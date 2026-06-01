@@ -22,6 +22,7 @@
       <option value="running">Đang chạy</option>
       <option value="idle">Tạm dừng</option>
       <option value="done">Hoàn tất</option>
+      <option value="stuck">⚠ Nghi kẹt</option>
     </select>
     <select class="fsel" id="f-branch"><option value="">Mọi branch</option></select>
     <select class="fsel" id="f-time">
@@ -32,6 +33,7 @@
       <option value="604800000">7 ngày qua</option>
     </select>
     <button class="fsel ghost" id="f-clear">Xoá lọc</button>
+    <button class="fsel" id="f-export" title="Xuất CSV các session đang hiển thị">⤓ CSV</button>
     <span class="fcount" id="f-count"></span>
   </div>
 
@@ -54,6 +56,7 @@
   </aside>
 
   <script src="/common.js"></script>
+  <script src="/export.js"></script>
   <script src="/agents.js"></script>
 </body>
 </html>
