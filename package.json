@@ -1,0 +1,29 @@
+{
+  "name": "laam",
+  "version": "0.1.0",
+  "description": "Local AI Agent Monitoring — internal dashboard to watch Claude AI agents running on your machine",
+  "type": "module",
+  "bin": {
+    "laam": "./bin/laam.js"
+  },
+  "scripts": {
+    "start": "node bin/laam.js",
+    "dev": "node --watch bin/laam.js",
+    "test": "node test/run.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "chokidar": "^3.6.0",
+    "express": "^4.19.2"
+  },
+  "keywords": [
+    "claude",
+    "agent",
+    "monitoring",
+    "dashboard",
+    "ai"
+  ],
+  "license": "MIT"
+}
