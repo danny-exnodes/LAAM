@@ -89,10 +89,21 @@ eq(toolTotal, 5, 'tổng tool call = 5 (Bash+Task, Read, Task+Task)');
 // ---- New: cost, tools, heatmap, model comparison ------------------------
 console.log('\n[1b] Cost / tools / heatmap / model comparison');
 
-// Cost: opus = $15/Mtok in, $75/Mtok out. Session B: 500 in, 300 out.
+// Cost: Opus 4.8 = $5/Mtok in, $25/Mtok out. Session B: 500 in, 300 out.
 const expectB = costUSD('claude-opus-4-8', 500, 300);
-ok(Math.abs(expectB - (500 / 1e6 * 15 + 300 / 1e6 * 75)) < 1e-9, 'costUSD opus tính đúng công thức');
+ok(Math.abs(expectB - (500 / 1e6 * 5 + 300 / 1e6 * 25)) < 1e-9, 'costUSD Opus 4.8 = $5/$25 per Mtok');
 ok(stats.totals.costUSD > 0, 'tổng chi phí > 0');
+
+// Tiered pricing (khớp bảng giá Anthropic chính thức, tra 2026-06-01).
+const per = (m) => costUSD(m, 1e6, 0); // giá input/Mtok
+const perOut = (m) => costUSD(m, 0, 1e6); // giá output/Mtok
+eq(per('claude-opus-4-8'), 5, 'Opus 4.8 input = $5/Mtok');
+eq(perOut('claude-opus-4-8'), 25, 'Opus 4.8 output = $25/Mtok');
+eq(per('claude-opus-4-1-20250805'), 15, 'Opus 4.1 input = $15/Mtok (legacy)');
+eq(per('claude-sonnet-4-6'), 3, 'Sonnet 4.6 input = $3/Mtok');
+eq(perOut('claude-sonnet-4-6'), 15, 'Sonnet 4.6 output = $15/Mtok');
+eq(per('claude-haiku-4-5-20251001'), 1, 'Haiku 4.5 input = $1/Mtok');
+eq(per('claude-3-5-haiku-20241022'), 0.8, 'Haiku 3.5 input = $0.80/Mtok');
 
 // Tools leaderboard: Task called 3 times total (1 in A, 2 in B), Bash 1, Read 1.
 const taskTool = stats.toolLeaderboard.mostUsed.find((t) => t.name === 'Task');
