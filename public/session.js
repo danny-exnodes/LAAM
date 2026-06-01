@@ -3,7 +3,7 @@
 (() => {
   const { esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI } = window.LAAM;
   window.LAAM.initTheme();
-  window.LAAM.buildHeader();
+  window.LAAM.buildHeader('', { conn: false }); // static page, no SSE → no conn indicator
 
   const main = document.querySelector('#main');
   const id = new URLSearchParams(location.search).get('id');

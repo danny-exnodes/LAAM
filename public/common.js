@@ -68,9 +68,12 @@
 
   // Inject the shared header into <header id="topbar">. `extra` is optional
   // HTML placed between the nav and the connection indicator (e.g. search).
-  function buildHeader(extra) {
+  // `opts.conn` (default true) controls the live-connection indicator — pass
+  // false on static pages that don't open an SSE stream.
+  function buildHeader(extra, opts = {}) {
     const bar = document.querySelector('#topbar');
     if (!bar) return;
+    const showConn = opts.conn !== false;
     const p = location.pathname;
     const links = NAV.map(
       (n) => `<a class="navlink ${n.match(p) ? 'active' : ''}" href="${n.href}">${n.label}</a>`
@@ -86,7 +89,7 @@
       <nav class="nav">${links}</nav>
       <div class="spacer"></div>
       ${extra || ''}
-      <div class="conn" id="conn"><span class="dot"></span><span id="conn-label">Đang kết nối…</span></div>
+      ${showConn ? '<div class="conn" id="conn"><span class="dot"></span><span id="conn-label">Đang kết nối…</span></div>' : ''}
       <button class="iconbtn" id="theme" title="Đổi theme">
         <svg id="theme-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       </button>`;

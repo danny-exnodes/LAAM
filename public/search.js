@@ -4,7 +4,7 @@
 (() => {
   const { esc, ago, shortModel } = window.LAAM;
   window.LAAM.initTheme();
-  window.LAAM.buildHeader();
+  window.LAAM.buildHeader('', { conn: false }); // static page, no SSE → no conn indicator
 
   // ---- Self-injected styles (reuse existing CSS vars / classes) ----
   if (!document.querySelector('#laam-search-css')) {
