@@ -61,8 +61,9 @@
   // ---- Top navigation ----
   const NAV = [
     { href: '/', label: 'Dashboard', match: (p) => p === '/' || p === '/index.html' },
-    { href: '/agents', label: 'Agents', match: (p) => p.startsWith('/agents') },
+    { href: '/agents', label: 'Agents', match: (p) => p.startsWith('/agents') || p.startsWith('/session') },
     { href: '/graph', label: 'Graph', match: (p) => p.startsWith('/graph') },
+    { href: '/search', label: 'Search', match: (p) => p.startsWith('/search') },
   ];
 
   // Inject the shared header into <header id="topbar">. `extra` is optional
@@ -116,8 +117,56 @@
     return es;
   }
 
+  // ---- Browser notifications (stuck-agent alerts) ----
+  // Asks permission lazily; throttles repeats per key so we don't spam.
+  const notified = new Map();
+  function notify(key, title, body, { throttleMs = 5 * 60 * 1000 } = {}) {
+    if (!('Notification' in window)) return;
+    const last = notified.get(key) || 0;
+    if (Date.now() - last < throttleMs) return;
+    const fire = () => {
+      try { new Notification(title, { body, tag: key }); notified.set(key, Date.now()); } catch {}
+    };
+    if (Notification.permission === 'granted') fire();
+    else if (Notification.permission !== 'denied') Notification.requestPermission().then((p) => { if (p === 'granted') fire(); });
+  }
+  function ensureNotifyPermission() {
+    if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  }
+
+  // ---- Runtime config (stuck threshold) ----
+  let _config = { stuckThresholdMin: 10 };
+  let _configP = null;
+  function loadConfig() {
+    if (!_configP) {
+      _configP = fetch('/api/config').then((r) => r.json()).then((c) => { _config = c; return c; }).catch(() => _config);
+    }
+    return _configP;
+  }
+  function getConfig() { return _config; }
+
+  // A session is "stuck" if it isn't done yet but hasn't written its transcript
+  // for longer than the configured threshold.
+  function isStuck(s, thresholdMin = _config.stuckThresholdMin, now = Date.now()) {
+    if (!s || s.status === 'done') return false;
+    if (!s.lastActivity) return false;
+    return now - s.lastActivity > thresholdMin * 60 * 1000;
+  }
+
+  // USD cost formatting helper, shared by dashboard + cards.
+  function fmtUSD(n) {
+    if (n == null) return '$0';
+    if (n < 0.01 && n > 0) return '<$0.01';
+    if (n < 1) return '$' + n.toFixed(2);
+    if (n < 1000) return '$' + n.toFixed(2);
+    return '$' + fmtNum(Math.round(n));
+  }
+
   window.LAAM = {
-    esc, fmtDur, ago, fmtNum, shortModel, STATUS_VI,
+    esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI,
     applyTheme, initTheme, cssVar, buildHeader, setConn, connectSSE,
+    notify, ensureNotifyPermission, loadConfig, getConfig, isStuck,
+    // Dashboard module registry: section modules push { id, render(host, stats, ctx) }.
+    dashModules: (window.LAAM_DASH_MODULES = window.LAAM_DASH_MODULES || []),
   };
 })();

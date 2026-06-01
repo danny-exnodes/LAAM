@@ -2,12 +2,16 @@
 // Data comes from /api/stats; the SSE stream is used purely as a "something
 // changed, refresh" signal so the dashboard stays live.
 (() => {
-  const { fmtNum, fmtDur, shortModel, cssVar } = window.LAAM;
+  const { fmtNum, fmtDur, shortModel, cssVar, isStuck, ago } = window.LAAM;
   window.LAAM.initTheme();
   window.LAAM.buildHeader();
+  window.LAAM.loadConfig();
+  window.LAAM.ensureNotifyPermission();
+  const knownStuck = new Set();
 
   const charts = {};
   let lastStats = null;
+  const moduleHosts = new Map(); // module.id -> host element
 
   // ---- Palette (resolved from CSS vars so charts follow the theme) ----
   function palette() {
@@ -188,6 +192,34 @@
       },
       options: baseOpts(p, { indexAxis: 'y', plugins: { legend: { display: false } }, scales: axisOpts(p, { indexAxis: 'y' }) }),
     });
+
+    renderModules(stats, p);
+  }
+
+  // ---- Pluggable dashboard modules (cost, heatmap, tools, models, …) ----
+  // Each module: { id, render(host, stats, ctx) }. It owns its host element and
+  // re-renders into it on every data/theme update.
+  function renderModules(stats, p) {
+    const area = document.querySelector('#modules');
+    if (!area) return;
+    const ctx = {
+      Chart: window.Chart, palette: p,
+      fmtNum: window.LAAM.fmtNum, fmtUSD: window.LAAM.fmtUSD, fmtDur,
+      shortModel, cssVar, esc: window.LAAM.esc,
+    };
+    for (const mod of window.LAAM.dashModules) {
+      try {
+        let host = moduleHosts.get(mod.id);
+        if (!host) {
+          host = document.createElement('div');
+          host.className = 'module-host';
+          host.dataset.module = mod.id;
+          area.appendChild(host);
+          moduleHosts.set(mod.id, host);
+        }
+        mod.render(host, stats, ctx);
+      } catch (e) { /* a broken module must not break the dashboard */ }
+    }
   }
 
   // ---- Data wiring ----
@@ -203,7 +235,32 @@
     pending = setTimeout(() => { pending = null; refresh(); }, 400);
   }
 
-  window.LAAM.connectSSE(scheduleRefresh);
+  // Stuck-agent alert banner + notifications, driven by the live snapshot.
+  function handleStuck(sessions) {
+    const stuck = (sessions || []).filter((s) => isStuck(s));
+    const el = document.querySelector('#stuck-alert');
+    if (el) {
+      if (stuck.length) {
+        el.hidden = false;
+        el.innerHTML = `⚠ <b>${stuck.length}</b> agent nghi bị kẹt (chưa hoàn tất, lâu không ghi transcript) — <a href="/agents">xem ở Agents →</a>`;
+      } else {
+        el.hidden = true;
+      }
+    }
+    for (const s of stuck) {
+      if (!knownStuck.has(s.id)) {
+        knownStuck.add(s.id);
+        window.LAAM.notify(`stuck:${s.id}`, '⚠ Agent nghi bị kẹt', `${s.project} · ${shortModel(s.model)} — ${ago(s.lastActivity)} chưa ghi transcript.`);
+      }
+    }
+    for (const id of [...knownStuck]) if (!stuck.some((s) => s.id === id)) knownStuck.delete(id);
+  }
+
+  // Export buttons.
+  document.querySelector('#exp-csv')?.addEventListener('click', () => window.LAAM.export?.csvSessions());
+  document.querySelector('#exp-pdf')?.addEventListener('click', () => window.LAAM.export?.pdfReport());
+
+  window.LAAM.connectSSE((data) => { handleStuck(data.sessions); scheduleRefresh(); });
   refresh();
   window.addEventListener('laam:theme', () => { if (lastStats) render(lastStats); });
 })();
