@@ -4,9 +4,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { scanAll } from '../lib/parser.js';
+import { scanAll, getToolCalls, defaultProjectsDir } from '../lib/parser.js';
 import { computeStats } from '../lib/stats.js';
-import { defaultProjectsDir } from '../lib/parser.js';
+import { searchTranscripts } from '../lib/search.js';
+import { costUSD } from '../lib/pricing.js';
 
 let failures = 0;
 function ok(cond, msg) {
@@ -84,6 +85,46 @@ ok(stats.activity.points.length >= 1, 'activity timeline có điểm dữ liệu
 
 const toolTotal = stats.byProject.reduce((n, p) => n + p.toolCalls, 0);
 eq(toolTotal, 5, 'tổng tool call = 5 (Bash+Task, Read, Task+Task)');
+
+// ---- New: cost, tools, heatmap, model comparison ------------------------
+console.log('\n[1b] Cost / tools / heatmap / model comparison');
+
+// Cost: opus = $15/Mtok in, $75/Mtok out. Session B: 500 in, 300 out.
+const expectB = costUSD('claude-opus-4-8', 500, 300);
+ok(Math.abs(expectB - (500 / 1e6 * 15 + 300 / 1e6 * 75)) < 1e-9, 'costUSD opus tính đúng công thức');
+ok(stats.totals.costUSD > 0, 'tổng chi phí > 0');
+
+// Tools leaderboard: Task called 3 times total (1 in A, 2 in B), Bash 1, Read 1.
+const taskTool = stats.toolLeaderboard.mostUsed.find((t) => t.name === 'Task');
+eq(taskTool?.count, 3, 'Task được đếm 3 lần trong leaderboard');
+const names = stats.toolLeaderboard.mostUsed.map((t) => t.name).sort();
+ok(names.includes('Bash') && names.includes('Read') && names.includes('Task'), 'leaderboard có Bash/Read/Task');
+// task1 (A) and task2 (B) closed with 4000ms each → Task avg should be 4000.
+eq(taskTool?.avgDurationMs, 4000, 'Task avgDurationMs = 4000 (2 lần đo được)');
+
+// Heatmap: 7×24 matrix, max > 0.
+ok(stats.heatmap.cells.length === 7 && stats.heatmap.cells[0].length === 24, 'heatmap là ma trận 7×24');
+ok(stats.heatmap.max > 0, 'heatmap.max > 0');
+
+// Model comparison: opus has 2 sessions, sonnet 1.
+const cmpOpus = stats.modelComparison.find((m) => m.model === 'claude-opus-4-8');
+eq(cmpOpus?.count, 2, 'modelComparison opus = 2 session');
+ok(cmpOpus.doneRate >= 0 && cmpOpus.doneRate <= 1, 'doneRate trong [0,1]');
+
+// getToolCalls on session A: should list Bash + Task with timing, sorted by start.
+const callsA = getToolCalls(path.join(projA, 'aaaa1111.jsonl'), T0 + 30000);
+eq(callsA.length, 2, 'session A có 2 tool call');
+const taskCall = callsA.find((c) => c.name === 'Task');
+eq(taskCall?.durationMs, 4000, 'Task call duration = 4000ms');
+eq(taskCall?.status, 'done', 'Task call status = done');
+
+// ---- New: full-text search ----------------------------------------------
+console.log('\n[1c] Full-text search');
+const res = searchTranscripts(scan, 'orchestrate');
+ok(res.total >= 1, 'tìm thấy "orchestrate" trong transcript');
+ok(res.matches.every((m) => m.snippet && m.sessionId), 'mỗi kết quả có snippet + sessionId');
+const resNone = searchTranscripts(scan, 'zzz_khong_ton_tai_xyz');
+eq(resNone.total, 0, 'từ khoá không tồn tại → 0 kết quả');
 
 // ---- Real dir smoke test ------------------------------------------------
 console.log('\n[2] Real projects dir — smoke test (no crash)');

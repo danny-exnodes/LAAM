@@ -7,8 +7,10 @@ import chokidar from 'chokidar';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { scanAll, getTimeline, defaultProjectsDir } from '../lib/parser.js';
+import { scanAll, getTimeline, getToolCalls, defaultProjectsDir } from '../lib/parser.js';
 import { computeStats } from '../lib/stats.js';
+import { searchTranscripts } from '../lib/search.js';
+import { PRICE_UPDATED } from '../lib/pricing.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -20,6 +22,9 @@ function arg(name, fallback) {
 }
 const PORT = Number(arg('port', process.env.LAAM_PORT || process.env.PORT || 4317));
 const PROJECTS_DIR = arg('dir', defaultProjectsDir());
+// A session that hasn't written its transcript for this many minutes while
+// still not "done" is flagged as potentially stuck. Configurable.
+const STUCK_THRESHOLD_MIN = Number(arg('stuck', process.env.LAAM_STUCK_MIN || 10));
 
 // ---- App ---------------------------------------------------------------
 const app = express();
@@ -29,6 +34,8 @@ app.use(express.static(PUBLIC));
 // Page routes (clean URLs without .html, so nav links stay tidy).
 app.get('/agents', (_req, res) => res.sendFile(path.join(PUBLIC, 'agents.html')));
 app.get('/graph', (_req, res) => res.sendFile(path.join(PUBLIC, 'graph.html')));
+app.get('/search', (_req, res) => res.sendFile(path.join(PUBLIC, 'search.html')));
+app.get('/session', (_req, res) => res.sendFile(path.join(PUBLIC, 'session.html')));
 
 app.get('/api/sessions', (_req, res) => {
   res.json(scanAll(PROJECTS_DIR));
@@ -38,11 +45,23 @@ app.get('/api/stats', (_req, res) => {
   res.json(computeStats(scanAll(PROJECTS_DIR)));
 });
 
+// Runtime config for the client (stuck threshold, pricing note).
+app.get('/api/config', (_req, res) => {
+  res.json({ stuckThresholdMin: STUCK_THRESHOLD_MIN, pricingUpdated: PRICE_UPDATED });
+});
+
+// Full-text search across transcript content.
+app.get('/api/search', (req, res) => {
+  const q = String(req.query.q || '');
+  const limit = Math.min(500, Number(req.query.limit) || 200);
+  res.json(searchTranscripts(scanAll(PROJECTS_DIR), q, { limit }));
+});
+
 app.get('/api/session/:id', (req, res) => {
   const data = scanAll(PROJECTS_DIR);
   const s = data.sessions.find((x) => x.id === req.params.id);
   if (!s) return res.status(404).json({ error: 'not found' });
-  res.json({ ...s, timeline: getTimeline(s.file) });
+  res.json({ ...s, timeline: getTimeline(s.file), toolCalls: getToolCalls(s.file) });
 });
 
 app.get('/api/health', (_req, res) => {
