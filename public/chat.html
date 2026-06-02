@@ -16,25 +16,59 @@
   <header id="topbar"></header>
 
   <main id="chat" class="chat">
-    <div class="chat-sub" id="chat-sub"></div>
-    <div class="transcript" id="transcript"></div>
-    <div class="dock">
-      <div class="attachments" id="attachments"></div>
-      <div class="dock-inner">
-        <button class="attach" id="attach-file" title="Đính kèm file (txt/md/csv/pdf)">📎</button>
-        <button class="attach" id="attach-url" title="Đọc nội dung một URL">🔗</button>
-        <textarea id="input" rows="1" placeholder="Nhắn cho Qwen… (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
-        <button class="send" id="send">Gửi</button>
-        <button class="stop" id="stop" hidden>Dừng</button>
+    <!-- Conversation history sidebar — filled by chat-history.js -->
+    <aside id="chat-sidebar" class="chat-sidebar" aria-label="Lịch sử trò chuyện"></aside>
+    <!-- Click-catcher behind the mobile drawer -->
+    <div id="sidebar-scrim" class="sidebar-scrim" hidden></div>
+
+    <section id="chat-main" class="chat-main">
+      <div class="chat-sub" id="chat-sub">
+        <button id="sidebar-toggle" class="sidebar-toggle" title="Lịch sử trò chuyện" aria-label="Bật/tắt lịch sử">☰</button>
+        <div id="chat-sub-info" class="chat-sub-info"></div>
+        <div class="chat-sub-spacer"></div>
+        <!-- Toolbar buttons (settings, export, …) — filled by feature modules -->
+        <div id="chat-toolbar" class="chat-toolbar"></div>
       </div>
-      <input type="file" id="file-input" hidden accept=".txt,.md,.csv,.json,.log,.pdf" />
-    </div>
+
+      <div class="transcript" id="transcript" role="log" aria-live="polite" aria-label="Nội dung trò chuyện"></div>
+
+      <!-- Scroll-to-bottom FAB — managed by chat-composer.js -->
+      <button id="scroll-bottom" class="scroll-bottom" hidden aria-label="Cuộn xuống cuối">↓</button>
+
+      <div class="dock">
+        <div class="attachments" id="attachments"></div>
+        <!-- Composer add-ons (token counter, slash menu, …) — chat-composer.js -->
+        <div id="composer-toolbar" class="composer-toolbar"></div>
+        <div class="dock-inner">
+          <button class="attach" id="attach-file" title="Đính kèm file (txt/md/csv/pdf)" aria-label="Đính kèm file">📎</button>
+          <button class="attach" id="attach-url" title="Đọc nội dung một URL" aria-label="Đọc một URL">🔗</button>
+          <textarea id="input" rows="1" placeholder="Nhắn cho Qwen… (Enter để gửi, Shift+Enter xuống dòng)" aria-label="Soạn tin nhắn"></textarea>
+          <button class="send" id="send">Gửi</button>
+          <button class="stop" id="stop" hidden>Dừng</button>
+        </div>
+        <input type="file" id="file-input" hidden accept=".txt,.md,.csv,.json,.log,.pdf" />
+      </div>
+    </section>
   </main>
 
+  <!-- Shared utilities + rich-render pipeline (load before the kernel) -->
   <script src="/common.js"></script>
   <script src="/chat-render.js"></script>
   <script src="/chat-geo.js"></script>
   <script src="/chat-ingest.js"></script>
+
+  <!-- Feature modules: each registers itself into window.LAAM_CHAT_MODULES and
+       is initialised by the kernel (chat.js) after the store is built. They must
+       NOT run logic at load time beyond the registry push. -->
+  <script src="/chat-history.js"></script>
+  <script src="/chat-actions.js"></script>
+  <script src="/chat-composer.js"></script>
+  <script src="/chat-settings.js"></script>
+  <script src="/chat-export.js"></script>
+  <script src="/chat-ux.js"></script>
+
+  <!-- Kernel: builds window.LAAMChat, then initialises every registered module.
+       MUST load last. -->
   <script src="/chat.js"></script>
 </body>
 </html>

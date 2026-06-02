@@ -99,20 +99,42 @@ app.get('/session', (_req, res) => res.sendFile(path.join(PUBLIC, 'session.html'
 app.get('/chat', (_req, res) => res.sendFile(path.join(PUBLIC, 'chat.html')));
 app.get('/office', (_req, res) => res.sendFile(path.join(PUBLIC, 'office.html')));
 
-// Chat with the local 7B model, streamed THROUGH the logging proxy so the
-// conversation is tracked in LAAM as a local session. Model is hard-locked.
+// Chat with the local model, streamed THROUGH the logging proxy so the
+// conversation is tracked in LAAM as a local session. Model defaults to the
+// hard-locked CHAT_MODEL but the client may override it (and gen params).
 app.get('/api/chat/info', (_req, res) => res.json({ model: CHAT_MODEL }));
+
+// List the models Ollama has available (powers the model dropdown). Proxies the
+// proxy's /api/tags. Fails soft with 502 so the UI can show a friendly error.
+app.get('/api/ollama/models', async (_req, res) => {
+  try {
+    const r = await fetch(`${PROXY_URL}/api/tags`);
+    const data = await r.json();
+    res.json(data && typeof data === 'object' ? data : { models: [] });
+  } catch (e) {
+    res.status(502).json({ error: 'Không lấy được danh sách mô hình: ' + e.message });
+  }
+});
+
 app.post('/api/chat', (req, res) => {
-  const { sessionId, messages } = req.body || {};
+  const body = req.body || {};
+  const { sessionId, messages } = body;
   if (!Array.isArray(messages) || !messages.length) {
     return res.status(400).json({ error: 'messages[] required' });
   }
   const sid = 'chat-' + String(sessionId || 'web').replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 48);
-  // Prepend the render-format system prompt unless the caller already set one.
+  // Honor an optional client-chosen model; fall back to the hard-locked default.
+  const model = (typeof body.model === 'string' && body.model) ? body.model : CHAT_MODEL;
+  // Honor an optional custom system prompt (else the render-format default).
+  const sysPrompt = (typeof body.system === 'string' && body.system.trim()) ? body.system : CHAT_SYSTEM;
+  // Prepend the system prompt unless the caller already set one.
   const outMsgs = messages[0] && messages[0].role === 'system'
     ? messages
-    : [{ role: 'system', content: CHAT_SYSTEM }, ...messages];
-  const payload = JSON.stringify({ model: CHAT_MODEL, stream: true, messages: outMsgs });
+    : [{ role: 'system', content: sysPrompt }, ...messages];
+  const out = { model, stream: true, messages: outMsgs };
+  // Pass through optional generation parameters (temperature, top_p, num_predict…).
+  if (body.options && typeof body.options === 'object') out.options = body.options;
+  const payload = JSON.stringify(out);
   const u = new URL(PROXY_URL);
   const preq = http.request(
     {
