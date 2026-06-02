@@ -135,6 +135,52 @@ app.get('/api/session/:id', (req, res) => {
   }
 });
 
+// Fetch a USER-SUPPLIED URL server-side and return its text, so the chat can
+// read web pages. SSRF-guarded: only public http(s) hosts.
+function isBlockedHost(host) {
+  const h = (host || '').toLowerCase();
+  if (h === 'localhost' || h.endsWith('.local') || h === '0.0.0.0') return true;
+  // Block private / loopback / link-local IPv4 ranges.
+  if (/^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^169\.254\./.test(h)) return true;
+  if (/^172\.(1[6-9]|2\d|3[01])\./.test(h)) return true;
+  if (h.includes(':')) return true; // IPv6 / host:port oddities — be conservative
+  return false;
+}
+function htmlToText(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/\s+\n/g, '\n').replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+app.post('/api/fetch-url', async (req, res) => {
+  const raw = String((req.body && req.body.url) || '').trim();
+  let u;
+  try { u = new URL(raw); } catch { return res.status(400).json({ error: 'URL không hợp lệ' }); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return res.status(400).json({ error: 'Chỉ hỗ trợ http/https' });
+  if (isBlockedHost(u.hostname)) return res.status(403).json({ error: 'Chặn địa chỉ nội bộ/loopback' });
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    const r = await fetch(u.href, { signal: ctrl.signal, redirect: 'follow', headers: { 'user-agent': 'LAAM-chat/0.1' } });
+    clearTimeout(timer);
+    const ctype = r.headers.get('content-type') || '';
+    const body = await r.text();
+    const text = /html/i.test(ctype) ? htmlToText(body) : body;
+    const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    res.json({
+      url: u.href,
+      title: titleMatch ? titleMatch[1].trim().slice(0, 200) : u.hostname,
+      text: text.slice(0, 12000),
+      truncated: text.length > 12000,
+    });
+  } catch (e) {
+    res.status(502).json({ error: 'Không tải được URL: ' + e.message });
+  }
+});
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,

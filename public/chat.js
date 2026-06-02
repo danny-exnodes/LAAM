@@ -21,6 +21,11 @@
   let streaming = false;
   let controller = null;
 
+  // Attached context (from files / URLs) to prepend to the next user message.
+  let attachments = []; // { name, text, kind }
+  const attachEl = $('#attachments');
+  const fileInput = $('#file-input');
+
   // ---- Self-injected CSS (once) ----
   if (!document.querySelector('#laam-chat-css')) {
     const style = document.createElement('style');
@@ -117,6 +122,25 @@
       .send:disabled { opacity: 0.45; cursor: default; }
       .stop { background: var(--bg-sunken); color: var(--text); border: 1px solid var(--border-strong); }
       .stop:hover { background: var(--border); }
+      .attach {
+        flex: 0 0 auto; border: 0; cursor: pointer; background: transparent;
+        font-size: 17px; line-height: 1; padding: 7px 4px; opacity: 0.75;
+      }
+      .attach:hover { opacity: 1; }
+      .attachments { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 4px 8px; }
+      .attach-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--bg-sunken); border: 1px solid var(--border);
+        border-radius: 999px; padding: 3px 6px 3px 10px; font-size: 12px;
+        color: var(--text-dim); max-width: 260px;
+      }
+      .attach-chip { overflow: hidden; }
+      .attach-chip .x {
+        border: 0; background: var(--border); color: var(--text);
+        width: 16px; height: 16px; border-radius: 50%; cursor: pointer;
+        font-size: 12px; line-height: 1; display: grid; place-items: center;
+      }
+      .attach-chip .x:hover { background: var(--error); color: #fff; }
     `;
     document.head.appendChild(style);
   }
@@ -166,6 +190,63 @@
     return html;
   }
 
+  // Rich render for a COMPLETED assistant message (markdown, tables, charts,
+  // maps). Falls back to the simple streaming renderer if the module/render fails.
+  function renderAssistant(bubble, text) {
+    if (window.LAAMChatRender && typeof window.LAAMChatRender.renderMessage === 'function') {
+      try { window.LAAMChatRender.renderMessage(text, bubble); return; } catch {}
+    }
+    bubble.innerHTML = renderContent(text);
+  }
+
+  // ---- Attachments (files / URLs) ----
+  function renderAttachments() {
+    if (!attachEl) return;
+    attachEl.innerHTML = attachments
+      .map((a, i) => `<span class="attach-chip" title="${esc(a.name)} · ${a.text.length} ký tự">${a.kind === 'url' ? '🔗' : '📎'} ${esc(a.name)}<button data-i="${i}" class="x">×</button></span>`)
+      .join('');
+  }
+  function addAttachment(att) {
+    attachments.push(att);
+    renderAttachments();
+  }
+  if (attachEl) {
+    attachEl.addEventListener('click', (e) => {
+      const x = e.target.closest('.x');
+      if (x) { attachments.splice(Number(x.dataset.i), 1); renderAttachments(); }
+    });
+  }
+  $('#attach-file')?.addEventListener('click', () => fileInput && fileInput.click());
+  fileInput?.addEventListener('change', async () => {
+    const file = fileInput.files && fileInput.files[0];
+    fileInput.value = '';
+    if (!file) return;
+    try {
+      const r = await window.LAAMChatIngest.parseFile(file);
+      addAttachment({ name: r.name + (r.truncated ? ' (cắt bớt)' : ''), text: r.text, kind: r.kind === 'pdf' ? 'file' : 'file' });
+    } catch (err) {
+      const e = addBubble('error');
+      e.bubble.textContent = '⚠ ' + (err && err.message ? err.message : 'không đọc được file.');
+    }
+  });
+  $('#attach-url')?.addEventListener('click', async () => {
+    const url = window.prompt('Dán URL để mô hình đọc (chỉ fetch URL bạn chủ động nhập):');
+    if (!url) return;
+    const chip = { name: 'Đang tải URL…', text: '', kind: 'url' };
+    addAttachment(chip);
+    try {
+      const r = await window.LAAMChatIngest.fetchUrl(url.trim());
+      chip.name = (r.title || r.url) + (r.truncated ? ' (cắt bớt)' : '');
+      chip.text = `URL: ${r.url}\nTiêu đề: ${r.title}\n\n${r.text}`;
+      renderAttachments();
+    } catch (err) {
+      attachments = attachments.filter((a) => a !== chip);
+      renderAttachments();
+      const e = addBubble('error');
+      e.bubble.textContent = '⚠ ' + (err && err.message ? err.message : 'không tải được URL.');
+    }
+  });
+
   function addBubble(role) {
     if (transcript.querySelector('.empty')) transcript.innerHTML = '';
     const wrap = document.createElement('div');
@@ -196,9 +277,22 @@
     input.value = '';
     autoGrow();
 
-    messages.push({ role: 'user', content: text });
+    // Prepend any attached file/URL context to the message the MODEL sees,
+    // but show only the typed question (+ a note) in the user bubble.
+    let content = text;
+    if (attachments.length) {
+      const ctx = attachments
+        .map((a) => `[Tài liệu đính kèm: ${a.name}]\n${a.text}`)
+        .join('\n\n');
+      content = ctx + '\n\n---\n\n' + text;
+    }
+    messages.push({ role: 'user', content });
     const u = addBubble('user');
-    u.bubble.innerHTML = renderContent(text);
+    u.bubble.innerHTML =
+      renderContent(text) +
+      (attachments.length ? `<div class="caption">📎 kèm ${attachments.length} tài liệu</div>` : '');
+    attachments = [];
+    renderAttachments();
 
     setStreaming(true);
 
@@ -258,7 +352,7 @@
 
       if (acc) {
         messages.push({ role: 'assistant', content: acc });
-        a.bubble.innerHTML = renderContent(acc);
+        renderAssistant(a.bubble, acc);
       } else {
         // No content at all — drop the empty bubble.
         a.wrap.remove();
