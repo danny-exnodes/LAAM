@@ -206,7 +206,13 @@
       .wf-tlabel { position:absolute; top:0; left:2px; font-size:10px; color: var(--text-faint);
         font-variant-numeric: tabular-nums; white-space:nowrap; }
       .wf-tick:last-child .wf-tlabel { left:auto; right:2px; }
-      @media (max-width:680px){ .wf-row{ grid-template-columns:130px 1fr; } }
+      @media (max-width:720px){
+        #main { padding: 16px max(13px, env(safe-area-inset-left)) calc(40px + env(safe-area-inset-bottom)) max(13px, env(safe-area-inset-left)); }
+        .sess-card { padding: 15px 14px; }
+        .sess-title { font-size: 18px; }
+        .wf-row{ grid-template-columns:118px 1fr; gap:8px; }
+        .wf-label { font-size: 11px; }
+      }
     `;
     const el = document.createElement('style');
     el.id = 'laam-session-css';

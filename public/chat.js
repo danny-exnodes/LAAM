@@ -36,6 +36,8 @@
         display: flex; flex-direction: column;
         max-width: 880px; width: 100%; margin: 0 auto;
         padding: 0 16px;
+        padding-left: max(16px, env(safe-area-inset-left));
+        padding-right: max(16px, env(safe-area-inset-right));
       }
       .chat-sub {
         flex: 0 0 auto;
@@ -99,17 +101,19 @@
         animation: laam-blink 1s steps(2, start) infinite;
       }
       @keyframes laam-blink { to { visibility: hidden; } }
-      .dock { flex: 0 0 auto; padding: 10px 0 16px; }
+      .dock { flex: 0 0 auto; padding: 10px 0 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
       .dock-inner {
         display: flex; align-items: flex-end; gap: 8px;
         background: var(--bg-elev); border: 1px solid var(--border-strong);
         border-radius: 16px; padding: 8px 8px 8px 14px;
-        box-shadow: var(--shadow);
+        box-shadow: var(--shadow); min-width: 0;
       }
       .dock-inner textarea {
-        flex: 1 1 auto; resize: none; border: 0; outline: 0;
+        /* min-width:0 lets the textarea shrink below its placeholder width so
+           the Send button never gets pushed off-screen on narrow phones. */
+        flex: 1 1 auto; min-width: 0; resize: none; border: 0; outline: 0;
         background: transparent; color: var(--text);
-        font-family: var(--sans); font-size: 14px; line-height: 1.5;
+        font-family: var(--sans); font-size: 16px; line-height: 1.5;
         max-height: 200px; padding: 6px 0;
       }
       .dock-inner textarea::placeholder { color: var(--text-faint); }
@@ -141,6 +145,13 @@
         font-size: 12px; line-height: 1; display: grid; place-items: center;
       }
       .attach-chip .x:hover { background: var(--error); color: #fff; }
+      @media (max-width: 720px) {
+        .chat-sub { padding: 10px 2px 6px; }
+        .msg { max-width: 92%; }
+        .dock-inner { gap: 5px; padding: 6px 6px 6px 10px; }
+        .send, .stop { padding: 9px 14px; }
+        .attach { padding: 7px 2px; font-size: 18px; }
+      }
     `;
     document.head.appendChild(style);
   }

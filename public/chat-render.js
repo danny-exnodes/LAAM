@@ -493,9 +493,17 @@
       a.setAttribute('rel', 'noopener noreferrer nofollow');
     });
 
-    // Tables get a class for CSS styling.
+    // Tables get a class for CSS styling, and a scroll wrapper so a wide table
+    // can never burst the chat bubble on a narrow phone — it scrolls instead.
     container.querySelectorAll('table').forEach(function (t) {
       t.classList.add('chat-table');
+      var p = t.parentNode;
+      if (p && !(p.classList && p.classList.contains('chat-table-wrap'))) {
+        var w = document.createElement('div');
+        w.className = 'chat-table-wrap';
+        p.insertBefore(w, t);
+        w.appendChild(t);
+      }
     });
 
     // Swap placeholder comments / text for the real chart/map elements.
@@ -583,6 +591,8 @@
       '.bubble pre code { background: none; border: 0; padding: 0; font-size: 12.5px; }',
       '.bubble a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }',
       // Tables
+      '.chat-table-wrap { margin: 10px 0; overflow-x: auto; -webkit-overflow-scrolling: touch; }',
+      '.chat-table-wrap > .chat-table { margin: 0; }',
       '.chat-table {',
       '  width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px;',
       '}',

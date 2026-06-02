@@ -97,6 +97,9 @@
       </button>`;
     const icon = document.querySelector('#theme-icon');
     if (icon) icon.innerHTML = document.documentElement.dataset.theme === 'dark' ? sun : moon;
+    // On mobile the nav scrolls horizontally; keep the active tab in view.
+    const activeLink = bar.querySelector('.navlink.active');
+    if (activeLink) try { activeLink.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch {}
     document.querySelector('#theme').onclick = () =>
       applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   }

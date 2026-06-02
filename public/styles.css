@@ -61,7 +61,7 @@ header {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 22px;
+  padding: 14px max(22px, env(safe-area-inset-right)) 14px max(22px, env(safe-area-inset-left));
   background: color-mix(in srgb, var(--bg-elev) 88%, transparent);
   backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--border);
@@ -354,7 +354,7 @@ main { padding: 22px; max-width: 1500px; margin: 0 auto; }
 @media (max-width: 720px) { .charts { grid-template-columns: 1fr; } .chart-card.wide, .chart-card.half { grid-column: span 1; } }
 
 /* ---- Graph ---- */
-.graphmain { display: flex; height: calc(100vh - 59px - 49px); }
+.graphmain { display: flex; height: calc(100vh - 59px - 49px); height: calc(100dvh - 59px - 49px); }
 #net { flex: 1; min-width: 0; background:
   radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 26px 26px; }
 .gpanel {
@@ -381,11 +381,89 @@ main { padding: 22px; max-width: 1500px; margin: 0 auto; }
 .gsub .sdesc { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gopen { display: inline-block; margin-top: 16px; font-size: 12.5px; font-weight: 600; color: var(--accent); text-decoration: none; }
 .gopen:hover { text-decoration: underline; }
-@media (max-width: 720px) { .gpanel { display: none; } }
+/* On phones the side panel becomes a bottom sheet overlaying the graph, so the
+   canvas keeps full width and node details stay reachable. */
+@media (max-width: 720px) {
+  .gpanel {
+    position: absolute; left: 0; right: 0; bottom: 0; width: auto;
+    max-height: 44dvh; border-left: 0; border-top: 1px solid var(--border);
+    border-top-left-radius: 14px; border-top-right-radius: 14px;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18); z-index: 16;
+    padding: 12px max(16px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  .gpanel-empty { margin-top: 0; }
+}
 
-@media (max-width: 680px) {
+/* ---- Office (Agents Office) — compact HUD on phones. Selectors are scoped
+   under `.office` so they out-specify the base rules office.js injects at
+   runtime, regardless of stylesheet source order, and live here (not in
+   office.js) to stay clear of that file's active development. ---- */
+@media (max-width: 720px) {
+  .office .office-panel.connected {
+    top: 10px; left: max(10px, env(safe-area-inset-left)); width: min(56vw, 220px);
+  }
+  .office .office-panel.connected .op-list { max-height: 132px; }
+  .office .office-panel.analytics { display: none; }   /* same numbers live on the dashboard */
+  .office .office-panel.console {
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+    bottom: calc(58px + env(safe-area-inset-bottom));
+  }
+  .office .office-panel.console .op-log { max-height: 60px; }
+  .office .office-controls {
+    bottom: calc(10px + env(safe-area-inset-bottom));
+    right: max(10px, env(safe-area-inset-right));
+    left: max(10px, env(safe-area-inset-left));
+    flex-wrap: wrap; justify-content: flex-end;
+  }
+}
+
+/* ---- Mobile (phones, ~440px iPhone Pro Max and down) ---- */
+@media (max-width: 720px) {
+  /* Header stays a single ~57px row: brand + horizontally scrollable nav +
+     theme/conn on the right. Keeps the fixed top:57/59px offsets used by
+     chat/office/graph/filterbar valid. */
+  header {
+    gap: 9px;
+    padding: 13px max(13px, env(safe-area-inset-right)) 13px max(13px, env(safe-area-inset-left));
+  }
+  .brand { flex-shrink: 0; }
+  .brand .sub { display: none; }
+  .brand h1 { font-size: 14px; }
+  .spacer { display: none; }
   .stats, .search { display: none; }
+  .nav {
+    flex: 1 1 auto; min-width: 0; margin-left: 8px; gap: 2px;
+    overflow-x: auto; flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    /* fade the scroll edges so it reads as "more here →" */
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .navlink { flex: 0 0 auto; white-space: nowrap; padding: 6px 11px; }
+  .conn #conn-label { display: none; }      /* keep the live dot, drop the label */
+  .iconbtn { flex-shrink: 0; }
+
+  main, .dash { padding: 16px max(13px, env(safe-area-inset-right)) calc(34px + env(safe-area-inset-bottom)) max(13px, env(safe-area-inset-left)); }
   .grid { grid-template-columns: 1fr; }
-  .nav { margin-left: 6px; }
-  .navlink { padding: 6px 9px; }
+  .dash-toolbar { flex-wrap: wrap; gap: 8px; }
+  .kpi-value { font-size: 22px; }
+
+  /* Filter bars scroll horizontally instead of overflowing the viewport. */
+  .filterbar {
+    gap: 8px; flex-wrap: nowrap; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    padding: 11px max(13px, env(safe-area-inset-right)) 11px max(13px, env(safe-area-inset-left));
+  }
+  .filterbar::-webkit-scrollbar { display: none; }
+  .filterbar .search { min-width: 168px; flex: 0 0 auto; }
+  .fsel, .gchk { flex: 0 0 auto; white-space: nowrap; }
+  .glegend { flex: 0 0 auto; gap: 10px; }
+  .fcount, .glegend { display: none; }      /* legend/count are non-essential on phones */
+
+  /* Drawer goes full-bleed and respects the home indicator. */
+  .drawer { width: 100vw; }
+  .drawer-body { padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+  .drawer-head { padding-left: max(20px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
 }
