@@ -3,6 +3,9 @@
     const st = document.createElement('style');
     st.id = 'laam-models-css';
     st.textContent = `
+      /* The table has nowrap cells; on a phone it scrolls horizontally inside
+         its card instead of overflowing the whole dashboard. */
+      .module-host .mdl-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -2px; }
       .module-host .mdl-table { width:100%; border-collapse:collapse; font-size:13px; }
       .module-host .mdl-table th, .module-host .mdl-table td { padding:7px 10px; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap; }
       .module-host .mdl-table th { color:var(--text-faint); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
@@ -49,7 +52,7 @@
       host.innerHTML = `
         <div class="chart-card wide">
           <h3>So sánh model</h3>
-          <table class="mdl-table">
+          <div class="mdl-scroll"><table class="mdl-table">
             <thead>
               <tr>
                 <th>Model</th>
@@ -62,7 +65,7 @@
               </tr>
             </thead>
             <tbody>${tableRows}</tbody>
-          </table>
+          </table></div>
         </div>
         <div class="chart-card half">
           <h3>Tốc độ (tokens/phút)</h3>
