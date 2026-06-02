@@ -416,6 +416,17 @@ main { padding: 22px; max-width: 1500px; margin: 0 auto; }
     left: max(10px, env(safe-area-inset-left));
     flex-wrap: wrap; justify-content: flex-end;
   }
+  /* v2: keep the connected list a slim, scrollable card; shrink the in-scene
+     labels so they read at the zoomed-out phone scale and don't overlap. */
+  .office .office-panel.connected { width: min(50vw, 188px); max-height: 30dvh; overflow: auto; font-size: 11px; }
+  .office .office-panel.console { bottom: calc(54px + env(safe-area-inset-bottom)); }
+  .office .office-panel.console .op-log { max-height: 48px; }
+  .office .office-controls { padding: 5px 7px; gap: 5px; }
+  .office .office-controls .fsel { padding: 6px 11px; font-size: 13px; }   /* bigger tap target */
+  .office .room-plaque { font-size: 9.5px; padding: 2px 7px; }
+  .office .name-tag { font-size: 8.5px; }
+  .office .chat-bubble { max-width: 150px; font-size: 10px; }
+  .office .office-stage { -webkit-overflow-scrolling: touch; }
 }
 
 /* ---- Mobile (phones, ~440px iPhone Pro Max and down) ---- */

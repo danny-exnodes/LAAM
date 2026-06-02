@@ -110,7 +110,11 @@
 
   // ---- State ----
   let prev = new Map(), knownSubs = new Set(), events = [];
-  let showDone = false, scale = 1, lastSnapshot = null;
+  // On phones the 1640×980 scene won't fit — start zoomed out so a useful chunk
+  // is visible, then let the user pan (native scroll) / zoom (buttons).
+  const isPhone = window.innerWidth <= 720;
+  let showDone = false, scale = isPhone ? Math.max(0.42, Math.min(0.7, window.innerWidth / 700)) : 1, lastSnapshot = null;
+  let didInitialScroll = false;
   const nodeEls = new Map();
 
   const pushEvent = (kind, text) => { events.unshift({ ts: Date.now(), kind, text }); if (events.length > 120) events.length = 120; };
@@ -379,7 +383,10 @@
 
   // ---- Boot ----
   const isMock = new URLSearchParams(location.search).get('mock') === '1';
-  function apply(data) { lastSnapshot = data; diff(data.sessions || []); render(data.sessions || []); updatePanels(data.sessions || []); }
+  function apply(data) {
+    lastSnapshot = data; diff(data.sessions || []); render(data.sessions || []); updatePanels(data.sessions || []);
+    if (isPhone && !didInitialScroll) { didInitialScroll = true; requestAnimationFrame(() => stage.scrollTo({ left: 120 * scale, top: 0 })); }
+  }
   if (isMock) {
     pushEvent('info', 'Chế độ mock (rooms + handoff + walk-to-lounge)');
     apply(mockSnapshot(false));
