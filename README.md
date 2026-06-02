@@ -24,6 +24,7 @@ Mở http://localhost:4317
 | `/graph` | **Graph** | Sơ đồ kết nối orchestrator → sub-agents; click node để xem chi tiết. (vis-network) |
 | `/search` | **Search** | Tìm kiếm **toàn văn** trong nội dung transcript (message, tool input, kết quả tool). |
 | `/session?id=…` | **Session detail** | Chi tiết một phiên + **waterfall** dòng thời gian các tool call. |
+| `/chat` | **Chat** | Trò chuyện trực tiếp với **Qwen 7B local** (streaming, qua proxy → mọi chat được track như nguồn local, miễn phí). |
 
 ## Tính năng
 
