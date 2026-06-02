@@ -58,13 +58,35 @@
     return typeof mime === 'string' && /^text\//i.test(mime);
   }
 
+  // Reused module worker for pdf.js. The vendored pdf.worker.min.mjs is an ES
+  // MODULE — loading it as a classic worker (which pdf.js' workerSrc default
+  // does) throws "Unexpected token 'export'" and silently falls back to a
+  // fragile main-thread "fake worker". Creating the worker explicitly with
+  // { type: 'module' } and handing it to pdf.js via workerPort fixes that.
+  var pdfWorkerPort = null;
+
   async function extractPdf(file) {
-    // Lazy-load pdf.js (ES module) only when a PDF is actually given.
     var pdfjs = await import('/vendor/pdf.min.mjs');
-    pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs';
+    try {
+      if (!pdfWorkerPort) {
+        pdfWorkerPort = new Worker('/vendor/pdf.worker.min.mjs', { type: 'module' });
+      }
+      pdfjs.GlobalWorkerOptions.workerPort = pdfWorkerPort;
+    } catch (e) {
+      // Worker construction failed → let pdf.js use its own fallback.
+      pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs';
+    }
 
     var data = await file.arrayBuffer();
-    var doc = await pdfjs.getDocument({ data: data }).promise;
+    var doc;
+    try {
+      doc = await pdfjs.getDocument({ data: data }).promise;
+    } catch (e) {
+      var nm = (e && e.name) || '';
+      if (nm === 'PasswordException') throw new Error('PDF được đặt mật khẩu/mã hoá, không đọc được.');
+      if (nm === 'InvalidPDFException') throw new Error('Tệp PDF hỏng hoặc không hợp lệ.');
+      throw e;
+    }
 
     var pageCount = Math.min(doc.numPages, MAX_PDF_PAGES);
     var pages = [];
@@ -73,7 +95,11 @@
       var tc = await page.getTextContent();
       pages.push(tc.items.map(function (it) { return it.str; }).join(' '));
     }
-    return pages.join('\n');
+    var text = pages.join('\n').trim();
+    if (!text) {
+      throw new Error('PDF không có lớp văn bản (có thể là ảnh scan) — không trích được chữ.');
+    }
+    return text;
   }
 
   async function parseFile(file) {
