@@ -69,6 +69,8 @@ services:
       LAAM_PORT: 4317
       LAAM_PROJECTS_DIR: /claude-projects
       LAAM_LOCAL_LOGS: /data/local-logs
+      # /chat proxies to the logging proxy (same compose network).
+      LAAM_PROXY_URL: http://proxy:11435
     volumes:
       # Host Claude transcripts, mounted read-only.
       - ${HOME}/.claude/projects:/claude-projects:ro

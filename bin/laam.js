@@ -4,6 +4,7 @@
 
 import express from 'express';
 import chokidar from 'chokidar';
+import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -28,6 +29,10 @@ const LOCAL_LOGS_DIR = arg('local', process.env.LAAM_LOCAL_LOGS || defaultLocalL
 // A session that hasn't written its transcript for this many minutes while
 // still not "done" is flagged as potentially stuck. Configurable.
 const STUCK_THRESHOLD_MIN = Number(arg('stuck', process.env.LAAM_STUCK_MIN || 10));
+// The /chat page talks to the local model THROUGH the logging proxy (so chats
+// are tracked like any other local session). Hard-locked to the 7B model.
+const PROXY_URL = arg('proxy-url', process.env.LAAM_PROXY_URL || 'http://localhost:11435');
+const CHAT_MODEL = process.env.LAAM_CHAT_MODEL || 'qwen2.5-coder:7b';
 
 // Unified scan: Claude transcripts + local-model proxy logs, merged into one
 // snapshot ({ projects, sessions }) consumed by every endpoint.
@@ -47,6 +52,7 @@ function scan(now = Date.now()) {
 // ---- App ---------------------------------------------------------------
 const app = express();
 const PUBLIC = path.join(ROOT, 'public');
+app.use(express.json({ limit: '2mb' }));
 app.use(express.static(PUBLIC));
 
 // Page routes (clean URLs without .html, so nav links stay tidy).
@@ -54,6 +60,49 @@ app.get('/agents', (_req, res) => res.sendFile(path.join(PUBLIC, 'agents.html'))
 app.get('/graph', (_req, res) => res.sendFile(path.join(PUBLIC, 'graph.html')));
 app.get('/search', (_req, res) => res.sendFile(path.join(PUBLIC, 'search.html')));
 app.get('/session', (_req, res) => res.sendFile(path.join(PUBLIC, 'session.html')));
+app.get('/chat', (_req, res) => res.sendFile(path.join(PUBLIC, 'chat.html')));
+
+// Chat with the local 7B model, streamed THROUGH the logging proxy so the
+// conversation is tracked in LAAM as a local session. Model is hard-locked.
+app.get('/api/chat/info', (_req, res) => res.json({ model: CHAT_MODEL }));
+app.post('/api/chat', (req, res) => {
+  const { sessionId, messages } = req.body || {};
+  if (!Array.isArray(messages) || !messages.length) {
+    return res.status(400).json({ error: 'messages[] required' });
+  }
+  const sid = 'chat-' + String(sessionId || 'web').replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 48);
+  const payload = JSON.stringify({ model: CHAT_MODEL, stream: true, messages });
+  const u = new URL(PROXY_URL);
+  const preq = http.request(
+    {
+      hostname: u.hostname,
+      port: u.port || 80,
+      path: '/api/chat',
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'content-length': Buffer.byteLength(payload),
+        'x-laam-session': sid,
+      },
+    },
+    (pres) => {
+      res.writeHead(pres.statusCode || 200, {
+        'content-type': 'application/x-ndjson',
+        'cache-control': 'no-cache',
+      });
+      pres.pipe(res);
+    }
+  );
+  preq.on('error', (e) => {
+    if (!res.headersSent) res.writeHead(502, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Không kết nối được proxy/Ollama: ' + e.message }));
+  });
+  // Abort the upstream generation only if the client disconnects mid-stream
+  // (Stop button / navigate away) — not on normal completion.
+  res.on('close', () => { if (!res.writableEnded) preq.destroy(); });
+  preq.write(payload);
+  preq.end();
+});
 
 app.get('/api/sessions', (_req, res) => {
   res.json(scan());
