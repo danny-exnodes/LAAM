@@ -49,12 +49,13 @@ const CHAT_SYSTEM = [
   '{"type":"bar","title":"Doanh thu theo quý","data":{"labels":["Q1","Q2","Q3","Q4"],"datasets":[{"label":"Doanh thu","data":[12,19,9,15]}]}}',
   '```',
   '',
-  '2) MAP — for places, locations, or directions. Fenced block with info string exactly `map`, ONE LINE of valid JSON:',
-  '{"center":[lat,lng],"zoom":13,"markers":[{"lat":..,"lng":..,"label":".."}],"route":[[lat,lng],..],"directions":{"from":"..","to":".."}}',
-  'Include `directions` with from/to when the user asks for directions.',
+  '2) MAP — for places, locations, or directions. Fenced block info string exactly `map`, ONE LINE of valid JSON.',
+  'IMPORTANT: You do NOT need to know real coordinates. Just give place NAMES — the app resolves lat/lng automatically (geocoding). Never refuse a map for lack of coordinates. Format:',
+  '{"markers":[{"name":"<place>"},...],"directions":{"from":"<place>","to":"<place>"},"zoom":13}',
+  'Use `directions` (from/to) when the user asks for directions; use `markers` with `name` to show one or more places. Add lat/lng yourself ONLY if you are certain.',
   'Example — "chỉ đường từ Hồ Gươm tới Văn Miếu":',
   '```map',
-  '{"center":[21.0278,105.8342],"zoom":13,"markers":[{"lat":21.0287,"lng":105.8524,"label":"Hồ Gươm"},{"lat":21.0227,"lng":105.8355,"label":"Văn Miếu"}],"directions":{"from":"Hồ Gươm, Hà Nội","to":"Văn Miếu, Hà Nội"}}',
+  '{"markers":[{"name":"Hồ Gươm, Hà Nội"},{"name":"Văn Miếu, Hà Nội"}],"directions":{"from":"Hồ Gươm, Hà Nội","to":"Văn Miếu, Hà Nội"}}',
   '```',
   '',
   '3) TABLE — to list or compare items in rows/columns. Use a GitHub-flavored Markdown table. DO NOT wrap the table in a code fence.',
@@ -218,6 +219,44 @@ app.post('/api/fetch-url', async (req, res) => {
   } catch (e) {
     res.status(502).json({ error: 'Không tải được URL: ' + e.message });
   }
+});
+
+// Geocoding via Nominatim (OpenStreetMap) — resolve a place NAME to lat/lng so
+// the chat map uses real coordinates instead of the model's guesses. Cached +
+// throttled to respect Nominatim's usage policy (≤1 req/s, identifying UA).
+const geoCache = new Map(); // lowercased query -> { lat, lng, display } | null
+let lastGeoCall = 0;
+async function geocodeOne(q) {
+  const query = String(q || '').trim();
+  if (!query) return null;
+  const key = query.toLowerCase();
+  if (geoCache.has(key)) return geoCache.get(key);
+  const wait = Math.max(0, 1100 - (Date.now() - lastGeoCall));
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  lastGeoCall = Date.now();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(query);
+    const r = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { 'User-Agent': 'LAAM-chat/0.1 (local AI agent monitoring; self-host)', 'Accept-Language': 'vi,en' },
+    });
+    clearTimeout(timer);
+    const arr = await r.json();
+    const hit = Array.isArray(arr) && arr[0]
+      ? { lat: parseFloat(arr[0].lat), lng: parseFloat(arr[0].lon), display: arr[0].display_name }
+      : null;
+    geoCache.set(key, hit);
+    return hit;
+  } catch {
+    return null; // fail soft — never break the chat flow
+  }
+}
+app.get('/api/geocode', async (req, res) => {
+  const hit = await geocodeOne(req.query.q);
+  if (!hit) return res.status(404).json({ error: 'không tìm thấy địa điểm' });
+  res.json(hit);
 });
 
 app.get('/api/health', (_req, res) => {

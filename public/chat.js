@@ -192,11 +192,16 @@
 
   // Rich render for a COMPLETED assistant message (markdown, tables, charts,
   // maps). Falls back to the simple streaming renderer if the module/render fails.
-  function renderAssistant(bubble, text) {
-    if (window.LAAMChatRender && typeof window.LAAMChatRender.renderMessage === 'function') {
-      try { window.LAAMChatRender.renderMessage(text, bubble); return; } catch {}
+  async function renderAssistant(bubble, text) {
+    let resolved = text;
+    // Resolve place names in map blocks to real coordinates (geocoding) first.
+    if (window.LAAMChatGeo && /```map|"markers"|"directions"/.test(text)) {
+      try { resolved = await window.LAAMChatGeo.resolveMaps(text); } catch {}
     }
-    bubble.innerHTML = renderContent(text);
+    if (window.LAAMChatRender && typeof window.LAAMChatRender.renderMessage === 'function') {
+      try { window.LAAMChatRender.renderMessage(resolved, bubble); return; } catch {}
+    }
+    bubble.innerHTML = renderContent(resolved);
   }
 
   // ---- Attachments (files / URLs) ----

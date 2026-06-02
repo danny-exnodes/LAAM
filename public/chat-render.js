@@ -414,7 +414,8 @@
             if (m == null || m.lat == null || m.lng == null) return;
             var pt = [m.lat, m.lng];
             var mk = window.L.marker(pt).addTo(map);
-            if (m.label) mk.bindPopup(String(m.label));
+            var lbl = m.label || m.name;
+            if (lbl) mk.bindPopup(String(lbl));
             bounds.push(pt);
           });
 
@@ -652,5 +653,5 @@
     }
   }
 
-  window.LAAMChatRender = { renderMessage: renderMessage };
+  window.LAAMChatRender = { renderMessage: renderMessage, normalize: normalizeFences };
 })();
