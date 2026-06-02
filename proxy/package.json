@@ -1,0 +1,10 @@
+{
+  "name": "laam-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero-dependency logging proxy in front of Ollama for LAAM",
+  "type": "module",
+  "bin": { "laam-proxy": "./server.js" },
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
