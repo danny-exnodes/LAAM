@@ -24,7 +24,8 @@ Mở http://localhost:4317
 | `/graph` | **Graph** | Sơ đồ kết nối orchestrator → sub-agents; click node để xem chi tiết. (vis-network) |
 | `/search` | **Search** | Tìm kiếm **toàn văn** trong nội dung transcript (message, tool input, kết quả tool). |
 | `/session?id=…` | **Session detail** | Chi tiết một phiên + **waterfall** dòng thời gian các tool call. |
-| `/chat` | **Chat** | Trò chuyện trực tiếp với **Qwen 7B local** (streaming, qua proxy → mọi chat được track như nguồn local, miễn phí). |
+| `/chat` | **Chat** | Trò chuyện trực tiếp với **model Qwen local** (streaming qua proxy → mọi chat được track như nguồn local, miễn phí). **Chọn model** (7B / coder / 14B) + chỉnh temperature / top-p / system prompt; **lịch sử nhiều hội thoại** (đổi tên, tìm, xoá); **đính kèm file & URL**; **render giàu**: bảng, biểu đồ (Chart.js), bản đồ (Leaflet/OSM); xuất Markdown/JSON. |
+| `/office` | **Office** | Văn phòng đẳng cự (isometric) hiển thị các agent đang làm việc theo từng phòng/project — di chuyển, ghép cặp, kéo-thả để xoay góc nhìn. |
 
 ## Tính năng
 
@@ -47,7 +48,8 @@ Mở http://localhost:4317
 - **Full-text search** toàn bộ nội dung transcript.
 - **Waterfall** tool-call cho từng session.
 - **Export** báo cáo: CSV (session/khoảng thời gian) và PDF (báo cáo tổng hợp, jsPDF).
-- **Chạy offline hoàn toàn**: Chart.js, vis-network, jsPDF được đóng gói sẵn trong `public/vendor/` (không gọi CDN).
+- **Chat giàu tính năng** (`/chat`): chọn model + tham số sinh, nhiều hội thoại có lịch sử, đính kèm file/URL làm ngữ cảnh, và render bảng / biểu đồ / bản đồ ngay trong câu trả lời; xuất hội thoại ra Markdown/JSON.
+- **Chạy offline hoàn toàn**: Chart.js, vis-network, jsPDF, marked, DOMPurify, Leaflet, pdf.js được đóng gói sẵn trong `public/vendor/` (không gọi CDN).
 - **Theme sáng/tối**, lưu lựa chọn.
 
 ## Tuỳ chỉnh

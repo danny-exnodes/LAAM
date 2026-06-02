@@ -2,6 +2,12 @@ node_modules/
 .DS_Store
 *.log
 
+# local env / secrets — never commit real tokens (keep the template)
+.env
+.env.*
+!.env.example
+
 # screenshot/test proof artifacts
 chat-render-proof/
 responsive-proof/
+*-proof/
