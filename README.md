@@ -28,6 +28,7 @@ Mở http://localhost:4317
 ## Tính năng
 
 - **Đọc dữ liệu thật** từ `~/.claude/projects/` — chạy là thấy ngay session đang diễn ra.
+- **Hai nguồn dữ liệu**: transcript Claude Code **và** model local (Qwen qua Ollama) — mỗi session gắn nhãn nguồn (badge `⬡ LOCAL`), lọc theo nguồn ở trang Agents. Model local **miễn phí → chi phí $0**, chỉ track token + thời gian + trạng thái. Xem [Model local](#model-local-qwen-qua-ollama).
 - **Live update** qua SSE + file watcher: agent vừa thao tác gì, các trang cập nhật tức thì.
 - **Dashboard thống kê** với biểu đồ (line / bar / doughnut) qua Chart.js — không cần build step.
 - **Bộ lọc & tìm kiếm** ở trang Agents: theo project, model, trạng thái, branch, khoảng thời gian.
@@ -55,11 +56,54 @@ Mở http://localhost:4317
 | `npm start -- --port 8080` | Đổi cổng (mặc định 4317) |
 | `npm start -- --dir /đường/dẫn` | Đổi thư mục projects cần theo dõi |
 | `npm start -- --stuck 15` | Ngưỡng cảnh báo agent kẹt, phút (mặc định 10) |
+| `npm start -- --local /đường/dẫn` | Thư mục log model local (mặc định `~/.laam/local-logs`) |
 | `LAAM_PROJECTS_DIR=... npm start` | Tương đương `--dir` qua biến môi trường |
 | `LAAM_PORT=... npm start` | Tương đương `--port` |
 | `LAAM_STUCK_MIN=... npm start` | Tương đương `--stuck` |
+| `LAAM_LOCAL_LOGS=... npm start` | Tương đương `--local` |
 
-> 💲 **Bảng giá** dùng để ước tính chi phí USD nằm trong `lib/pricing.js`. Đây là số liệu thủ công, **có thể lỗi thời** — hãy đối chiếu bảng giá Anthropic chính thức và cập nhật tay khi cần.
+> 💲 **Bảng giá** dùng để ước tính chi phí USD nằm trong `lib/pricing.js`. Đây là số liệu thủ công, **có thể lỗi thời** — hãy đối chiếu bảng giá Anthropic chính thức và cập nhật tay khi cần. Model **local = $0**.
+
+## Model local (Qwen qua Ollama)
+
+LAAM theo dõi model local như **nguồn dữ liệu thứ hai** thông qua một **logging proxy** đứng trước [Ollama](https://ollama.com):
+
+```
+client ──► proxy (:11435) ──► Ollama (:11434)
+                  │
+                  ▼  ghi JSONL
+        ~/.laam/local-logs/<session>.jsonl ──► LAAM đọc & hiển thị
+```
+
+**Chạy thử (native, không cần Docker):**
+
+```bash
+# 1) Cài & chạy Ollama (https://ollama.com), rồi pull model
+ollama pull qwen2.5-coder:7b           # ~4.7 GB
+
+# 2) Bật logging proxy (zero-dependency, chỉ Node built-in)
+node proxy/server.js                    # :11435 -> :11434, log vào ~/.laam/local-logs
+
+# 3) Trỏ client vào proxy thay vì Ollama
+#    OpenAI base_url: http://localhost:11435/v1
+#    Ollama host:     http://localhost:11435
+curl http://localhost:11435/api/chat -d '{"model":"qwen2.5-coder:7b","messages":[{"role":"user","content":"hi"}]}'
+```
+
+Mỗi request hoàn tất được proxy ghi 1 dòng JSON (`model, endpoint, tokensIn/out, thời lượng, status, request, responseText`). Đặt header `x-laam-session: <tên>` để gom các request vào cùng một "session" trong LAAM. Chi tiết: [`proxy/README.md`](proxy/README.md).
+
+## Docker (đóng gói lâu dài)
+
+`docker-compose.yml` đóng gói **Ollama + proxy + LAAM** (tùy chọn thêm **ngrok** cho public URL bền), `restart: unless-stopped`, volume giữ model + log, mount `~/.claude/projects` (read-only).
+
+```bash
+docker compose build
+docker compose up -d
+docker compose exec ollama ollama pull qwen2.5-coder:7b   # tải model vào volume
+docker compose --profile public up -d                     # (tùy chọn) bật ngrok — cần NGROK_AUTHTOKEN
+```
+
+> ⚠ Trên macOS, Ollama **trong Docker chạy CPU-only** (Docker Desktop không truyền GPU). Để dùng GPU Apple Silicon, chạy **Ollama native trên host** và trỏ proxy `OLLAMA_URL=http://host.docker.internal:11434` (xem chú thích trong `docker-compose.yml`).
 
 ## Cách hoạt động
 

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { scanAll, getToolCalls, defaultProjectsDir } from '../lib/parser.js';
+import { scanLocal, getLocalTimeline } from '../lib/localParser.js';
 import { computeStats } from '../lib/stats.js';
 import { searchTranscripts } from '../lib/search.js';
 import { costUSD } from '../lib/pricing.js';
@@ -136,6 +137,43 @@ ok(res.total >= 1, 'tìm thấy "orchestrate" trong transcript');
 ok(res.matches.every((m) => m.snippet && m.sessionId), 'mỗi kết quả có snippet + sessionId');
 const resNone = searchTranscripts(scan, 'zzz_khong_ton_tai_xyz');
 eq(resNone.total, 0, 'từ khoá không tồn tại → 0 kết quả');
+
+// ---- New: local-model ingest (Ollama proxy logs) ------------------------
+console.log('\n[1d] Local model ingest (Ollama proxy logs)');
+const localDir = fs.mkdtempSync(path.join(os.tmpdir(), 'laam-local-'));
+fs.writeFileSync(path.join(localDir, 'sess-a.jsonl'), [
+  { ts: T0, endTs: T0 + 2000, durationMs: 2000, sessionId: 'sess-a', model: 'qwen2.5-coder:7b', endpoint: '/api/chat', stream: true, status: 'ok', httpStatus: 200, tokensIn: 50, tokensOut: 120, request: { messages: [{ role: 'user', content: 'viết hàm fib' }] }, responseText: 'def fib(n): ...', error: null },
+  { ts: T0 + 5000, endTs: T0 + 8000, durationMs: 3000, sessionId: 'sess-a', model: 'qwen2.5-coder:7b', endpoint: '/v1/chat/completions', stream: false, status: 'ok', httpStatus: 200, tokensIn: 30, tokensOut: 80, request: { messages: [{ role: 'user', content: 'tối ưu nó' }] }, responseText: 'tối ưu: ...', error: null },
+].map((e) => JSON.stringify(e)).join('\n') + '\n');
+
+const localScan = scanLocal(localDir, T0 + 9000);
+eq(localScan.sessions.length, 1, 'scanLocal: 1 session local');
+const ls = localScan.sessions[0];
+eq(ls.source, 'local', 'session local có source=local');
+eq(ls.costUSD, 0, 'session local có costUSD = 0 (miễn phí)');
+eq(ls.tokens.input, 80, 'tokens input local cộng đúng (50+30)');
+eq(ls.tokens.output, 200, 'tokens output local cộng đúng (120+80)');
+eq(ls.model, 'qwen2.5-coder:7b', 'model local đúng');
+ok(ls.messageCount >= 2, 'messageCount local > 0');
+eq(localScan.projects.length, 1, 'local có 1 project nhóm "Ollama (local)"');
+
+// Merge với dữ liệu Claude rồi computeStats: local KHÔNG làm tăng chi phí.
+const merged = {
+  projectsDir: root, scannedAt: T0 + 9000,
+  projects: [...scan.projects, ...localScan.projects],
+  sessions: [...scan.sessions, ...localScan.sessions],
+};
+const mstats = computeStats(merged);
+eq(mstats.totals.localSessions, 1, 'thống kê: 1 session local');
+eq(mstats.totals.claudeSessions, 3, 'thống kê: 3 session Claude');
+ok(Math.abs(mstats.totals.costUSD - stats.totals.costUSD) < 1e-9, 'chi phí tổng KHÔNG đổi khi thêm local (local = $0)');
+const qwenCmp = mstats.modelComparison.find((m) => m.model === 'qwen2.5-coder:7b');
+eq(qwenCmp?.costUSD, 0, 'qwen trong so sánh model có cost = $0');
+
+// Timeline local có cả user + assistant.
+const ltl = getLocalTimeline(path.join(localDir, 'sess-a.jsonl'));
+ok(ltl.some((i) => i.role === 'user') && ltl.some((i) => i.role === 'assistant'), 'timeline local có user + assistant');
+fs.rmSync(localDir, { recursive: true, force: true });
 
 // ---- Real dir smoke test ------------------------------------------------
 console.log('\n[2] Real projects dir — smoke test (no crash)');
