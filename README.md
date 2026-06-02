@@ -96,6 +96,7 @@ Mỗi request hoàn tất được proxy ghi 1 dòng JSON (`model, endpoint, tok
 
 `docker-compose.yml` đóng gói **Ollama + proxy + LAAM** (tùy chọn thêm **ngrok** cho public URL bền), `restart: unless-stopped`, volume giữ model + log, mount `~/.claude/projects` (read-only).
 
+**Linux / CPU (full stack trong Docker):**
 ```bash
 docker compose build
 docker compose up -d
@@ -103,7 +104,22 @@ docker compose exec ollama ollama pull qwen2.5-coder:7b   # tải model vào vol
 docker compose --profile public up -d                     # (tùy chọn) bật ngrok — cần NGROK_AUTHTOKEN
 ```
 
-> ⚠ Trên macOS, Ollama **trong Docker chạy CPU-only** (Docker Desktop không truyền GPU). Để dùng GPU Apple Silicon, chạy **Ollama native trên host** và trỏ proxy `OLLAMA_URL=http://host.docker.internal:11434` (xem chú thích trong `docker-compose.yml`).
+**macOS / Apple Silicon (giữ GPU — khuyến nghị):** Docker Desktop không truyền GPU, nên Ollama chạy **native trên host** (GPU), còn **proxy + LAAM chạy trong Docker** trỏ về host:
+```bash
+ollama serve &                       # native, có GPU + model
+docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d --no-deps proxy laam
+```
+Override `docker-compose.macos.yml` đặt `OLLAMA_URL=http://host.docker.internal:11434` và bind-mount `~/.laam/local-logs` + `~/.claude/projects`. ngrok native vẫn trỏ `:4317` (giờ là container LAAM) nên public URL không đổi.
+
+**Chọn model (7b ↔ 14b):**
+```bash
+ollama pull qwen2.5-coder:7b         # ~4.7 GB (mặc định, an toàn cho 16 GB)
+ollama pull qwen2.5-coder:14b        # ~9 GB  (xem kết quả load test bên dưới)
+# Đặt model mặc định cho proxy (inject khi request thiếu field "model"):
+LAAM_DEFAULT_MODEL=qwen2.5-coder:14b docker compose ... up -d proxy
+# Hoặc gọi trực tiếp, chọn model per-request:
+scripts/qwen-chat.sh qwen2.5-coder:14b "Viết quicksort bằng Python"
+```
 
 ## Cách hoạt động
 

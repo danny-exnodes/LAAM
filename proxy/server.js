@@ -24,6 +24,10 @@ const PROXY_PORT = parseInt(process.env.PROXY_PORT || '11435', 10);
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const LAAM_LOCAL_LOGS =
   process.env.LAAM_LOCAL_LOGS || path.join(os.homedir(), '.laam', 'local-logs');
+// Optional: model name to inject when a completion request omits `model`.
+// Lets you switch the default between e.g. qwen2.5-coder:7b and :14b without
+// touching the client. Empty = never inject (client must specify the model).
+const DEFAULT_MODEL = process.env.DEFAULT_MODEL || '';
 
 const UPSTREAM = new URL(OLLAMA_URL);
 
@@ -237,7 +241,7 @@ const server = http.createServer((clientReq, clientRes) => {
   });
 
   clientReq.on('end', () => {
-    const reqBody = Buffer.concat(reqChunks);
+    let reqBody = Buffer.concat(reqChunks);
     let reqJson = null;
     let model = '';
     let streamFlag = false;
@@ -245,6 +249,11 @@ const server = http.createServer((clientReq, clientRes) => {
     if (isCompletion) {
       reqJson = safeJsonParse(reqBody);
       if (reqJson && typeof reqJson === 'object') {
+        // Inject the default model when the client didn't specify one.
+        if (DEFAULT_MODEL && !reqJson.model) {
+          reqJson.model = DEFAULT_MODEL;
+          reqBody = Buffer.from(JSON.stringify(reqJson), 'utf8');
+        }
         model = typeof reqJson.model === 'string' ? reqJson.model : '';
         // /api/* defaults to streaming when `stream` is omitted; /v1/* defaults
         // to non-streaming.

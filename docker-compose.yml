@@ -44,6 +44,9 @@ services:
       OLLAMA_URL: http://ollama:11434
       LAAM_LOCAL_LOGS: /data/local-logs
       PROXY_PORT: 11435
+      # Default model injected when a request omits `model`. Switch between
+      # qwen2.5-coder:7b and qwen2.5-coder:14b via LAAM_DEFAULT_MODEL (or .env).
+      DEFAULT_MODEL: ${LAAM_DEFAULT_MODEL:-qwen2.5-coder:7b}
       # --- Apple-Silicon GPU alternative -------------------------------------
       # To use a native (host-installed) Ollama with GPU acceleration instead
       # of the containerized CPU-only one above: remove the `ollama` service
