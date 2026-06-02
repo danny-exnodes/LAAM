@@ -7,6 +7,12 @@
       "runtimeArgs": ["start"],
       "port": 4317,
       "autoPort": true
+    },
+    {
+      "name": "laam-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "LAAM_CHAT_MODEL=qwen2.5:7b node bin/laam.js --port 4318"],
+      "port": 4318
     }
   ]
 }
