@@ -121,6 +121,17 @@ LAAM_DEFAULT_MODEL=qwen2.5-coder:14b docker compose ... up -d proxy
 scripts/qwen-chat.sh qwen2.5-coder:14b "Viết quicksort bằng Python"
 ```
 
+### Load test 7b vs 14b trên Apple M3 / 16 GB (2026-06-02)
+
+Đo qua proxy → Ollama native (Metal GPU), trong khi Docker Desktop + LAAM + proxy cùng chạy:
+
+| Model | Tốc độ sinh | Trong bộ nhớ | RAM trống khi inference | Swap | Kết luận |
+|-------|-------------|--------------|--------------------------|------|----------|
+| **7b** | **~11 tok/s** | 4.9 GB · **100% GPU** | ~1.7 GB | ổn định | Thoải mái — **mặc định** |
+| **14b** | **~5–8 tok/s** | 9.7 GB · **100% GPU** | ~0.1 GB | +3 GB (file 6→7 GB) | Chạy được nhưng **căng** |
+
+**Kết luận:** Máy 16 GB **chịu được 14b** — model nạp **100% lên GPU** (vừa unified memory), cold-start ~10s. Nhưng 14b chạy **~½ tốc độ 7b** và đẩy hệ thống vào **swap nặng** (gần như hết RAM trống), nên cả máy ì khi có app khác. → Dùng **7b làm mặc định** (nhanh, còn dư RAM); chỉ dùng **14b cho tác vụ nặng thỉnh thoảng**, nên đóng bớt app khác (kể cả cân nhắc tắt Docker Desktop) để bớt áp lực bộ nhớ. Cả hai đều **miễn phí ($0)** trong LAAM.
+
 ## Cách hoạt động
 
 ```
