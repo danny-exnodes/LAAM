@@ -131,6 +131,85 @@
     return { text: out.join('\n'), blocks: blocks };
   }
 
+  // ---- Step 0: normalize mislabeled blocks (7B robustness) ----------------
+  // Small models often emit ```json (or no language) instead of ```chart /
+  // ```map, or wrap a Markdown table in a fence. Rewrite those so the renderer
+  // recognizes them — WITHOUT touching genuine code/JSON blocks.
+  function tryParseJson(s) { try { return JSON.parse(s); } catch (e) { return null; } }
+  function looksLikeChartObj(o) {
+    return o && typeof o === 'object' && typeof o.type === 'string' && o.data && typeof o.data === 'object' &&
+      (Array.isArray(o.data.datasets) || Array.isArray(o.data.labels));
+  }
+  function looksLikeMapObj(o) {
+    return o && typeof o === 'object' &&
+      (Array.isArray(o.markers) || Array.isArray(o.route) ||
+        (o.directions && typeof o.directions === 'object' && o.directions.from && o.directions.to));
+  }
+  function isTableLines(lines) {
+    var hasPipe = false, hasSep = false;
+    for (var k = 0; k < lines.length; k++) {
+      if (lines[k].indexOf('|') >= 0) hasPipe = true;
+      if (/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(lines[k])) hasSep = true;
+    }
+    return hasPipe && hasSep;
+  }
+  function normalizeFences(src) {
+    var lines = String(src).split('\n');
+    var out = [];
+    var i = 0, n = lines.length;
+    while (i < n) {
+      var line = lines[i];
+      var open = line.match(/^(\s*)(`{3,})([^`]*)$/);
+      if (open) {
+        var indent = open[1], fence = open[2], kind = open[3].trim().toLowerCase();
+        var body = [], j = i + 1, closed = false;
+        var closeRe = new RegExp('^\\s*' + fence + '`*\\s*$');
+        for (; j < n; j++) { if (closeRe.test(lines[j])) { closed = true; break; } body.push(lines[j]); }
+        if (closed) {
+          if (kind === 'chart' || kind === 'map') {
+            out.push(line); for (var a = 0; a < body.length; a++) out.push(body[a]); out.push(lines[j]);
+          } else {
+            var bodyStr = body.join('\n').trim();
+            var obj = tryParseJson(bodyStr);
+            if (obj && looksLikeChartObj(obj)) { out.push(indent + '```chart'); out.push(bodyStr); out.push(indent + '```'); }
+            else if (obj && looksLikeMapObj(obj)) { out.push(indent + '```map'); out.push(bodyStr); out.push(indent + '```'); }
+            else if ((kind === '' || kind === 'markdown' || kind === 'md' || kind === 'text' || kind === 'table' || kind === 'gfm') && isTableLines(body)) {
+              for (var t = 0; t < body.length; t++) out.push(body[t]); // unwrap table
+            } else {
+              out.push(line); for (var c = 0; c < body.length; c++) out.push(body[c]); out.push(lines[j]);
+            }
+          }
+          i = j + 1; continue;
+        }
+      }
+      out.push(line); i++;
+    }
+    var res = out.join('\n');
+    // Whole message is a bare chart/map JSON object (no fence at all) → wrap it.
+    if (res.indexOf('```') < 0) {
+      var whole = tryParseJson(res.trim());
+      if (whole && looksLikeChartObj(whole)) return '```chart\n' + res.trim() + '\n```';
+      if (whole && looksLikeMapObj(whole)) return '```map\n' + res.trim() + '\n```';
+    }
+    // Catch a standalone single-line chart/map JSON object emitted WITHOUT a
+    // fence inside prose (small models often do "Here is the chart:\n{json}").
+    var ls = res.split('\n'); var outed = []; var inFence = false;
+    for (var p = 0; p < ls.length; p++) {
+      var ln = ls[p];
+      if (/^\s*`{3,}/.test(ln)) { inFence = !inFence; outed.push(ln); continue; }
+      if (!inFence) {
+        var tr = ln.trim();
+        if (tr.length > 20 && tr.charAt(0) === '{' && tr.charAt(tr.length - 1) === '}') {
+          var po = tryParseJson(tr);
+          if (po && looksLikeChartObj(po)) { outed.push('```chart', tr, '```'); continue; }
+          if (po && looksLikeMapObj(po)) { outed.push('```map', tr, '```'); continue; }
+        }
+      }
+      outed.push(ln);
+    }
+    return outed.join('\n');
+  }
+
   // ---- Step 2: Markdown → HTML --------------------------------------------
   function renderMarkdown(text) {
     if (window.marked && typeof window.marked.parse === 'function') {
@@ -542,7 +621,7 @@
     try {
       injectCss();
 
-      var extracted = extractSpecialBlocks(rawText == null ? '' : String(rawText));
+      var extracted = extractSpecialBlocks(normalizeFences(rawText == null ? '' : String(rawText)));
       var html = renderMarkdown(extracted.text);
       var clean = sanitize(html);
 
