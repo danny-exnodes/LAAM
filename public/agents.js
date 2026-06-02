@@ -11,7 +11,7 @@
   const $ = (s) => document.querySelector(s);
   const main = $('#main');
   let state = { projects: [], sessions: [], error: null, projectsDir: '' };
-  const filters = { q: '', project: '', model: '', status: '', branch: '', time: '' };
+  const filters = { q: '', source: '', project: '', model: '', status: '', branch: '', time: '' };
   const collapsed = new Set(JSON.parse(localStorage.getItem('laam.collapsed') || '[]'));
 
   // ---- Filtering ----
@@ -27,6 +27,7 @@
     );
   }
   function sessionPasses(s) {
+    if (filters.source && (s.source || 'claude') !== filters.source) return false;
     if (filters.project && s.projectPath !== filters.project) return false;
     if (filters.model && s.model !== filters.model) return false;
     if (filters.status === 'stuck') { if (!isStuck(s)) return false; }
@@ -91,6 +92,7 @@
     return `<div class="card ${s.status} ${stuck ? 'stuck' : ''}" data-id="${esc(s.id)}">
       <div class="card-top">
         <span class="badge ${s.status}"><span class="dot"></span>${STATUS_VI[s.status]}</span>
+        ${s.source === 'local' ? '<span class="badge local" title="Model local chạy qua Ollama (miễn phí)">⬡ LOCAL</span>' : ''}
         ${stuck ? '<span class="badge stuck" title="Chưa hoàn tất nhưng đã lâu không ghi transcript">⚠ Nghi kẹt</span>' : ''}
         <div>
           <div class="model">${esc(shortModel(s.model))}</div>
@@ -175,6 +177,7 @@
 
   // ---- Filter events ----
   $('#search').addEventListener('input', (e) => { filters.q = e.target.value.trim(); render(); });
+  $('#f-source').addEventListener('change', (e) => { filters.source = e.target.value; render(); });
   $('#f-project').addEventListener('change', (e) => { filters.project = e.target.value; render(); });
   $('#f-model').addEventListener('change', (e) => { filters.model = e.target.value; render(); });
   $('#f-status').addEventListener('change', (e) => { filters.status = e.target.value; render(); });
@@ -183,7 +186,7 @@
   $('#f-clear').addEventListener('click', () => {
     Object.keys(filters).forEach((k) => (filters[k] = ''));
     $('#search').value = '';
-    ['#f-project', '#f-model', '#f-status', '#f-branch', '#f-time'].forEach((s) => ($(s).value = ''));
+    ['#f-source', '#f-project', '#f-model', '#f-status', '#f-branch', '#f-time'].forEach((s) => ($(s).value = ''));
     render();
   });
   $('#f-export').addEventListener('click', () => {

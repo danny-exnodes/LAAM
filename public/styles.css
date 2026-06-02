@@ -183,6 +183,7 @@ main { padding: 22px; max-width: 1500px; margin: 0 auto; }
 .badge.running { background: var(--running-soft); color: var(--running); }
 .badge.idle { background: var(--idle-soft); color: var(--idle); }
 .badge.done { background: var(--done-soft); color: var(--done); }
+.badge.local { background: color-mix(in srgb, #0ea5e9 18%, transparent); color: #0ea5e9; }
 .badge.stuck { background: color-mix(in srgb, var(--error) 16%, transparent); color: var(--error); animation: pulse-err 1.8s infinite; }
 .card.stuck { border-color: var(--error); }
 .card.stuck::before { background: var(--error) !important; }
