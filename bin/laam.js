@@ -97,6 +97,7 @@ app.get('/graph', (_req, res) => res.sendFile(path.join(PUBLIC, 'graph.html')));
 app.get('/search', (_req, res) => res.sendFile(path.join(PUBLIC, 'search.html')));
 app.get('/session', (_req, res) => res.sendFile(path.join(PUBLIC, 'session.html')));
 app.get('/chat', (_req, res) => res.sendFile(path.join(PUBLIC, 'chat.html')));
+app.get('/office', (_req, res) => res.sendFile(path.join(PUBLIC, 'office.html')));
 
 // Chat with the local 7B model, streamed THROUGH the logging proxy so the
 // conversation is tracked in LAAM as a local session. Model is hard-locked.

@@ -63,6 +63,7 @@
     { href: '/', label: 'Dashboard', match: (p) => p === '/' || p === '/index.html' },
     { href: '/agents', label: 'Agents', match: (p) => p.startsWith('/agents') || p.startsWith('/session') },
     { href: '/graph', label: 'Graph', match: (p) => p.startsWith('/graph') },
+    { href: '/office', label: 'Office', match: (p) => p.startsWith('/office') },
     { href: '/search', label: 'Search', match: (p) => p.startsWith('/search') },
     { href: '/chat', label: 'Chat', match: (p) => p.startsWith('/chat') },
   ];
