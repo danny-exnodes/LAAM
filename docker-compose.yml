@@ -1,0 +1,100 @@
+# LAAM — Local AI Agent Monitoring: full stack.
+#
+# Services:
+#   ollama  — local LLM runtime (serves models on :11434)
+#   proxy   — zero-dep logging proxy; forwards to Ollama and writes JSONL logs
+#   laam    — the dashboard web app (:4317)
+#   ngrok   — optional public tunnel (only with the "public" profile)
+#
+# The top-level `version:` key is intentionally omitted; modern Docker Compose
+# ignores it.
+#
+# ---------------------------------------------------------------------------
+# Quick start (once Docker Desktop is running):
+#   docker compose build
+#   docker compose up -d
+#   docker compose exec ollama ollama pull qwen2.5-coder:7b   # pull a model
+#   docker compose --profile public up -d                     # also start ngrok
+#
+# macOS note: GPU passthrough is NOT available in Docker Desktop on macOS, so
+# the Ollama container below runs CPU-only. For Apple-Silicon GPU acceleration,
+# run Ollama natively on the host and point the proxy at it via
+# host.docker.internal (see the commented-out alternative in the proxy service).
+# ---------------------------------------------------------------------------
+
+services:
+  # Local LLM runtime. Models are persisted in the ollama-models volume so they
+  # survive container restarts/rebuilds.
+  ollama:
+    image: ollama/ollama:latest
+    # CPU-only inside Docker on macOS (no GPU passthrough). On Linux with the
+    # NVIDIA Container Toolkit you could add a `deploy.resources.reservations`
+    # block to expose GPUs, but that does nothing on Docker Desktop / macOS.
+    volumes:
+      - ollama-models:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped
+
+  # Logging proxy: forwards to Ollama and writes JSONL request/response logs to
+  # the shared local-logs volume, which the laam service reads.
+  proxy:
+    build: ./proxy
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      LAAM_LOCAL_LOGS: /data/local-logs
+      PROXY_PORT: 11435
+      # --- Apple-Silicon GPU alternative -------------------------------------
+      # To use a native (host-installed) Ollama with GPU acceleration instead
+      # of the containerized CPU-only one above: remove the `ollama` service
+      # from `depends_on` below, comment out the OLLAMA_URL line above, and use:
+      #   OLLAMA_URL: http://host.docker.internal:11434
+      # (host.docker.internal resolves to the macOS host from inside the
+      # container.)
+    volumes:
+      - local-logs:/data/local-logs
+    ports:
+      - "11435:11435"
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  # The LAAM dashboard.
+  laam:
+    build: .
+    environment:
+      LAAM_PORT: 4317
+      LAAM_PROJECTS_DIR: /claude-projects
+      LAAM_LOCAL_LOGS: /data/local-logs
+    volumes:
+      # Host Claude transcripts, mounted read-only.
+      - ${HOME}/.claude/projects:/claude-projects:ro
+      # The proxy's logs, mounted read-only (proxy owns the writes).
+      - local-logs:/data/local-logs:ro
+    ports:
+      - "4317:4317"
+    depends_on:
+      - proxy
+    restart: unless-stopped
+
+  # Optional public tunnel. Only starts when the "public" profile is enabled:
+  #   docker compose --profile public up -d
+  # The NGROK_AUTHTOKEN must be supplied via the environment or a .env file
+  # (e.g. a line `NGROK_AUTHTOKEN=...` in ./.env). The --domain below is the
+  # user's reserved free static ngrok domain.
+  ngrok:
+    image: ngrok/ngrok:latest
+    command: http laam:4317 --domain=discolor-unseemly-poking.ngrok-free.dev
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    depends_on:
+      - laam
+    restart: unless-stopped
+    profiles:
+      - public
+
+volumes:
+  # Persisted Ollama models (pulled via `ollama pull`).
+  ollama-models:
+  # JSONL logs written by the proxy and read by the dashboard.
+  local-logs:
