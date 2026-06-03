@@ -135,7 +135,7 @@
   // ---- shared dictionary (nav / status / time / connection / theme) --------
   register({
     vi: {
-      nav: { dashboard: 'Tổng quan', agents: 'Agent', graph: 'Sơ đồ', search: 'Tìm kiếm', office: 'Văn phòng', chat: 'Trò chuyện' },
+      nav: { dashboard: 'Tổng quan', agents: 'Agent', graph: 'Sơ đồ', search: 'Tìm kiếm', office: 'Văn phòng', chat: 'Trò chuyện', connectors: 'Kết nối' },
       brand: { sub: 'Giám sát AI Agent cục bộ' },
       conn: { connecting: 'Đang kết nối…', live: 'Trực tiếp', lost: 'Mất kết nối' },
       theme: { toggle: 'Đổi giao diện sáng/tối' },
@@ -145,7 +145,7 @@
       common: { export: 'Xuất', retry: 'Thử lại', loading: 'Đang tải…', search: 'Tìm kiếm', close: 'Đóng', cancel: 'Huỷ', save: 'Lưu', delete: 'Xoá', all: 'Tất cả', none: '—', copy: 'Chép', copied: 'Đã chép' },
     },
     en: {
-      nav: { dashboard: 'Dashboard', agents: 'Agents', graph: 'Graph', search: 'Search', office: 'Office', chat: 'Chat' },
+      nav: { dashboard: 'Dashboard', agents: 'Agents', graph: 'Graph', search: 'Search', office: 'Office', chat: 'Chat', connectors: 'Connectors' },
       brand: { sub: 'Local AI Agent Monitoring' },
       conn: { connecting: 'Connecting…', live: 'Live', lost: 'Disconnected' },
       theme: { toggle: 'Toggle light/dark theme' },
@@ -155,7 +155,7 @@
       common: { export: 'Export', retry: 'Retry', loading: 'Loading…', search: 'Search', close: 'Close', cancel: 'Cancel', save: 'Save', delete: 'Delete', all: 'All', none: '—', copy: 'Copy', copied: 'Copied' },
     },
     zh: {
-      nav: { dashboard: '仪表盘', agents: '智能体', graph: '关系图', search: '搜索', office: '办公室', chat: '对话' },
+      nav: { dashboard: '仪表盘', agents: '智能体', graph: '关系图', search: '搜索', office: '办公室', chat: '对话', connectors: '连接器' },
       brand: { sub: '本地 AI 智能体监控' },
       conn: { connecting: '连接中…', live: '实时', lost: '已断开' },
       theme: { toggle: '切换浅色/深色主题' },

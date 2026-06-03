@@ -15,6 +15,7 @@ import { scanLocal, getLocalTimeline, defaultLocalLogsDir } from '../lib/localPa
 import { computeStats } from '../lib/stats.js';
 import { searchTranscripts } from '../lib/search.js';
 import { PRICE_UPDATED } from '../lib/pricing.js';
+import * as connectors from '../lib/connectors/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
@@ -157,6 +158,19 @@ app.get('/search', (_req, res) => res.sendFile(path.join(PUBLIC, 'search.html'))
 app.get('/session', (_req, res) => res.sendFile(path.join(PUBLIC, 'session.html')));
 app.get('/chat', (_req, res) => res.sendFile(path.join(PUBLIC, 'chat.html')));
 app.get('/office', (_req, res) => res.sendFile(path.join(PUBLIC, 'office.html')));
+app.get('/connectors', (_req, res) => res.sendFile(path.join(PUBLIC, 'connectors.html')));
+
+// ---- Connectors API ------------------------------------------------------
+app.get('/api/connectors', (_req, res) => res.json({ connectors: connectors.list() }));
+app.post('/api/connectors/:id/connect', (req, res) => {
+  const r = connectors.connect(req.params.id, (req.body && req.body.fields) || {});
+  res.status(r.ok ? 200 : 400).json(r);
+});
+app.post('/api/connectors/:id/disconnect', (req, res) => res.json(connectors.disconnect(req.params.id)));
+app.post('/api/connectors/:id/test', async (req, res) => {
+  const r = await connectors.testConnector(req.params.id);
+  res.status(r.ok ? 200 : 400).json(r);
+});
 
 // Chat with the local model, streamed THROUGH the logging proxy so the
 // conversation is tracked in LAAM as a local session. Model defaults to the
@@ -175,7 +189,7 @@ app.get('/api/ollama/models', async (_req, res) => {
   }
 });
 
-app.post('/api/chat', (req, res) => {
+app.post('/api/chat', async (req, res) => {
   const body = req.body || {};
   const { sessionId, messages } = body;
   if (!Array.isArray(messages) || !messages.length) {
@@ -192,9 +206,57 @@ app.post('/api/chat', (req, res) => {
   const outMsgs = messages[0] && messages[0].role === 'system'
     ? messages
     : [{ role: 'system', content: sysPrompt }, ...messages];
+  const options = (body.options && typeof body.options === 'object') ? body.options : null;
+
+  // ---- Connector tool-calling loop -------------------------------------
+  // If any connector is connected, expose its tools to the model. We run the
+  // tool rounds NON-streaming (to capture tool_calls), execute the real APIs,
+  // feed the results back, and stream the final answer as NDJSON.
+  const tools = connectors.chatTools();
+  if (tools.length) {
+    res.writeHead(200, { 'content-type': 'application/x-ndjson', 'cache-control': 'no-cache' });
+    const ndjson = (o) => { try { res.write(JSON.stringify(o) + '\n'); } catch (e) {} };
+    const convo = outMsgs.slice();
+    async function round(withTools) {
+      const reqBody = { model, stream: false, think: false, messages: convo };
+      if (options) reqBody.options = options;
+      if (withTools) reqBody.tools = tools;
+      const r = await fetch(PROXY_URL + '/api/chat', { method: 'POST', headers: { 'content-type': 'application/json', 'x-laam-session': sid }, body: JSON.stringify(reqBody) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }
+    try {
+      let final = null;
+      for (let i = 0; i < 4; i++) {
+        const j = await round(i < 3);
+        const msg = j.message || {};
+        const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+        if (calls.length && i < 3) {
+          convo.push({ role: 'assistant', content: msg.content || '', tool_calls: calls });
+          for (const tc of calls) {
+            const name = tc.function && tc.function.name;
+            ndjson({ tool: name, args: tc.function && tc.function.arguments }); // client shows a "calling …" chip
+            const result = await connectors.execute(name, tc.function && tc.function.arguments);
+            convo.push({ role: 'tool', tool_name: name, content: JSON.stringify(result).slice(0, 6000) });
+          }
+          continue;
+        }
+        final = j; break;
+      }
+      const content = (final && final.message && final.message.content) || '';
+      ndjson({ message: { content } });
+      ndjson({ done: true, model, eval_count: final && final.eval_count, eval_duration: final && final.eval_duration });
+      res.end();
+    } catch (e) {
+      ndjson({ error: 'Lỗi connector/chat: ' + (e && e.message ? e.message : String(e)) });
+      res.end();
+    }
+    return;
+  }
+
+  // ---- No connectors → plain token streaming (unchanged) ----------------
   const out = { model, stream: true, messages: outMsgs };
-  // Pass through optional generation parameters (temperature, top_p, num_predict…).
-  if (body.options && typeof body.options === 'object') out.options = body.options;
+  if (options) out.options = options;
   const payload = JSON.stringify(out);
   const u = new URL(PROXY_URL);
   const preq = http.request(
@@ -616,6 +678,10 @@ if (watchPaths.length) {
 // Re-broadcast periodically so "running → idle" transitions update even
 // when no file changes (status is time-based).
 setInterval(broadcast, 15000);
+
+connectors.loadConnectors().then((ids) => {
+  if (ids.length) console.log(`  ▶  Connectors loaded: ${ids.join(', ')}`);
+}).catch(() => {});
 
 app.listen(PORT, () => {
   console.log(`\n  LAAM — Local AI Agent Monitoring`);

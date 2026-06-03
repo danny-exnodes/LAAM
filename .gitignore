@@ -7,6 +7,10 @@ node_modules/
 .env.*
 !.env.example
 
+# user-entered connector credentials (tokens) — NEVER commit
+connectors.json
+.laam/
+
 # screenshot/test proof artifacts
 chat-render-proof/
 responsive-proof/

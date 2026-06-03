@@ -99,6 +99,7 @@
     { href: '/office', key: 'nav.office', match: (p) => p.startsWith('/office') },
     { href: '/search', key: 'nav.search', match: (p) => p.startsWith('/search') },
     { href: '/chat', key: 'nav.chat', match: (p) => p.startsWith('/chat') },
+    { href: '/connectors', key: 'nav.connectors', match: (p) => p.startsWith('/connectors') },
   ];
 
   // Inject the shared header into <header id="topbar">. `extra` is optional

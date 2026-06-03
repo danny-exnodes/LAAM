@@ -17,6 +17,11 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
   laam:
+    environment:
+      # Where user-entered connector credentials are stored (persisted on the
+      # host at ~/.laam/connectors.json, never committed).
+      LAAM_CONFIG_DIR: /data/laam-config
     volumes:
       - ${HOME}/.claude/projects:/claude-projects:ro
       - ${HOME}/.laam/local-logs:/data/local-logs:ro
+      - ${HOME}/.laam:/data/laam-config
