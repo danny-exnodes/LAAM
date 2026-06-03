@@ -9,6 +9,46 @@ const SYSTEM =
   "Bạn là LAAM, trợ lý nội bộ thân thiện. Trả lời ngắn gọn, chính xác, hữu ích. " +
   "Dùng tiếng Việt khi người dùng dùng tiếng Việt.";
 
+type ChatBody = {
+  conversationId?: string;
+  message?: string;
+  model?: string;
+  temperature?: number;
+  topP?: number;
+  system?: string;
+};
+type ChatMessage = { role: string; content: string };
+
+// Build the Ollama /api/chat request payload from the request body, the
+// conversation history, and the server defaults. Pure — no I/O — so the
+// option mapping (temperature/top_p, model + system overrides, defaults) is
+// unit-testable without a live Ollama. Absent numeric options are omitted so
+// Ollama keeps its own defaults rather than receiving NaN/undefined.
+export function buildOllamaPayload(
+  body: ChatBody,
+  historyMessages: ChatMessage[],
+  defaults: { model: string; system: string },
+) {
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+  const model = str(body.model) ?? defaults.model;
+  const system = str(body.system) ?? defaults.system;
+
+  const options: { temperature?: number; top_p?: number } = {};
+  const t = num(body.temperature);
+  if (t !== null) options.temperature = t;
+  const p = num(body.topP);
+  if (p !== null) options.top_p = p;
+
+  return {
+    model,
+    messages: [{ role: "system", content: system }, ...historyMessages],
+    options,
+    stream: true as const,
+  };
+}
+
 // POST /api/chat — { conversationId?, message }. Streams the Gemma 4 reply
 // (plain text tokens) and persists both the user + assistant messages.
 export async function POST(req: Request) {
@@ -18,16 +58,15 @@ export async function POST(req: Request) {
   }
   const userId = session.user.id;
 
-  const body = (await req.json().catch(() => null)) as
-    | { conversationId?: string; message?: string }
-    | null;
-  const message = (body?.message ?? "").toString().trim();
+  const body = ((await req.json().catch(() => null)) ?? {}) as ChatBody;
+  const message = (body.message ?? "").toString().trim();
   if (!message) {
     return new Response(JSON.stringify({ error: "Empty message" }), { status: 400 });
   }
+  const model = typeof body.model === "string" && body.model.trim() ? body.model : MODEL;
 
   // Resolve or create the conversation (must belong to the user).
-  let conversationId = body?.conversationId;
+  let conversationId = body.conversationId;
   if (conversationId) {
     const rows = await db
       .select()
@@ -43,7 +82,7 @@ export async function POST(req: Request) {
       id: conversationId,
       userId,
       title: message.slice(0, 60),
-      model: MODEL,
+      model,
     });
   }
   const convId = conversationId;
@@ -55,21 +94,22 @@ export async function POST(req: Request) {
     .from(chatMessages)
     .where(eq(chatMessages.conversationId, convId))
     .orderBy(asc(chatMessages.createdAt));
-  const messages = [
-    { role: "system", content: SYSTEM },
-    ...history.map((m) => ({ role: m.role, content: m.content })),
-  ];
+  const payload = buildOllamaPayload(
+    body,
+    history.map((m) => ({ role: m.role, content: m.content })),
+    { model: MODEL, system: SYSTEM },
+  );
 
   let ollamaRes: Response;
   try {
     ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL, messages, stream: true }),
+      body: JSON.stringify(payload),
     });
   } catch {
     return new Response(
-      `Không kết nối được Ollama (${OLLAMA_URL}). Đảm bảo Ollama đang chạy và đã 'ollama pull ${MODEL}'.`,
+      `Không kết nối được Ollama (${OLLAMA_URL}). Đảm bảo Ollama đang chạy và đã 'ollama pull ${model}'.`,
       { status: 502, headers: { "x-conversation-id": convId } },
     );
   }
