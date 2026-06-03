@@ -66,6 +66,12 @@ const CHAT_SYSTEM = [
   '```map',
   '{"directions":{"from":"current","to":"Bắc Ninh, Việt Nam"}}',
   '```',
+  'NEARBY PLACES: when the user asks to find places AROUND THEM — "quán cafe quanh đây", "nhà hàng gần đây", "find 10 cafes near me", "我附近的咖啡店" — emit a map block with a `nearby` object. The app reads the device GPS, queries real places (OpenStreetMap) and renders the list + markers itself. Do NOT invent place names. Format:',
+  '{"nearby":{"query":"<category, e.g. cafe>","limit":<N, default 10>}}',
+  'Example — "tìm 10 quán cafe quanh đây":',
+  '```map',
+  '{"nearby":{"query":"cafe","limit":10}}',
+  '```',
   '',
   '3) TABLE — to list or compare items in rows/columns. Use a GitHub-flavored Markdown table. DO NOT wrap the table in a code fence.',
   'Example:',
@@ -94,6 +100,24 @@ function langDirective(lang) {
     '',
     '',
   ].join('\n');
+}
+
+// Inject the user's real position (from the device GPS, reverse-geocoded by the
+// client) so the model answers location questions instead of refusing.
+function locationDirective(loc) {
+  if (!loc || typeof loc !== 'object' || typeof loc.lat !== 'number' || typeof loc.lng !== 'number') return '';
+  const addr = (typeof loc.address === 'string' && loc.address.trim()) ? loc.address.trim() : '';
+  return [
+    '=== USER LOCATION (known — use it, do NOT refuse) ===',
+    'The user has shared their current device location:',
+    (addr ? '  Address: ' + addr : '') ,
+    '  Coordinates: ' + loc.lat.toFixed(5) + ', ' + loc.lng.toFixed(5),
+    'When the user asks about "here / around here / nearby / near me / my location / my coordinates / quanh đây / gần đây / vị trí của tôi / 附近 / 我的位置", USE this location to answer directly. You DO know where they are — never say you lack their location.',
+    'For "what are my coordinates", state the coordinates (and address) above.',
+    'To list real places around them, emit a ```map block with {"nearby":{"query":"...","limit":N}} — the app fills in real results.',
+    '',
+    '',
+  ].filter(Boolean).join('\n');
 }
 
 // Unified scan: Claude transcripts + local-model proxy logs, merged into one
@@ -154,7 +178,7 @@ app.post('/api/chat', (req, res) => {
   // Honor an optional custom system prompt (else the render-format default), then
   // FORCE the reply language so the model never drifts to English/Chinese.
   const baseSys = (typeof body.system === 'string' && body.system.trim()) ? body.system : CHAT_SYSTEM;
-  const sysPrompt = langDirective(body.lang) + baseSys;
+  const sysPrompt = langDirective(body.lang) + locationDirective(body.location) + baseSys;
   // Prepend the system prompt unless the caller already set one.
   const outMsgs = messages[0] && messages[0].role === 'system'
     ? messages
@@ -351,6 +375,134 @@ app.get('/api/route', async (req, res) => {
   const hit = await routeOne(coords);
   if (!hit) return res.status(502).json({ error: 'không lấy được tuyến đường' });
   res.json(hit);
+});
+
+// ---- Reverse geocode (coords -> address), for location awareness ---------
+const revCache = new Map(); // "lat,lng" (rounded) -> { address, lat, lng } | null
+async function reverseOne(lat, lng) {
+  const key = lat.toFixed(4) + ',' + lng.toFixed(4);
+  if (revCache.has(key)) return revCache.get(key);
+  const wait = Math.max(0, 1100 - (Date.now() - lastGeoCall));
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  lastGeoCall = Date.now();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const url = 'https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&addressdetails=1&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lng);
+    const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'LAAM-chat/0.1 (local AI agent monitoring; self-host)', 'Accept-Language': 'vi,en' } });
+    clearTimeout(timer);
+    const j = await r.json();
+    const hit = j && j.display_name ? { address: j.display_name, lat: lat, lng: lng } : null;
+    revCache.set(key, hit);
+    return hit;
+  } catch {
+    return null;
+  }
+}
+app.get('/api/reverse', async (req, res) => {
+  const lat = parseFloat(req.query.lat), lng = parseFloat(req.query.lng);
+  if (!isFinite(lat) || !isFinite(lng)) return res.status(400).json({ error: 'cần lat & lng' });
+  const hit = await reverseOne(lat, lng);
+  if (!hit) return res.status(404).json({ error: 'không tra được địa chỉ' });
+  res.json(hit);
+});
+
+// ---- Nearby POI search (real places around the user) via Overpass --------
+// Maps a free-text category to OSM tag filters; unknown queries fall back to a
+// viewbox-bounded Nominatim search. Keyless, cached, timed-out, fail-soft.
+const POI_TAGS = {
+  cafe: ['amenity=cafe'], 'coffee': ['amenity=cafe'], 'quán cafe': ['amenity=cafe'], 'cà phê': ['amenity=cafe'], 'càphê': ['amenity=cafe'], '咖啡': ['amenity=cafe'], '咖啡店': ['amenity=cafe'],
+  restaurant: ['amenity=restaurant'], 'nhà hàng': ['amenity=restaurant'], 'quán ăn': ['amenity=restaurant', 'amenity=fast_food'], '餐厅': ['amenity=restaurant'], '饭店': ['amenity=restaurant'],
+  bar: ['amenity=bar', 'amenity=pub'], 'quán bar': ['amenity=bar', 'amenity=pub'], '酒吧': ['amenity=bar', 'amenity=pub'],
+  atm: ['amenity=atm'], 'cây atm': ['amenity=atm'], 'máy atm': ['amenity=atm'], '取款机': ['amenity=atm'],
+  bank: ['amenity=bank'], 'ngân hàng': ['amenity=bank'], '银行': ['amenity=bank'],
+  pharmacy: ['amenity=pharmacy'], 'nhà thuốc': ['amenity=pharmacy'], 'hiệu thuốc': ['amenity=pharmacy'], '药店': ['amenity=pharmacy'], '药房': ['amenity=pharmacy'],
+  hospital: ['amenity=hospital'], 'bệnh viện': ['amenity=hospital'], '医院': ['amenity=hospital'],
+  hotel: ['tourism=hotel', 'tourism=guest_house'], 'khách sạn': ['tourism=hotel', 'tourism=guest_house'], 'nhà nghỉ': ['tourism=guest_house', 'tourism=hotel'], '酒店': ['tourism=hotel'], '宾馆': ['tourism=hotel'],
+  fuel: ['amenity=fuel'], 'cây xăng': ['amenity=fuel'], 'trạm xăng': ['amenity=fuel'], 'xăng': ['amenity=fuel'], '加油站': ['amenity=fuel'],
+  supermarket: ['shop=supermarket', 'shop=convenience'], 'siêu thị': ['shop=supermarket'], 'tạp hoá': ['shop=convenience'], '超市': ['shop=supermarket'],
+  parking: ['amenity=parking'], 'bãi đỗ xe': ['amenity=parking'], 'bãi đỗ': ['amenity=parking'], '停车场': ['amenity=parking'],
+  hospital_clinic: ['amenity=clinic'],
+  school: ['amenity=school'], 'trường học': ['amenity=school'], '学校': ['amenity=school'],
+  park: ['leisure=park'], 'công viên': ['leisure=park'], '公园': ['leisure=park'],
+  toilet: ['amenity=toilets'], 'nhà vệ sinh': ['amenity=toilets'], '厕所': ['amenity=toilets'], '洗手间': ['amenity=toilets'],
+  bus: ['highway=bus_stop', 'amenity=bus_station'], 'bến xe buýt': ['amenity=bus_station', 'highway=bus_stop'], 'trạm xe buýt': ['highway=bus_stop'], '公交站': ['highway=bus_stop'],
+};
+function poiTagsFor(q) {
+  const key = String(q || '').trim().toLowerCase();
+  if (POI_TAGS[key]) return POI_TAGS[key];
+  for (const k in POI_TAGS) { if (k.length > 2 && key.indexOf(k) >= 0) return POI_TAGS[k]; }
+  return null;
+}
+function haversine(aLat, aLng, bLat, bLng) {
+  const R = 6371000, toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(bLat - aLat), dLng = toRad(bLng - aLng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(s)));
+}
+let lastOverpass = 0;
+async function nearbyOverpass(lat, lng, tags, radius) {
+  const filters = tags.map((t) => {
+    const i = t.indexOf('='); const k = t.slice(0, i), v = t.slice(i + 1);
+    return `node["${k}"="${v}"](around:${radius},${lat},${lng});way["${k}"="${v}"](around:${radius},${lat},${lng});`;
+  }).join('');
+  const ql = `[out:json][timeout:18];(${filters});out center 60;`;
+  const wait = Math.max(0, 1000 - (Date.now() - lastOverpass));
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  lastOverpass = Date.now();
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 20000);
+  const r = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST', signal: ctrl.signal,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'LAAM-chat/0.1 (self-host)' },
+    body: 'data=' + encodeURIComponent(ql),
+  });
+  clearTimeout(timer);
+  const j = await r.json();
+  const els = Array.isArray(j.elements) ? j.elements : [];
+  const out = [];
+  for (const e of els) {
+    const p = e.type === 'node' ? { lat: e.lat, lng: e.lon } : (e.center ? { lat: e.center.lat, lng: e.center.lon } : null);
+    if (!p) continue;
+    const name = (e.tags && (e.tags.name || e.tags['name:en'] || e.tags['name:vi'])) || null;
+    if (!name) continue; // skip unnamed POIs — not useful to list
+    out.push({ name, lat: p.lat, lng: p.lng, dist: haversine(lat, lng, p.lat, p.lng), kind: e.tags.amenity || e.tags.shop || e.tags.tourism || e.tags.leisure || null });
+  }
+  // de-dup by name+rounded coords, sort by distance
+  const seen = new Set(), dedup = [];
+  out.sort((a, b) => a.dist - b.dist);
+  for (const o of out) { const k = o.name + '@' + o.lat.toFixed(4) + ',' + o.lng.toFixed(4); if (!seen.has(k)) { seen.add(k); dedup.push(o); } }
+  return dedup;
+}
+const nearbyCache = new Map();
+app.get('/api/nearby', async (req, res) => {
+  const lat = parseFloat(req.query.lat), lng = parseFloat(req.query.lng);
+  if (!isFinite(lat) || !isFinite(lng)) return res.status(400).json({ error: 'cần lat & lng' });
+  const q = String(req.query.q || '').slice(0, 60);
+  let limit = parseInt(req.query.limit, 10); if (!isFinite(limit) || limit < 1) limit = 10; limit = Math.min(limit, 30);
+  let radius = parseInt(req.query.radius, 10); if (!isFinite(radius) || radius < 100) radius = 1500; radius = Math.min(radius, 5000);
+  const cacheKey = lat.toFixed(3) + ',' + lng.toFixed(3) + '|' + q.toLowerCase() + '|' + radius;
+  try {
+    let list = nearbyCache.get(cacheKey);
+    if (!list) {
+      const tags = poiTagsFor(q);
+      if (tags) list = await nearbyOverpass(lat, lng, tags, radius);
+      else {
+        // Unknown category → Nominatim search bounded to a viewbox around the user.
+        const d = radius / 111000; // ~deg
+        const vb = [lng - d, lat + d, lng + d, lat - d].join(',');
+        const wait = Math.max(0, 1100 - (Date.now() - lastGeoCall)); if (wait) await new Promise((r) => setTimeout(r, wait)); lastGeoCall = Date.now();
+        const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=' + limit + '&bounded=1&viewbox=' + vb + '&q=' + encodeURIComponent(q);
+        const r2 = await fetch(url, { headers: { 'User-Agent': 'LAAM-chat/0.1 (self-host)', 'Accept-Language': 'vi,en' } });
+        const arr = await r2.json();
+        list = (Array.isArray(arr) ? arr : []).map((a) => ({ name: (a.display_name || '').split(',')[0], lat: parseFloat(a.lat), lng: parseFloat(a.lon), dist: haversine(lat, lng, parseFloat(a.lat), parseFloat(a.lon)), kind: a.type || null })).sort((x, y) => x.dist - y.dist);
+      }
+      nearbyCache.set(cacheKey, list);
+    }
+    res.json({ query: q, center: { lat, lng }, radius, results: list.slice(0, limit) });
+  } catch (e) {
+    res.status(502).json({ error: 'không tìm được địa điểm quanh đây' });
+  }
 });
 
 app.get('/api/health', (_req, res) => {

@@ -79,12 +79,69 @@
     });
   }
 
+  // ---- Location awareness (broad need + reverse-geocoded context) --------
+  // Any phrasing that implies the user's current position / surroundings —
+  // beyond directions: "quanh đây / gần đây / gần tôi / toạ độ hiện tại",
+  // "nearby / near me / around here", "附近 / 我附近".
+  var NEARBY_RE = /(quanh\s*(đ[âa]y|t[ôo]i|kh[uư]\s*v[ựu]c|m[ìi]nh)|g[ầa]n\s*(đ[âa]y|t[ôo]i|n[àa]y|m[ìi]nh)|xung\s*quanh|chung\s*quanh|to[ạa]\s*đ[ộo]\s*(hi[ệe]n\s*t[ạa]i|c[ủu]a\s*(t[ôo]i|m[ìi]nh)|c[ủu]a\s*m[ìi]nh)?|near\s*(me|here|by)|nearby|around\s*(here|me)|附近|周[围邊]|我附近)/i;
+  function needsLocation(s) { var t = String(s == null ? '' : s); return CURRENT_RE.test(t) || NEARBY_RE.test(t); }
+
+  // Cached reverse-geocoded location context for this session.
+  var _locCtx; // {lat,lng,address}|null|undefined
+  async function ensureLocationContext() {
+    if (_locCtx !== undefined) return _locCtx;
+    var pos = await getCurrentPosition();
+    if (!pos) { _locCtx = null; return null; }
+    var address = '';
+    try {
+      var r = await fetch('/api/reverse?lat=' + pos.lat + '&lng=' + pos.lng);
+      if (r.ok) { var j = await r.json(); if (j && j.address) address = j.address; }
+    } catch (e) { /* address optional */ }
+    _locCtx = { lat: pos.lat, lng: pos.lng, address: address };
+    return _locCtx;
+  }
+  function getLocationContext() { return _locCtx === undefined ? null : _locCtx; }
+
+  // Real POIs around a point (server Overpass/Nominatim proxy).
+  async function fetchNearby(lat, lng, query, limit) {
+    try {
+      var u = '/api/nearby?lat=' + lat + '&lng=' + lng + '&q=' + encodeURIComponent(query || '') + '&limit=' + (limit || 10);
+      var r = await fetch(u);
+      if (!r.ok) return null;
+      var j = await r.json();
+      return j && Array.isArray(j.results) ? j.results : null;
+    } catch (e) { return null; }
+  }
+
   // Resolve one map config object in place; returns true if it changed.
   async function resolveMapCfg(cfg) {
     if (!cfg || typeof cfg !== 'object') return false;
     var changed = false;
     var markers = Array.isArray(cfg.markers) ? cfg.markers : [];
     var dir = cfg.directions;
+
+    // -1) NEARBY POIs around the user's device GPS (self-contained block).
+    if (cfg.nearby && typeof cfg.nearby === 'object' && (cfg.nearby.query || cfg.nearby.q || cfg.nearby.type)) {
+      var nq = cfg.nearby.query || cfg.nearby.q || cfg.nearby.type;
+      var nlim = Number(cfg.nearby.limit) || 10;
+      var npos = await getCurrentPosition();
+      if (npos) {
+        var places = await fetchNearby(npos.lat, npos.lng, nq, nlim);
+        var ms = [{ lat: npos.lat, lng: npos.lng, label: userLabel(), current: true }];
+        if (places && places.length) {
+          places.forEach(function (p) { if (finiteNum(p.lat) && finiteNum(p.lng)) ms.push({ lat: p.lat, lng: p.lng, label: p.name }); });
+          cfg.places = places.map(function (p) { return { name: p.name, lat: p.lat, lng: p.lng, dist: p.dist, kind: p.kind }; });
+        } else {
+          cfg.nearbyEmpty = true;
+        }
+        cfg.markers = ms;
+        cfg.center = [npos.lat, npos.lng];
+        if (typeof cfg.zoom !== 'number') cfg.zoom = 15;
+      } else {
+        cfg.locationDenied = true;
+      }
+      return true; // nearby is self-contained — skip directions/geocode passes
+    }
 
     // 0) CURRENT LOCATION — fill from device GPS where the user asked for it.
     //    Triggers when the FROM endpoint is the user ("đây / từ đây / current"),
@@ -171,5 +228,9 @@
     return norm;
   }
 
-  window.LAAMChatGeo = { resolveMaps: resolveMaps, getCurrentPosition: getCurrentPosition, isCurrentLoc: isCurrentLoc };
+  window.LAAMChatGeo = {
+    resolveMaps: resolveMaps, getCurrentPosition: getCurrentPosition, isCurrentLoc: isCurrentLoc,
+    needsLocation: needsLocation, ensureLocationContext: ensureLocationContext,
+    getLocationContext: getLocationContext, fetchNearby: fetchNearby,
+  };
 })();

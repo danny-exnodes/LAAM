@@ -144,7 +144,8 @@
   function looksLikeMapObj(o) {
     return o && typeof o === 'object' &&
       (Array.isArray(o.markers) || Array.isArray(o.route) ||
-        (o.directions && typeof o.directions === 'object' && o.directions.from && o.directions.to));
+        (o.nearby && typeof o.nearby === 'object') ||
+        (o.directions && typeof o.directions === 'object' && (o.directions.to || o.directions.from)));
   }
   function isTableLines(lines) {
     var hasPipe = false, hasSep = false;
@@ -434,6 +435,30 @@
         rn.lastChild.textContent = T('chat.mapRouteStraight');
         container.appendChild(rn);
       }
+      // Nearby POI search → list the real places (name + distance) under the map.
+      if (Array.isArray(cfg.places) && cfg.places.length) {
+        var list = document.createElement('ol');
+        list.className = 'chat-map-places';
+        cfg.places.forEach(function (p) {
+          if (!p || !p.name) return;
+          var li = document.createElement('li');
+          var nm = document.createElement('span'); nm.className = 'pl-name'; nm.textContent = String(p.name);
+          li.appendChild(nm);
+          if (typeof p.dist === 'number') {
+            var d = document.createElement('span'); d.className = 'pl-dist';
+            d.textContent = p.dist >= 1000 ? (p.dist / 1000).toFixed(1) + ' km' : p.dist + ' m';
+            li.appendChild(d);
+          }
+          list.appendChild(li);
+        });
+        container.appendChild(list);
+      } else if (cfg.nearbyEmpty) {
+        var en = document.createElement('div');
+        en.className = 'chat-map-note';
+        en.innerHTML = '<span aria-hidden="true">🔍</span><span></span>';
+        en.lastChild.textContent = T('chat.nearbyEmpty');
+        container.appendChild(en);
+      }
 
       // Leaflet must init AFTER the element is in the document and sized.
       requestAnimationFrame(function () {
@@ -671,6 +696,15 @@
       // Gentle note when the user\'s location could not be obtained.
       '.chat-map-note {',
       '  margin-top: 6px; font-size: 12px; color: var(--text-dim); display: flex; gap: 6px; align-items: flex-start;',
+      '}',
+      // Nearby-POI result list under the map.
+      '.chat-map-places {',
+      '  margin: 8px 0 0; padding-left: 22px; display: flex; flex-direction: column; gap: 3px;',
+      '}',
+      '.chat-map-places li { font-size: 13px; color: var(--text); line-height: 1.4; }',
+      '.chat-map-places .pl-name { color: var(--text); }',
+      '.chat-map-places .pl-dist {',
+      '  margin-left: 8px; font-size: 11.5px; color: var(--text-faint); font-family: var(--mono); white-space: nowrap;',
       '}',
       // Block errors
       '.chat-block-error {',

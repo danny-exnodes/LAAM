@@ -277,6 +277,13 @@
     emit('conversations:change', conversations);
     renderTranscript();
 
+    // Location awareness: if the message implies the user's position/surroundings
+    // ("quanh đây", "near me", "vị trí của tôi"…), acquire the device GPS NOW so
+    // the permission prompt fires on send, and reverse-geocode it for context.
+    if (window.LAAMChatGeo && window.LAAMChatGeo.needsLocation && window.LAAMChatGeo.needsLocation(text)) {
+      try { await window.LAAMChatGeo.ensureLocationContext(); } catch (e) {}
+    }
+
     await streamAssistant(c);
   }
 
@@ -308,6 +315,10 @@
       // Tell the backend which language to answer in (current UI language) so
       // the model replies in the user's language instead of drifting.
       body.lang = (window.LAAMI18n && window.LAAMI18n.getLang) ? window.LAAMI18n.getLang() : 'vi';
+      // If we already know the user's location (acquired in send()), pass it so
+      // the model answers "nearby / my coordinates" instead of refusing.
+      var loc = (window.LAAMChatGeo && window.LAAMChatGeo.getLocationContext) ? window.LAAMChatGeo.getLocationContext() : null;
+      if (loc && typeof loc.lat === 'number') body.location = loc;
       const options = {};
       if (typeof s.temperature === 'number') options.temperature = s.temperature;
       if (typeof s.top_p === 'number') options.top_p = s.top_p;
