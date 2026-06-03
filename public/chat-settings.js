@@ -44,7 +44,7 @@
     gear.setAttribute('aria-label', T('chat.setGearAria'));
     gear.setAttribute('aria-expanded', 'false');
     gear.title = T('chat.setGearTitle');
-    gear.textContent = '⚙';
+    gear.innerHTML = (window.LAAM && window.LAAM.icon) ? window.LAAM.icon('settings', { size: 17, class: 'lc' }) : '';
     gear.setAttribute('data-i18n-aria', 'chat.setGearAria');
     gear.setAttribute('data-i18n-title', 'chat.setGearTitle');
     if (mounts.toolbar) mounts.toolbar.appendChild(gear);
@@ -134,7 +134,7 @@
       p.innerHTML = `
         <div class="ls-head">
           <span class="ls-title" data-i18n="chat.setTitle">Cài đặt mô hình</span>
-          <button type="button" class="ls-x" data-i18n-aria="chat.setCloseAria" aria-label="Đóng">×</button>
+          <button type="button" class="ls-x" data-i18n-aria="chat.setCloseAria" aria-label="Đóng">${(window.LAAM && window.LAAM.icon) ? window.LAAM.icon('x', { size: 17, class: 'lc' }) : '×'}</button>
         </div>
         <div class="ls-body">
           <label class="ls-field">
@@ -319,7 +319,8 @@
     function setBadge(model) {
       if (!store.setModelInfo) return;
       const pretty = store.prettyModel ? store.prettyModel(model) : model;
-      store.setModelInfo('<span class="badge-local">' + esc(T('chat.badgeLocal')) + '</span><span>' + esc(T('chat.modelLocalFree', { model: pretty })) + '</span>');
+      const hex = (window.LAAM && window.LAAM.icon) ? window.LAAM.icon('hexagon', { size: 13, class: 'lc' }) : '';
+      store.setModelInfo('<span class="badge-local">' + hex + esc(T('chat.badgeLocal')) + '</span><span>' + esc(T('chat.modelLocalFree', { model: pretty })) + '</span>');
     }
 
     // ======================================================================
@@ -354,6 +355,7 @@
         .laam-settings-panel .ls-x {
           border: 0; background: transparent; color: var(--text-faint); cursor: pointer;
           font-size: 19px; line-height: 1; width: 24px; height: 24px; border-radius: 6px;
+          display: grid; place-items: center;
         }
         .laam-settings-panel .ls-x:hover { color: var(--text); background: var(--bg-sunken); }
         .laam-settings-panel .ls-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }

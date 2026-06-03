@@ -83,13 +83,15 @@
     // chart, and a map / directions block. UI text is Vietnamese.
     // Text resolved at build time via T(key) so chips follow the active language.
     const SUGGESTIONS = [
-      { icon: '💡', key: 'chat.suggest1' },
-      { icon: '🐍', key: 'chat.suggest2' },
-      { icon: '📊', key: 'chat.suggest3' },
-      { icon: '📈', key: 'chat.suggest4' },
-      { icon: '🗺️', key: 'chat.suggest5' },
-      { icon: '✍️', key: 'chat.suggest6' },
+      { icon: 'lightbulb', key: 'chat.suggest1' },
+      { icon: 'braces', key: 'chat.suggest2' },
+      { icon: 'bar-chart-3', key: 'chat.suggest3' },
+      { icon: 'trending-up', key: 'chat.suggest4' },
+      { icon: 'map', key: 'chat.suggest5' },
+      { icon: 'pen-line', key: 'chat.suggest6' },
     ];
+    const L = window.LAAM || {};
+    const iconSvg = (name, size) => (L.icon ? L.icon(name, { size: size || 16, class: 'lc' }) : '');
 
     function pickSuggestion(text) {
       if (!text || store.isStreaming()) return;
@@ -111,7 +113,7 @@
         chip.setAttribute('tabindex', '0');
         chip.setAttribute('aria-label', text);
         chip.innerHTML =
-          '<span class="laam-ux-chip-ico" aria-hidden="true">' + esc(s.icon) + '</span>' +
+          '<span class="laam-ux-chip-ico" aria-hidden="true">' + iconSvg(s.icon, 16) + '</span>' +
           '<span class="laam-ux-chip-txt">' + esc(text) + '</span>';
         chip.addEventListener('click', () => pickSuggestion(text));
         chip.addEventListener('keydown', (e) => {

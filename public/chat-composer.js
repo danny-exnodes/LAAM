@@ -33,11 +33,11 @@
   // a localized label (resolved at render via labelKey) is shown beside each.
   // run() receives the store.
   var COMMANDS = [
-    { name: 'moi',    labelKey: 'chat.cmdNew',      icon: '✚',  run: function (s) { s.newConversation(); } },
-    { name: 'xoa',    labelKey: 'chat.cmdClear',    icon: '🗑', run: function (s) { s.clearMessages(); } },
-    { name: 'dung',   labelKey: 'chat.cmdStop',     icon: '⏹', run: function (s) { s.stop(); } },
-    { name: 'xuat',   labelKey: 'chat.cmdExport',   icon: '⬇',  run: function (s) { s.emit('command:export'); } },
-    { name: 'caidat', labelKey: 'chat.cmdSettings', icon: '⚙',  run: function (s) { s.emit('command:settings'); } },
+    { name: 'moi',    labelKey: 'chat.cmdNew',      icon: 'plus',        run: function (s) { s.newConversation(); } },
+    { name: 'xoa',    labelKey: 'chat.cmdClear',    icon: 'trash-2',     run: function (s) { s.clearMessages(); } },
+    { name: 'dung',   labelKey: 'chat.cmdStop',     icon: 'circle-stop', run: function (s) { s.stop(); } },
+    { name: 'xuat',   labelKey: 'chat.cmdExport',   icon: 'download',    run: function (s) { s.emit('command:export'); } },
+    { name: 'caidat', labelKey: 'chat.cmdSettings', icon: 'settings',    run: function (s) { s.emit('command:settings'); } },
   ];
 
   // If a single pasted chunk is longer than this, offer to attach it instead of
@@ -51,6 +51,8 @@
       var input = m.input;
       if (!store || !input) return; // nothing to power up without these
       var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
+      var L = window.LAAM || {};
+      var iconSvg = function (name, size) { return L.icon ? L.icon(name, { size: size || 16, class: 'lc' }) : ''; };
 
       injectCss();
 
@@ -100,7 +102,7 @@
         overlay = document.createElement('div');
         overlay.className = 'laam-cmp-drop';
         overlay.setAttribute('aria-hidden', 'true');
-        overlay.innerHTML = '<div class="laam-cmp-drop-card"><div class="laam-cmp-drop-ic">📥</div>' +
+        overlay.innerHTML = '<div class="laam-cmp-drop-card"><div class="laam-cmp-drop-ic">' + iconSvg('upload', 28) + '</div>' +
           '<div class="laam-cmp-drop-msg"></div>' +
           '<div class="laam-cmp-drop-sub"></div></div>';
         overlayHost.appendChild(overlay);
@@ -330,7 +332,7 @@
           row.setAttribute('aria-selected', i === activeIdx ? 'true' : 'false');
           row.dataset.i = i;
           row.innerHTML =
-            '<span class="laam-cmp-menu-ic">' + (ctx.esc ? ctx.esc(c.icon) : c.icon) + '</span>' +
+            '<span class="laam-cmp-menu-ic">' + iconSvg(c.icon) + '</span>' +
             '<span class="laam-cmp-menu-cmd">/' + (ctx.esc ? ctx.esc(c.name) : c.name) + '</span>' +
             '<span class="laam-cmp-menu-lbl">' + (ctx.esc ? ctx.esc(T(c.labelKey)) : T(c.labelKey)) + '</span>';
           menuItemsWrap.appendChild(row);

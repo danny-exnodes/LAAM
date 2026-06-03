@@ -240,7 +240,7 @@
   function renderAttachments() {
     if (!attachEl) return;
     attachEl.innerHTML = attachments
-      .map((a, i) => `<span class="attach-chip" title="${esc(T('chat.attachChars', { name: a.name, n: (a.text || '').length }))}">${a.kind === 'url' ? '🔗' : '📎'} ${esc(a.name)}<button data-i="${i}" class="x" aria-label="${esc(T('chat.attachRemoveAria'))}">×</button></span>`)
+      .map((a, i) => `<span class="attach-chip" title="${esc(T('chat.attachChars', { name: a.name, n: (a.text || '').length }))}">${(L.icon ? L.icon(a.kind === 'url' ? 'link' : 'paperclip', { size: 14, class: 'lc' }) : '')} ${esc(a.name)}<button data-i="${i}" class="x" aria-label="${esc(T('chat.attachRemoveAria'))}">×</button></span>`)
       .join('');
     emit('attachments:change', attachments);
   }
@@ -491,7 +491,7 @@
 
     if (m.role === 'user') {
       bubble.innerHTML = renderContent(m.text != null ? m.text : m.content) +
-        (m.attachments && m.attachments.length ? '<div class="caption">' + esc(T('chat.attachedCaption', { n: m.attachments.length })) + '</div>' : '');
+        (m.attachments && m.attachments.length ? '<div class="caption caption-icon">' + (L.icon ? L.icon('paperclip', { size: 13, class: 'lc' }) : '') + '<span>' + esc(T('chat.attachedCaption', { n: m.attachments.length })) + '</span></div>' : '');
     } else if (m.streaming) {
       bubble.classList.add('cursor');
       bubble.innerHTML = renderContent(m.content);
@@ -512,8 +512,9 @@
     }
     if (m.stopped) {
       const cap = document.createElement('div');
-      cap.className = 'caption';
-      cap.textContent = T('chat.stopped');
+      cap.className = 'caption caption-icon';
+      const ic = L.icon ? L.icon('circle-stop', { size: 13, class: 'lc' }) : '';
+      cap.innerHTML = ic + '<span>' + esc(T('chat.stopped')) + '</span>';
       wrap.appendChild(cap);
     }
 
@@ -525,13 +526,15 @@
     const wrap = document.createElement('div');
     wrap.className = 'msg error';
     const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    bubble.textContent = T('chat.errPrefix', { msg: msg });
+    bubble.className = 'bubble bubble-error';
+    const warnIc = L.icon ? L.icon('triangle-alert', { size: 15, class: 'lc' }) : '';
+    bubble.innerHTML = warnIc + '<span>' + esc(T('chat.errPrefix', { msg: msg })) + '</span>';
     wrap.appendChild(bubble);
     const retry = document.createElement('button');
     retry.className = 'msg-retry';
     retry.type = 'button';
-    retry.textContent = T('chat.errRetry');
+    const retryIc = L.icon ? L.icon('rotate-cw', { size: 13, class: 'lc' }) : '';
+    retry.innerHTML = retryIc + '<span>' + esc(T('chat.errRetry')) + '</span>';
     retry.addEventListener('click', () => retryLast());
     wrap.appendChild(retry);
     emit('error:rendered', { el: wrap, message: msg, retry: retryLast });
@@ -571,6 +574,17 @@
   if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
   if (scrim) scrim.addEventListener('click', closeSidebarMobile);
 
+  // ----------------------------------------------------------------------
+  // Lucide icons for the static chrome buttons (replace the inline emoji).
+  // ----------------------------------------------------------------------
+  function setBtnIcon(el, name, size) {
+    if (!el) return;
+    const ic = L.icon ? L.icon(name, { size: size || 18, class: 'lc' }) : '';
+    if (ic) el.innerHTML = ic;
+  }
+  setBtnIcon(sidebarToggleBtn, 'menu', 18);
+  setBtnIcon($('#scroll-bottom'), 'arrow-down', 18);
+
   // ======================================================================
   // Model info line
   // ======================================================================
@@ -581,7 +595,8 @@
   }
   function setModelInfo(html) { if (subInfo) subInfo.innerHTML = html; }
   function defaultModelBadge(m) {
-    return '<span class="badge-local">' + esc(T('chat.badgeLocal')) + '</span><span>' + esc(T('chat.modelLocalFree', { model: prettyModel(m) })) + '</span>';
+    const hex = L.icon ? L.icon('hexagon', { size: 13, class: 'lc' }) : '';
+    return '<span class="badge-local">' + hex + esc(T('chat.badgeLocal')) + '</span><span>' + esc(T('chat.modelLocalFree', { model: prettyModel(m) })) + '</span>';
   }
   let lastBadgeModel = 'qwen2.5-coder:7b';
   fetch('/api/chat/info').then((r) => r.json())
@@ -606,6 +621,7 @@
   // file / URL attach (baseline; composer adds drag-drop + paste)
   if (attachEl) attachEl.addEventListener('click', (e) => { const x = e.target.closest('.x'); if (x) removeAttachment(Number(x.dataset.i)); });
   const attachFileBtn = $('#attach-file');
+  setBtnIcon(attachFileBtn, 'paperclip', 18);
   if (attachFileBtn) attachFileBtn.addEventListener('click', () => fileInput && fileInput.click());
   if (fileInput) fileInput.addEventListener('change', async () => {
     const file = fileInput.files && fileInput.files[0];
@@ -625,6 +641,7 @@
     }
   });
   const attachUrlBtn = $('#attach-url');
+  setBtnIcon(attachUrlBtn, 'link', 18);
   if (attachUrlBtn) attachUrlBtn.addEventListener('click', async () => {
     const url = window.prompt(T('chat.urlPrompt'));
     if (!url) return;
@@ -643,6 +660,7 @@
   // the model phrases a from-my-location request. Real coords are resolved at
   // map-render time by chat-geo.js.
   const attachLocBtn = $('#attach-loc');
+  setBtnIcon(attachLocBtn, 'map-pin', 18);
   if (attachLocBtn) attachLocBtn.addEventListener('click', async () => {
     attachLocBtn.disabled = true;
     let pos = null;
@@ -791,6 +809,9 @@
       }
       .msg.user .bubble pre { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.28); color: #fff; }
       .caption { margin-top: 5px; font-size: 11.5px; color: var(--text-faint); font-family: var(--mono); }
+      .caption.caption-icon { display: inline-flex; align-items: center; gap: 5px; }
+      .bubble.bubble-error { display: flex; align-items: flex-start; gap: 6px; }
+      .msg-retry { display: inline-flex; align-items: center; gap: 5px; }
       .cursor::after { content: '▍'; color: var(--text-faint); animation: laam-blink 1s steps(2, start) infinite; }
       @keyframes laam-blink { to { visibility: hidden; } }
       .msg-actions { display: flex; gap: 4px; margin-top: 4px; opacity: 0; transition: opacity .12s ease; }

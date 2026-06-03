@@ -244,7 +244,8 @@
     if (el) {
       if (stuck.length) {
         el.hidden = false;
-        el.innerHTML = t9('dash.stuck.banner', { n: stuck.length });
+        el.innerHTML = window.LAAM.icon('triangle-alert', { size: 16, class: 'lc' }) +
+          ' ' + t9('dash.stuck.banner', { n: stuck.length });
       } else {
         el.hidden = true;
       }
@@ -264,7 +265,23 @@
     for (const id of [...knownStuck]) if (!stuck.some((s) => s.id === id)) knownStuck.delete(id);
   }
 
-  // Export buttons.
+  // Export buttons. Inject Lucide icons + alignment CSS (icon survives i18n
+  // re-translation because the text lives in a separate inner span).
+  if (!document.getElementById('laam-dash-icon-css')) {
+    const st = document.createElement('style');
+    st.id = 'laam-dash-icon-css';
+    st.textContent = `
+      .dash-toolbar .fsel { display:inline-flex; align-items:center; gap:6px; }
+      .dash-toolbar .fsel .lc-ico { display:inline-flex; }
+      #stuck-alert .lc { vertical-align:-2px; margin-right:2px; }
+    `;
+    document.head.appendChild(st);
+  }
+  const csvIco = document.querySelector('#exp-csv .lc-ico');
+  if (csvIco) csvIco.innerHTML = window.LAAM.icon('download', { size: 16, class: 'lc' });
+  const pdfIco = document.querySelector('#exp-pdf .lc-ico');
+  if (pdfIco) pdfIco.innerHTML = window.LAAM.icon('file-text', { size: 16, class: 'lc' });
+
   document.querySelector('#exp-csv')?.addEventListener('click', () => window.LAAM.export?.csvSessions());
   document.querySelector('#exp-pdf')?.addEventListener('click', () => window.LAAM.export?.pdfReport());
 

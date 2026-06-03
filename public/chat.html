@@ -23,7 +23,7 @@
 
     <section id="chat-main" class="chat-main">
       <div class="chat-sub" id="chat-sub">
-        <button id="sidebar-toggle" class="sidebar-toggle" data-i18n-title="chat.sidebarToggleTitle" data-i18n-aria="chat.sidebarToggleAria" title="Lịch sử trò chuyện" aria-label="Bật/tắt lịch sử">☰</button>
+        <button id="sidebar-toggle" class="sidebar-toggle" data-i18n-title="chat.sidebarToggleTitle" data-i18n-aria="chat.sidebarToggleAria" title="Lịch sử trò chuyện" aria-label="Bật/tắt lịch sử"></button>
         <div id="chat-sub-info" class="chat-sub-info"></div>
         <div class="chat-sub-spacer"></div>
         <!-- Toolbar buttons (settings, export, …) — filled by feature modules -->
@@ -33,16 +33,16 @@
       <div class="transcript" id="transcript" role="log" aria-live="polite" data-i18n-aria="chat.transcriptAria" aria-label="Nội dung trò chuyện"></div>
 
       <!-- Scroll-to-bottom FAB — managed by chat-composer.js -->
-      <button id="scroll-bottom" class="scroll-bottom" hidden data-i18n-aria="chat.scrollBottomAria" aria-label="Cuộn xuống cuối">↓</button>
+      <button id="scroll-bottom" class="scroll-bottom" hidden data-i18n-aria="chat.scrollBottomAria" aria-label="Cuộn xuống cuối"></button>
 
       <div class="dock">
         <div class="attachments" id="attachments"></div>
         <!-- Composer add-ons (token counter, slash menu, …) — chat-composer.js -->
         <div id="composer-toolbar" class="composer-toolbar"></div>
         <div class="dock-inner">
-          <button class="attach" id="attach-file" data-i18n-title="chat.attachFileTitle" data-i18n-aria="chat.attachFileAria" title="Đính kèm file (txt/md/csv/pdf)" aria-label="Đính kèm file">📎</button>
-          <button class="attach" id="attach-url" data-i18n-title="chat.attachUrlTitle" data-i18n-aria="chat.attachUrlAria" title="Đọc nội dung một URL" aria-label="Đọc một URL">🔗</button>
-          <button class="attach" id="attach-loc" data-i18n-title="chat.locTitle" data-i18n-aria="chat.locTitle" title="Dùng vị trí hiện tại của tôi" aria-label="Dùng vị trí hiện tại của tôi">📍</button>
+          <button class="attach" id="attach-file" data-i18n-title="chat.attachFileTitle" data-i18n-aria="chat.attachFileAria" title="Đính kèm file (txt/md/csv/pdf)" aria-label="Đính kèm file"></button>
+          <button class="attach" id="attach-url" data-i18n-title="chat.attachUrlTitle" data-i18n-aria="chat.attachUrlAria" title="Đọc nội dung một URL" aria-label="Đọc một URL"></button>
+          <button class="attach" id="attach-loc" data-i18n-title="chat.locTitle" data-i18n-aria="chat.locTitle" title="Dùng vị trí hiện tại của tôi" aria-label="Dùng vị trí hiện tại của tôi"></button>
           <textarea id="input" rows="1" data-i18n-ph="chat.inputPh" data-i18n-aria="chat.inputAria" placeholder="Nhắn cho Qwen… (Enter để gửi, Shift+Enter xuống dòng)" aria-label="Soạn tin nhắn"></textarea>
           <button class="send" id="send" data-i18n="chat.send">Gửi</button>
           <button class="stop" id="stop" hidden data-i18n="chat.stop">Dừng</button>
@@ -55,6 +55,7 @@
   <!-- Shared utilities + rich-render pipeline (load before the kernel) -->
   <script src="/i18n.js"></script>
   <script src="/i18n.chat.js"></script>
+  <script src="/vendor/lucide-icons.js"></script>
   <script src="/common.js"></script>
   <script src="/chat-render.js"></script>
   <script src="/chat-geo.js"></script>

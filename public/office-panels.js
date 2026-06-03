@@ -29,6 +29,11 @@
     if (typeof L.ago === 'function') return L.ago(ts);
     return '';
   }
+  // Lucide glyph helper (aligned on the text baseline via class 'lc').
+  function icon(name, size) {
+    if (typeof L.icon === 'function') return L.icon(name, { class: 'lc', size: size || 13 });
+    return '';
+  }
   // Translate via the shared i18n engine; fall back to the given default string.
   function t(key, fallback, vars) {
     if (typeof L.t === 'function') {
@@ -118,6 +123,10 @@
       '.op-g.info{color:var(--text-faint);}',
       '.op-empty{font-size:12px;color:var(--text-faint);padding:8px 4px;',
       '  font-family:var(--sans);}',
+      /* Lucide glyphs: keep events/warn icons centered in their slots. */
+      '.op-ev .op-g{display:inline-flex;align-items:center;justify-content:center;}',
+      '.op-warn{display:inline-flex;align-items:center;}',
+      '.op-g .lc,.op-warn .lc{display:block;}',
       '@keyframes op-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--running) 55%,transparent);}',
       '  70%{box-shadow:0 0 0 7px color-mix(in srgb,var(--running) 0%,transparent);}',
       '  100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--running) 0%,transparent);}}',
@@ -147,7 +156,7 @@
         var chip = src
           ? '<span class="op-chip ' + src + '">' + (src === 'claude' ? t('office.srcClaude', 'Claude') : t('office.srcLocal', 'Local')) + '</span>'
           : '';
-        var warn = stuck ? '<span class="op-warn" title="' + esc(t('office.connStuckTip', 'Nghi bị kẹt')) + '">⚠</span>' : '';
+        var warn = stuck ? '<span class="op-warn" title="' + esc(t('office.connStuckTip', 'Nghi bị kẹt')) + '">' + icon('triangle-alert', 12) + '</span>' : '';
         var label = esc(a.label || a.id || t('office.connNoName', '(không tên)'));
         var model = a.model ? '<span class="op-model">' + esc(shortModel(a.model)) + '</span>' : '';
         return (
@@ -208,7 +217,14 @@
   }
 
   // ---- 3) event console ----------------------------------------------
-  var GLYPH = { start: '▶', spawn: '⎇', done: '✓', stuck: '⚠', info: '·' };
+  // Lucide glyph per event kind; renders an <svg> that inherits the .op-g color.
+  var GLYPH = {
+    start: function () { return icon('play', 12); },
+    spawn: function () { return icon('git-branch', 12); },
+    done: function () { return icon('check', 12); },
+    stuck: function () { return icon('triangle-alert', 12); },
+    info: function () { return icon('circle', 8); },
+  };
   function events(hostEl, list) {
     if (!hostEl) return;
     injectStyle();
@@ -220,7 +236,7 @@
         return (
           '<div class="op-ev">' +
           '<span class="op-ts">' + esc(ago(e.ts)) + '</span>' +
-          '<span class="op-g ' + kind + '">' + GLYPH[kind] + '</span>' +
+          '<span class="op-g ' + kind + '">' + GLYPH[kind]() + '</span>' +
           '<span class="op-tx">' + esc(e.text || '') + '</span>' +
           '</div>'
         );

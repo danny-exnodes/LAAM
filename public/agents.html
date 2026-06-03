@@ -12,7 +12,7 @@
 
   <div class="filterbar" id="filterbar">
     <label class="search">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <span class="search-ic" id="search-ic"></span>
       <input id="search" type="text" placeholder="Tìm project / agent / task…" data-i18n-ph="agents.searchPh" />
     </label>
     <select class="fsel" id="f-source">
@@ -27,7 +27,7 @@
       <option value="running" data-i18n="status.running">Đang chạy</option>
       <option value="idle" data-i18n="status.idle">Tạm dừng</option>
       <option value="done" data-i18n="status.done">Hoàn tất</option>
-      <option value="stuck" data-i18n="agents.statusStuck">⚠ Nghi kẹt</option>
+      <option value="stuck" data-i18n="agents.statusStuck">Nghi kẹt</option>
     </select>
     <select class="fsel" id="f-branch"><option value="" data-i18n="agents.branchAll">Mọi branch</option></select>
     <select class="fsel" id="f-time">
@@ -38,7 +38,7 @@
       <option value="604800000" data-i18n="agents.time7d">7 ngày qua</option>
     </select>
     <button class="fsel ghost" id="f-clear" data-i18n="agents.clear">Xoá lọc</button>
-    <button class="fsel" id="f-export" title="Xuất CSV các session đang hiển thị" data-i18n="agents.exportCsv" data-i18n-title="agents.exportTitle">⤓ CSV</button>
+    <button class="fsel" id="f-export" title="Xuất CSV các session đang hiển thị" data-i18n-title="agents.exportTitle"><span class="f-export-ic" id="f-export-ic"></span><span data-i18n="agents.exportCsv">CSV</span></button>
     <span class="fcount" id="f-count"></span>
   </div>
 
@@ -53,14 +53,13 @@
         <h3 id="d-title">—</h3>
         <div class="dp" id="d-path"></div>
       </div>
-      <button class="iconbtn" id="d-close">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
+      <button class="iconbtn" id="d-close" aria-label="Close"></button>
     </div>
     <div class="drawer-body" id="d-body"></div>
   </aside>
   <script src="/i18n.js"></script>
   <script src="/i18n.agents.js"></script>
+  <script src="/vendor/lucide-icons.js"></script>
 
   <script src="/common.js"></script>
   <script src="/export.js"></script>

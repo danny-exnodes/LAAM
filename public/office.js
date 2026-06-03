@@ -13,6 +13,16 @@
   const S = window.OfficeSprites, P = window.OfficePanels;
   const TW = (S && S.TILE_W) || 72, TH = (S && S.TILE_H) || 36;
   const $ = (s) => document.querySelector(s);
+  const ic = (name, size) => window.LAAM.icon(name, { class: 'lc', size: size || 17 });
+
+  // Fill the chrome glyphs (toggles, zoom, drawer close) with Lucide icons.
+  const setIcon = (sel, name, size) => { const el = $(sel); if (el) el.innerHTML = ic(name, size); };
+  setIcon('#tg-connected', 'users');
+  setIcon('#tg-analytics', 'bar-chart-3');
+  setIcon('#tg-console', 'clipboard-list');
+  setIcon('#zoom-out', 'minus', 16);
+  setIcon('#zoom-in', 'plus', 16);
+  setIcon('#d-close', 'x', 16);
   const scene = $('#scene'), floor = $('#floor'), roomsSvg = $('#rooms'), furn = $('#furniture'),
     agentsEl = $('#agents'), plaques = $('#plaques'), links = $('#links'), stage = $('#stage'), sizer = $('#sizer');
   const NS = 'http://www.w3.org/2000/svg';
@@ -94,9 +104,12 @@
       .office-panel.console { bottom: 14px; left: 14px; right: 240px; }
       .office-controls { position: absolute; bottom: 14px; right: 14px; z-index: 30; display: flex; gap: 6px; align-items: center;
         background: color-mix(in srgb, var(--bg-elev) 86%, transparent); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 10px; padding: 6px 8px; }
-      .office-controls .fsel { padding: 4px 9px; }
+      .office-controls .fsel { padding: 4px 9px; display: inline-flex; align-items: center; justify-content: center; }
       .office-controls .office-toggle { font-size: 13px; line-height: 1; }
       .office-controls .office-toggle.off { opacity: .4; }
+      .office-controls .fsel .lc, .room-plaque .lc, .name-tag .lc, .chat-bubble .who .lc { vertical-align: -0.15em; }
+      #d-close { display: inline-flex; align-items: center; justify-content: center; }
+      .meta .m .lc { vertical-align: -0.15em; margin-right: 1px; }
       .office-controls .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 3px; }
       @media (max-width: 720px) {
         /* Compact HUD so the iso scene stays usable on a phone. */
@@ -208,24 +221,30 @@
 
   const nodeStatus = (n) => n.role === 'sub' ? (n.sub.status === 'running' ? 'running' : 'done') : n.session.status;
   function nodeBubble(n) {
-    if (n.role === 'sub') return { who: '⛓ ' + (n.sub.type || t('office.agentFallback')), text: n.sub.description || '', tool: false };
+    if (n.role === 'sub') return { whoIcon: 'git-branch', who: (n.sub.type || t('office.agentFallback')), text: n.sub.description || '', tool: false };
     const task = n.session.currentTask; if (!task) return null;
     const who = task.kind === 'user' ? t('office.bubbleRequest') : task.kind === 'tool' ? t('office.bubbleDoing') : task.kind === 'thinking' ? t('office.bubbleThinking') : t('office.bubbleActive');
-    return { who, text: task.text || '', tool: task.kind === 'tool' };
+    return { whoIcon: null, who, text: task.text || '', tool: task.kind === 'tool' };
   }
-  const nodeLabel = (n) => n.role === 'sub' ? (n.sub.type || t('office.agentFallback')) : (n.session.source === 'local' ? '⬡ ' + n.session.project : n.session.project);
+  // Returns { icon, text }: a Lucide glyph (or null) plus the plain label text.
+  const nodeLabel = (n) => n.role === 'sub'
+    ? { icon: null, text: (n.sub.type || t('office.agentFallback')) }
+    : (n.session.source === 'local' ? { icon: 'hexagon', text: n.session.project } : { icon: null, text: n.session.project });
 
   function buildWrap(n, status) {
     const wrap = document.createElement('div'); wrap.className = 'av-wrap';
     wrap.appendChild(S.avatar({ status, role: n.role, hue: hueFor(n.session.id + (n.sub ? n.sub.id : '')) }));
     const dot = document.createElement('span'); dot.className = 'status-dot ' + status; wrap.appendChild(dot);
     if (n.role === 'orchestrator' && isStuck(n.session)) { const b = document.createElement('span'); b.className = 'stuck-badge'; b.textContent = '!'; wrap.appendChild(b); }
-    const tag = document.createElement('span'); tag.className = 'name-tag'; tag.textContent = nodeLabel(n); wrap.appendChild(tag);
+    const tag = document.createElement('span'); tag.className = 'name-tag';
+    const lbl = nodeLabel(n);
+    tag.innerHTML = (lbl.icon ? ic(lbl.icon, 12) + ' ' : '') + esc(lbl.text); wrap.appendChild(tag);
     if (status !== 'done') {
       const bb = nodeBubble(n);
       if (bb && bb.text) {
         const bubble = document.createElement('div'); bubble.className = 'chat-bubble' + (bb.tool ? ' tool' : '');
-        bubble.innerHTML = `<span class="who">${esc(bb.who)}</span><span class="body">${esc((bb.text || '').slice(0, 130))}</span>`;
+        const whoIco = bb.whoIcon ? ic(bb.whoIcon, 11) + ' ' : '';
+        bubble.innerHTML = `<span class="who">${whoIco}${esc(bb.who)}</span><span class="body">${esc((bb.text || '').slice(0, 130))}</span>`;
         wrap.appendChild(bubble);
       }
     }
@@ -359,7 +378,7 @@
       const d = await (await fetch('/api/session/' + s.id)).json();
       const head = `<div class="meta" style="margin-bottom:14px">
         <span class="m"><b>${fmtDur(d.durationMs)}</b></span><span class="m"><b>${d.messageCount}</b> ${esc(t('office.msgUnit'))}</span>
-        <span class="m"><b>${d.toolUseCount}</b> ${esc(t('office.toolUnit'))}</span><span class="m">💲<b>${fmtUSD(d.costUSD)}</b></span></div>`;
+        <span class="m"><b>${d.toolUseCount}</b> ${esc(t('office.toolUnit'))}</span><span class="m">${ic('dollar-sign', 13)}<b>${fmtUSD(d.costUSD)}</b></span></div>`;
       const tl = (d.timeline || []).slice(-40).map((it) => {
         const role = it.sidechain ? 'tool' : it.role;
         return `<div class="tl-item"><div class="tl-role ${role}">${role}</div><div class="tl-text ${it.kind === 'tool' || it.kind === 'result' ? 'mono' : ''}">${esc((it.text || '').slice(0, 400))}</div></div>`;

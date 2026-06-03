@@ -47,6 +47,11 @@
 
 * { box-sizing: border-box; }
 
+/* Lucide icons (LAAM.icon): inherit text colour, align to the baseline, and
+   never shrink in flex rows. `.lc` is the convention used across the app. */
+svg.lc { vertical-align: -0.15em; flex: 0 0 auto; }
+button svg.lc, a svg.lc { pointer-events: none; }
+
 body {
   margin: 0;
   font-family: var(--sans);

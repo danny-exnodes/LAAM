@@ -61,12 +61,18 @@
         }
       }
 
-      // Build one toolbar button. `label` may carry an icon glyph.
-      function mkBtn(label, title) {
+      var L = window.LAAM || {};
+      function iconSvg(name) { return L.icon ? L.icon(name, { size: 13, class: 'lc' }) : ''; }
+
+      // Build one toolbar button: a Lucide icon + a label span. `iconName` is a
+      // kebab-case lucide name; pass '' for a label-only button.
+      function mkBtn(label, title, iconName) {
         var b = document.createElement('button');
         b.type = 'button';
         b.className = 'laam-act-btn';
-        b.textContent = label;
+        var ic = iconName ? iconSvg(iconName) : '';
+        b.innerHTML = ic + '<span class="laam-act-lbl"></span>';
+        b.querySelector('.laam-act-lbl').textContent = label;
         if (title) { b.title = title; b.setAttribute('aria-label', title); }
         return b;
       }
@@ -98,19 +104,19 @@
         var typedText = msg.text != null ? msg.text : fullText;
 
         // ----- Chép (both roles) -----
-        var copyBtn = mkBtn(T('chat.actCopy'), T('chat.actCopyTitle'));
+        var copyBtn = mkBtn(T('chat.actCopy'), T('chat.actCopyTitle'), 'copy');
         copyBtn.addEventListener('click', function () {
           copyText(fullText).then(function () {
-            flash(copyBtn, T('chat.actCopied'));
+            flash(copyBtn, T('chat.actCopied'), 'check');
           }, function () {
-            flash(copyBtn, T('chat.actCopyErr'));
+            flash(copyBtn, T('chat.actCopyErr'), 'x');
           });
         });
         actionsEl.appendChild(copyBtn);
 
         // ----- Sửa (user only) -----
         if (role === 'user') {
-          var editBtn = mkBtn(T('chat.actEdit'), T('chat.actEditTitle'));
+          var editBtn = mkBtn(T('chat.actEdit'), T('chat.actEditTitle'), 'pencil-line');
           setBusyState(editBtn);
           editBtn.addEventListener('click', function () {
             if (streaming()) { hint(editBtn); return; }
@@ -121,7 +127,7 @@
 
         // ----- Tạo lại (assistant only) -----
         if (role === 'assistant') {
-          var regenBtn = mkBtn(T('chat.actRegen'), T('chat.actRegenTitle'));
+          var regenBtn = mkBtn(T('chat.actRegen'), T('chat.actRegenTitle'), 'rotate-cw');
           setBusyState(regenBtn);
           regenBtn.addEventListener('click', function () {
             if (streaming()) { hint(regenBtn); return; }
@@ -131,7 +137,7 @@
         }
 
         // ----- Xoá (both roles) -----
-        var delBtn = mkBtn(T('chat.actDelete'), T('chat.actDeleteTitle'));
+        var delBtn = mkBtn(T('chat.actDelete'), T('chat.actDeleteTitle'), 'trash-2');
         setBusyState(delBtn);
         delBtn.addEventListener('click', function () {
           if (streaming()) { hint(delBtn); return; }
@@ -143,17 +149,26 @@
         actionsEl.appendChild(delBtn);
       }
 
-      // Briefly swap a button's label (e.g. "✓ Đã chép"), then restore it.
-      function flash(btn, label) {
+      // Briefly swap a button's label + icon (e.g. a check + "Đã chép"), then
+      // restore it. `okIcon` is an optional lucide name for the flash state.
+      function flash(btn, label, okIcon) {
         if (!btn || btn.dataset.flashing === '1') return;
-        var prev = btn.textContent;
+        var lbl = btn.querySelector('.laam-act-lbl');
+        if (!lbl) return;
+        var icEl = btn.querySelector('svg');
+        var prev = lbl.textContent;
+        var prevIc = icEl ? icEl.outerHTML : '';
         btn.dataset.flashing = '1';
-        btn.textContent = label;
+        lbl.textContent = label;
+        if (okIcon && icEl) icEl.outerHTML = iconSvg(okIcon);
         btn.classList.add('laam-act-ok');
         setTimeout(function () {
           // Guard: the button may have been removed by a re-render meanwhile.
           if (!btn.isConnected) return;
-          btn.textContent = prev;
+          var l2 = btn.querySelector('.laam-act-lbl');
+          if (l2) l2.textContent = prev;
+          var s2 = btn.querySelector('svg');
+          if (s2 && prevIc) s2.outerHTML = prevIc;
           btn.classList.remove('laam-act-ok');
           btn.dataset.flashing = '0';
         }, 1200);
@@ -189,9 +204,9 @@
 
         var row = document.createElement('div');
         row.className = 'laam-act-edit-row';
-        var saveBtn = mkBtn(T('chat.editSave'), T('chat.editSaveTitle'));
+        var saveBtn = mkBtn(T('chat.editSave'), T('chat.editSaveTitle'), 'check');
         saveBtn.classList.add('laam-act-primary');
-        var cancelBtn = mkBtn(T('chat.editCancel'), T('chat.editCancelTitle'));
+        var cancelBtn = mkBtn(T('chat.editCancel'), T('chat.editCancelTitle'), 'x');
         row.appendChild(saveBtn);
         row.appendChild(cancelBtn);
         box.appendChild(row);
@@ -246,7 +261,10 @@
         style.id = 'laam-actions-css';
         style.textContent = [
           // Lean on the kernel's base .msg-actions button styling; add only
-          // the extras. A subtle confirmed/error state for the copy flash.
+          // the extras. Icon + label sit on one baseline-aligned row.
+          '.msg-actions button.laam-act-btn { display: inline-flex; align-items: center; gap: 5px; }',
+          '.laam-act-edit-row .laam-act-btn { display: inline-flex; align-items: center; gap: 5px; }',
+          // A subtle confirmed/error state for the copy flash.
           '.msg-actions button.laam-act-ok {',
           '  color: var(--accent); border-color: var(--accent);',
           '  background: var(--accent-soft);',

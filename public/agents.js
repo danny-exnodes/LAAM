@@ -1,7 +1,7 @@
 // LAAM — Agents monitoring page: live agent cards grouped by project, with
 // search + project/model/status/branch/time filters and a detail drawer.
 (() => {
-  const { esc, fmtDur, ago, fmtUSD, shortModel, STATUS_VI, isStuck, t } = window.LAAM;
+  const { esc, fmtDur, ago, fmtUSD, shortModel, STATUS_VI, isStuck, t, icon } = window.LAAM;
   window.LAAM.initTheme();
   window.LAAM.buildHeader();
   window.LAAM.loadConfig();
@@ -10,6 +10,24 @@
 
   const $ = (s) => document.querySelector(s);
   const main = $('#main');
+
+  // ---- Static chrome icons (search field, export button, drawer close) ----
+  (function injectIcons() {
+    const sic = $('#search-ic'); if (sic) sic.innerHTML = icon('search', { size: 15, class: 'lc' });
+    const eic = $('#f-export-ic'); if (eic) eic.innerHTML = icon('download', { size: 15, class: 'lc' });
+    const dc = $('#d-close'); if (dc) dc.innerHTML = icon('x', { size: 16, class: 'lc' });
+    if (document.querySelector('#laam-agents-icon-css')) return;
+    const el = document.createElement('style');
+    el.id = 'laam-agents-icon-css';
+    el.textContent = `
+      .filterbar .search .search-ic { display:inline-flex; align-items:center; }
+      #f-export { display:inline-flex; align-items:center; gap:5px; }
+      .meta .m { display:inline-flex; align-items:center; gap:4px; }
+      .sub .sdur { display:inline-flex; align-items:center; gap:3px; }
+      svg.lc { flex-shrink:0; }
+    `;
+    document.head.appendChild(el);
+  })();
   let state = { projects: [], sessions: [], error: null, projectsDir: '' };
   const filters = { q: '', source: '', project: '', model: '', status: '', branch: '', time: '' };
   const collapsed = new Set(JSON.parse(localStorage.getItem('laam.collapsed') || '[]'));
@@ -80,9 +98,9 @@
         <span class="sdot"></span>
         <span class="stype">${esc(a.type)}</span>
         <span class="sdesc">${esc(a.description || t('agents.subNoDesc'))}</span>
-        <span class="sdur">${a.status === 'running' ? '⏱ ' : ''}${fmtDur(a.durationMs)}</span>
+        <span class="sdur">${a.status === 'running' ? icon('clock', { size: 12, class: 'lc' }) + ' ' : ''}${fmtDur(a.durationMs)}</span>
       </div>`).join('');
-    return `<div class="subs"><div class="subs-label">${esc(t('agents.subs', { n: subs.length }))}</div>${rows}</div>`;
+    return `<div class="subs"><div class="subs-label">${icon('git-branch', { size: 13, class: 'lc' })} ${esc(t('agents.subs', { n: subs.length }))}</div>${rows}</div>`;
   }
 
   function cardHtml(s) {
@@ -92,8 +110,8 @@
     return `<div class="card ${s.status} ${stuck ? 'stuck' : ''}" data-id="${esc(s.id)}">
       <div class="card-top">
         <span class="badge ${s.status}"><span class="dot"></span>${STATUS_VI[s.status]}</span>
-        ${s.source === 'local' ? `<span class="badge local" title="${esc(t('agents.badgeLocalTitle'))}">${esc(t('agents.badgeLocal'))}</span>` : ''}
-        ${stuck ? `<span class="badge stuck" title="${esc(t('agents.badgeStuckTitle'))}">${esc(t('agents.badgeStuck'))}</span>` : ''}
+        ${s.source === 'local' ? `<span class="badge local" title="${esc(t('agents.badgeLocalTitle'))}">${icon('hexagon', { size: 12, class: 'lc' })}${esc(t('agents.badgeLocal'))}</span>` : ''}
+        ${stuck ? `<span class="badge stuck" title="${esc(t('agents.badgeStuckTitle'))}">${icon('triangle-alert', { size: 12, class: 'lc' })}${esc(t('agents.badgeStuck'))}</span>` : ''}
         <div>
           <div class="model">${esc(shortModel(s.model))}</div>
           <div class="sid">${esc(s.id.slice(0, 8))}${s.gitBranch ? ' · ' + esc(s.gitBranch) : ''}</div>
@@ -101,10 +119,10 @@
       </div>
       ${taskHtml(s.currentTask)}
       <div class="meta">
-        <span class="m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b data-dur ${running ? 'data-live' : ''} data-start="${s.startTime || ''}">${fmtDur(dur)}</b></span>
-        <span class="m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><b>${s.messageCount}</b> ${esc(t('agents.msgUnit'))}</span>
-        <span class="m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>${s.toolUseCount}</b> ${esc(t('agents.toolUnit'))}</span>
-        <span class="m" title="${esc(t('agents.costTitle'))}">💲<b>${fmtUSD(s.costUSD)}</b></span>
+        <span class="m">${icon('clock', { size: 13, class: 'lc' })}<b data-dur ${running ? 'data-live' : ''} data-start="${s.startTime || ''}">${fmtDur(dur)}</b></span>
+        <span class="m">${icon('message-square', { size: 13, class: 'lc' })}<b>${s.messageCount}</b> ${esc(t('agents.msgUnit'))}</span>
+        <span class="m">${icon('file-text', { size: 13, class: 'lc' })}<b>${s.toolUseCount}</b> ${esc(t('agents.toolUnit'))}</span>
+        <span class="m" title="${esc(t('agents.costTitle'))}">${icon('dollar-sign', { size: 13, class: 'lc' })}<b>${fmtUSD(s.costUSD)}</b></span>
         <span class="m" title="${ago(s.lastActivity)}">${ago(s.lastActivity)}</span>
       </div>
       ${subsHtml(s.subAgents)}
@@ -116,7 +134,7 @@
     const running = sessions.filter((s) => s.status === 'running').length;
     return `<section class="project ${isCol ? 'collapsed' : ''}" data-path="${esc(p.path)}">
       <div class="project-head">
-        <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+        ${icon('chevron-down', { size: 16, class: 'lc chev', strokeWidth: 2.5 })}
         <h2>${esc(p.name)}</h2>
         <span class="path">${esc(p.path)}</span>
         <span class="count">${sessions.length} ${esc(t('agents.sessionUnit'))}</span>
@@ -237,9 +255,9 @@
       <span class="m"><b>${fmtDur(d.durationMs)}</b> ${esc(t('agents.totalLabel'))}</span>
       <span class="m"><b>${d.messageCount}</b> ${esc(t('agents.msgUnit'))}</span>
       <span class="m"><b>${d.tokens ? (d.tokens.input + d.tokens.output).toLocaleString() : 0}</b> ${esc(t('agents.tokensUnit'))}</span>
-      <span class="m" title="${esc(t('agents.costEstTitle'))}">💲<b>${fmtUSD(d.costUSD)}</b></span>
+      <span class="m" title="${esc(t('agents.costEstTitle'))}">${icon('dollar-sign', { size: 13, class: 'lc' })}<b>${fmtUSD(d.costUSD)}</b></span>
     </div>
-    <a class="gopen" style="display:inline-block;margin-bottom:14px" href="/session?id=${encodeURIComponent(d.id)}">${esc(t('agents.openDetail'))}</a>`;
+    <a class="gopen" style="display:inline-flex;align-items:center;gap:5px;margin-bottom:14px" href="/session?id=${encodeURIComponent(d.id)}">${icon('external-link', { size: 14, class: 'lc' })}${esc(t('agents.openDetail'))}</a>`;
     const subs = d.subAgents && d.subAgents.length
       ? `<div class="subs" style="border-top:0;padding-top:0;margin-bottom:14px">${subsHtml(d.subAgents).replace('<div class="subs">', '').replace(/<\/div>$/, '')}</div>` : '';
     const tl = (d.timeline || []).map((it) => {

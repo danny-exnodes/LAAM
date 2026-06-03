@@ -1,7 +1,7 @@
 // LAAM — Session detail page: full single-session view with a tool-call
 // waterfall (Gantt-style horizontal bars built from plain divs, no chart lib).
 (() => {
-  const { esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI, t } = window.LAAM;
+  const { esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI, t, icon } = window.LAAM;
   let lastData = null; // cache last loaded session for re-render on language change
   window.LAAM.initTheme();
   window.LAAM.buildHeader('', { conn: false }); // static page, no SSE → no conn indicator
@@ -52,11 +52,11 @@
         <span class="sdot"></span>
         <span class="stype">${esc(a.type)}</span>
         <span class="sdesc">${esc(a.description || t('session.subNoDesc'))}</span>
-        <span class="sdur">${a.status === 'running' ? '⏱ ' : ''}${fmtDur(a.durationMs)}</span>
+        <span class="sdur">${a.status === 'running' ? icon('clock', { size: 12, class: 'lc' }) + ' ' : ''}${fmtDur(a.durationMs)}</span>
       </div>`
       )
       .join('');
-    return `<div class="subs"><div class="subs-label">${esc(t('session.subs', { n: subs.length }))}</div>${rows}</div>`;
+    return `<div class="subs"><div class="subs-label">${icon('git-branch', { size: 13, class: 'lc' })} ${esc(t('session.subs', { n: subs.length }))}</div>${rows}</div>`;
   }
 
   // ---- Waterfall ----

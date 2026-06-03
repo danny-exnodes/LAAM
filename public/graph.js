@@ -7,6 +7,21 @@
   window.LAAM.buildHeader();
 
   const $ = (s) => document.querySelector(s);
+
+  // ---- Self-injected styles (icon alignment for toolbar + open link) ----
+  if (!document.querySelector('#laam-graph-css')) {
+    const st = document.createElement('style');
+    st.id = 'laam-graph-css';
+    st.textContent = `
+      #g-fit { display: inline-flex; align-items: center; gap: 6px; }
+      .gopen { display: inline-flex; align-items: center; gap: 6px; }
+      .lc { vertical-align: text-bottom; }`;
+    document.head.appendChild(st);
+  }
+  // Toolbar "fit/center" button glyph.
+  const fitIc = document.querySelector('.g-fit-ic');
+  if (fitIc) fitIc.innerHTML = window.LAAM.icon('locate-fixed', { size: 16, class: 'lc' });
+
   let state = { projects: [], sessions: [] };
   let projectFilter = '';
   let network = null;
@@ -127,7 +142,7 @@
         ${row(t('graph.rowSubAgents'), s.subAgentCount)}
         ${s.currentTask ? `<div class="gtask">${esc((s.currentTask.text || '').slice(0, 240))}</div>` : ''}
         ${subs ? `<div class="gsubs">${subs}</div>` : ''}
-        <a class="gopen" href="/agents">${esc(t('graph.openAgents'))}</a>`;
+        <a class="gopen" href="/agents">${window.LAAM.icon('external-link', { size: 15, class: 'lc' })}<span>${esc(t('graph.openAgents'))}</span></a>`;
     } else {
       const a = entry.data;
       body.innerHTML = `<h3>${esc(a.type)} <span class="gbadge ${a.status === 'running' ? 'running' : 'done'}">${esc(a.status === 'running' ? t('graph.statusRunning') : t('graph.statusDone'))}</span></h3>

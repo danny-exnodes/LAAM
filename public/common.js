@@ -47,13 +47,38 @@
   function statusLabel(s) { return T('status.' + s); }
   const STATUS_VI = new Proxy({}, { get: (_t, k) => statusLabel(String(k)) });
 
+  // ---- Lucide icons (vendored offline in /vendor/lucide-icons.js) ----
+  // iconInner(name) -> the inner <path>/<circle>… markup of a Lucide icon;
+  // icon(name, opts) -> a full <svg> string. Names are kebab-case lucide names.
+  function iconInner(name) {
+    const node = (window.LUCIDE || {})[name];
+    if (!node) return '';
+    let s = '';
+    for (let i = 0; i < node.length; i++) {
+      const ch = node[i], tag = ch[0], a = ch[1] || {};
+      s += '<' + tag;
+      for (const k in a) s += ' ' + k + '="' + a[k] + '"';
+      s += '/>';
+    }
+    return s;
+  }
+  function icon(name, opts) {
+    opts = opts || {};
+    const inner = iconInner(name);
+    if (!inner) return '';
+    const size = opts.size || 18;
+    const sw = opts.strokeWidth || 2;
+    const cls = opts.class ? ' class="' + opts.class + '"' : '';
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="' + size + '" height="' + size +
+      '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + sw +
+      '" stroke-linecap="round" stroke-linejoin="round"' + cls + ' aria-hidden="true">' + inner + '</svg>';
+  }
+
   // ---- Theme ----
-  const sun = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
-  const moon = '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>';
   function applyTheme(t) {
     document.documentElement.dataset.theme = t;
-    const icon = document.querySelector('#theme-icon');
-    if (icon) icon.innerHTML = t === 'dark' ? sun : moon;
+    const el = document.querySelector('#theme-icon');
+    if (el) el.innerHTML = iconInner(t === 'dark' ? 'sun' : 'moon');
     localStorage.setItem('laam.theme', t);
     window.dispatchEvent(new CustomEvent('laam:theme', { detail: t }));
   }
@@ -104,10 +129,10 @@
       ${langPickerHtml()}
       ${showConn ? `<div class="conn" id="conn"><span class="dot"></span><span id="conn-label">${esc(T('conn.connecting'))}</span></div>` : ''}
       <button class="iconbtn" id="theme" title="${esc(T('theme.toggle'))}">
-        <svg id="theme-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
+        <svg id="theme-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
       </button>`;
-    const icon = document.querySelector('#theme-icon');
-    if (icon) icon.innerHTML = document.documentElement.dataset.theme === 'dark' ? sun : moon;
+    const themeIcon = document.querySelector('#theme-icon');
+    if (themeIcon) themeIcon.innerHTML = iconInner(document.documentElement.dataset.theme === 'dark' ? 'sun' : 'moon');
     wireLangPicker(bar);
     // On mobile the nav scrolls horizontally; keep the active tab in view.
     const activeLink = bar.querySelector('.navlink.active');
@@ -125,7 +150,7 @@
       (L) => `<option value="${L}" ${L === cur ? 'selected' : ''}>${esc(i18n.LANG_NAMES[L] || L)}</option>`
     ).join('');
     return `<label class="lang-picker" title="${esc(T('lang.label'))}" aria-label="${esc(T('lang.label'))}">
-      <span class="lang-globe" aria-hidden="true">🌐</span>
+      <span class="lang-globe" aria-hidden="true">${icon('globe', { size: 15 })}</span>
       <select id="lang-select" class="lang-select">${opts}</select>
     </label>`;
   }
@@ -212,7 +237,7 @@
   }
 
   window.LAAM = {
-    esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI, statusLabel, t: T,
+    esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI, statusLabel, t: T, icon, iconInner,
     applyTheme, initTheme, cssVar, buildHeader, setConn, connectSSE,
     notify, ensureNotifyPermission, loadConfig, getConfig, isStuck,
     // Dashboard module registry: section modules push { id, render(host, stats, ctx) }.

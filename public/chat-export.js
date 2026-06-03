@@ -45,6 +45,16 @@
       var ago = (ctx && ctx.ago) || function () { return ''; };
       var mounts = (ctx && ctx.mounts) || {};
       var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
+      var L = window.LAAM || {};
+      function iconSvg(name, size) { return L.icon ? L.icon(name, { size: size || 14, class: 'lc' }) : ''; }
+      // Set a button's content to a Lucide icon + a label span (so flashes can
+      // swap just the label / icon without nuking the other).
+      function setIconLabel(btn, iconName, label) {
+        if (!btn) return;
+        btn.innerHTML = (iconName ? iconSvg(iconName) : '') + '<span class="laam-exp-lbl"></span>';
+        var s = btn.querySelector('.laam-exp-lbl');
+        if (s) s.textContent = label == null ? '' : String(label);
+      }
 
       injectCss();
 
@@ -76,16 +86,24 @@
         }
       }
 
-      // Briefly swap a button's label to a confirmation, then restore it.
-      function flash(btn, label, okClass) {
+      // Briefly swap a button's label (+ icon) to a confirmation, then restore
+      // it. `okIcon` is an optional lucide name for the flash state.
+      function flash(btn, label, okClass, okIcon) {
         if (!btn || btn.dataset.flashing === '1') return;
-        var prev = btn.textContent;
+        var lbl = btn.querySelector('.laam-exp-lbl');
+        var icEl = btn.querySelector('svg');
+        var prev = lbl ? lbl.textContent : btn.textContent;
+        var prevIc = icEl ? icEl.outerHTML : '';
         btn.dataset.flashing = '1';
-        btn.textContent = label;
+        if (lbl) lbl.textContent = label; else btn.textContent = label;
+        if (okIcon && icEl) icEl.outerHTML = iconSvg(okIcon, 13);
         if (okClass) btn.classList.add(okClass);
         setTimeout(function () {
           if (!btn.isConnected) { btn.dataset.flashing = '0'; return; }
-          btn.textContent = prev;
+          var l2 = btn.querySelector('.laam-exp-lbl');
+          if (l2) l2.textContent = prev; else btn.textContent = prev;
+          var s2 = btn.querySelector('svg');
+          if (s2 && prevIc) s2.outerHTML = prevIc;
           if (okClass) btn.classList.remove(okClass);
           btn.dataset.flashing = '0';
         }, 1200);
@@ -260,9 +278,9 @@
         var conv = currentConv();
         var md = buildMarkdown(conv);
         copyText(md).then(function () {
-          if (srcBtn) flash(srcBtn, T('chat.expCopied'), 'laam-exp-ok');
+          if (srcBtn) flash(srcBtn, T('chat.expCopied'), 'laam-exp-ok', 'check');
         }, function () {
-          if (srcBtn) flash(srcBtn, T('chat.expCopyErr'), 'laam-exp-err');
+          if (srcBtn) flash(srcBtn, T('chat.expCopyErr'), 'laam-exp-err', 'x');
         });
       }
       function doDownloadMd() {
@@ -286,7 +304,7 @@
         exportBtn = document.createElement('button');
         exportBtn.type = 'button';
         exportBtn.className = 'laam-exp-btn';
-        exportBtn.textContent = T('chat.expBtn');
+        setIconLabel(exportBtn, 'download', T('chat.expBtn'));
         exportBtn.title = T('chat.expTitle');
         exportBtn.setAttribute('aria-label', T('chat.expTitle'));
         exportBtn.setAttribute('aria-haspopup', 'menu');
@@ -300,15 +318,15 @@
         menuEl.hidden = true;
 
         var items = [
-          { labelKey: 'chat.expCopyMd', titleKey: 'chat.expCopyMdTitle', fn: function (b) { doCopyMarkdown(b); } },
-          { labelKey: 'chat.expDownloadMd', titleKey: 'chat.expDownloadMdTitle', fn: function () { doDownloadMd(); closeMenu(); } },
-          { labelKey: 'chat.expDownloadJson', titleKey: 'chat.expDownloadJsonTitle', fn: function () { doDownloadJson(); closeMenu(); } },
+          { labelKey: 'chat.expCopyMd', titleKey: 'chat.expCopyMdTitle', icon: 'copy', fn: function (b) { doCopyMarkdown(b); } },
+          { labelKey: 'chat.expDownloadMd', titleKey: 'chat.expDownloadMdTitle', icon: 'file-text', fn: function () { doDownloadMd(); closeMenu(); } },
+          { labelKey: 'chat.expDownloadJson', titleKey: 'chat.expDownloadJsonTitle', icon: 'file-json', fn: function () { doDownloadJson(); closeMenu(); } },
         ];
         items.forEach(function (it) {
           var b = document.createElement('button');
           b.type = 'button';
           b.className = 'laam-exp-item';
-          b.textContent = T(it.labelKey);
+          setIconLabel(b, it.icon, T(it.labelKey));
           b.title = T(it.titleKey);
           b.dataset.labelKey = it.labelKey;
           b.dataset.titleKey = it.titleKey;
@@ -332,14 +350,16 @@
         window.LAAMI18n.onChange(function () {
           try {
             if (exportBtn) {
-              exportBtn.textContent = T('chat.expBtn');
+              var eb = exportBtn.querySelector('.laam-exp-lbl');
+              if (eb) eb.textContent = T('chat.expBtn'); else exportBtn.textContent = T('chat.expBtn');
               exportBtn.title = T('chat.expTitle');
               exportBtn.setAttribute('aria-label', T('chat.expTitle'));
             }
             if (menuEl) {
               menuEl.querySelectorAll('.laam-exp-item').forEach(function (b) {
                 if (b.dataset.flashing === '1') return; // don't clobber a flash
-                if (b.dataset.labelKey) b.textContent = T(b.dataset.labelKey);
+                var lb = b.querySelector('.laam-exp-lbl');
+                if (b.dataset.labelKey) { if (lb) lb.textContent = T(b.dataset.labelKey); else b.textContent = T(b.dataset.labelKey); }
                 if (b.dataset.titleKey) b.title = T(b.dataset.titleKey);
               });
             }
@@ -400,7 +420,7 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'laam-pre-copy';
-        btn.textContent = T('chat.preCopy');
+        setIconLabel(btn, 'copy', T('chat.preCopy'));
         btn.title = T('chat.preCopyTitle');
         btn.setAttribute('aria-label', T('chat.preCopyAria'));
         btn.addEventListener('click', function (e) {
@@ -409,9 +429,9 @@
           // add characters — textContent reconstructs the original source).
           var code = pre.textContent || '';
           copyText(code).then(function () {
-            flash(btn, T('chat.preCopied'), 'laam-exp-ok');
+            flash(btn, T('chat.preCopied'), 'laam-exp-ok', 'check');
           }, function () {
-            flash(btn, T('chat.preCopyErr'), 'laam-exp-err');
+            flash(btn, T('chat.preCopyErr'), 'laam-exp-err', 'x');
           });
         });
         wrap.appendChild(btn);
@@ -695,7 +715,9 @@
           '  border: 0; background: transparent; color: var(--text); text-align: left;',
           '  cursor: pointer; border-radius: 7px; padding: 7px 10px; font-size: 13px;',
           '  font-family: var(--sans); line-height: 1.4; white-space: nowrap;',
+          '  display: flex; align-items: center; gap: 8px;',
           '}',
+          '.laam-exp-item > svg.lc { color: var(--text-dim); }',
           '.laam-exp-item:hover { background: var(--bg-sunken); }',
           '.laam-exp-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }',
           '.laam-exp-item[disabled] { opacity: 0.4; cursor: default; }',
@@ -713,6 +735,7 @@
           '  border: 1px solid var(--border-strong); background: var(--bg-elev); color: var(--text-dim);',
           '  border-radius: 7px; padding: 3px 8px; font-size: 11px; line-height: 1.4;',
           '  font-family: var(--sans); cursor: pointer; opacity: 0;',
+          '  display: inline-flex; align-items: center; gap: 4px;',
           '  transition: opacity .12s ease, color .12s ease, background .12s ease;',
           '}',
           '.laam-pre-wrap:hover .laam-pre-copy,',

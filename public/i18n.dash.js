@@ -5,8 +5,8 @@
     vi: {
       dash: {
         exp: {
-          csv: '⤓ CSV session',
-          pdf: '⤓ PDF báo cáo',
+          csv: 'CSV session',
+          pdf: 'PDF báo cáo',
           csvTitle: 'Xuất toàn bộ session ra CSV',
           pdfTitle: 'Xuất báo cáo tổng hợp ra PDF',
         },
@@ -50,8 +50,8 @@
         },
         axis: { session: 'Session', tokens: 'Tokens' },
         stuck: {
-          banner: '⚠ <b>{n}</b> agent nghi bị kẹt (chưa hoàn tất, lâu không ghi transcript) — <a href="/agents">xem ở Agents →</a>',
-          notifyTitle: '⚠ Agent nghi bị kẹt',
+          banner: '<b>{n}</b> agent nghi bị kẹt (chưa hoàn tất, lâu không ghi transcript) — <a href="/agents">xem ở Agents →</a>',
+          notifyTitle: 'Agent nghi bị kẹt',
           notifyBody: '{project} · {model} — {ago} chưa ghi transcript.',
         },
         cost: {
@@ -121,8 +121,8 @@
     en: {
       dash: {
         exp: {
-          csv: '⤓ CSV sessions',
-          pdf: '⤓ PDF report',
+          csv: 'CSV sessions',
+          pdf: 'PDF report',
           csvTitle: 'Export all sessions to CSV',
           pdfTitle: 'Export a summary report to PDF',
         },
@@ -166,8 +166,8 @@
         },
         axis: { session: 'Sessions', tokens: 'Tokens' },
         stuck: {
-          banner: '⚠ <b>{n}</b> agents likely stuck (not finished, no transcript writes for a while) — <a href="/agents">view in Agents →</a>',
-          notifyTitle: '⚠ Agent likely stuck',
+          banner: '<b>{n}</b> agents likely stuck (not finished, no transcript writes for a while) — <a href="/agents">view in Agents →</a>',
+          notifyTitle: 'Agent likely stuck',
           notifyBody: '{project} · {model} — no transcript writes for {ago}.',
         },
         cost: {
@@ -237,8 +237,8 @@
     zh: {
       dash: {
         exp: {
-          csv: '⤓ CSV 会话',
-          pdf: '⤓ PDF 报告',
+          csv: 'CSV 会话',
+          pdf: 'PDF 报告',
           csvTitle: '将全部会话导出为 CSV',
           pdfTitle: '将汇总报告导出为 PDF',
         },
@@ -282,8 +282,8 @@
         },
         axis: { session: '会话', tokens: 'Token' },
         stuck: {
-          banner: '⚠ <b>{n}</b> 个智能体疑似卡住（未完成，长时间未写入 transcript）— <a href="/agents">在智能体页查看 →</a>',
-          notifyTitle: '⚠ 智能体疑似卡住',
+          banner: '<b>{n}</b> 个智能体疑似卡住（未完成，长时间未写入 transcript）— <a href="/agents">在智能体页查看 →</a>',
+          notifyTitle: '智能体疑似卡住',
           notifyBody: '{project} · {model} — 已 {ago} 未写入 transcript。',
         },
         cost: {

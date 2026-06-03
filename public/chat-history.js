@@ -41,6 +41,8 @@
       };
       var ago = (ctx && ctx.ago) || function () { return ''; };
       var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
+      var L = window.LAAM || {};
+      var iconSvg = function (name, size) { return L.icon ? L.icon(name, { size: size || 15, class: 'lc' }) : ''; };
 
       injectCss();
 
@@ -68,7 +70,7 @@
         newBtn.title = T('chat.histNewAria');
         newLabel.textContent = T('chat.histNew');
       }
-      newBtn.innerHTML = '<span class="laam-hist-plus" aria-hidden="true">＋</span> ';
+      newBtn.innerHTML = '<span class="laam-hist-plus" aria-hidden="true">' + iconSvg('plus', 15) + '</span> ';
       newBtn.appendChild(newLabel);
       paintNewBtn();
 
@@ -176,14 +178,14 @@
         renameBtn.className = 'laam-hist-act';
         renameBtn.setAttribute('aria-label', T('chat.histRenameAria'));
         renameBtn.title = T('chat.histRenameTitle');
-        renameBtn.textContent = '✎';
+        renameBtn.innerHTML = iconSvg('pencil-line', 14);
 
         var delBtn = document.createElement('button');
         delBtn.type = 'button';
         delBtn.className = 'laam-hist-act laam-hist-act-del';
         delBtn.setAttribute('aria-label', T('chat.histDeleteAria'));
         delBtn.title = T('chat.histDeleteTitle');
-        delBtn.textContent = '🗑';
+        delBtn.innerHTML = iconSvg('trash-2', 14);
 
         actions.appendChild(renameBtn);
         actions.appendChild(delBtn);

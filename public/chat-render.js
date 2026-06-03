@@ -51,6 +51,7 @@
 
   var L_ = window.LAAM || {};
   var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
+  var iconSvg = function (name, size) { return (L_ && L_.icon) ? L_.icon(name, { size: size || 14, class: 'lc' }) : ''; };
   var esc =
     (L_ && typeof L_.esc === 'function')
       ? L_.esc
@@ -250,7 +251,9 @@
   function smallError(msg) {
     var d = document.createElement('div');
     d.className = 'chat-block-error';
-    d.textContent = msg;
+    var ic = iconSvg('triangle-alert', 14);
+    d.innerHTML = ic + '<span></span>';
+    d.lastChild.textContent = msg;
     return d;
   }
 
@@ -415,7 +418,8 @@
         a.href = gmaps;
         a.target = '_blank';
         a.rel = 'noopener noreferrer nofollow';
-        a.textContent = T('chat.mapOpenGoogle');
+        a.innerHTML = iconSvg('external-link', 14) + '<span></span>';
+        a.lastChild.textContent = T('chat.mapOpenGoogle');
         container.appendChild(a);
       }
 
@@ -423,7 +427,7 @@
       if (cfg.locationDenied) {
         var note = document.createElement('div');
         note.className = 'chat-map-note';
-        note.innerHTML = '<span aria-hidden="true">📍</span><span></span>';
+        note.innerHTML = '<span aria-hidden="true">' + iconSvg('map-pin', 14) + '</span><span></span>';
         note.lastChild.textContent = T('chat.mapLocationDenied');
         container.appendChild(note);
       }
@@ -431,7 +435,7 @@
       if (cfg.routeStraight) {
         var rn = document.createElement('div');
         rn.className = 'chat-map-note';
-        rn.innerHTML = '<span aria-hidden="true">〜</span><span></span>';
+        rn.innerHTML = '<span aria-hidden="true">' + iconSvg('route', 14) + '</span><span></span>';
         rn.lastChild.textContent = T('chat.mapRouteStraight');
         container.appendChild(rn);
       }
@@ -455,7 +459,7 @@
       } else if (cfg.nearbyEmpty) {
         var en = document.createElement('div');
         en.className = 'chat-map-note';
-        en.innerHTML = '<span aria-hidden="true">🔍</span><span></span>';
+        en.innerHTML = '<span aria-hidden="true">' + iconSvg('search', 14) + '</span><span></span>';
         en.lastChild.textContent = T('chat.nearbyEmpty');
         container.appendChild(en);
       }
@@ -676,7 +680,7 @@
       '  border-radius: 10px; overflow: hidden; border: 1px solid var(--border);',
       '}',
       '.chat-map-link {',
-      '  display: inline-block; margin-top: 6px; font-size: 12.5px;',
+      '  display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12.5px;',
       '  color: var(--accent); text-decoration: underline; text-underline-offset: 2px;',
       '}',
       // Self-drawn markers (no external PNGs → no 404, works fully offline).
@@ -710,6 +714,7 @@
       '.chat-block-error {',
       '  margin: 8px 0; padding: 8px 10px; border-radius: 8px; font-size: 12.5px;',
       '  background: var(--bg-sunken); border: 1px solid var(--border); color: var(--text-dim);',
+      '  display: flex; align-items: center; gap: 6px;',
       '}',
     ].join('\n');
     document.head.appendChild(style);

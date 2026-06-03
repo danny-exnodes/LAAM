@@ -12,6 +12,8 @@
     const st = document.createElement('style');
     st.id = 'laam-search-css';
     st.textContent = `
+      .search-ic { display: inline-flex; align-items: center; flex-shrink: 0; }
+      .search-ic svg { color: var(--text-faint); }
       #results { display: flex; flex-direction: column; gap: 9px; }
       .sresult-head { font-size: 13px; color: var(--text-dim); margin-bottom: 4px; }
       .sresult {
@@ -50,6 +52,10 @@
   const $ = (s) => document.querySelector(s);
   const results = $('#results');
   const input = $('#q');
+
+  // Search-box glyph (replaces the former hand-rolled inline <svg>).
+  const searchIc = $('.search-ic');
+  if (searchIc) searchIc.innerHTML = window.LAAM.icon('search', { size: 15, class: 'lc' });
 
   // Escape a string for safe use inside a RegExp.
   const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

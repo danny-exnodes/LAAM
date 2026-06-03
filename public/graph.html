@@ -14,7 +14,7 @@
   <div class="filterbar">
     <select class="fsel" id="g-project"><option value="" data-i18n="graph.allProjects">Mọi project</option></select>
     <label class="gchk"><input type="checkbox" id="g-physics" checked /> <span data-i18n="graph.physics">Physics</span></label>
-    <button class="fsel ghost" id="g-fit" data-i18n="graph.fit">Canh giữa</button>
+    <button class="fsel ghost" id="g-fit"><span class="g-fit-ic"></span><span data-i18n="graph.fit">Canh giữa</span></button>
     <span class="glegend">
       <span class="lg"><i style="background:#6d5efc"></i><span data-i18n="graph.legendProject">Project</span></span>
       <span class="lg"><i style="background:#16a34a"></i><span data-i18n="graph.legendOrchestrator">Orchestrator</span></span>
@@ -32,6 +32,7 @@
   </main>
   <script src="/i18n.js"></script>
   <script src="/i18n.graphsearch.js"></script>
+  <script src="/vendor/lucide-icons.js"></script>
 
   <script src="/common.js"></script>
   <script src="/graph.js"></script>
