@@ -20,6 +20,7 @@ export const dashboard: Dict = {
   'dash.chart.tools': { vi: 'Tool calls theo project', en: 'Tool calls by project', zh: '按项目统计工具调用' },
   'dash.chart.topDur': { vi: 'Top session theo thời lượng', en: 'Top sessions by duration', zh: '时长最长的会话' },
   'dash.chart.topTok': { vi: 'Top session theo tokens', en: 'Top sessions by tokens', zh: 'token 最多的会话' },
+  'dash.chart.empty': { vi: 'Chưa có dữ liệu.', en: 'No data yet.', zh: '暂无数据。' },
   // act
   'dash.act.daily': { vi: '(theo ngày)', en: '(daily)', zh: '（按天）' },
   'dash.act.hourly': { vi: '(theo giờ)', en: '(hourly)', zh: '（按小时）' },
@@ -31,6 +32,10 @@ export const dashboard: Dict = {
   'dash.kpi.messages': { vi: 'Messages', en: 'Messages', zh: '消息' },
   'dash.kpi.toolCalls': { vi: 'Tool calls', en: 'Tool calls', zh: '工具调用' },
   'dash.kpi.avgDur': { vi: 'Thời lượng TB', en: 'Avg. duration', zh: '平均时长' },
+  'dash.kpi.subAgents': { vi: 'Sub-agent', en: 'Sub-agents', zh: '子智能体' },
+  'dash.kpi.cost': { vi: 'Chi phí ước tính', en: 'Estimated cost', zh: '预计费用' },
+  'dash.kpi.tokensIn': { vi: 'Tokens vào', en: 'Tokens in', zh: '输入 token' },
+  'dash.kpi.tokensOut': { vi: 'Tokens ra', en: 'Tokens out', zh: '输出 token' },
   'dash.kpi.sub.projects': { vi: '{n} project', en: '{n} projects', zh: '{n} 个项目' },
   'dash.kpi.sub.subAgents': { vi: '{n} sub-agent', en: '{n} sub-agents', zh: '{n} 个子智能体' },
   'dash.kpi.sub.idleDone': { vi: 'idle / done', en: 'idle / done', zh: '暂停 / 完成' },
