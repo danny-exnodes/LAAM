@@ -20,6 +20,7 @@
     id: 'tools',
     render(host, stats, ctx) {
       const { Chart, palette: p, fmtNum, fmtDur, esc } = ctx;
+      const t9 = (ctx && ctx.t) || ((k) => k);
 
       // 1) idempotent teardown of any charts created last render
       if (host._charts) { for (const c of host._charts) { try { c.destroy(); } catch (e) {} } }
@@ -36,10 +37,10 @@
       const errTable = errRows.length
         ? `<div class="tool-tbl-wrap"><table class="tool-tbl">
              <thead><tr>
-               <th>Tool</th>
-               <th style="text-align:right">Lần gọi</th>
-               <th style="text-align:right">Lỗi</th>
-               <th style="text-align:right">Tỉ lệ</th>
+               <th>${esc(t9('dash.tools.th.tool'))}</th>
+               <th style="text-align:right">${esc(t9('dash.tools.th.calls'))}</th>
+               <th style="text-align:right">${esc(t9('dash.tools.th.errors'))}</th>
+               <th style="text-align:right">${esc(t9('dash.tools.th.rate'))}</th>
              </tr></thead>
              <tbody>
                ${errRows.map((t) => {
@@ -54,20 +55,20 @@
                }).join('')}
              </tbody>
            </table></div>`
-        : `<div class="tool-empty">Không có lỗi tool nào 🎉</div>`;
+        : `<div class="tool-empty">${esc(t9('dash.tools.noErrors'))}</div>`;
 
       // 3) rebuild markup
       host.innerHTML = `
         <div class="chart-card">
-          <h3>Tool dùng nhiều nhất</h3>
+          <h3>${esc(t9('dash.tools.mostUsed'))}</h3>
           <div class="cwrap"><canvas></canvas></div>
         </div>
         <div class="chart-card">
-          <h3>Tool hay lỗi nhất</h3>
+          <h3>${esc(t9('dash.tools.mostErrors'))}</h3>
           ${errTable}
         </div>
         <div class="chart-card">
-          <h3>Tool chậm nhất (TB)</h3>
+          <h3>${esc(t9('dash.tools.slowest'))}</h3>
           <div class="cwrap"><canvas></canvas></div>
         </div>
       `;
@@ -101,12 +102,12 @@
         data: {
           labels: mostUsed.map((t) => t.name),
           datasets: [{
-            label: 'Lần gọi',
+            label: t9('dash.tools.ds.calls'),
             data: mostUsed.map((t) => t.count || 0),
             backgroundColor: p.accent,
           }],
         },
-        options: hbarOpts((c) => `${fmtNum(c.parsed.x)} lần`),
+        options: hbarOpts((c) => t9('dash.tools.tooltipCalls', { n: fmtNum(c.parsed.x) })),
       }));
 
       // Chart: slowest avg duration (horizontal bar, idle)
@@ -115,7 +116,7 @@
         data: {
           labels: slowest.map((t) => t.name),
           datasets: [{
-            label: 'TB thời gian',
+            label: t9('dash.tools.ds.avgDur'),
             data: slowest.map((t) => t.avgDurationMs || 0),
             backgroundColor: p.idle,
           }],

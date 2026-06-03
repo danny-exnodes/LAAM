@@ -5,6 +5,7 @@
 // Persistent avatars glide between positions. Driven by the existing SSE feed.
 (() => {
   const { esc, ago, fmtDur, fmtUSD, fmtNum, shortModel, STATUS_VI, isStuck } = window.LAAM;
+  const t = (k, v) => window.LAAM.t(k, v);
   window.LAAM.initTheme();
   window.LAAM.buildHeader();
   window.LAAM.loadConfig();
@@ -117,7 +118,9 @@
   let didInitialScroll = false;
   const nodeEls = new Map();
 
-  const pushEvent = (kind, text) => { events.unshift({ ts: Date.now(), kind, text }); if (events.length > 120) events.length = 120; };
+  // Store the i18n key + vars so events can be re-translated on a language switch.
+  const pushEvent = (kind, key, vars) => { events.unshift({ ts: Date.now(), kind, key, vars }); if (events.length > 120) events.length = 120; };
+  const evText = (e) => e.key ? t(e.key, e.vars) : (e.text || '');
   const hueFor = (id) => { let h = 0; for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360; return h; };
 
   function placeSprite(host, svg, col, row, z) {
@@ -193,12 +196,12 @@
 
   const nodeStatus = (n) => n.role === 'sub' ? (n.sub.status === 'running' ? 'running' : 'done') : n.session.status;
   function nodeBubble(n) {
-    if (n.role === 'sub') return { who: '⛓ ' + (n.sub.type || 'agent'), text: n.sub.description || '', tool: false };
-    const t = n.session.currentTask; if (!t) return null;
-    const who = t.kind === 'user' ? 'Yêu cầu' : t.kind === 'tool' ? 'Đang làm' : t.kind === 'thinking' ? '…' : 'Hoạt động';
-    return { who, text: t.text || '', tool: t.kind === 'tool' };
+    if (n.role === 'sub') return { who: '⛓ ' + (n.sub.type || t('office.agentFallback')), text: n.sub.description || '', tool: false };
+    const task = n.session.currentTask; if (!task) return null;
+    const who = task.kind === 'user' ? t('office.bubbleRequest') : task.kind === 'tool' ? t('office.bubbleDoing') : task.kind === 'thinking' ? t('office.bubbleThinking') : t('office.bubbleActive');
+    return { who, text: task.text || '', tool: task.kind === 'tool' };
   }
-  const nodeLabel = (n) => n.role === 'sub' ? (n.sub.type || 'agent') : (n.session.source === 'local' ? '⬡ ' + n.session.project : n.session.project);
+  const nodeLabel = (n) => n.role === 'sub' ? (n.sub.type || t('office.agentFallback')) : (n.session.source === 'local' ? '⬡ ' + n.session.project : n.session.project);
 
   function buildWrap(n, status) {
     const wrap = document.createElement('div'); wrap.className = 'av-wrap';
@@ -241,7 +244,7 @@
       out.setAttribute('class', 'room-outline'); out.setAttribute('stroke', `hsl(${rm.hue},55%,58%)`); roomsSvg.appendChild(out);
       const pl = document.createElement('div'); pl.className = 'room-plaque';
       pl.style.left = isoX(rm.col + rm.w / 2, rm.row) + 'px'; pl.style.top = (isoY(rm.col + rm.w / 2, rm.row) - 6) + 'px';
-      pl.innerHTML = `<span>${esc(rm.name)}</span><span class="rsrc" style="background:hsla(${rm.hue},60%,55%,.16);color:hsl(${rm.hue},55%,55%)">${rm.source === 'local' ? 'Local' : 'Claude'} ·${rm.n}</span>`;
+      pl.innerHTML = `<span>${esc(rm.name)}</span><span class="rsrc" style="background:hsla(${rm.hue},60%,55%,.16);color:hsl(${rm.hue},55%,55%)">${rm.source === 'local' ? t('office.srcLocal') : t('office.srcClaude')} ·${rm.n}</span>`;
       plaques.appendChild(pl);
     });
 
@@ -301,7 +304,7 @@
     const local = sessions.filter((s) => s.source === 'local').length;
     P.connected($('#panel-connected'), all.filter((a) => a.status !== 'done' || showDone).slice(0, 40));
     P.analytics($('#panel-analytics'), { running, idle, done, total: sessions.length, claude, local, subAgents, tokensTotal, costUSD });
-    P.events($('#panel-console'), events);
+    P.events($('#panel-console'), events.map((e) => ({ ts: e.ts, kind: e.kind, text: evText(e) })));
   }
 
   // ---- SSE diff -> events ----
@@ -309,14 +312,14 @@
     const cur = new Map(sessions.map((s) => [s.id, s]));
     for (const s of sessions) {
       const p = prev.get(s.id);
-      if (!p) pushEvent('start', `Phiên mới: ${s.project} · ${shortModel(s.model)}`);
+      if (!p) pushEvent('start', 'office.evNewSession', { project: s.project, model: shortModel(s.model) });
       else {
-        if (p.status !== 'done' && s.status === 'done') pushEvent('done', `Hoàn tất: ${s.project} · ${shortModel(s.model)} → ra lounge`);
-        if (!isStuck(p) && isStuck(s)) pushEvent('stuck', `Nghi kẹt: ${s.project} · ${shortModel(s.model)}`);
+        if (p.status !== 'done' && s.status === 'done') pushEvent('done', 'office.evDone', { project: s.project, model: shortModel(s.model) });
+        if (!isStuck(p) && isStuck(s)) pushEvent('stuck', 'office.evStuck', { project: s.project, model: shortModel(s.model) });
       }
       for (const a of s.subAgents || []) {
         const k = s.id + ':' + a.id;
-        if (!knownSubs.has(k)) { knownSubs.add(k); pushEvent('spawn', `${s.project} giao việc → ${a.type || 'agent'}${a.description ? ' (' + a.description.slice(0, 30) + ')' : ''}`); }
+        if (!knownSubs.has(k)) { knownSubs.add(k); pushEvent('spawn', 'office.evSpawn', { project: s.project, type: a.type || t('office.agentFallback'), desc: a.description ? ' (' + a.description.slice(0, 30) + ')' : '' }); }
       }
     }
     prev = cur;
@@ -328,21 +331,21 @@
   $('#d-close').onclick = closeDrawer; scrim.onclick = closeDrawer;
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeDrawer(); });
   async function openDrawer(s) {
-    $('#d-title').textContent = s.project + (s.source === 'local' ? ' · Local' : '');
-    $('#d-path').textContent = `${s.id.slice(0, 12)} · ${shortModel(s.model)} · ${STATUS_VI[s.status]}`;
-    $('#d-body').innerHTML = '<div class="empty">Đang tải…</div>';
+    $('#d-title').textContent = s.project + (s.source === 'local' ? t('office.drawerLocalSuffix') : '');
+    $('#d-path').textContent = `${s.id.slice(0, 12)} · ${shortModel(s.model)} · ${window.LAAM.statusLabel ? window.LAAM.statusLabel(s.status) : t('status.' + s.status)}`;
+    $('#d-body').innerHTML = `<div class="empty">${esc(t('office.drawerLoading'))}</div>`;
     drawer.classList.add('open'); scrim.classList.add('open');
     try {
       const d = await (await fetch('/api/session/' + s.id)).json();
       const head = `<div class="meta" style="margin-bottom:14px">
-        <span class="m"><b>${fmtDur(d.durationMs)}</b></span><span class="m"><b>${d.messageCount}</b> msg</span>
-        <span class="m"><b>${d.toolUseCount}</b> tool</span><span class="m">💲<b>${fmtUSD(d.costUSD)}</b></span></div>`;
+        <span class="m"><b>${fmtDur(d.durationMs)}</b></span><span class="m"><b>${d.messageCount}</b> ${esc(t('office.msgUnit'))}</span>
+        <span class="m"><b>${d.toolUseCount}</b> ${esc(t('office.toolUnit'))}</span><span class="m">💲<b>${fmtUSD(d.costUSD)}</b></span></div>`;
       const tl = (d.timeline || []).slice(-40).map((it) => {
         const role = it.sidechain ? 'tool' : it.role;
         return `<div class="tl-item"><div class="tl-role ${role}">${role}</div><div class="tl-text ${it.kind === 'tool' || it.kind === 'result' ? 'mono' : ''}">${esc((it.text || '').slice(0, 400))}</div></div>`;
       }).join('');
-      $('#d-body').innerHTML = head + `<div class="tl">${tl || '<div class="empty">Chưa có hoạt động.</div>'}</div>`;
-    } catch { $('#d-body').innerHTML = '<div class="empty">Lỗi tải dữ liệu.</div>'; }
+      $('#d-body').innerHTML = head + `<div class="tl">${tl || `<div class="empty">${esc(t('office.drawerNoActivity'))}</div>`}</div>`;
+    } catch { $('#d-body').innerHTML = `<div class="empty">${esc(t('office.drawerLoadError'))}</div>`; }
   }
 
   // ---- Camera: zoom + drag-to-pan ----
@@ -381,6 +384,15 @@
     ] };
   }
 
+  // ---- Re-render on language switch ----
+  // Static data-i18n nodes (controls) are handled by applyDOM; JS-built canvas
+  // labels, plaques, bubbles, drawer + panels must be re-rendered from cache.
+  window.addEventListener('laam:lang', () => {
+    if (!lastSnapshot) return;
+    render(lastSnapshot.sessions || []);
+    updatePanels(lastSnapshot.sessions || []);
+  });
+
   // ---- Boot ----
   const isMock = new URLSearchParams(location.search).get('mock') === '1';
   function apply(data) {
@@ -388,10 +400,10 @@
     if (isPhone && !didInitialScroll) { didInitialScroll = true; requestAnimationFrame(() => stage.scrollTo({ left: 120 * scale, top: 0 })); }
   }
   if (isMock) {
-    pushEvent('info', 'Chế độ mock (rooms + handoff + walk-to-lounge)');
+    pushEvent('info', 'office.evMockMode');
     apply(mockSnapshot(false));
     window.LAAM.setConn(true);
-    setTimeout(() => { pushEvent('done', 'webapp hoàn tất → đi ra lounge'); apply(mockSnapshot(true)); }, 3500);
+    setTimeout(() => { pushEvent('done', 'office.evMockDone'); apply(mockSnapshot(true)); }, 3500);
   } else {
     window.LAAM.connectSSE(apply);
   }

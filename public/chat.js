@@ -68,6 +68,7 @@
 (() => {
   const L = window.LAAM || {};
   const esc = L.esc || ((s) => (s == null ? '' : String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))));
+  const T = (k, v) => (L.t ? L.t(k, v) : (window.LAAMI18n ? window.LAAMI18n.t(k, v) : k));
   const ago = L.ago || ((ts) => '');
   const fmtNum = L.fmtNum || ((n) => String(n));
   if (L.initTheme) L.initTheme();
@@ -239,7 +240,7 @@
   function renderAttachments() {
     if (!attachEl) return;
     attachEl.innerHTML = attachments
-      .map((a, i) => `<span class="attach-chip" title="${esc(a.name)} · ${(a.text || '').length} ký tự">${a.kind === 'url' ? '🔗' : '📎'} ${esc(a.name)}<button data-i="${i}" class="x" aria-label="Bỏ đính kèm">×</button></span>`)
+      .map((a, i) => `<span class="attach-chip" title="${esc(T('chat.attachChars', { name: a.name, n: (a.text || '').length }))}">${a.kind === 'url' ? '🔗' : '📎'} ${esc(a.name)}<button data-i="${i}" class="x" aria-label="${esc(T('chat.attachRemoveAria'))}">×</button></span>`)
       .join('');
     emit('attachments:change', attachments);
   }
@@ -261,7 +262,7 @@
 
     let content = text;
     if (atts.length) {
-      const ctx = atts.map((a) => `[Tài liệu đính kèm: ${a.name}]\n${a.text}`).join('\n\n');
+      const ctx = atts.map((a) => `${T('chat.attachDocLabel', { name: a.name })}\n${a.text}`).join('\n\n');
       content = ctx + '\n\n---\n\n' + text;
     }
     c.messages.push({
@@ -346,7 +347,7 @@
       }
     } catch (err) {
       if (err && err.name === 'AbortError') aborted = true;
-      else errMsg = (err && err.message) ? err.message : 'không gọi được mô hình.';
+      else errMsg = (err && err.message) ? err.message : T('chat.errModel');
     } finally {
       controller = null;
       setStreaming(false);
@@ -459,9 +460,7 @@
     const div = document.createElement('div');
     div.className = 'empty';
     div.id = 'chat-empty';
-    div.innerHTML =
-      'Bắt đầu trò chuyện với mô hình Qwen chạy cục bộ. ' +
-      'Mỗi cuộc hội thoại được theo dõi như một phiên trong LAAM.';
+    div.textContent = T('chat.empty');
     transcript.appendChild(div);
     emit('empty:rendered', { el: div });
   }
@@ -478,7 +477,7 @@
 
     if (m.role === 'user') {
       bubble.innerHTML = renderContent(m.text != null ? m.text : m.content) +
-        (m.attachments && m.attachments.length ? '<div class="caption">📎 kèm ' + m.attachments.length + ' tài liệu</div>' : '');
+        (m.attachments && m.attachments.length ? '<div class="caption">' + esc(T('chat.attachedCaption', { n: m.attachments.length })) + '</div>' : '');
     } else if (m.streaming) {
       bubble.classList.add('cursor');
       bubble.innerHTML = renderContent(m.content);
@@ -494,13 +493,13 @@
       const cap = document.createElement('div');
       cap.className = 'caption';
       const modelLabel = m.model ? prettyModel(m.model) : '7B';
-      cap.textContent = modelLabel + ' · ' + m.stats.tps.toFixed(1) + ' tok/s · ' + m.stats.tokens + ' tokens';
+      cap.textContent = T('chat.statsCaption', { model: modelLabel, tps: m.stats.tps.toFixed(1), tokens: m.stats.tokens });
       wrap.appendChild(cap);
     }
     if (m.stopped) {
       const cap = document.createElement('div');
       cap.className = 'caption';
-      cap.textContent = '⏹ đã dừng';
+      cap.textContent = T('chat.stopped');
       wrap.appendChild(cap);
     }
 
@@ -513,12 +512,12 @@
     wrap.className = 'msg error';
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    bubble.textContent = '⚠ Lỗi: ' + msg;
+    bubble.textContent = T('chat.errPrefix', { msg: msg });
     wrap.appendChild(bubble);
     const retry = document.createElement('button');
     retry.className = 'msg-retry';
     retry.type = 'button';
-    retry.textContent = '↻ Thử lại';
+    retry.textContent = T('chat.errRetry');
     retry.addEventListener('click', () => retryLast());
     wrap.appendChild(retry);
     emit('error:rendered', { el: wrap, message: msg, retry: retryLast });
@@ -568,11 +567,12 @@
   }
   function setModelInfo(html) { if (subInfo) subInfo.innerHTML = html; }
   function defaultModelBadge(m) {
-    return '<span class="badge-local">⬡ LOCAL</span><span>' + esc(prettyModel(m)) + ' (local) · miễn phí</span>';
+    return '<span class="badge-local">' + esc(T('chat.badgeLocal')) + '</span><span>' + esc(T('chat.modelLocalFree', { model: prettyModel(m) })) + '</span>';
   }
+  let lastBadgeModel = 'qwen2.5-coder:7b';
   fetch('/api/chat/info').then((r) => r.json())
-    .then((d) => setModelInfo(defaultModelBadge((d && d.model) || 'qwen2.5-coder:7b')))
-    .catch(() => setModelInfo(defaultModelBadge('qwen2.5-coder:7b')));
+    .then((d) => { lastBadgeModel = (d && d.model) || 'qwen2.5-coder:7b'; setModelInfo(defaultModelBadge(lastBadgeModel)); })
+    .catch(() => setModelInfo(defaultModelBadge(lastBadgeModel)));
 
   // ======================================================================
   // Baseline composer wiring (works even if chat-composer.js is absent)
@@ -599,21 +599,21 @@
     if (!file) return;
     try {
       const r = await window.LAAMChatIngest.parseFile(file);
-      addAttachment({ name: r.name + (r.truncated ? ' (cắt bớt)' : ''), text: r.text, kind: 'file' });
-    } catch (err) { pendingError = (err && err.message) || 'không đọc được file.'; renderTranscript(); }
+      addAttachment({ name: r.name + (r.truncated ? T('chat.truncatedSuffix') : ''), text: r.text, kind: 'file' });
+    } catch (err) { pendingError = (err && err.message) || T('chat.errReadFile'); renderTranscript(); }
   });
   const attachUrlBtn = $('#attach-url');
   if (attachUrlBtn) attachUrlBtn.addEventListener('click', async () => {
-    const url = window.prompt('Dán URL để mô hình đọc (chỉ fetch URL bạn chủ động nhập):');
+    const url = window.prompt(T('chat.urlPrompt'));
     if (!url) return;
-    const chip = { name: 'Đang tải URL…', text: '', kind: 'url' };
+    const chip = { name: T('chat.urlLoading'), text: '', kind: 'url' };
     addAttachment(chip);
     try {
       const r = await window.LAAMChatIngest.fetchUrl(url.trim());
-      chip.name = (r.title || r.url) + (r.truncated ? ' (cắt bớt)' : '');
-      chip.text = 'URL: ' + r.url + '\nTiêu đề: ' + r.title + '\n\n' + r.text;
+      chip.name = (r.title || r.url) + (r.truncated ? T('chat.truncatedSuffix') : '');
+      chip.text = 'URL: ' + r.url + '\n' + T('chat.urlMetaTitle', { title: r.title }) + '\n\n' + r.text;
       renderAttachments();
-    } catch (err) { attachments = attachments.filter((a) => a !== chip); renderAttachments(); pendingError = (err && err.message) || 'không tải được URL.'; renderTranscript(); }
+    } catch (err) { attachments = attachments.filter((a) => a !== chip); renderAttachments(); pendingError = (err && err.message) || T('chat.errLoadUrl'); renderTranscript(); }
   });
 
   // ======================================================================
@@ -659,6 +659,26 @@
   if (!conversations.length) newConversation();
   else { emit('conversations:change', conversations); emit('conversation:switch', current()); renderTranscript(); }
   focusInput();
+
+  // ----------------------------------------------------------------------
+  // Re-render dynamic JS content on a language switch. Static data-i18n nodes
+  // are handled by common.js/applyDOM; here we rebuild JS-built content:
+  //   • the transcript (captions, empty-state, error bubble) — also re-emits
+  //     message:rendered so every feature module re-localizes its per-message UI
+  //   • pending attachment chips
+  //   • the default model badge (settings module re-localizes its own badge)
+  // Feature modules subscribe to laam:lang themselves for their toolbar/panels.
+  window.addEventListener('laam:lang', () => {
+    try { renderAttachments(); } catch (e) {}
+    try { renderTranscript(); } catch (e) {}
+    // Re-localize the badge. Prefer the current conversation's chosen model (the
+    // settings module also re-applies on its own onChange, but covering it here
+    // keeps the badge correct even if that module is absent).
+    try {
+      const s = getSettings();
+      setModelInfo(defaultModelBadge((s && s.model) || lastBadgeModel));
+    } catch (e) {}
+  });
 
   // ----------------------------------------------------------------------
   function injectBaseCss() {

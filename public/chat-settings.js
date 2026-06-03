@@ -22,6 +22,8 @@
     const esc = (ctx && ctx.esc) || ((s) => (s == null ? '' : String(s)));
     const mounts = (ctx && ctx.mounts) || {};
     if (!store) return;
+    const T = (k, v) => (window.LAAMI18n ? window.LAAMI18n.t(k, v) : k);
+    const applyDOM = (root) => { try { if (window.LAAMI18n && window.LAAMI18n.applyDOM) window.LAAMI18n.applyDOM(root); } catch (e) {} };
 
     const DEFAULT_MODEL = 'qwen2.5-coder:7b'; // matches the backend hard-lock
     const DEFAULTS = { temperature: 0.8, top_p: 0.9 };
@@ -39,16 +41,32 @@
     const gear = document.createElement('button');
     gear.type = 'button';
     gear.className = 'laam-settings-gear';
-    gear.setAttribute('aria-label', 'Cài đặt mô hình');
+    gear.setAttribute('aria-label', T('chat.setGearAria'));
     gear.setAttribute('aria-expanded', 'false');
-    gear.title = 'Cài đặt mô hình';
+    gear.title = T('chat.setGearTitle');
     gear.textContent = '⚙';
+    gear.setAttribute('data-i18n-aria', 'chat.setGearAria');
+    gear.setAttribute('data-i18n-title', 'chat.setGearTitle');
     if (mounts.toolbar) mounts.toolbar.appendChild(gear);
     gear.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
 
     // ---- events ----------------------------------------------------------
     store.on('command:settings', () => openPanel());
     store.on('conversation:switch', () => { if (panel) syncControls(); });
+
+    // Re-localize on language change: the gear + panel carry data-i18n attrs
+    // (applyDOM handles them); re-sync the model <option> labels (built in JS)
+    // and re-apply the badge in the active language.
+    if (window.LAAMI18n && typeof window.LAAMI18n.onChange === 'function') {
+      window.LAAMI18n.onChange(() => {
+        try { applyDOM(gear.parentNode || document); } catch (e) {}
+        try { if (panel) { applyDOM(panel); syncControls(); } } catch (e) {}
+        try {
+          const s = store.getSettings() || {};
+          setBadge(s.model || serverModel || (modelCache && modelCache[0]) || DEFAULT_MODEL);
+        } catch (e) {}
+      });
+    }
 
     // ======================================================================
     // Open / close
@@ -110,46 +128,48 @@
       const p = document.createElement('div');
       p.className = 'laam-settings-panel';
       p.setAttribute('role', 'dialog');
-      p.setAttribute('aria-label', 'Cài đặt mô hình');
+      p.setAttribute('aria-label', T('chat.setTitle'));
+      p.setAttribute('data-i18n-aria', 'chat.setTitle');
       p.hidden = true;
       p.innerHTML = `
         <div class="ls-head">
-          <span class="ls-title">Cài đặt mô hình</span>
-          <button type="button" class="ls-x" aria-label="Đóng">×</button>
+          <span class="ls-title" data-i18n="chat.setTitle">Cài đặt mô hình</span>
+          <button type="button" class="ls-x" data-i18n-aria="chat.setCloseAria" aria-label="Đóng">×</button>
         </div>
         <div class="ls-body">
           <label class="ls-field">
-            <span class="ls-label">Mô hình</span>
-            <select class="ls-select" id="ls-model"><option value="">Đang tải…</option></select>
+            <span class="ls-label" data-i18n="chat.setModelLabel">Mô hình</span>
+            <select class="ls-select" id="ls-model"><option value="" data-i18n="chat.setLoading">Đang tải…</option></select>
           </label>
 
           <label class="ls-field">
-            <span class="ls-label">Nhiệt độ (temperature) <b id="ls-temp-val">0.8</b></span>
+            <span class="ls-label"><span data-i18n="chat.setTempLabel">Nhiệt độ (temperature)</span> <b id="ls-temp-val">0.8</b></span>
             <input type="range" class="ls-range" id="ls-temp" min="0" max="1.5" step="0.1" value="0.8">
-            <span class="ls-hint">Thấp = chính xác · Cao = sáng tạo</span>
+            <span class="ls-hint" data-i18n="chat.setTempHint">Thấp = chính xác · Cao = sáng tạo</span>
           </label>
 
           <label class="ls-field">
-            <span class="ls-label">Top-p <b id="ls-topp-val">0.9</b></span>
+            <span class="ls-label"><span data-i18n="chat.setToppLabel">Top-p</span> <b id="ls-topp-val">0.9</b></span>
             <input type="range" class="ls-range" id="ls-topp" min="0" max="1" step="0.05" value="0.9">
           </label>
 
           <label class="ls-field">
-            <span class="ls-label">Số token tối đa (num_predict)</span>
-            <input type="number" class="ls-num" id="ls-maxtok" min="64" max="4096" step="1" placeholder="Mặc định của mô hình">
-            <span class="ls-hint">Để trống = dùng mặc định của mô hình</span>
+            <span class="ls-label" data-i18n="chat.setMaxTokLabel">Số token tối đa (num_predict)</span>
+            <input type="number" class="ls-num" id="ls-maxtok" min="64" max="4096" step="1" data-i18n-ph="chat.setMaxTokPh" placeholder="Mặc định của mô hình">
+            <span class="ls-hint" data-i18n="chat.setMaxTokHint">Để trống = dùng mặc định của mô hình</span>
           </label>
 
           <label class="ls-field">
-            <span class="ls-label">Lời nhắc hệ thống (system)</span>
-            <textarea class="ls-area" id="ls-system" rows="4" placeholder="Lời nhắc hệ thống — để trống dùng mặc định"></textarea>
+            <span class="ls-label" data-i18n="chat.setSystemLabel">Lời nhắc hệ thống (system)</span>
+            <textarea class="ls-area" id="ls-system" rows="4" data-i18n-ph="chat.setSystemPh" placeholder="Lời nhắc hệ thống — để trống dùng mặc định"></textarea>
           </label>
         </div>
         <div class="ls-foot">
-          <span class="ls-note">Áp dụng cho cuộc trò chuyện hiện tại.</span>
-          <button type="button" class="ls-reset" id="ls-reset">Đặt lại mặc định</button>
+          <span class="ls-note" data-i18n="chat.setApplyNote">Áp dụng cho cuộc trò chuyện hiện tại.</span>
+          <button type="button" class="ls-reset" id="ls-reset" data-i18n="chat.setReset">Đặt lại mặc định</button>
         </div>
       `;
+      applyDOM(p);
 
       const q = (sel) => p.querySelector(sel);
       const xBtn = q('.ls-x');
@@ -254,7 +274,7 @@
       const sel = panel._refs.modelSel;
       if (!modelCache) { // not fetched yet — keep a single placeholder
         if (!sel.options.length || sel.options[0].value !== '') {
-          sel.innerHTML = '<option value="">Đang tải…</option>';
+          sel.innerHTML = '<option value="">' + esc(T('chat.setLoading')) + '</option>';
         }
         return;
       }
@@ -266,7 +286,7 @@
       const prettyOf = (m) => (store.prettyModel ? store.prettyModel(m) : m);
       sel.innerHTML = list.length
         ? list.map((m) => `<option value="${esc(m)}">${esc(prettyOf(m))}</option>`).join('')
-        : '<option value="">(không có mô hình)</option>';
+        : '<option value="">' + esc(T('chat.setNoModels')) + '</option>';
     }
 
     async function bootModels() {
@@ -299,7 +319,7 @@
     function setBadge(model) {
       if (!store.setModelInfo) return;
       const pretty = store.prettyModel ? store.prettyModel(model) : model;
-      store.setModelInfo('<span class="badge-local">⬡ LOCAL</span><span>' + esc(pretty) + ' (local) · miễn phí</span>');
+      store.setModelInfo('<span class="badge-local">' + esc(T('chat.badgeLocal')) + '</span><span>' + esc(T('chat.modelLocalFree', { model: pretty })) + '</span>');
     }
 
     // ======================================================================

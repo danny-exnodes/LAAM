@@ -31,6 +31,7 @@
     if (!ctx || !ctx.store) return;
     const store = ctx.store;
     const esc = ctx.esc || ((s) => (s == null ? '' : String(s)));
+    const T = (k, v) => (window.LAAMI18n ? window.LAAMI18n.t(k, v) : k);
     const mounts = ctx.mounts || {};
     const transcript = mounts.transcript || null;
 
@@ -71,22 +72,23 @@
         }
       } catch (e) {}
     }
-    labelIfMissing(mounts.sendBtn, 'Gửi tin nhắn');
-    labelIfMissing(mounts.stopBtn, 'Dừng tạo phản hồi');
-    labelIfMissing(mounts.input, 'Soạn tin nhắn');
+    labelIfMissing(mounts.sendBtn, T('chat.sendAria'));
+    labelIfMissing(mounts.stopBtn, T('chat.stopAria'));
+    labelIfMissing(mounts.input, T('chat.inputAria'));
 
     // ---------------------------------------------------------------------
     // A) EMPTY-STATE PROMPT SUGGESTIONS
     // ---------------------------------------------------------------------
     // Prompts picked to exercise the rich renderer: prose, code, a table, a
     // chart, and a map / directions block. UI text is Vietnamese.
+    // Text resolved at build time via T(key) so chips follow the active language.
     const SUGGESTIONS = [
-      { icon: '💡', text: 'Giải thích closure trong JavaScript bằng ví dụ' },
-      { icon: '🐍', text: 'Viết hàm Python sắp xếp nhanh (quicksort)' },
-      { icon: '📊', text: 'So sánh PostgreSQL, MySQL và SQLite (dạng bảng)' },
-      { icon: '📈', text: 'Vẽ biểu đồ cột doanh thu 4 quý: 12, 19, 9, 15' },
-      { icon: '🗺️', text: 'Chỉ đường từ Hồ Gươm tới Văn Miếu' },
-      { icon: '✍️', text: 'Tóm tắt lợi ích của năng lượng mặt trời' },
+      { icon: '💡', key: 'chat.suggest1' },
+      { icon: '🐍', key: 'chat.suggest2' },
+      { icon: '📊', key: 'chat.suggest3' },
+      { icon: '📈', key: 'chat.suggest4' },
+      { icon: '🗺️', key: 'chat.suggest5' },
+      { icon: '✍️', key: 'chat.suggest6' },
     ];
 
     function pickSuggestion(text) {
@@ -99,22 +101,23 @@
       const grid = document.createElement('div');
       grid.className = 'laam-ux-suggest';
       grid.setAttribute('role', 'list');
-      grid.setAttribute('aria-label', 'Gợi ý câu hỏi');
+      grid.setAttribute('aria-label', T('chat.suggestAria'));
 
       SUGGESTIONS.forEach((s) => {
+        const text = T(s.key);
         const chip = document.createElement('div');
         chip.className = 'laam-ux-chip';
         chip.setAttribute('role', 'button');
         chip.setAttribute('tabindex', '0');
-        chip.setAttribute('aria-label', s.text);
+        chip.setAttribute('aria-label', text);
         chip.innerHTML =
           '<span class="laam-ux-chip-ico" aria-hidden="true">' + esc(s.icon) + '</span>' +
-          '<span class="laam-ux-chip-txt">' + esc(s.text) + '</span>';
-        chip.addEventListener('click', () => pickSuggestion(s.text));
+          '<span class="laam-ux-chip-txt">' + esc(text) + '</span>';
+        chip.addEventListener('click', () => pickSuggestion(text));
         chip.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
             e.preventDefault();
-            pickSuggestion(s.text);
+            pickSuggestion(text);
           }
         });
         grid.appendChild(chip);
@@ -169,7 +172,7 @@
       ind.innerHTML =
         '<span class="laam-ux-dots" aria-hidden="true">' +
         '<span></span><span></span><span></span></span>' +
-        '<span class="laam-ux-thinking-label">đang soạn…</span>';
+        '<span class="laam-ux-thinking-label">' + esc(T('chat.thinking')) + '</span>';
       bubble.appendChild(ind);
     }
 
@@ -187,7 +190,7 @@
     // ---------------------------------------------------------------------
     store.on('stream:start', (d) => {
       try {
-        announce('Đang tạo phản hồi…');
+        announce(T('chat.annGenerating'));
         thinkingIndex = d && typeof d.index === 'number' ? d.index : -1;
         showThinking(thinkingIndex);
         // (D) keep a newly-starting answer in view, but only if the user was
@@ -220,7 +223,7 @@
         clearThinking();
         const aborted = d && d.aborted;
         const error = d && d.error;
-        announce(error ? 'Lỗi khi tạo phản hồi' : aborted ? 'Đã dừng' : 'Đã xong');
+        announce(error ? T('chat.annError') : aborted ? T('chat.annStopped') : T('chat.annDone'));
 
         // (D) gentle focus return: only if the user isn't typing/interacting
         // with some other control. Body/transcript/null === "nothing focused".

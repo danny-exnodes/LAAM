@@ -22,6 +22,7 @@
     id: 'models',
     render(host, stats, ctx) {
       const { Chart, palette: p, fmtNum, fmtUSD, fmtDur, shortModel, esc } = ctx;
+      const t9 = (ctx && ctx.t) || ((k) => k);
 
       // idempotent teardown
       if (host._charts) { for (const c of host._charts) { try { c.destroy(); } catch (e) {} } }
@@ -32,8 +33,8 @@
       if (!rows.length) {
         host.innerHTML = `
           <div class="chart-card wide">
-            <h3>So sánh model</h3>
-            <div class="mdl-empty">Chưa có dữ liệu model để so sánh.</div>
+            <h3>${esc(t9('dash.mdl.title'))}</h3>
+            <div class="mdl-empty">${esc(t9('dash.mdl.empty'))}</div>
           </div>`;
         return;
       }
@@ -51,28 +52,28 @@
 
       host.innerHTML = `
         <div class="chart-card wide">
-          <h3>So sánh model</h3>
+          <h3>${esc(t9('dash.mdl.title'))}</h3>
           <div class="mdl-scroll"><table class="mdl-table">
             <thead>
               <tr>
-                <th>Model</th>
-                <th>#Session</th>
-                <th>Tokens</th>
-                <th>Chi phí</th>
-                <th>Thời lượng TB</th>
-                <th>Tốc độ (tok/phút)</th>
-                <th>Hoàn tất %</th>
+                <th>${esc(t9('dash.mdl.th.model'))}</th>
+                <th>${esc(t9('dash.mdl.th.sessions'))}</th>
+                <th>${esc(t9('dash.mdl.th.tokens'))}</th>
+                <th>${esc(t9('dash.mdl.th.cost'))}</th>
+                <th>${esc(t9('dash.mdl.th.avgDur'))}</th>
+                <th>${esc(t9('dash.mdl.th.speed'))}</th>
+                <th>${esc(t9('dash.mdl.th.doneRate'))}</th>
               </tr>
             </thead>
             <tbody>${tableRows}</tbody>
           </table></div>
         </div>
         <div class="chart-card half">
-          <h3>Tốc độ (tokens/phút)</h3>
+          <h3>${esc(t9('dash.mdl.speed'))}</h3>
           <div class="cwrap"><canvas></canvas></div>
         </div>
         <div class="chart-card half">
-          <h3>Tỉ lệ hoàn tất</h3>
+          <h3>${esc(t9('dash.mdl.doneRate'))}</h3>
           <div class="cwrap"><canvas></canvas></div>
         </div>
       `;
@@ -94,7 +95,7 @@
         data: {
           labels,
           datasets: [{
-            label: 'tok/phút',
+            label: t9('dash.mdl.ds.speed'),
             data: rows.map((r) => r.tokensPerMin || 0),
             backgroundColor: p.accent,
             borderRadius: 4,
@@ -103,7 +104,7 @@
         options: baseOpts({
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: (c) => `${fmtNum(c.parsed.y)} tok/phút` } },
+            tooltip: { callbacks: { label: (c) => t9('dash.mdl.tooltipSpeed', { n: fmtNum(c.parsed.y) }) } },
           },
           scales: {
             x: catAxis,
@@ -122,7 +123,7 @@
         data: {
           labels,
           datasets: [{
-            label: 'Hoàn tất %',
+            label: t9('dash.mdl.ds.done'),
             data: rows.map((r) => +((r.doneRate || 0) * 100).toFixed(1)),
             backgroundColor: p.running,
             borderRadius: 4,

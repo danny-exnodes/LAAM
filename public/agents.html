@@ -13,37 +13,37 @@
   <div class="filterbar" id="filterbar">
     <label class="search">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-      <input id="search" type="text" placeholder="Tìm project / agent / task…" />
+      <input id="search" type="text" placeholder="Tìm project / agent / task…" data-i18n-ph="agents.searchPh" />
     </label>
     <select class="fsel" id="f-source">
-      <option value="">Mọi nguồn</option>
+      <option value="" data-i18n="agents.srcAll">Mọi nguồn</option>
       <option value="claude">Claude</option>
-      <option value="local">Local (Ollama)</option>
+      <option value="local" data-i18n="agents.srcLocal">Local (Ollama)</option>
     </select>
-    <select class="fsel" id="f-project"><option value="">Mọi project</option></select>
-    <select class="fsel" id="f-model"><option value="">Mọi model</option></select>
+    <select class="fsel" id="f-project"><option value="" data-i18n="agents.projAll">Mọi project</option></select>
+    <select class="fsel" id="f-model"><option value="" data-i18n="agents.modelAll">Mọi model</option></select>
     <select class="fsel" id="f-status">
-      <option value="">Mọi trạng thái</option>
-      <option value="running">Đang chạy</option>
-      <option value="idle">Tạm dừng</option>
-      <option value="done">Hoàn tất</option>
-      <option value="stuck">⚠ Nghi kẹt</option>
+      <option value="" data-i18n="agents.statusAll">Mọi trạng thái</option>
+      <option value="running" data-i18n="status.running">Đang chạy</option>
+      <option value="idle" data-i18n="status.idle">Tạm dừng</option>
+      <option value="done" data-i18n="status.done">Hoàn tất</option>
+      <option value="stuck" data-i18n="agents.statusStuck">⚠ Nghi kẹt</option>
     </select>
-    <select class="fsel" id="f-branch"><option value="">Mọi branch</option></select>
+    <select class="fsel" id="f-branch"><option value="" data-i18n="agents.branchAll">Mọi branch</option></select>
     <select class="fsel" id="f-time">
-      <option value="">Mọi thời điểm</option>
-      <option value="3600000">1 giờ qua</option>
-      <option value="21600000">6 giờ qua</option>
-      <option value="86400000">24 giờ qua</option>
-      <option value="604800000">7 ngày qua</option>
+      <option value="" data-i18n="agents.timeAll">Mọi thời điểm</option>
+      <option value="3600000" data-i18n="agents.time1h">1 giờ qua</option>
+      <option value="21600000" data-i18n="agents.time6h">6 giờ qua</option>
+      <option value="86400000" data-i18n="agents.time24h">24 giờ qua</option>
+      <option value="604800000" data-i18n="agents.time7d">7 ngày qua</option>
     </select>
-    <button class="fsel ghost" id="f-clear">Xoá lọc</button>
-    <button class="fsel" id="f-export" title="Xuất CSV các session đang hiển thị">⤓ CSV</button>
+    <button class="fsel ghost" id="f-clear" data-i18n="agents.clear">Xoá lọc</button>
+    <button class="fsel" id="f-export" title="Xuất CSV các session đang hiển thị" data-i18n="agents.exportCsv" data-i18n-title="agents.exportTitle">⤓ CSV</button>
     <span class="fcount" id="f-count"></span>
   </div>
 
   <main id="main">
-    <div class="empty"><div class="big">Đang tải dữ liệu agents…</div></div>
+    <div class="empty"><div class="big" data-i18n="agents.loading">Đang tải dữ liệu agents…</div></div>
   </main>
 
   <div class="scrim" id="scrim"></div>
@@ -59,6 +59,8 @@
     </div>
     <div class="drawer-body" id="d-body"></div>
   </aside>
+  <script src="/i18n.js"></script>
+  <script src="/i18n.agents.js"></script>
 
   <script src="/common.js"></script>
   <script src="/export.js"></script>

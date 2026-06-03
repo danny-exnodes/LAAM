@@ -27,6 +27,9 @@
 (function () {
   'use strict';
 
+  // i18n helper (errors are thrown lazily, so they read in the active language).
+  var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
+
   // ~8K tokens worth of characters. All ingested text is capped to this length.
   var MAX_CHARS = 32000;
 
@@ -83,8 +86,8 @@
       doc = await pdfjs.getDocument({ data: data }).promise;
     } catch (e) {
       var nm = (e && e.name) || '';
-      if (nm === 'PasswordException') throw new Error('PDF được đặt mật khẩu/mã hoá, không đọc được.');
-      if (nm === 'InvalidPDFException') throw new Error('Tệp PDF hỏng hoặc không hợp lệ.');
+      if (nm === 'PasswordException') throw new Error(T('chat.ingPdfPassword'));
+      if (nm === 'InvalidPDFException') throw new Error(T('chat.ingPdfCorrupt'));
       throw e;
     }
 
@@ -97,19 +100,19 @@
     }
     var text = pages.join('\n').trim();
     if (!text) {
-      throw new Error('PDF không có lớp văn bản (có thể là ảnh scan) — không trích được chữ.');
+      throw new Error(T('chat.ingPdfNoText'));
     }
     return text;
   }
 
   async function parseFile(file) {
     if (!file) {
-      throw new Error('Không có tệp');
+      throw new Error(T('chat.ingNoFile'));
     }
 
     var size = Number(file.size) || 0;
     if (size > MAX_FILE_BYTES) {
-      throw new Error('File quá lớn (tối đa 5MB)');
+      throw new Error(T('chat.ingTooLarge'));
     }
 
     var ext = getExt(file.name);
@@ -126,7 +129,7 @@
         rawText = await extractPdf(file);
       } catch (e) {
         var msg = (e && e.message) ? e.message : String(e);
-        throw new Error('Không đọc được PDF: ' + msg);
+        throw new Error(T('chat.ingPdfFail', { msg: msg }));
       }
       kind = 'pdf';
     } else if (isText) {
@@ -134,7 +137,7 @@
       // CSV is kept as-is (the model can read CSV text); flag its kind separately.
       kind = ext === 'csv' ? 'csv' : 'text';
     } else {
-      throw new Error('Định dạng không hỗ trợ: ' + (ext || mime || 'unknown'));
+      throw new Error(T('chat.ingUnsupported', { fmt: (ext || mime || 'unknown') }));
     }
 
     var capped = cap(rawText);
@@ -157,7 +160,7 @@
       });
     } catch (e) {
       var netMsg = (e && e.message) ? e.message : String(e);
-      throw new Error('Không tải được URL: ' + netMsg);
+      throw new Error(T('chat.ingUrlFail', { msg: netMsg }));
     }
 
     var json;

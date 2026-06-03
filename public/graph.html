@@ -12,13 +12,13 @@
   <header id="topbar"></header>
 
   <div class="filterbar">
-    <select class="fsel" id="g-project"><option value="">Mọi project</option></select>
-    <label class="gchk"><input type="checkbox" id="g-physics" checked /> Physics</label>
-    <button class="fsel ghost" id="g-fit">Canh giữa</button>
+    <select class="fsel" id="g-project"><option value="" data-i18n="graph.allProjects">Mọi project</option></select>
+    <label class="gchk"><input type="checkbox" id="g-physics" checked /> <span data-i18n="graph.physics">Physics</span></label>
+    <button class="fsel ghost" id="g-fit" data-i18n="graph.fit">Canh giữa</button>
     <span class="glegend">
-      <span class="lg"><i style="background:#6d5efc"></i>Project</span>
-      <span class="lg"><i style="background:#16a34a"></i>Orchestrator</span>
-      <span class="lg"><i style="background:#0ea5e9"></i>Sub-agent</span>
+      <span class="lg"><i style="background:#6d5efc"></i><span data-i18n="graph.legendProject">Project</span></span>
+      <span class="lg"><i style="background:#16a34a"></i><span data-i18n="graph.legendOrchestrator">Orchestrator</span></span>
+      <span class="lg"><i style="background:#0ea5e9"></i><span data-i18n="graph.legendSub">Sub-agent</span></span>
     </span>
     <span class="fcount" id="g-count"></span>
   </div>
@@ -26,10 +26,12 @@
   <main class="graphmain">
     <div id="net"></div>
     <aside class="gpanel" id="gpanel">
-      <div class="gpanel-empty" id="gpanel-empty">Bấm vào một node để xem chi tiết.</div>
+      <div class="gpanel-empty" id="gpanel-empty" data-i18n="graph.emptyHint">Bấm vào một node để xem chi tiết.</div>
       <div id="gpanel-body" style="display:none"></div>
     </aside>
   </main>
+  <script src="/i18n.js"></script>
+  <script src="/i18n.graphsearch.js"></script>
 
   <script src="/common.js"></script>
   <script src="/graph.js"></script>

@@ -3,6 +3,7 @@
 // clickable cards with the matched substring highlighted.
 (() => {
   const { esc, ago, shortModel } = window.LAAM;
+  const t = (k, v) => window.LAAM.t(k, v);
   window.LAAM.initTheme();
   window.LAAM.buildHeader('', { conn: false }); // static page, no SSE → no conn indicator
 
@@ -65,7 +66,7 @@
 
   function rowHtml(m, q) {
     const tag = `${esc(m.role)} · ${esc(m.kind)}`;
-    const sub = m.sidechain ? '<span class="stag sub">sub</span>' : '';
+    const sub = m.sidechain ? `<span class="stag sub">${esc(t('search.subTag'))}</span>` : '';
     return `<a class="sresult" href="/session?id=${encodeURIComponent(m.sessionId)}">
       <div class="sresult-top">
         <span class="sproj">${esc(m.project || '—')}</span>
@@ -82,28 +83,33 @@
   function render(data, q) {
     const matches = data.matches || [];
     if (!matches.length) {
-      results.innerHTML = '<div class="empty"><div class="big">Không tìm thấy.</div></div>';
+      results.innerHTML = `<div class="empty"><div class="big">${esc(t('search.noResults'))}</div></div>`;
       return;
     }
-    const head = `<div class="sresult-head">${data.total} kết quả${data.truncated ? ' (hiển thị 200 đầu)' : ''}</div>`;
+    const countKey = data.truncated ? 'search.resultCountTrunc' : 'search.resultCount';
+    const head = `<div class="sresult-head">${esc(t(countKey, { n: data.total }))}</div>`;
     results.innerHTML = head + matches.map((m) => rowHtml(m, q)).join('');
   }
 
   function showHint() {
-    results.innerHTML = '<div class="empty"><div class="big">Tìm trong nội dung transcript</div><div>Nhập ít nhất 2 ký tự để tìm trong tin nhắn, tool input và kết quả tool.</div></div>';
+    lastView = { kind: 'hint' };
+    results.innerHTML = `<div class="empty"><div class="big">${esc(t('search.hintTitle'))}</div><div>${esc(t('search.hintBody'))}</div></div>`;
   }
 
   let seq = 0;
+  let lastView = { kind: 'hint' }; // remember what's on screen for lang re-render
   async function run(q) {
     const my = ++seq;
     try {
       const r = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=200`);
       const data = await r.json();
       if (my !== seq) return; // a newer query superseded this one
+      lastView = { kind: 'results', data, q };
       render(data, q);
     } catch {
       if (my !== seq) return;
-      results.innerHTML = '<div class="empty"><div class="big">Lỗi tìm kiếm.</div></div>';
+      lastView = { kind: 'error' };
+      results.innerHTML = `<div class="empty"><div class="big">${esc(t('search.error'))}</div></div>`;
     }
   }
 
@@ -117,6 +123,15 @@
       return;
     }
     timer = setTimeout(() => run(q), 300);
+  });
+
+  // Re-render the current view (hint / results / error) on language switch so
+  // dynamic JS-built content updates without a reload. The placeholder is a
+  // static data-i18n-ph node, handled by applyDOM in common.js.
+  window.LAAMI18n.onChange(() => {
+    if (lastView.kind === 'results') render(lastView.data, lastView.q);
+    else if (lastView.kind === 'error') results.innerHTML = `<div class="empty"><div class="big">${esc(t('search.error'))}</div></div>`;
+    else showHint();
   });
 
   showHint();

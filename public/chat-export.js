@@ -44,6 +44,7 @@
       var esc = (ctx && ctx.esc) || function (s) { return s == null ? '' : String(s); };
       var ago = (ctx && ctx.ago) || function () { return ''; };
       var mounts = (ctx && ctx.mounts) || {};
+      var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
 
       injectCss();
 
@@ -99,24 +100,24 @@
 
       function convTitle(conv) {
         var t = conv && conv.title ? String(conv.title).trim() : '';
-        return t || 'Hội thoại';
+        return t || T('chat.expConvTitle');
       }
 
       // A filesystem-friendly base name for downloads.
       function safeFileBase(conv) {
         var base = (conv && conv.title ? String(conv.title) : '') ||
-          (conv && conv.id ? String(conv.id) : '') || 'hoi-thoai';
+          (conv && conv.id ? String(conv.id) : '') || T('chat.expFileBase');
         base = base.trim().toLowerCase()
           .replace(/[\s ]+/g, '-')         // whitespace → dash
           .replace(/[^a-z0-9\-_.]/g, '')        // strip anything not filename-safe
           .replace(/-+/g, '-')                  // collapse dashes
           .replace(/^[-.]+|[-.]+$/g, '');        // trim leading/trailing dashes/dots
-        return base || 'hoi-thoai';
+        return base || T('chat.expFileBase');
       }
 
       // The role label used in Markdown headings.
       function roleLabel(role) {
-        return role === 'user' ? 'Bạn' : role === 'assistant' ? 'Qwen' : 'Hệ thống';
+        return role === 'user' ? T('chat.expRoleUser') : role === 'assistant' ? T('chat.expRoleAssistant') : T('chat.expRoleSystem');
       }
 
       // The text to export for a message: user → typed text (no attachment
@@ -145,8 +146,7 @@
         var lines = [];
         lines.push('# ' + convTitle(conv));
         lines.push('');
-        lines.push('_Xuất từ LAAM · ' + formatDate(conv.updatedAt || conv.createdAt || Date.now()) +
-          ' · ' + msgs.length + ' tin nhắn_');
+        lines.push('_' + T('chat.expMdMeta', { date: formatDate(conv.updatedAt || conv.createdAt || Date.now()), n: msgs.length }) + '_');
         lines.push('');
 
         var sections = [];
@@ -155,7 +155,7 @@
           if (!m || m.streaming) continue;
           var body = exportTextOf(m).trim();
           var atts = (m.attachments && m.attachments.length)
-            ? '\n\n_📎 kèm ' + m.attachments.length + ' tài liệu_' : '';
+            ? '\n\n_' + T('chat.expMdAtts', { n: m.attachments.length }) + '_' : '';
           sections.push('**' + roleLabel(m.role) + ':**\n\n' + body + atts);
         }
         lines.push(sections.join('\n\n---\n\n'));
@@ -260,9 +260,9 @@
         var conv = currentConv();
         var md = buildMarkdown(conv);
         copyText(md).then(function () {
-          if (srcBtn) flash(srcBtn, '✓ Đã chép', 'laam-exp-ok');
+          if (srcBtn) flash(srcBtn, T('chat.expCopied'), 'laam-exp-ok');
         }, function () {
-          if (srcBtn) flash(srcBtn, '✗ Lỗi chép', 'laam-exp-err');
+          if (srcBtn) flash(srcBtn, T('chat.expCopyErr'), 'laam-exp-err');
         });
       }
       function doDownloadMd() {
@@ -286,9 +286,9 @@
         exportBtn = document.createElement('button');
         exportBtn.type = 'button';
         exportBtn.className = 'laam-exp-btn';
-        exportBtn.textContent = '⬇ Xuất';
-        exportBtn.title = 'Xuất hội thoại';
-        exportBtn.setAttribute('aria-label', 'Xuất hội thoại');
+        exportBtn.textContent = T('chat.expBtn');
+        exportBtn.title = T('chat.expTitle');
+        exportBtn.setAttribute('aria-label', T('chat.expTitle'));
         exportBtn.setAttribute('aria-haspopup', 'menu');
         exportBtn.setAttribute('aria-expanded', 'false');
         exportBtn.addEventListener('click', function (e) { e.stopPropagation(); toggleMenu(); });
@@ -300,16 +300,18 @@
         menuEl.hidden = true;
 
         var items = [
-          { label: '⧉ Sao chép Markdown', title: 'Chép toàn bộ hội thoại dạng Markdown', fn: function (b) { doCopyMarkdown(b); } },
-          { label: '↓ Tải .md', title: 'Tải hội thoại dạng Markdown', fn: function () { doDownloadMd(); closeMenu(); } },
-          { label: '↓ Tải .json', title: 'Tải hội thoại dạng JSON', fn: function () { doDownloadJson(); closeMenu(); } },
+          { labelKey: 'chat.expCopyMd', titleKey: 'chat.expCopyMdTitle', fn: function (b) { doCopyMarkdown(b); } },
+          { labelKey: 'chat.expDownloadMd', titleKey: 'chat.expDownloadMdTitle', fn: function () { doDownloadMd(); closeMenu(); } },
+          { labelKey: 'chat.expDownloadJson', titleKey: 'chat.expDownloadJsonTitle', fn: function () { doDownloadJson(); closeMenu(); } },
         ];
         items.forEach(function (it) {
           var b = document.createElement('button');
           b.type = 'button';
           b.className = 'laam-exp-item';
-          b.textContent = it.label;
-          b.title = it.title;
+          b.textContent = T(it.labelKey);
+          b.title = T(it.titleKey);
+          b.dataset.labelKey = it.labelKey;
+          b.dataset.titleKey = it.titleKey;
           b.setAttribute('role', 'menuitem');
           b.addEventListener('click', function (e) {
             e.stopPropagation();
@@ -322,6 +324,28 @@
         toolbar.appendChild(wrap);
       }
       mountExportUi();
+
+      // Re-localize the export button + menu (built once) on language change.
+      // Per-message code-copy buttons + timestamps are rebuilt each render, so
+      // the kernel's transcript re-render handles those for us.
+      if (window.LAAMI18n && typeof window.LAAMI18n.onChange === 'function') {
+        window.LAAMI18n.onChange(function () {
+          try {
+            if (exportBtn) {
+              exportBtn.textContent = T('chat.expBtn');
+              exportBtn.title = T('chat.expTitle');
+              exportBtn.setAttribute('aria-label', T('chat.expTitle'));
+            }
+            if (menuEl) {
+              menuEl.querySelectorAll('.laam-exp-item').forEach(function (b) {
+                if (b.dataset.flashing === '1') return; // don't clobber a flash
+                if (b.dataset.labelKey) b.textContent = T(b.dataset.labelKey);
+                if (b.dataset.titleKey) b.title = T(b.dataset.titleKey);
+              });
+            }
+          } catch (e) {}
+        });
+      }
 
       // Kernel/composer asked us to export → open the menu (or, if there's no
       // toolbar button, fall back to a direct copy-as-markdown).
@@ -376,18 +400,18 @@
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'laam-pre-copy';
-        btn.textContent = '⧉ Chép';
-        btn.title = 'Chép đoạn mã';
-        btn.setAttribute('aria-label', 'Chép đoạn mã');
+        btn.textContent = T('chat.preCopy');
+        btn.title = T('chat.preCopyTitle');
+        btn.setAttribute('aria-label', T('chat.preCopyAria'));
         btn.addEventListener('click', function (e) {
           e.stopPropagation();
           // The visible code is the <pre>'s textContent (highlight spans don't
           // add characters — textContent reconstructs the original source).
           var code = pre.textContent || '';
           copyText(code).then(function () {
-            flash(btn, '✓ Đã chép', 'laam-exp-ok');
+            flash(btn, T('chat.preCopied'), 'laam-exp-ok');
           }, function () {
-            flash(btn, '✗ Lỗi', 'laam-exp-err');
+            flash(btn, T('chat.preCopyErr'), 'laam-exp-err');
           });
         });
         wrap.appendChild(btn);

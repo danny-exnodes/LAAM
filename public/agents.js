@@ -1,7 +1,7 @@
 // LAAM — Agents monitoring page: live agent cards grouped by project, with
 // search + project/model/status/branch/time filters and a detail drawer.
 (() => {
-  const { esc, fmtDur, ago, fmtUSD, shortModel, STATUS_VI, isStuck } = window.LAAM;
+  const { esc, fmtDur, ago, fmtUSD, shortModel, STATUS_VI, isStuck, t } = window.LAAM;
   window.LAAM.initTheme();
   window.LAAM.buildHeader();
   window.LAAM.loadConfig();
@@ -69,7 +69,7 @@
   function taskHtml(t) {
     if (!t) return '';
     const cls = t.kind === 'tool' ? 'tool' : t.kind === 'thinking' ? 'thinking' : '';
-    const label = t.kind === 'user' ? 'Yêu cầu mới nhất' : t.kind === 'tool' ? 'Đang thao tác' : t.kind === 'thinking' ? 'Trạng thái' : 'Hoạt động mới nhất';
+    const label = t.kind === 'user' ? window.LAAM.t('agents.taskUser') : t.kind === 'tool' ? window.LAAM.t('agents.taskTool') : t.kind === 'thinking' ? window.LAAM.t('agents.taskThinking') : window.LAAM.t('agents.taskLatest');
     return `<div class="task ${cls}"><span class="label">${label}</span><span class="body">${esc((t.text || '').slice(0, 280))}</span></div>`;
   }
 
@@ -79,10 +79,10 @@
       <div class="sub ${a.status === 'running' ? 'running' : ''}">
         <span class="sdot"></span>
         <span class="stype">${esc(a.type)}</span>
-        <span class="sdesc">${esc(a.description || '(không mô tả)')}</span>
+        <span class="sdesc">${esc(a.description || t('agents.subNoDesc'))}</span>
         <span class="sdur">${a.status === 'running' ? '⏱ ' : ''}${fmtDur(a.durationMs)}</span>
       </div>`).join('');
-    return `<div class="subs"><div class="subs-label">⛓ Sub-agents (${subs.length})</div>${rows}</div>`;
+    return `<div class="subs"><div class="subs-label">${esc(t('agents.subs', { n: subs.length }))}</div>${rows}</div>`;
   }
 
   function cardHtml(s) {
@@ -92,8 +92,8 @@
     return `<div class="card ${s.status} ${stuck ? 'stuck' : ''}" data-id="${esc(s.id)}">
       <div class="card-top">
         <span class="badge ${s.status}"><span class="dot"></span>${STATUS_VI[s.status]}</span>
-        ${s.source === 'local' ? '<span class="badge local" title="Model local chạy qua Ollama (miễn phí)">⬡ LOCAL</span>' : ''}
-        ${stuck ? '<span class="badge stuck" title="Chưa hoàn tất nhưng đã lâu không ghi transcript">⚠ Nghi kẹt</span>' : ''}
+        ${s.source === 'local' ? `<span class="badge local" title="${esc(t('agents.badgeLocalTitle'))}">${esc(t('agents.badgeLocal'))}</span>` : ''}
+        ${stuck ? `<span class="badge stuck" title="${esc(t('agents.badgeStuckTitle'))}">${esc(t('agents.badgeStuck'))}</span>` : ''}
         <div>
           <div class="model">${esc(shortModel(s.model))}</div>
           <div class="sid">${esc(s.id.slice(0, 8))}${s.gitBranch ? ' · ' + esc(s.gitBranch) : ''}</div>
@@ -102,9 +102,9 @@
       ${taskHtml(s.currentTask)}
       <div class="meta">
         <span class="m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b data-dur ${running ? 'data-live' : ''} data-start="${s.startTime || ''}">${fmtDur(dur)}</b></span>
-        <span class="m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><b>${s.messageCount}</b> msg</span>
-        <span class="m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>${s.toolUseCount}</b> tool</span>
-        <span class="m" title="Chi phí ước tính (USD)">💲<b>${fmtUSD(s.costUSD)}</b></span>
+        <span class="m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><b>${s.messageCount}</b> ${esc(t('agents.msgUnit'))}</span>
+        <span class="m"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg><b>${s.toolUseCount}</b> ${esc(t('agents.toolUnit'))}</span>
+        <span class="m" title="${esc(t('agents.costTitle'))}">💲<b>${fmtUSD(s.costUSD)}</b></span>
         <span class="m" title="${ago(s.lastActivity)}">${ago(s.lastActivity)}</span>
       </div>
       ${subsHtml(s.subAgents)}
@@ -119,8 +119,8 @@
         <svg class="chev" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
         <h2>${esc(p.name)}</h2>
         <span class="path">${esc(p.path)}</span>
-        <span class="count">${sessions.length} session</span>
-        ${running ? `<span class="running-pill"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--running)"></span>${running} chạy</span>` : ''}
+        <span class="count">${sessions.length} ${esc(t('agents.sessionUnit'))}</span>
+        ${running ? `<span class="running-pill"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--running)"></span>${esc(t('agents.runningPill', { n: running }))}</span>` : ''}
       </div>
       <div class="grid">${sessions.map(cardHtml).join('')}</div>
     </section>`;
@@ -129,7 +129,7 @@
   function render() {
     syncSelects();
     if (state.error) {
-      main.innerHTML = `<div class="empty"><div class="big">Không đọc được dữ liệu</div><div>${esc(state.error)}</div></div>`;
+      main.innerHTML = `<div class="empty"><div class="big">${esc(t('agents.errTitle'))}</div><div>${esc(state.error)}</div></div>`;
       $('#f-count').textContent = '';
       return;
     }
@@ -142,10 +142,10 @@
     }).filter(Boolean).join('');
 
     const total = state.sessions.length;
-    $('#f-count').textContent = total ? `${shown}/${total} session` : '';
+    $('#f-count').textContent = total ? t('agents.count', { shown, total }) : '';
 
     if (!html) {
-      main.innerHTML = `<div class="empty"><div class="big">${total ? 'Không khớp bộ lọc' : 'Chưa có agent nào'}</div><div>${total ? 'Thử điều chỉnh bộ lọc hoặc từ khoá.' : 'Bắt đầu một phiên Claude Code, dữ liệu sẽ xuất hiện ở đây.'}</div><p style="margin-top:14px">Đang theo dõi: <code>${esc(state.projectsDir)}</code></p></div>`;
+      main.innerHTML = `<div class="empty"><div class="big">${esc(total ? t('agents.emptyMatch') : t('agents.emptyNone'))}</div><div>${esc(total ? t('agents.emptyMatchSub') : t('agents.emptyNoneSub'))}</div><p style="margin-top:14px">${esc(t('agents.watching'))} <code>${esc(state.projectsDir)}</code></p></div>`;
       return;
     }
     main.innerHTML = html;
@@ -159,7 +159,7 @@
       if (isStuck(s)) {
         if (!knownStuck.has(s.id)) {
           knownStuck.add(s.id);
-          window.LAAM.notify(`stuck:${s.id}`, '⚠ Agent nghi bị kẹt', `${s.project} · ${shortModel(s.model)} — ${ago(s.lastActivity)} chưa ghi transcript.`);
+          window.LAAM.notify(`stuck:${s.id}`, t('agents.notifyTitle'), t('agents.notifyBody', { project: s.project, model: shortModel(s.model), ago: ago(s.lastActivity) }));
         }
       } else {
         knownStuck.delete(s.id);
@@ -220,26 +220,26 @@
     const s = state.sessions.find((x) => x.id === id);
     $('#d-title').textContent = s ? s.project : id;
     $('#d-path').textContent = s ? `${s.id.slice(0, 12)} · ${shortModel(s.model)}` : '';
-    $('#d-body').innerHTML = '<div class="empty">Đang tải timeline…</div>';
+    $('#d-body').innerHTML = `<div class="empty">${esc(t('agents.drawerLoading'))}</div>`;
     drawer.classList.add('open'); scrim.classList.add('open');
     try {
       const r = await fetch(`/api/session/${id}`);
       const d = await r.json();
       renderTimeline(d);
     } catch {
-      $('#d-body').innerHTML = '<div class="empty">Lỗi tải dữ liệu.</div>';
+      $('#d-body').innerHTML = `<div class="empty">${esc(t('agents.drawerErr'))}</div>`;
     }
   }
 
   function renderTimeline(d) {
     const head = `<div class="meta" style="margin-bottom:10px">
       <span class="m"><b>${STATUS_VI[d.status]}</b></span>
-      <span class="m"><b>${fmtDur(d.durationMs)}</b> tổng</span>
-      <span class="m"><b>${d.messageCount}</b> msg</span>
-      <span class="m"><b>${d.tokens ? (d.tokens.input + d.tokens.output).toLocaleString() : 0}</b> tokens</span>
-      <span class="m" title="Chi phí ước tính">💲<b>${fmtUSD(d.costUSD)}</b></span>
+      <span class="m"><b>${fmtDur(d.durationMs)}</b> ${esc(t('agents.totalLabel'))}</span>
+      <span class="m"><b>${d.messageCount}</b> ${esc(t('agents.msgUnit'))}</span>
+      <span class="m"><b>${d.tokens ? (d.tokens.input + d.tokens.output).toLocaleString() : 0}</b> ${esc(t('agents.tokensUnit'))}</span>
+      <span class="m" title="${esc(t('agents.costEstTitle'))}">💲<b>${fmtUSD(d.costUSD)}</b></span>
     </div>
-    <a class="gopen" style="display:inline-block;margin-bottom:14px" href="/session?id=${encodeURIComponent(d.id)}">↗ Mở trang chi tiết (waterfall tool-call)</a>`;
+    <a class="gopen" style="display:inline-block;margin-bottom:14px" href="/session?id=${encodeURIComponent(d.id)}">${esc(t('agents.openDetail'))}</a>`;
     const subs = d.subAgents && d.subAgents.length
       ? `<div class="subs" style="border-top:0;padding-top:0;margin-bottom:14px">${subsHtml(d.subAgents).replace('<div class="subs">', '').replace(/<\/div>$/, '')}</div>` : '';
     const tl = (d.timeline || []).map((it) => {
@@ -252,9 +252,12 @@
         <div class="tl-text ${cls} ${err}">${esc((it.text || '').slice(0, 600))}</div>
       </div>`;
     }).join('');
-    $('#d-body').innerHTML = head + subs + `<div class="tl">${tl || '<div class="empty">Chưa có hoạt động.</div>'}</div>`;
+    $('#d-body').innerHTML = head + subs + `<div class="tl">${tl || `<div class="empty">${esc(t('agents.timelineEmpty'))}</div>`}</div>`;
   }
 
   // ---- Live data ----
   window.LAAM.connectSSE((data) => { state = data; render(); });
+
+  // ---- Re-render on language change (uses the last cached SSE snapshot) ----
+  window.addEventListener('laam:lang', () => { render(); });
 })();

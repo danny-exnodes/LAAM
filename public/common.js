@@ -14,13 +14,17 @@
     return `${sec}s`;
   }
 
+  // Translate via the i18n engine (loaded before this file); fall back to the
+  // raw key/text if it isn't present (e.g. a page that forgot the script tag).
+  function T(key, vars) { return window.LAAMI18n ? window.LAAMI18n.t(key, vars) : key; }
+
   function ago(ts) {
-    if (!ts) return '—';
+    if (!ts) return T('time.none');
     const d = Date.now() - ts;
-    if (d < 60000) return 'vừa xong';
-    if (d < 3600000) return `${Math.floor(d / 60000)} phút trước`;
-    if (d < 86400000) return `${Math.floor(d / 3600000)} giờ trước`;
-    return `${Math.floor(d / 86400000)} ngày trước`;
+    if (d < 60000) return T('time.justNow');
+    if (d < 3600000) return T('time.minAgo', { n: Math.floor(d / 60000) });
+    if (d < 86400000) return T('time.hourAgo', { n: Math.floor(d / 3600000) });
+    return T('time.dayAgo', { n: Math.floor(d / 86400000) });
   }
 
   function fmtNum(n) {
@@ -37,7 +41,11 @@
     return m.replace(/^claude-/, '').replace(/-20\d{6}$/, '');
   }
 
-  const STATUS_VI = { running: 'Đang chạy', idle: 'Tạm dừng', done: 'Hoàn tất' };
+  // Status label for the current language. `STATUS_VI` is kept as a live,
+  // language-aware map (legacy name; read as STATUS_VI[status]) so existing
+  // callers keep working while resolving to the active language at access time.
+  function statusLabel(s) { return T('status.' + s); }
+  const STATUS_VI = new Proxy({}, { get: (_t, k) => statusLabel(String(k)) });
 
   // ---- Theme ----
   const sun = '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
@@ -60,43 +68,47 @@
 
   // ---- Top navigation ----
   const NAV = [
-    { href: '/', label: 'Dashboard', match: (p) => p === '/' || p === '/index.html' },
-    { href: '/agents', label: 'Agents', match: (p) => p.startsWith('/agents') || p.startsWith('/session') },
-    { href: '/graph', label: 'Graph', match: (p) => p.startsWith('/graph') },
-    { href: '/office', label: 'Office', match: (p) => p.startsWith('/office') },
-    { href: '/search', label: 'Search', match: (p) => p.startsWith('/search') },
-    { href: '/chat', label: 'Chat', match: (p) => p.startsWith('/chat') },
+    { href: '/', key: 'nav.dashboard', match: (p) => p === '/' || p === '/index.html' },
+    { href: '/agents', key: 'nav.agents', match: (p) => p.startsWith('/agents') || p.startsWith('/session') },
+    { href: '/graph', key: 'nav.graph', match: (p) => p.startsWith('/graph') },
+    { href: '/office', key: 'nav.office', match: (p) => p.startsWith('/office') },
+    { href: '/search', key: 'nav.search', match: (p) => p.startsWith('/search') },
+    { href: '/chat', key: 'nav.chat', match: (p) => p.startsWith('/chat') },
   ];
 
   // Inject the shared header into <header id="topbar">. `extra` is optional
   // HTML placed between the nav and the connection indicator (e.g. search).
   // `opts.conn` (default true) controls the live-connection indicator — pass
   // false on static pages that don't open an SSE stream.
+  let _lastHeader = null; // remember args so we can rebuild on language change
   function buildHeader(extra, opts = {}) {
+    _lastHeader = { extra, opts };
     const bar = document.querySelector('#topbar');
     if (!bar) return;
     const showConn = opts.conn !== false;
     const p = location.pathname;
     const links = NAV.map(
-      (n) => `<a class="navlink ${n.match(p) ? 'active' : ''}" href="${n.href}">${n.label}</a>`
+      (n) => `<a class="navlink ${n.match(p) ? 'active' : ''}" href="${n.href}">${esc(T(n.key))}</a>`
     ).join('');
     bar.innerHTML = `
       <a class="brand" href="/">
         <div class="logo">L</div>
         <div>
           <h1>LAAM</h1>
-          <div class="sub">Local AI Agent Monitoring</div>
+          <div class="sub">${esc(T('brand.sub'))}</div>
         </div>
       </a>
       <nav class="nav">${links}</nav>
       <div class="spacer"></div>
       ${extra || ''}
-      ${showConn ? '<div class="conn" id="conn"><span class="dot"></span><span id="conn-label">Đang kết nối…</span></div>' : ''}
-      <button class="iconbtn" id="theme" title="Đổi theme">
+      ${langPickerHtml()}
+      ${showConn ? `<div class="conn" id="conn"><span class="dot"></span><span id="conn-label">${esc(T('conn.connecting'))}</span></div>` : ''}
+      <button class="iconbtn" id="theme" title="${esc(T('theme.toggle'))}">
         <svg id="theme-icon" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"></svg>
       </button>`;
     const icon = document.querySelector('#theme-icon');
     if (icon) icon.innerHTML = document.documentElement.dataset.theme === 'dark' ? sun : moon;
+    wireLangPicker(bar);
     // On mobile the nav scrolls horizontally; keep the active tab in view.
     const activeLink = bar.querySelector('.navlink.active');
     if (activeLink) try { activeLink.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch {}
@@ -104,12 +116,41 @@
       applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
   }
 
+  // ---- Language picker (vi / en / zh) ----
+  function langPickerHtml() {
+    const i18n = window.LAAMI18n;
+    if (!i18n) return '';
+    const cur = i18n.getLang();
+    const opts = i18n.SUPPORTED.map(
+      (L) => `<option value="${L}" ${L === cur ? 'selected' : ''}>${esc(i18n.LANG_NAMES[L] || L)}</option>`
+    ).join('');
+    return `<label class="lang-picker" title="${esc(T('lang.label'))}" aria-label="${esc(T('lang.label'))}">
+      <span class="lang-globe" aria-hidden="true">🌐</span>
+      <select id="lang-select" class="lang-select">${opts}</select>
+    </label>`;
+  }
+  function wireLangPicker(bar) {
+    const sel = bar.querySelector('#lang-select');
+    if (sel && window.LAAMI18n) sel.addEventListener('change', () => window.LAAMI18n.setLang(sel.value));
+  }
+
+  // Rebuild the header (nav labels, conn, picker) whenever the language changes,
+  // and re-apply the live-connection label to its current state.
+  if (window.LAAMI18n) {
+    window.LAAMI18n.onChange(() => {
+      const prev = document.querySelector('#conn');
+      const wasLive = !!(prev && prev.classList.contains('live'));
+      if (_lastHeader) buildHeader(_lastHeader.extra, _lastHeader.opts);
+      if (document.querySelector('#conn')) setConn(wasLive);
+    });
+  }
+
   function setConn(live) {
     const c = document.querySelector('#conn');
     if (!c) return;
     c.classList.toggle('live', live);
     const lbl = document.querySelector('#conn-label');
-    if (lbl) lbl.textContent = live ? 'Trực tiếp' : 'Mất kết nối';
+    if (lbl) lbl.textContent = live ? T('conn.live') : T('conn.lost');
   }
 
   // Subscribe to the live snapshot stream. `onSnapshot(data)` fires on connect
@@ -171,10 +212,18 @@
   }
 
   window.LAAM = {
-    esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI,
+    esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI, statusLabel, t: T,
     applyTheme, initTheme, cssVar, buildHeader, setConn, connectSSE,
     notify, ensureNotifyPermission, loadConfig, getConfig, isStuck,
     // Dashboard module registry: section modules push { id, render(host, stats, ctx) }.
     dashModules: (window.LAAM_DASH_MODULES = window.LAAM_DASH_MODULES || []),
   };
+
+  // Translate any static [data-i18n] markup present on first paint (the engine
+  // only re-applies on a language switch; the initial pass is up to us).
+  if (window.LAAMI18n) {
+    const applyOnce = () => window.LAAMI18n.applyDOM(document);
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', applyOnce);
+    else applyOnce();
+  }
 })();

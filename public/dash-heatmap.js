@@ -65,6 +65,7 @@
     render(host, stats, ctx) {
       host.innerHTML = '';
       const esc = (ctx && ctx.esc) || (s => String(s));
+      const t9 = (ctx && ctx.t) || ((k) => k);
       const cssVar = (ctx && ctx.cssVar) || (() => '#3b82f6');
       const accent =
         cssVar('--accent') ||
@@ -75,7 +76,7 @@
       card.className = 'chart-card wide';
 
       const h3 = document.createElement('h3');
-      h3.textContent = 'Heatmap hoạt động (giờ × thứ)';
+      h3.textContent = t9('dash.hm.title');
       card.appendChild(h3);
 
       const hm = stats && stats.heatmap;
@@ -85,13 +86,17 @@
       if (!cells || max <= 0) {
         const empty = document.createElement('div');
         empty.className = 'hm-empty';
-        empty.textContent = 'Chưa có dữ liệu hoạt động.';
+        empty.textContent = t9('dash.hm.empty');
         card.appendChild(empty);
         host.appendChild(card);
         return;
       }
 
-      const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+      const dayLabels = [
+        t9('dash.hm.day.sun'), t9('dash.hm.day.mon'), t9('dash.hm.day.tue'),
+        t9('dash.hm.day.wed'), t9('dash.hm.day.thu'), t9('dash.hm.day.fri'),
+        t9('dash.hm.day.sat'),
+      ];
       const labelHours = { 0: 1, 3: 1, 6: 1, 9: 1, 12: 1, 15: 1, 18: 1, 21: 1 };
 
       const wrap = document.createElement('div');
@@ -127,7 +132,7 @@
             const op = Math.max(0.08, val / max);
             cell.style.background = `color-mix(in srgb, ${accent} ${(op * 100).toFixed(1)}%, transparent)`;
           }
-          cell.title = `${dayLabels[d]} ${hr}h · ${val} hoạt động`;
+          cell.title = t9('dash.hm.cellTitle', { day: dayLabels[d], hr, n: val });
           grid.appendChild(cell);
         }
       }
@@ -137,12 +142,12 @@
       const legend = document.createElement('div');
       legend.className = 'hm-legend';
       const lowSpan = document.createElement('span');
-      lowSpan.textContent = 'ít';
+      lowSpan.textContent = t9('dash.hm.low');
       const swatch = document.createElement('div');
       swatch.className = 'hm-legend-swatch';
       swatch.style.background = `linear-gradient(to right, var(--bg-sunken, rgba(127,127,127,0.08)), ${accent})`;
       const highSpan = document.createElement('span');
-      highSpan.textContent = `nhiều (tối đa ${esc(String(max))})`;
+      highSpan.textContent = t9('dash.hm.high', { max: esc(String(max)) });
       legend.appendChild(lowSpan);
       legend.appendChild(swatch);
       legend.appendChild(highSpan);

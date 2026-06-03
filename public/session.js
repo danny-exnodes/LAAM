@@ -1,7 +1,8 @@
 // LAAM — Session detail page: full single-session view with a tool-call
 // waterfall (Gantt-style horizontal bars built from plain divs, no chart lib).
 (() => {
-  const { esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI } = window.LAAM;
+  const { esc, fmtDur, ago, fmtNum, fmtUSD, shortModel, STATUS_VI, t } = window.LAAM;
+  let lastData = null; // cache last loaded session for re-render on language change
   window.LAAM.initTheme();
   window.LAAM.buildHeader('', { conn: false }); // static page, no SSE → no conn indicator
 
@@ -10,16 +11,16 @@
 
   injectCss();
 
-  const BACK = '<a class="sess-back" href="/agents">← Agents</a>';
+  const BACK = () => `<a class="sess-back" href="/agents">${esc(t('session.back'))}</a>`;
 
   function emptyState(big, sub) {
-    main.innerHTML = `${BACK}<div class="empty"><div class="big">${esc(big)}</div>${
+    main.innerHTML = `${BACK()}<div class="empty"><div class="big">${esc(big)}</div>${
       sub ? `<div>${esc(sub)}</div>` : ''
     }</div>`;
   }
 
   if (!id) {
-    emptyState('Không có session id', 'Mở một phiên từ trang Agents để xem chi tiết.');
+    emptyState(t('session.noId'), t('session.noIdSub'));
     return;
   }
 
@@ -29,13 +30,13 @@
     try {
       const r = await fetch(`/api/session/${encodeURIComponent(id)}`);
       if (!r.ok) {
-        emptyState(r.status === 404 ? 'Không tìm thấy phiên' : 'Lỗi tải phiên', `HTTP ${r.status}`);
+        emptyState(r.status === 404 ? t('session.notFound') : t('session.loadErr'), `HTTP ${r.status}`);
         return;
       }
       const d = await r.json();
       render(d);
     } catch (e) {
-      emptyState('Lỗi tải phiên', String((e && e.message) || e));
+      emptyState(t('session.loadErr'), String((e && e.message) || e));
     }
   }
 
@@ -50,12 +51,12 @@
       <div class="sub ${a.status === 'running' ? 'running' : ''}">
         <span class="sdot"></span>
         <span class="stype">${esc(a.type)}</span>
-        <span class="sdesc">${esc(a.description || '(không mô tả)')}</span>
+        <span class="sdesc">${esc(a.description || t('session.subNoDesc'))}</span>
         <span class="sdur">${a.status === 'running' ? '⏱ ' : ''}${fmtDur(a.durationMs)}</span>
       </div>`
       )
       .join('');
-    return `<div class="subs"><div class="subs-label">⛓ Sub-agents (${subs.length})</div>${rows}</div>`;
+    return `<div class="subs"><div class="subs-label">${esc(t('session.subs', { n: subs.length }))}</div>${rows}</div>`;
   }
 
   // ---- Waterfall ----
@@ -67,7 +68,7 @@
 
   function waterfallHtml(calls) {
     if (!calls || !calls.length) {
-      return `<div class="sess-card"><div class="empty" style="padding:34px 0">Phiên này chưa có tool call.</div></div>`;
+      return `<div class="sess-card"><div class="empty" style="padding:34px 0">${esc(t('session.noToolCall'))}</div></div>`;
     }
     const rows = calls.slice().sort((a, b) => (a.start || 0) - (b.start || 0));
     const now = Date.now();
@@ -111,8 +112,8 @@
 
     return `<div class="sess-card wf">
       <div class="wf-head">
-        <div class="sess-h3">Tool-call waterfall <span class="wf-count">${rows.length}</span></div>
-        <div class="wf-span">Tổng span: <b>${fmtDur(span)}</b></div>
+        <div class="sess-h3">${esc(t('session.wfTitle'))} <span class="wf-count">${rows.length}</span></div>
+        <div class="wf-span">${esc(t('session.wfSpan'))} <b>${fmtDur(span)}</b></div>
       </div>
       <div class="wf-rows">
         <div class="wf-row wf-ruler">
@@ -125,27 +126,28 @@
   }
 
   function render(d) {
+    lastData = d;
     const tokens = d.tokens ? (d.tokens.input || 0) + (d.tokens.output || 0) : 0;
     const status = d.status || 'done';
     const head = `
       <div class="sess-card sess-info">
         <div class="sess-info-top">
           <span class="badge ${status}"><span class="dot"></span>${STATUS_VI[status] || status}</span>
-          <h1 class="sess-title">${esc(d.project || '(no project)')}</h1>
+          <h1 class="sess-title">${esc(d.project || t('session.noProject'))}</h1>
         </div>
         <div class="sess-ids">
           <span class="sess-id">${esc(d.id)}</span>
           <span class="sess-path">${esc(d.projectPath || '')}</span>
         </div>
         <div class="meta">
-          <span class="m"><span class="mk">model</span><b>${esc(shortModel(d.model))}</b></span>
-          <span class="m"><span class="mk">branch</span><b>${esc(d.gitBranch || '—')}</b></span>
-          <span class="m"><span class="mk">thời lượng</span><b>${fmtDur(d.durationMs)}</b></span>
-          <span class="m"><span class="mk">tin nhắn</span><b>${fmtNum(d.messageCount || 0)}</b></span>
-          <span class="m"><span class="mk">tool</span><b>${fmtNum(d.toolUseCount || 0)}</b></span>
-          <span class="m"><span class="mk">tokens</span><b>${fmtNum(tokens)}</b></span>
-          <span class="m"><span class="mk">chi phí</span><b>${fmtUSD(d.costUSD)}</b></span>
-          <span class="m" title="${ago(d.lastActivity)}"><span class="mk">hoạt động</span><b>${ago(
+          <span class="m"><span class="mk">${esc(t('session.mModel'))}</span><b>${esc(shortModel(d.model))}</b></span>
+          <span class="m"><span class="mk">${esc(t('session.mBranch'))}</span><b>${esc(d.gitBranch || '—')}</b></span>
+          <span class="m"><span class="mk">${esc(t('session.mDuration'))}</span><b>${fmtDur(d.durationMs)}</b></span>
+          <span class="m"><span class="mk">${esc(t('session.mMessages'))}</span><b>${fmtNum(d.messageCount || 0)}</b></span>
+          <span class="m"><span class="mk">${esc(t('session.mTool'))}</span><b>${fmtNum(d.toolUseCount || 0)}</b></span>
+          <span class="m"><span class="mk">${esc(t('session.mTokens'))}</span><b>${fmtNum(tokens)}</b></span>
+          <span class="m"><span class="mk">${esc(t('session.mCost'))}</span><b>${fmtUSD(d.costUSD)}</b></span>
+          <span class="m" title="${ago(d.lastActivity)}"><span class="mk">${esc(t('session.mActivity'))}</span><b>${ago(
       d.lastActivity
     )}</b></span>
         </div>
@@ -154,8 +156,11 @@
     const wf = waterfallHtml(d.toolCalls);
     const subs = d.subAgentCount > 0 ? `<div class="sess-card">${subsHtml(d.subAgents)}</div>` : '';
 
-    main.innerHTML = `${BACK}${head}${wf}${subs}`;
+    main.innerHTML = `${BACK()}${head}${wf}${subs}`;
   }
+
+  // Re-render from the last loaded session when the language changes.
+  window.addEventListener('laam:lang', () => { if (lastData) render(lastData); });
 
   function injectCss() {
     if (document.querySelector('#laam-session-css')) return;

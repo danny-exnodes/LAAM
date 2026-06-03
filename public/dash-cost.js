@@ -15,6 +15,7 @@
     id: 'cost',
     render(host, stats, ctx) {
       const { Chart, palette: p, fmtNum, fmtUSD, shortModel, esc } = ctx;
+      const t9 = (ctx && ctx.t) || ((k) => k);
 
       // 1) idempotent teardown of any charts created last render
       if (host._charts) { for (const c of host._charts) { try { c.destroy(); } catch (e) {} } }
@@ -24,7 +25,8 @@
       const activity = stats.activity || { bucketMs: 0, points: [] };
       const byModel = Array.isArray(stats.byModel) ? stats.byModel : [];
       const byProject = Array.isArray(stats.byProject) ? stats.byProject : [];
-      const note = (stats.pricing && stats.pricing.note) || '';
+      // Prefer the localized note; the server string is Vietnamese-only.
+      const note = t9('dash.cost.priceNote');
 
       const daily = activity.bucketMs >= 86400000;
       const pad = (n) => String(n).padStart(2, '0');
@@ -39,18 +41,18 @@
       host.innerHTML = `
         <div class="chart-card wide">
           <div class="cost-head">
-            <h3>Đốt token theo thời gian</h3>
-            <span class="cost-total">Tổng chi phí ước tính: <b>${esc(fmtUSD(totals.costUSD || 0))}</b></span>
+            <h3>${esc(t9('dash.cost.burnTitle'))}</h3>
+            <span class="cost-total">${t9('dash.cost.total', { cost: esc(fmtUSD(totals.costUSD || 0)) })}</span>
           </div>
           <div class="cwrap"><canvas></canvas></div>
           <div class="cost-note">${esc(note)}</div>
         </div>
         <div class="chart-card">
-          <h3>Chi phí ước tính theo model (USD)</h3>
+          <h3>${esc(t9('dash.cost.byModel'))}</h3>
           <div class="cwrap"><canvas></canvas></div>
         </div>
         <div class="chart-card">
-          <h3>Chi phí theo project (USD)</h3>
+          <h3>${esc(t9('dash.cost.byProject'))}</h3>
           <div class="cwrap"><canvas></canvas></div>
         </div>
       `;
@@ -79,7 +81,7 @@
         data: {
           labels: pts.map((q) => fmtTs(q.ts)),
           datasets: [{
-            label: 'Tokens',
+            label: t9('dash.ds.tokens'),
             data: pts.map((q) => q.tokens),
             borderColor: p.accent,
             backgroundColor: p.accent + '33',
@@ -91,7 +93,7 @@
         options: baseOpts({
           plugins: {
             legend: { display: false },
-            tooltip: { callbacks: { label: (c) => `${fmtNum(c.parsed.y)} tokens` } },
+            tooltip: { callbacks: { label: (c) => t9('dash.cost.tooltipTokens', { n: fmtNum(c.parsed.y) }) } },
           },
           scales: {
             x: catAxis,

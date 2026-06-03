@@ -29,6 +29,14 @@
     if (typeof L.ago === 'function') return L.ago(ts);
     return '';
   }
+  // Translate via the shared i18n engine; fall back to the given default string.
+  function t(key, fallback, vars) {
+    if (typeof L.t === 'function') {
+      var s = L.t(key, vars);
+      if (s && s !== key) return s;
+    }
+    return fallback;
+  }
 
   // ---- one-time stylesheet injection ----------------------------------
   function injectStyle() {
@@ -137,10 +145,10 @@
         var dotCls = stuck ? 'stuck' : status;
         var src = a.source === 'claude' ? 'claude' : a.source === 'local' ? 'local' : '';
         var chip = src
-          ? '<span class="op-chip ' + src + '">' + (src === 'claude' ? 'Claude' : 'Local') + '</span>'
+          ? '<span class="op-chip ' + src + '">' + (src === 'claude' ? t('office.srcClaude', 'Claude') : t('office.srcLocal', 'Local')) + '</span>'
           : '';
-        var warn = stuck ? '<span class="op-warn" title="Nghi bị kẹt">⚠</span>' : '';
-        var label = esc(a.label || a.id || '(không tên)');
+        var warn = stuck ? '<span class="op-warn" title="' + esc(t('office.connStuckTip', 'Nghi bị kẹt')) + '">⚠</span>' : '';
+        var label = esc(a.label || a.id || t('office.connNoName', '(không tên)'));
         var model = a.model ? '<span class="op-model">' + esc(shortModel(a.model)) + '</span>' : '';
         return (
           '<div class="op-row">' +
@@ -154,10 +162,10 @@
       })
       .join('');
 
-    var body = rows || '<div class="op-empty">Chưa có agent nào kết nối.</div>';
+    var body = rows || '<div class="op-empty">' + esc(t('office.connEmpty', 'Chưa có agent nào kết nối.')) + '</div>';
     hostEl.innerHTML =
       '<div class="op-panel op-conn-head">' +
-      '<div class="op-title"><span class="op-led"></span>Đang kết nối ' +
+      '<div class="op-title"><span class="op-led"></span>' + esc(t('office.connTitle', 'Đang kết nối')) + ' ' +
       '<span class="op-count">(' + list.length + ')</span></div>' +
       '<div class="op-list">' + body + '</div>' +
       '</div>';
@@ -181,19 +189,21 @@
 
     hostEl.innerHTML =
       '<div class="op-panel op-analytics">' +
-      '<div class="op-title">Analytics</div>' +
+      '<div class="op-title">' + esc(t('office.anTitle', 'Analytics')) + '</div>' +
       '<div class="op-hero">' +
       '<span class="op-big">' + fmtNum(running) + '</span>' +
-      '<span class="op-heroL">Đang chạy</span>' +
+      '<span class="op-heroL">' + esc(t('office.anRunning', 'Đang chạy')) + '</span>' +
       '</div>' +
       '<div class="op-grid">' +
-      card(fmtNum(num(s.total)), 'Tổng agent') +
-      card(fmtNum(num(s.subAgents)), 'Sub-agent') +
-      card(fmtNum(num(s.tokensTotal)), 'Tokens') +
-      card(fmtUSD(num(s.costUSD)), 'Chi phí') +
+      card(fmtNum(num(s.total)), esc(t('office.anTotal', 'Tổng agent'))) +
+      card(fmtNum(num(s.subAgents)), esc(t('office.anSubAgents', 'Sub-agent'))) +
+      card(fmtNum(num(s.tokensTotal)), esc(t('office.anTokens', 'Tokens'))) +
+      card(fmtUSD(num(s.costUSD)), esc(t('office.anCost', 'Chi phí'))) +
       '</div>' +
-      '<div class="op-split">Nguồn: <b>Claude ' + fmtNum(num(s.claude)) +
-      '</b><span class="op-sep">·</span><b>Local ' + fmtNum(num(s.local)) + '</b></div>' +
+      '<div class="op-split">' + esc(t('office.anSource', 'Nguồn:')) + ' <b>' +
+      esc(t('office.anClaude', 'Claude ' + fmtNum(num(s.claude)), { n: fmtNum(num(s.claude)) })) +
+      '</b><span class="op-sep">·</span><b>' +
+      esc(t('office.anLocal', 'Local ' + fmtNum(num(s.local)), { n: fmtNum(num(s.local)) })) + '</b></div>' +
       '</div>';
   }
 
@@ -217,10 +227,10 @@
       })
       .join('');
 
-    var body = lines || '<div class="op-empty">Chưa có sự kiện nào.</div>';
+    var body = lines || '<div class="op-empty">' + esc(t('office.evEmpty', 'Chưa có sự kiện nào.')) + '</div>';
     hostEl.innerHTML =
       '<div class="op-panel">' +
-      '<div class="op-title">Nhật ký sự kiện</div>' +
+      '<div class="op-title">' + esc(t('office.evTitle', 'Nhật ký sự kiện')) + '</div>' +
       '<div class="op-log">' + body + '</div>' +
       '</div>';
   }

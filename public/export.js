@@ -1,6 +1,15 @@
 (function () {
   window.LAAM = window.LAAM || {};
 
+  // Localized string helper; falls back to the key if i18n is unavailable.
+  function t9(key, vars) {
+    if (window.LAAM && typeof window.LAAM.t === 'function') {
+      try { return window.LAAM.t(key, vars); } catch (e) { /* fall through */ }
+    }
+    return key;
+  }
+  const errStr = (e) => (e && e.message ? e.message : String(e));
+
   function downloadBlob(filename, mime, text) {
     const b = new Blob([text], { type: mime });
     const u = URL.createObjectURL(b);
@@ -89,7 +98,7 @@
       const data = await fetchJSON('/api/sessions');
       sessions = flattenSessions(data);
     } catch (e) {
-      alert('Không thể tải danh sách session để xuất CSV: ' + (e && e.message ? e.message : e));
+      alert(t9('dash.export.errSessionsCSV', { err: errStr(e) }));
       return;
     }
 
@@ -142,14 +151,14 @@
   // --- 2) csvSession ----------------------------------------------------
   async function csvSession(id) {
     if (!id) {
-      alert('Thiếu mã session để xuất CSV.');
+      alert(t9('dash.export.errMissingId'));
       return;
     }
     let session;
     try {
       session = await fetchJSON('/api/session/' + encodeURIComponent(id));
     } catch (e) {
-      alert('Không thể tải session để xuất CSV: ' + (e && e.message ? e.message : e));
+      alert(t9('dash.export.errSessionCSV', { err: errStr(e) }));
       return;
     }
 
@@ -177,7 +186,7 @@
   async function pdfReport(opts) {
     opts = opts || {};
     if (!window.jspdf || !window.jspdf.jsPDF) {
-      alert('Xuất PDF không khả dụng: thư viện jsPDF chưa được tải.');
+      alert(t9('dash.export.errPdfLib'));
       return;
     }
     const { jsPDF } = window.jspdf;
@@ -186,7 +195,7 @@
     try {
       stats = await fetchJSON('/api/stats');
     } catch (e) {
-      alert('Không thể tải số liệu để xuất PDF: ' + (e && e.message ? e.message : e));
+      alert(t9('dash.export.errStatsPDF', { err: errStr(e) }));
       return;
     }
 
@@ -228,27 +237,28 @@
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(16);
       ensureRoom(20);
-      doc.text('LAAM — Báo cáo', marginX, y);
+      doc.text(t9('dash.pdf.title'), marginX, y);
       y += 22;
-      line('Tạo lúc: ' + new Date().toLocaleString(), { size: 9 });
+      line(t9('dash.pdf.createdAt', { time: new Date().toLocaleString() }), { size: 9 });
       gap(8);
 
       // Summary block
-      line('Tổng quan', { size: 12, bold: true });
+      const pad28 = (s) => String(s).padEnd(28, ' ');
+      line(t9('dash.pdf.overview'), { size: 12, bold: true });
       gap(2);
-      line('Tổng session         : ' + fmtNum(totals.sessions || 0));
-      line('Đang chạy            : ' + fmtNum(totals.running || 0));
-      line('Hoàn tất             : ' + fmtNum(totals.done || 0));
-      line('Tổng tokens (in+out) : ' + fmtNum(tokensTotal));
-      line('Chi phí ước tính     : $' + Number(totals.costUSD || 0).toFixed(2));
-      line('Tổng tool calls      : ' + fmtNum(totals.toolCalls || 0));
+      line(pad28(t9('dash.pdf.totalSessions')) + ': ' + fmtNum(totals.sessions || 0));
+      line(pad28(t9('dash.pdf.running')) + ': ' + fmtNum(totals.running || 0));
+      line(pad28(t9('dash.pdf.done')) + ': ' + fmtNum(totals.done || 0));
+      line(pad28(t9('dash.pdf.totalTokens')) + ': ' + fmtNum(tokensTotal));
+      line(pad28(t9('dash.pdf.estCost')) + ': $' + Number(totals.costUSD || 0).toFixed(2));
+      line(pad28(t9('dash.pdf.totalToolCalls')) + ': ' + fmtNum(totals.toolCalls || 0));
       gap(10);
 
       // By model
       const models = stats.modelComparison || stats.byModel || [];
-      line('Theo model', { size: 12, bold: true });
+      line(t9('dash.pdf.byModel'), { size: 12, bold: true });
       gap(2);
-      line('model                          #ss      tokens        chi phí    done%', { size: 9, bold: true });
+      line(t9('dash.pdf.byModelHeader'), { size: 9, bold: true });
       for (const m of models) {
         const name = String(m.model || '').slice(0, 28).padEnd(28, ' ');
         const ss = String(fmtNum(m.count || 0)).padStart(5, ' ');
@@ -264,7 +274,7 @@
       // Top tools
       const tl = stats.toolLeaderboard || {};
       const mostUsed = tl.mostUsed || [];
-      line('Top tool', { size: 12, bold: true });
+      line(t9('dash.pdf.topTools'), { size: 12, bold: true });
       gap(2);
       for (const t of mostUsed) {
         const name = String(t.name || '').slice(0, 40).padEnd(40, ' ');
@@ -274,9 +284,9 @@
 
       // By project
       const byProject = stats.byProject || [];
-      line('Theo project', { size: 12, bold: true });
+      line(t9('dash.pdf.byProject'), { size: 12, bold: true });
       gap(2);
-      line('project                        #ss      tokens        chi phí', { size: 9, bold: true });
+      line(t9('dash.pdf.byProjectHeader'), { size: 9, bold: true });
       for (const p of byProject) {
         const name = String(p.name || '').slice(0, 28).padEnd(28, ' ');
         const ss = String(fmtNum(p.sessions || 0)).padStart(5, ' ');
@@ -287,12 +297,12 @@
       gap(12);
 
       // Footer note
-      const note = (stats.pricing && stats.pricing.note) || 'Giá ước tính, có thể lỗi thời';
+      const note = (stats.pricing && stats.pricing.note) || t9('dash.pdf.priceNote');
       line(note, { size: 8 });
 
       doc.save('laam-report-' + dateStamp() + '.pdf');
     } catch (e) {
-      alert('Lỗi khi tạo PDF: ' + (e && e.message ? e.message : e));
+      alert(t9('dash.export.errPdfGen', { err: errStr(e) }));
     }
   }
 

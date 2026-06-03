@@ -40,6 +40,7 @@
         });
       };
       var ago = (ctx && ctx.ago) || function () { return ''; };
+      var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
 
       injectCss();
 
@@ -55,14 +56,21 @@
 
       var heading = document.createElement('div');
       heading.className = 'laam-hist-title';
-      heading.textContent = 'Trò chuyện';
+      heading.textContent = T('chat.histTitle');
 
       var newBtn = document.createElement('button');
       newBtn.type = 'button';
       newBtn.className = 'laam-hist-new';
-      newBtn.setAttribute('aria-label', 'Cuộc trò chuyện mới');
-      newBtn.title = 'Cuộc trò chuyện mới';
-      newBtn.innerHTML = '<span class="laam-hist-plus" aria-hidden="true">＋</span> Mới';
+      var newLabel = document.createElement('span');
+      newLabel.className = 'laam-hist-new-lbl';
+      function paintNewBtn() {
+        newBtn.setAttribute('aria-label', T('chat.histNewAria'));
+        newBtn.title = T('chat.histNewAria');
+        newLabel.textContent = T('chat.histNew');
+      }
+      newBtn.innerHTML = '<span class="laam-hist-plus" aria-hidden="true">＋</span> ';
+      newBtn.appendChild(newLabel);
+      paintNewBtn();
 
       header.appendChild(heading);
       header.appendChild(newBtn);
@@ -73,8 +81,8 @@
       var filterInput = document.createElement('input');
       filterInput.type = 'text';
       filterInput.className = 'laam-hist-filter-input';
-      filterInput.placeholder = 'Tìm cuộc trò chuyện…';
-      filterInput.setAttribute('aria-label', 'Tìm cuộc trò chuyện');
+      filterInput.placeholder = T('chat.histFilterPh');
+      filterInput.setAttribute('aria-label', T('chat.histFilterAria'));
       filterInput.autocomplete = 'off';
       filterInput.spellcheck = false;
       filterWrap.appendChild(filterInput);
@@ -83,7 +91,7 @@
       var list = document.createElement('div');
       list.className = 'laam-hist-list';
       list.setAttribute('role', 'list');
-      list.setAttribute('aria-label', 'Danh sách cuộc trò chuyện');
+      list.setAttribute('aria-label', T('chat.histListAria'));
 
       root.appendChild(header);
       root.appendChild(filterWrap);
@@ -97,7 +105,7 @@
       // ---- helpers --------------------------------------------------------
       function titleOf(c) {
         var t = c && c.title ? String(c.title).trim() : '';
-        return t || 'Cuộc trò chuyện mới';
+        return t || T('chat.histUntitled');
       }
 
       function matchesFilter(c) {
@@ -125,8 +133,8 @@
           var empty = document.createElement('div');
           empty.className = 'laam-hist-empty';
           empty.textContent = filterText
-            ? 'Không có cuộc trò chuyện nào khớp.'
-            : 'Chưa có cuộc trò chuyện nào.';
+            ? T('chat.histNoMatch')
+            : T('chat.histEmpty');
           list.appendChild(empty);
           return;
         }
@@ -166,15 +174,15 @@
         var renameBtn = document.createElement('button');
         renameBtn.type = 'button';
         renameBtn.className = 'laam-hist-act';
-        renameBtn.setAttribute('aria-label', 'Đổi tên cuộc trò chuyện');
-        renameBtn.title = 'Đổi tên';
+        renameBtn.setAttribute('aria-label', T('chat.histRenameAria'));
+        renameBtn.title = T('chat.histRenameTitle');
         renameBtn.textContent = '✎';
 
         var delBtn = document.createElement('button');
         delBtn.type = 'button';
         delBtn.className = 'laam-hist-act laam-hist-act-del';
-        delBtn.setAttribute('aria-label', 'Xoá cuộc trò chuyện');
-        delBtn.title = 'Xoá';
+        delBtn.setAttribute('aria-label', T('chat.histDeleteAria'));
+        delBtn.title = T('chat.histDeleteTitle');
         delBtn.textContent = '🗑';
 
         actions.appendChild(renameBtn);
@@ -207,7 +215,7 @@
         delBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           safe(function () {
-            if (window.confirm('Xoá cuộc trò chuyện này?')) {
+            if (window.confirm(T('chat.histDeleteConfirm'))) {
               store.deleteConversation(c.id);
             }
           });
@@ -226,7 +234,7 @@
         editor.type = 'text';
         editor.className = 'laam-hist-rename';
         editor.value = c.title ? String(c.title) : '';
-        editor.setAttribute('aria-label', 'Tên cuộc trò chuyện');
+        editor.setAttribute('aria-label', T('chat.histRenameInputAria'));
         editor.maxLength = 120;
 
         var done = false;
@@ -307,6 +315,22 @@
 
       // ---- first paint ----------------------------------------------------
       renderList();
+
+      // ---- re-localize on language change ---------------------------------
+      // The shell (heading / new button / filter) is built once; re-translate it
+      // and re-render the list (rows use T() for titles + empty states).
+      if (window.LAAMI18n && typeof window.LAAMI18n.onChange === 'function') {
+        window.LAAMI18n.onChange(function () {
+          safe(function () {
+            heading.textContent = T('chat.histTitle');
+            paintNewBtn();
+            filterInput.placeholder = T('chat.histFilterPh');
+            filterInput.setAttribute('aria-label', T('chat.histFilterAria'));
+            list.setAttribute('aria-label', T('chat.histListAria'));
+            renderList();
+          });
+        });
+      }
     } catch (e) {
       // Never throw out of init — a broken sidebar must not break the page.
       try { console.error('[chat-history] init failed:', e); } catch (e2) {}

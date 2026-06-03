@@ -3,6 +3,7 @@
 // changed, refresh" signal so the dashboard stays live.
 (() => {
   const { fmtNum, fmtDur, shortModel, cssVar, isStuck, ago } = window.LAAM;
+  const t9 = (k, v) => window.LAAM.t(k, v);
   window.LAAM.initTheme();
   window.LAAM.buildHeader();
   window.LAAM.loadConfig();
@@ -11,6 +12,7 @@
 
   const charts = {};
   let lastStats = null;
+  let lastSessions = null;
   const moduleHosts = new Map(); // module.id -> host element
 
   // ---- Palette (resolved from CSS vars so charts follow the theme) ----
@@ -51,13 +53,13 @@
   // ---- KPIs ----
   function renderKpis(t) {
     const items = [
-      { label: 'Session', value: fmtNum(t.sessions), sub: `${t.projects} project`, tone: 'accent' },
-      { label: 'Đang chạy', value: fmtNum(t.running), sub: `${t.runningSubAgents} sub-agent`, tone: 'running' },
-      { label: 'Tạm dừng / Hoàn tất', value: `${fmtNum(t.idle)} / ${fmtNum(t.done)}`, sub: 'idle / done', tone: 'done' },
-      { label: 'Tổng tokens', value: fmtNum(t.tokensTotal), sub: `${fmtNum(t.tokensIn)} in · ${fmtNum(t.tokensOut)} out`, tone: 'accent' },
-      { label: 'Messages', value: fmtNum(t.messages), sub: `${fmtNum(t.userMessages)} user · ${fmtNum(t.assistantMessages)} asst`, tone: 'done' },
-      { label: 'Tool calls', value: fmtNum(t.toolCalls), sub: `${fmtNum(t.subAgents)} sub-agent`, tone: 'accent' },
-      { label: 'Thời lượng TB', value: fmtDur(t.avgDurationMs), sub: `tổng ${fmtDur(t.totalDurationMs)}`, tone: 'done' },
+      { label: t9('dash.kpi.sessions'), value: fmtNum(t.sessions), sub: t9('dash.kpi.sub.projects', { n: t.projects }), tone: 'accent' },
+      { label: t9('dash.kpi.running'), value: fmtNum(t.running), sub: t9('dash.kpi.sub.subAgents', { n: t.runningSubAgents }), tone: 'running' },
+      { label: t9('dash.kpi.idleDone'), value: `${fmtNum(t.idle)} / ${fmtNum(t.done)}`, sub: t9('dash.kpi.sub.idleDone'), tone: 'done' },
+      { label: t9('dash.kpi.tokensTotal'), value: fmtNum(t.tokensTotal), sub: t9('dash.kpi.sub.inOut', { in: fmtNum(t.tokensIn), out: fmtNum(t.tokensOut) }), tone: 'accent' },
+      { label: t9('dash.kpi.messages'), value: fmtNum(t.messages), sub: t9('dash.kpi.sub.userAsst', { user: fmtNum(t.userMessages), asst: fmtNum(t.assistantMessages) }), tone: 'done' },
+      { label: t9('dash.kpi.toolCalls'), value: fmtNum(t.toolCalls), sub: t9('dash.kpi.sub.subAgents', { n: fmtNum(t.subAgents) }), tone: 'accent' },
+      { label: t9('dash.kpi.avgDur'), value: fmtDur(t.avgDurationMs), sub: t9('dash.kpi.sub.totalDur', { dur: fmtDur(t.totalDurationMs) }), tone: 'done' },
     ];
     document.querySelector('#kpis').innerHTML = items.map((i) => `
       <div class="kpi ${i.tone}">
@@ -81,7 +83,7 @@
     charts.status = new C(document.querySelector('#c-status'), {
       type: 'doughnut',
       data: {
-        labels: ['Đang chạy', 'Tạm dừng', 'Hoàn tất'],
+        labels: [t9('dash.st.running'), t9('dash.st.idle'), t9('dash.st.done')],
         datasets: [{ data: [t.running, t.idle, t.done], backgroundColor: [p.running, p.idle, p.done], borderWidth: 0 }],
       },
       options: baseOpts(p, { cutout: '62%' }),
@@ -102,7 +104,7 @@
       type: 'bar',
       data: {
         labels: stats.byBranch.map((b) => b.branch),
-        datasets: [{ label: 'Session', data: stats.byBranch.map((b) => b.count), backgroundColor: p.accent, borderRadius: 5 }],
+        datasets: [{ label: t9('dash.ds.session'), data: stats.byBranch.map((b) => b.count), backgroundColor: p.accent, borderRadius: 5 }],
       },
       options: baseOpts(p, { plugins: { legend: { display: false } }, scales: axisOpts(p) }),
     });
@@ -110,7 +112,7 @@
     // Activity timeline (line)
     const act = stats.activity;
     const daily = act.bucketMs >= 86400000;
-    document.querySelector('#act-hint').textContent = daily ? '(theo ngày)' : '(theo giờ)';
+    document.querySelector('#act-hint').textContent = daily ? t9('dash.act.daily') : t9('dash.act.hourly');
     const fmtBucket = (ts) => {
       const d = new Date(ts);
       const pad = (n) => String(n).padStart(2, '0');
@@ -121,16 +123,16 @@
       data: {
         labels: act.points.map((x) => fmtBucket(x.ts)),
         datasets: [
-          { label: 'Session', data: act.points.map((x) => x.sessions), borderColor: p.accent, backgroundColor: p.accent + '33', fill: true, tension: 0.3, yAxisID: 'y' },
-          { label: 'Tokens', data: act.points.map((x) => x.tokens), borderColor: p.running, backgroundColor: 'transparent', tension: 0.3, yAxisID: 'y1' },
+          { label: t9('dash.ds.session'), data: act.points.map((x) => x.sessions), borderColor: p.accent, backgroundColor: p.accent + '33', fill: true, tension: 0.3, yAxisID: 'y' },
+          { label: t9('dash.ds.tokens'), data: act.points.map((x) => x.tokens), borderColor: p.running, backgroundColor: 'transparent', tension: 0.3, yAxisID: 'y1' },
         ],
       },
       options: baseOpts(p, {
         interaction: { mode: 'index', intersect: false },
         scales: {
           x: { ticks: { color: p.text, font: { size: 10 }, maxRotation: 0, autoSkip: true }, grid: { color: p.grid } },
-          y: { position: 'left', beginAtZero: true, ticks: { color: p.text, font: { size: 10 }, precision: 0 }, grid: { color: p.grid }, title: { display: true, text: 'Session', color: p.text } },
-          y1: { position: 'right', beginAtZero: true, ticks: { color: p.text, font: { size: 10 }, callback: (v) => fmtNum(v) }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Tokens', color: p.text } },
+          y: { position: 'left', beginAtZero: true, ticks: { color: p.text, font: { size: 10 }, precision: 0 }, grid: { color: p.grid }, title: { display: true, text: t9('dash.axis.session'), color: p.text } },
+          y1: { position: 'right', beginAtZero: true, ticks: { color: p.text, font: { size: 10 }, callback: (v) => fmtNum(v) }, grid: { drawOnChartArea: false }, title: { display: true, text: t9('dash.axis.tokens'), color: p.text } },
         },
       }),
     });
@@ -140,7 +142,7 @@
       type: 'bar',
       data: {
         labels: stats.byProject.map((x) => x.name),
-        datasets: [{ label: 'Session', data: stats.byProject.map((x) => x.sessions), backgroundColor: p.series, borderRadius: 5 }],
+        datasets: [{ label: t9('dash.ds.session'), data: stats.byProject.map((x) => x.sessions), backgroundColor: p.series, borderRadius: 5 }],
       },
       options: baseOpts(p, { plugins: { legend: { display: false } }, scales: axisOpts(p) }),
     });
@@ -151,8 +153,8 @@
       data: {
         labels: stats.byProject.map((x) => x.name),
         datasets: [
-          { label: 'Input', data: stats.byProject.map((x) => x.tokensIn), backgroundColor: p.accent, borderRadius: 4 },
-          { label: 'Output', data: stats.byProject.map((x) => x.tokensOut), backgroundColor: p.running, borderRadius: 4 },
+          { label: t9('dash.ds.input'), data: stats.byProject.map((x) => x.tokensIn), backgroundColor: p.accent, borderRadius: 4 },
+          { label: t9('dash.ds.output'), data: stats.byProject.map((x) => x.tokensOut), backgroundColor: p.running, borderRadius: 4 },
         ],
       },
       options: baseOpts(p, {
@@ -168,7 +170,7 @@
       type: 'bar',
       data: {
         labels: stats.byProject.map((x) => x.name),
-        datasets: [{ label: 'Tool calls', data: stats.byProject.map((x) => x.toolCalls), backgroundColor: p.idle, borderRadius: 5 }],
+        datasets: [{ label: t9('dash.ds.toolCalls'), data: stats.byProject.map((x) => x.toolCalls), backgroundColor: p.idle, borderRadius: 5 }],
       },
       options: baseOpts(p, { plugins: { legend: { display: false } }, scales: axisOpts(p) }),
     });
@@ -178,7 +180,7 @@
       type: 'bar',
       data: {
         labels: stats.topByDuration.map((s) => `${s.project} · ${s.id.slice(0, 6)}`),
-        datasets: [{ label: 'Thời lượng (phút)', data: stats.topByDuration.map((s) => Math.round((s.durationMs || 0) / 60000)), backgroundColor: p.accent, borderRadius: 4 }],
+        datasets: [{ label: t9('dash.ds.durationMin'), data: stats.topByDuration.map((s) => Math.round((s.durationMs || 0) / 60000)), backgroundColor: p.accent, borderRadius: 4 }],
       },
       options: baseOpts(p, { indexAxis: 'y', plugins: { legend: { display: false } }, scales: axisOpts(p, { indexAxis: 'y' }) }),
     });
@@ -188,7 +190,7 @@
       type: 'bar',
       data: {
         labels: stats.topByTokens.map((s) => `${s.project} · ${s.id.slice(0, 6)}`),
-        datasets: [{ label: 'Tokens', data: stats.topByTokens.map((s) => s.tokensTotal), backgroundColor: p.running, borderRadius: 4 }],
+        datasets: [{ label: t9('dash.ds.tokens'), data: stats.topByTokens.map((s) => s.tokensTotal), backgroundColor: p.running, borderRadius: 4 }],
       },
       options: baseOpts(p, { indexAxis: 'y', plugins: { legend: { display: false } }, scales: axisOpts(p, { indexAxis: 'y' }) }),
     });
@@ -205,7 +207,7 @@
     const ctx = {
       Chart: window.Chart, palette: p,
       fmtNum: window.LAAM.fmtNum, fmtUSD: window.LAAM.fmtUSD, fmtDur,
-      shortModel, cssVar, esc: window.LAAM.esc,
+      shortModel, cssVar, esc: window.LAAM.esc, t: window.LAAM.t,
     };
     for (const mod of window.LAAM.dashModules) {
       try {
@@ -236,21 +238,27 @@
   }
 
   // Stuck-agent alert banner + notifications, driven by the live snapshot.
-  function handleStuck(sessions) {
+  function renderStuckBanner(sessions) {
     const stuck = (sessions || []).filter((s) => isStuck(s));
     const el = document.querySelector('#stuck-alert');
     if (el) {
       if (stuck.length) {
         el.hidden = false;
-        el.innerHTML = `⚠ <b>${stuck.length}</b> agent nghi bị kẹt (chưa hoàn tất, lâu không ghi transcript) — <a href="/agents">xem ở Agents →</a>`;
+        el.innerHTML = t9('dash.stuck.banner', { n: stuck.length });
       } else {
         el.hidden = true;
       }
     }
+  }
+
+  function handleStuck(sessions) {
+    lastSessions = sessions;
+    const stuck = (sessions || []).filter((s) => isStuck(s));
+    renderStuckBanner(sessions);
     for (const s of stuck) {
       if (!knownStuck.has(s.id)) {
         knownStuck.add(s.id);
-        window.LAAM.notify(`stuck:${s.id}`, '⚠ Agent nghi bị kẹt', `${s.project} · ${shortModel(s.model)} — ${ago(s.lastActivity)} chưa ghi transcript.`);
+        window.LAAM.notify(`stuck:${s.id}`, t9('dash.stuck.notifyTitle'), t9('dash.stuck.notifyBody', { project: s.project, model: shortModel(s.model), ago: ago(s.lastActivity) }));
       }
     }
     for (const id of [...knownStuck]) if (!stuck.some((s) => s.id === id)) knownStuck.delete(id);
@@ -263,4 +271,10 @@
   window.LAAM.connectSSE((data) => { handleStuck(data.sessions); scheduleRefresh(); });
   refresh();
   window.addEventListener('laam:theme', () => { if (lastStats) render(lastStats); });
+  // Re-render dynamic content (KPIs, charts, modules, stuck banner) on language
+  // switch from the last cached snapshot — no reload, no re-notify.
+  window.addEventListener('laam:lang', () => {
+    if (lastStats) render(lastStats);
+    renderStuckBanner(lastSessions);
+  });
 })();

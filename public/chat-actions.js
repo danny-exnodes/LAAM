@@ -25,6 +25,7 @@
       var store = ctx && ctx.store;
       if (!store) return;
       var esc = (ctx && ctx.esc) || function (s) { return s == null ? '' : String(s); };
+      var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
 
       injectCss();
 
@@ -74,7 +75,7 @@
       function setBusyState(btn) {
         if (streaming()) {
           btn.disabled = true;
-          btn.title = 'Đang trả lời… thử lại sau khi xong';
+          btn.title = T('chat.actBusy');
           btn.setAttribute('aria-disabled', 'true');
         } else {
           btn.disabled = false;
@@ -97,19 +98,19 @@
         var typedText = msg.text != null ? msg.text : fullText;
 
         // ----- Chép (both roles) -----
-        var copyBtn = mkBtn('⧉ Chép', 'Chép nội dung tin nhắn');
+        var copyBtn = mkBtn(T('chat.actCopy'), T('chat.actCopyTitle'));
         copyBtn.addEventListener('click', function () {
           copyText(fullText).then(function () {
-            flash(copyBtn, '✓ Đã chép');
+            flash(copyBtn, T('chat.actCopied'));
           }, function () {
-            flash(copyBtn, '✗ Lỗi chép');
+            flash(copyBtn, T('chat.actCopyErr'));
           });
         });
         actionsEl.appendChild(copyBtn);
 
         // ----- Sửa (user only) -----
         if (role === 'user') {
-          var editBtn = mkBtn('✎ Sửa', 'Sửa & gửi lại tin nhắn');
+          var editBtn = mkBtn(T('chat.actEdit'), T('chat.actEditTitle'));
           setBusyState(editBtn);
           editBtn.addEventListener('click', function () {
             if (streaming()) { hint(editBtn); return; }
@@ -120,7 +121,7 @@
 
         // ----- Tạo lại (assistant only) -----
         if (role === 'assistant') {
-          var regenBtn = mkBtn('↻ Tạo lại', 'Tạo lại câu trả lời');
+          var regenBtn = mkBtn(T('chat.actRegen'), T('chat.actRegenTitle'));
           setBusyState(regenBtn);
           regenBtn.addEventListener('click', function () {
             if (streaming()) { hint(regenBtn); return; }
@@ -130,12 +131,12 @@
         }
 
         // ----- Xoá (both roles) -----
-        var delBtn = mkBtn('🗑 Xoá', 'Xoá tin nhắn này');
+        var delBtn = mkBtn(T('chat.actDelete'), T('chat.actDeleteTitle'));
         setBusyState(delBtn);
         delBtn.addEventListener('click', function () {
           if (streaming()) { hint(delBtn); return; }
           var ok;
-          try { ok = window.confirm('Xoá tin nhắn này?'); } catch (e) { ok = false; }
+          try { ok = window.confirm(T('chat.actDeleteConfirm')); } catch (e) { ok = false; }
           if (!ok) return;
           try { store.deleteMessage(index); } catch (e) {}
         });
@@ -183,14 +184,14 @@
         var ta = document.createElement('textarea');
         ta.className = 'laam-act-edit-ta';
         ta.value = initialText == null ? '' : String(initialText);
-        ta.setAttribute('aria-label', 'Sửa tin nhắn');
+        ta.setAttribute('aria-label', T('chat.editAria'));
         box.appendChild(ta);
 
         var row = document.createElement('div');
         row.className = 'laam-act-edit-row';
-        var saveBtn = mkBtn('Lưu & gửi', 'Lưu và gửi lại');
+        var saveBtn = mkBtn(T('chat.editSave'), T('chat.editSaveTitle'));
         saveBtn.classList.add('laam-act-primary');
-        var cancelBtn = mkBtn('Huỷ', 'Huỷ chỉnh sửa');
+        var cancelBtn = mkBtn(T('chat.editCancel'), T('chat.editCancelTitle'));
         row.appendChild(saveBtn);
         row.appendChild(cancelBtn);
         box.appendChild(row);

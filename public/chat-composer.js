@@ -30,13 +30,14 @@
   });
 
   // Slash commands. ASCII names (no diacritics) so they survive IME composition;
-  // a Vietnamese label is shown beside each. run() receives the store.
+  // a localized label (resolved at render via labelKey) is shown beside each.
+  // run() receives the store.
   var COMMANDS = [
-    { name: 'moi',    label: 'Cuộc trò chuyện mới',   icon: '✚',  run: function (s) { s.newConversation(); } },
-    { name: 'xoa',    label: 'Xoá nội dung hội thoại', icon: '🗑', run: function (s) { s.clearMessages(); } },
-    { name: 'dung',   label: 'Dừng tạo',               icon: '⏹', run: function (s) { s.stop(); } },
-    { name: 'xuat',   label: 'Xuất hội thoại',         icon: '⬇',  run: function (s) { s.emit('command:export'); } },
-    { name: 'caidat', label: 'Cài đặt mô hình',        icon: '⚙',  run: function (s) { s.emit('command:settings'); } },
+    { name: 'moi',    labelKey: 'chat.cmdNew',      icon: '✚',  run: function (s) { s.newConversation(); } },
+    { name: 'xoa',    labelKey: 'chat.cmdClear',    icon: '🗑', run: function (s) { s.clearMessages(); } },
+    { name: 'dung',   labelKey: 'chat.cmdStop',     icon: '⏹', run: function (s) { s.stop(); } },
+    { name: 'xuat',   labelKey: 'chat.cmdExport',   icon: '⬇',  run: function (s) { s.emit('command:export'); } },
+    { name: 'caidat', labelKey: 'chat.cmdSettings', icon: '⚙',  run: function (s) { s.emit('command:settings'); } },
   ];
 
   // If a single pasted chunk is longer than this, offer to attach it instead of
@@ -49,6 +50,7 @@
       var m = (ctx && ctx.mounts) || {};
       var input = m.input;
       if (!store || !input) return; // nothing to power up without these
+      var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
 
       injectCss();
 
@@ -99,10 +101,18 @@
         overlay.className = 'laam-cmp-drop';
         overlay.setAttribute('aria-hidden', 'true');
         overlay.innerHTML = '<div class="laam-cmp-drop-card"><div class="laam-cmp-drop-ic">📥</div>' +
-          '<div>Thả tệp vào đây</div>' +
-          '<div class="laam-cmp-drop-sub">txt, md, csv, json, log, pdf</div></div>';
+          '<div class="laam-cmp-drop-msg"></div>' +
+          '<div class="laam-cmp-drop-sub"></div></div>';
         overlayHost.appendChild(overlay);
       }
+      function paintOverlay() {
+        if (!overlay) return;
+        var msg = overlay.querySelector('.laam-cmp-drop-msg');
+        var sub = overlay.querySelector('.laam-cmp-drop-sub');
+        if (msg) msg.textContent = T('chat.dropHere');
+        if (sub) sub.textContent = T('chat.dropFormats');
+      }
+      paintOverlay();
 
       // Use a depth counter: dragenter/dragleave fire for every child element, so
       // a naive boolean flickers. Only hide when the counter returns to zero.
@@ -127,26 +137,26 @@
         if (!files.length) return;
         var ingest = window.LAAMChatIngest;
         if (!ingest || typeof ingest.parseFile !== 'function') {
-          note('Không thể đọc tệp lúc này.');
+          note(T('chat.cantReadFiles'));
           return;
         }
         for (var i = 0; i < files.length; i++) {
           var f = files[i];
           // Images can't be read by the coder model — skip with a gentle note.
           if (f && f.type && /^image\//i.test(f.type)) {
-            note('Mô hình không đọc được ảnh — đã bỏ qua "' + f.name + '".');
+            note(T('chat.skipImage', { name: f.name }));
             continue;
           }
           try {
             var r = await ingest.parseFile(f);
             store.addAttachment({
-              name: r.name + (r.truncated ? ' (cắt bớt)' : ''),
+              name: r.name + (r.truncated ? T('chat.truncatedSuffix') : ''),
               text: r.text,
               kind: 'file',
             });
           } catch (err) {
             // Per-file failure must not abort the rest of the batch.
-            note((f && f.name ? f.name + ': ' : '') + ((err && err.message) || 'không đọc được tệp.'));
+            note((f && f.name ? f.name + ': ' : '') + ((err && err.message) || T('chat.fileReadErr')));
           }
         }
       }
@@ -216,11 +226,11 @@
             truncated = true;
           }
           store.addAttachment({
-            name: 'Văn bản đã dán' + (truncated ? ' (cắt bớt)' : ''),
+            name: T('chat.pastedText') + (truncated ? T('chat.truncatedSuffix') : ''),
             text: capped,
             kind: 'file',
           });
-          note('Đã đính kèm văn bản dán (' + text.length + ' ký tự).');
+          note(T('chat.pastedAttached', { n: text.length }));
           return;
         }
         // Otherwise: let the browser paste normally (kernel autoGrow + counter
@@ -243,7 +253,7 @@
         if (!len) { counter.hidden = true; return; }
         var toks = Math.ceil(len / 4); // rough heuristic, matches kernel ingest note
         counter.hidden = false;
-        counter.textContent = len + ' ký tự · ~' + toks + ' token';
+        counter.textContent = T('chat.counter', { chars: len, tokens: toks });
       }
       input.addEventListener('input', updateCounter);
       updateCounter();
@@ -288,7 +298,7 @@
         menu.hidden = true;
         var head = document.createElement('div');
         head.className = 'laam-cmp-menu-head';
-        head.textContent = 'Lệnh nhanh';
+        head.textContent = T('chat.cmdMenuHead');
         menu.appendChild(head);
         menuItemsWrap = document.createElement('div');
         menuItemsWrap.className = 'laam-cmp-menu-items';
@@ -326,7 +336,7 @@
           row.innerHTML =
             '<span class="laam-cmp-menu-ic">' + (ctx.esc ? ctx.esc(c.icon) : c.icon) + '</span>' +
             '<span class="laam-cmp-menu-cmd">/' + (ctx.esc ? ctx.esc(c.name) : c.name) + '</span>' +
-            '<span class="laam-cmp-menu-lbl">' + (ctx.esc ? ctx.esc(c.label) : c.label) + '</span>';
+            '<span class="laam-cmp-menu-lbl">' + (ctx.esc ? ctx.esc(T(c.labelKey)) : T(c.labelKey)) + '</span>';
           menuItemsWrap.appendChild(row);
         });
         menu.hidden = matches.length === 0;
@@ -443,6 +453,18 @@
 
       // Keep the FAB honest while streaming pins the view to the bottom.
       store.on('stream:start', function () { /* nothing required; kernel autoscrolls */ });
+
+      // -- re-localize JS-built composer UI on language change --------------
+      // The drop overlay + menu header are built once; the counter is dynamic.
+      // Re-paint the static bits and re-render the open menu/counter.
+      if (window.LAAMI18n && typeof window.LAAMI18n.onChange === 'function') {
+        window.LAAMI18n.onChange(function () {
+          try { paintOverlay(); } catch (e) {}
+          try { var h = menu && menu.querySelector('.laam-cmp-menu-head'); if (h) h.textContent = T('chat.cmdMenuHead'); } catch (e) {}
+          try { if (menuOpen) renderMenu(); } catch (e) {}
+          try { updateCounter(); } catch (e) {}
+        });
+      }
     } catch (e) {
       // Never throw out of init.
       try { console.error('[chat] composer init failed:', e); } catch (e2) {}

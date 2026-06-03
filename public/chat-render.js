@@ -50,6 +50,7 @@
   'use strict';
 
   var L_ = window.LAAM || {};
+  var T = function (k, v) { return window.LAAMI18n ? window.LAAMI18n.t(k, v) : k; };
   var esc =
     (L_ && typeof L_.esc === 'function')
       ? L_.esc
@@ -257,9 +258,9 @@
     try {
       var cfg = JSON.parse(raw);
       if (!cfg || typeof cfg !== 'object' || !cfg.data) {
-        return smallError('⚠ chart không hợp lệ');
+        return smallError(T('chat.chartInvalid'));
       }
-      if (!window.Chart) return smallError('⚠ chart không hợp lệ');
+      if (!window.Chart) return smallError(T('chat.chartInvalid'));
 
       var type = cfg.type || 'bar';
       var wrap = document.createElement('div');
@@ -326,13 +327,13 @@
           // eslint-disable-next-line no-new
           new window.Chart(canvas, { type: type, data: data, options: options });
         } catch (e) {
-          wrap.replaceWith(smallError('⚠ chart không hợp lệ'));
+          wrap.replaceWith(smallError(T('chat.chartInvalid')));
         }
       });
 
       return wrap;
     } catch (e) {
-      return smallError('⚠ chart không hợp lệ');
+      return smallError(T('chat.chartInvalid'));
     }
   }
 
@@ -362,8 +363,8 @@
   function buildMap(raw) {
     try {
       var cfg = JSON.parse(raw);
-      if (!cfg || typeof cfg !== 'object') return smallError('⚠ map không hợp lệ');
-      if (!window.L) return smallError('⚠ map không hợp lệ');
+      if (!cfg || typeof cfg !== 'object') return smallError(T('chat.mapInvalid'));
+      if (!window.L) return smallError(T('chat.mapInvalid'));
 
       var markers = Array.isArray(cfg.markers) ? cfg.markers : [];
       var route = Array.isArray(cfg.route) ? cfg.route : null;
@@ -395,7 +396,7 @@
         a.href = gmaps;
         a.target = '_blank';
         a.rel = 'noopener noreferrer nofollow';
-        a.textContent = '↗ Mở chỉ đường trong Google Maps';
+        a.textContent = T('chat.mapOpenGoogle');
         container.appendChild(a);
       }
 
@@ -435,13 +436,13 @@
             try { map.invalidateSize(); } catch (e) {}
           });
         } catch (e) {
-          mapEl.replaceWith(smallError('⚠ map không hợp lệ'));
+          mapEl.replaceWith(smallError(T('chat.mapInvalid')));
         }
       });
 
       return container;
     } catch (e) {
-      return smallError('⚠ map không hợp lệ');
+      return smallError(T('chat.mapInvalid'));
     }
   }
 
@@ -482,7 +483,7 @@
   function buildBlockElement(block) {
     if (block.kind === 'chart') return buildChart(block.raw);
     if (block.kind === 'map') return buildMap(block.raw);
-    return smallError('⚠ khối không hợp lệ');
+    return smallError(T('chat.blockInvalid'));
   }
 
   // ---- Step 4: post-process sanitized DOM ----------------------------------

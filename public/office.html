@@ -29,10 +29,10 @@
     <div class="office-panel console" id="panel-console"></div>
 
     <div class="office-controls" id="controls">
-      <button class="fsel" id="zoom-out">−</button>
-      <button class="fsel" id="zoom-in">+</button>
-      <button class="fsel ghost" id="zoom-fit">Canh giữa</button>
-      <label class="gchk"><input type="checkbox" id="show-done" /> Hiện hoàn tất</label>
+      <button class="fsel" id="zoom-out" data-i18n-title="office.zoomOut" data-i18n-aria="office.zoomOut">−</button>
+      <button class="fsel" id="zoom-in" data-i18n-title="office.zoomIn" data-i18n-aria="office.zoomIn">+</button>
+      <button class="fsel ghost" id="zoom-fit" data-i18n="office.fit">Canh giữa</button>
+      <label class="gchk"><input type="checkbox" id="show-done" /> <span data-i18n="office.showDone">Hiện hoàn tất</span></label>
     </div>
   </main>
 
@@ -45,6 +45,8 @@
     </div>
     <div class="drawer-body" id="d-body"></div>
   </aside>
+  <script src="/i18n.js"></script>
+  <script src="/i18n.office.js"></script>
 
   <script src="/common.js"></script>
   <script src="/office-sprites.js"></script>

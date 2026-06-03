@@ -16,29 +16,31 @@
     <div class="dash-toolbar">
       <div class="stuck-alert" id="stuck-alert" hidden></div>
       <div class="spacer"></div>
-      <button class="fsel" id="exp-csv" title="Xuất toàn bộ session ra CSV">⤓ CSV session</button>
-      <button class="fsel" id="exp-pdf" title="Xuất báo cáo tổng hợp ra PDF">⤓ PDF báo cáo</button>
+      <button class="fsel" id="exp-csv" data-i18n="dash.exp.csv" data-i18n-title="dash.exp.csvTitle" title="Xuất toàn bộ session ra CSV">⤓ CSV session</button>
+      <button class="fsel" id="exp-pdf" data-i18n="dash.exp.pdf" data-i18n-title="dash.exp.pdfTitle" title="Xuất báo cáo tổng hợp ra PDF">⤓ PDF báo cáo</button>
     </div>
     <div class="kpis" id="kpis"></div>
 
     <div class="charts">
-      <div class="chart-card"><h3>Trạng thái session</h3><div class="cwrap"><canvas id="c-status"></canvas></div></div>
-      <div class="chart-card"><h3>Phân bố theo model</h3><div class="cwrap"><canvas id="c-model"></canvas></div></div>
-      <div class="chart-card"><h3>Phân bố theo branch</h3><div class="cwrap"><canvas id="c-branch"></canvas></div></div>
+      <div class="chart-card"><h3 data-i18n="dash.chart.status">Trạng thái session</h3><div class="cwrap"><canvas id="c-status"></canvas></div></div>
+      <div class="chart-card"><h3 data-i18n="dash.chart.model">Phân bố theo model</h3><div class="cwrap"><canvas id="c-model"></canvas></div></div>
+      <div class="chart-card"><h3 data-i18n="dash.chart.branch">Phân bố theo branch</h3><div class="cwrap"><canvas id="c-branch"></canvas></div></div>
 
-      <div class="chart-card wide"><h3>Hoạt động theo thời gian <span class="hint" id="act-hint"></span></h3><div class="cwrap tall"><canvas id="c-activity"></canvas></div></div>
+      <div class="chart-card wide"><h3><span data-i18n="dash.chart.activity">Hoạt động theo thời gian</span> <span class="hint" id="act-hint"></span></h3><div class="cwrap tall"><canvas id="c-activity"></canvas></div></div>
 
-      <div class="chart-card"><h3>Session theo project</h3><div class="cwrap"><canvas id="c-proj"></canvas></div></div>
-      <div class="chart-card"><h3>Tokens theo project (in/out)</h3><div class="cwrap"><canvas id="c-tokens"></canvas></div></div>
-      <div class="chart-card"><h3>Tool calls theo project</h3><div class="cwrap"><canvas id="c-tools"></canvas></div></div>
+      <div class="chart-card"><h3 data-i18n="dash.chart.proj">Session theo project</h3><div class="cwrap"><canvas id="c-proj"></canvas></div></div>
+      <div class="chart-card"><h3 data-i18n="dash.chart.tokens">Tokens theo project (in/out)</h3><div class="cwrap"><canvas id="c-tokens"></canvas></div></div>
+      <div class="chart-card"><h3 data-i18n="dash.chart.tools">Tool calls theo project</h3><div class="cwrap"><canvas id="c-tools"></canvas></div></div>
 
-      <div class="chart-card half"><h3>Top session theo thời lượng</h3><div class="cwrap tall"><canvas id="c-dur"></canvas></div></div>
-      <div class="chart-card half"><h3>Top session theo tokens</h3><div class="cwrap tall"><canvas id="c-toptok"></canvas></div></div>
+      <div class="chart-card half"><h3 data-i18n="dash.chart.topDur">Top session theo thời lượng</h3><div class="cwrap tall"><canvas id="c-dur"></canvas></div></div>
+      <div class="chart-card half"><h3 data-i18n="dash.chart.topTok">Top session theo tokens</h3><div class="cwrap tall"><canvas id="c-toptok"></canvas></div></div>
     </div>
 
     <!-- Pluggable feature modules render their own cards here. -->
     <div class="charts" id="modules"></div>
   </main>
+  <script src="/i18n.js"></script>
+  <script src="/i18n.dash.js"></script>
 
   <script src="/common.js"></script>
   <script src="/export.js"></script>
