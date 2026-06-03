@@ -77,7 +77,14 @@ Data đã có trong `agentSessions`; chủ yếu là UI + SSE (Wave 0.2).
 
 ---
 
-## Wave 3 — Chat (gap lớn nhất; backend + UI)
+## Wave 3 — Chat ✅ HOÀN THÀNH (2026-06-03)
+
+> Agent Team `laam-v2-wave3` (4 agent: proxies/chatapi/messages/composer) + TL prep (chat types) + TL integration (ChatClient).
+> Kết quả: **301 test pass** (60 file), `next build` xanh → **leaflet SSR residual đóng** (/chat nhúng MarkdownView thật). Commits: `5a41d1d` prep · `5efe82c` B · `874fe10` A · `72cf08c` C · `923edbf` D · `1e33f3f` integration.
+> Đã có: 8 backend endpoint (ollama/models, chat/info, fetch-url SSRF, ocr tesseract, geocode/reverse/route/nearby); /api/chat nhận model/temp/topP/system; UI: rich render (MarkdownView: tables/chart/map/code), settings panel (model picker/temp/top-p/system), đính kèm file/URL/ảnh+OCR + drag-drop, message actions copy/edit/regenerate/delete + timestamps, composer (slash menu/token counter/shortcuts/scroll-to-bottom), sidebar (search/rename/delete), export MD/JSON, PATCH rename. i18n vi/en/zh.
+> Residual: relTime trong MessageItem vi-only (chưa i18n en/zh); DNS-rebinding không chặn ở fetch-url (như v1); streaming/OCR/tesseract chưa verify end-to-end trong sandbox (cần Ollama + tesseract trên máy chủ).
+
+## Wave 3 — Chat (gap lớn nhất; backend + UI) — chi tiết gốc
 
 Backend endpoints cần port sang Next route handlers:
 - `/api/ollama/models`, `/api/chat/info`, `/api/fetch-url` (SSRF-guard), `/api/ocr` (Tesseract+pdf.js), `/api/geocode`, `/api/reverse`, `/api/route`, `/api/nearby`.
