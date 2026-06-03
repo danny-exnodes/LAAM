@@ -47,8 +47,10 @@
   }
 
   // ---- Current location (device GPS) ------------------------------------
-  // "from my place", "vị trí của tôi", "当前位置", or a marker flagged current.
-  var CURRENT_RE = /(v[ịi]\s*tr[íi]\s*(hi[ệe]n\s*t[ạa]i|c[ủu]a\s*(t[ôo]i|m[ìi]nh))|ch[ỗo]\s*(t[ôo]i|m[ìi]nh)|đ[ịi]nh\s*v[ịi]|current\s*location|my\s*location|where\s*i\s*am|当前位置|我的位置|我现在的位置|我当前位置)/i;
+  // Matches the user's own position across languages: "đây / từ đây / chỗ này /
+  // vị trí của tôi", "here / from here / my location / current", "这里 / 我的位置 /
+  // 当前位置". Also a marker can carry current/me/useCurrentLocation flags.
+  var CURRENT_RE = /(v[ịi]\s*tr[íi]\s*(hi[ệe]n\s*t[ạa]i|c[ủu]a\s*(t[ôo]i|m[ìi]nh))|ch[ỗo]\s*(t[ôo]i|m[ìi]nh|n[àa]y)|n[ơo]i\s*(t[ôo]i|m[ìi]nh|n[àa]y)|(t[ừu]|t[ạa]i|[ởo])\s*đ[âa]y|(^|[\s,])đ[âa]y([\s,.]|$)|đ[ịi]nh\s*v[ịi]|current(\s*(location|position|spot))?|my\s*(location|position|place)|from\s*here|(^|[\s,])here([\s,.]|$)|where\s*i\s*am|这里|这儿|我的位置|当前位置|我现在的位置|我当前位置|我这里)/i;
   function isCurrentLoc(s) { return CURRENT_RE.test(String(s == null ? '' : s)); }
   function markerIsCurrent(m) {
     if (!m) return false;
@@ -85,8 +87,12 @@
     var dir = cfg.directions;
 
     // 0) CURRENT LOCATION — fill from device GPS where the user asked for it.
-    var fromCurrent = dir && (isCurrentLoc(dir.from) || dir.fromCurrent === true);
-    var toCurrent = dir && isCurrentLoc(dir.to);
+    //    Triggers when the FROM endpoint is the user ("đây / từ đây / current"),
+    //    a current flag is set, OR a destination is given with NO origin at all
+    //    ("dẫn đường đến X" → start from where the user is).
+    var hasTo = !!(dir && (dir.to || dir._to));
+    var fromCurrent = !!(dir && (isCurrentLoc(dir.from) || dir.fromCurrent === true || dir.useCurrentLocation === true || (hasTo && !dir.from)));
+    var toCurrent = !!(dir && isCurrentLoc(dir.to));
     var curMarkers = markers.filter(markerIsCurrent);
     if (fromCurrent || toCurrent || curMarkers.length) {
       var pos = await getCurrentPosition();
@@ -111,15 +117,16 @@
       }
     }
 
-    // 2) Directions with from/to but no usable markers → build markers from them.
-    //    A current-location endpoint uses the GPS point resolved in step 0.
+    // 2) Build the directions endpoints into markers. The FROM may be the GPS
+    //    point from step 0 (dir._from); a missing/current FROM is just skipped
+    //    (e.g. GPS denied → we still show the destination). Geocode named ends.
     var usable = markers.filter(hasCoords);
-    if (dir && dir.from && dir.to && usable.length < 2) {
-      var a = dir._from || await geocode(dir.from);
-      var b = dir._to || await geocode(dir.to);
+    if (dir && (dir.to || dir._to) && usable.length < 2) {
       var pts = [];
-      if (a) pts.push({ lat: a.lat, lng: a.lng, label: a.label || dir.from, current: !!a.current });
-      if (b) pts.push({ lat: b.lat, lng: b.lng, label: b.label || dir.to, current: !!b.current });
+      if (dir._from) pts.push({ lat: dir._from.lat, lng: dir._from.lng, label: dir._from.label, current: true });
+      else if (dir.from && !isCurrentLoc(dir.from)) { var ga = await geocode(dir.from); if (ga) pts.push({ lat: ga.lat, lng: ga.lng, label: dir.from }); }
+      if (dir._to) pts.push({ lat: dir._to.lat, lng: dir._to.lng, label: dir._to.label, current: true });
+      else if (dir.to && !isCurrentLoc(dir.to)) { var gb = await geocode(dir.to); if (gb) pts.push({ lat: gb.lat, lng: gb.lng, label: dir.to }); }
       if (pts.length) { cfg.markers = pts; markers = pts; usable = pts.filter(hasCoords); changed = true; }
     }
     if (dir) { delete dir._from; delete dir._to; } // don't leak temp keys into JSON
@@ -128,7 +135,7 @@
     //    geometry from the server's OSRM proxy; fall back to a straight line.
     usable = (Array.isArray(cfg.markers) ? cfg.markers : []).filter(hasCoords);
     if (usable.length && !Array.isArray(cfg.center)) { cfg.center = [usable[0].lat, usable[0].lng]; changed = true; }
-    if (dir && dir.from && dir.to && usable.length >= 2 && !Array.isArray(cfg.route)) {
+    if (dir && usable.length >= 2 && !Array.isArray(cfg.route)) {
       var road = await fetchRoute(usable);
       if (road && road.length > 1) {
         cfg.route = road;
