@@ -2,6 +2,8 @@ import { eq, asc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages } from "@/db/schema";
+import { chatTools, execute } from "@/lib/connectors";
+import type { ConnectorTool } from "@/lib/connectors/types";
 
 const OLLAMA_URL = (process.env.OLLAMA_URL ?? "http://localhost:11434").replace(/\/$/, "");
 const MODEL = process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
@@ -17,7 +19,7 @@ type ChatBody = {
   topP?: number;
   system?: string;
 };
-type ChatMessage = { role: string; content: string };
+type ChatMessage = { role: string; content: string; tool_calls?: unknown[] };
 
 // Build the Ollama /api/chat request payload from the request body, the
 // conversation history, and the server defaults. Pure — no I/O — so the
@@ -47,6 +49,52 @@ export function buildOllamaPayload(
     options,
     stream: true as const,
   };
+}
+
+// --- Connector tool-calling loop -------------------------------------------
+// When the user has connectors connected, the model may want to call their
+// tools before answering. We run bounded NON-streaming rounds: ask Ollama with
+// the tools exposed; if it returns tool_calls, run each via execute() and feed
+// the results back; repeat. The returned message list is what the final
+// (streaming) request sends. Factored out + dependency-injected so the round
+// logic is unit-testable without a live Ollama or real connectors.
+
+type OllamaToolCall = { function?: { name?: string; arguments?: unknown } };
+type OllamaChatMessage = { role?: string; content?: string; tool_calls?: OllamaToolCall[] };
+type OllamaChatResponse = { message?: OllamaChatMessage };
+
+type ToolRoundsDeps = {
+  // Non-streaming Ollama /api/chat call. `tools` is empty on the final round
+  // (forces a text answer instead of another tool_call).
+  callOllama: (messages: ChatMessage[], tools: ConnectorTool[]) => Promise<OllamaChatResponse>;
+  execute: (toolName: string, args: unknown) => Promise<unknown>;
+};
+
+export async function runToolRounds(
+  messages: ChatMessage[],
+  tools: ConnectorTool[],
+  deps: ToolRoundsDeps,
+  maxRounds = 4,
+): Promise<ChatMessage[]> {
+  const convo: ChatMessage[] = messages.slice();
+  for (let i = 0; i < maxRounds; i++) {
+    const allowTools = i < maxRounds - 1; // last round must yield text
+    const res = await deps.callOllama(convo, allowTools ? tools : []);
+    const msg = res?.message ?? {};
+    const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    if (allowTools && calls.length) {
+      // Echo the assistant's tool_calls turn, then each tool result.
+      convo.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });
+      for (const tc of calls) {
+        const name = tc.function?.name ?? "";
+        const result = await deps.execute(name, tc.function?.arguments);
+        convo.push({ role: "tool", content: JSON.stringify(result) });
+      }
+      continue;
+    }
+    break; // no tool_calls (or final round) → done
+  }
+  return convo;
 }
 
 // POST /api/chat — { conversationId?, message }. Streams the Gemma 4 reply
@@ -99,6 +147,46 @@ export async function POST(req: Request) {
     history.map((m) => ({ role: m.role, content: m.content })),
     { model: MODEL, system: SYSTEM },
   );
+
+  // If the user has connectors connected, let the model call their tools first
+  // (bounded, non-streaming rounds), then stream the final answer below with
+  // the tool-augmented history. With no connectors this is skipped entirely —
+  // the streaming + persistence path stays byte-for-byte identical.
+  let tools: ConnectorTool[] = [];
+  try {
+    tools = await chatTools(userId);
+  } catch {
+    tools = []; // connector framework unavailable → behave as no-connector
+  }
+  if (tools.length) {
+    const callOllama = async (
+      messages: ChatMessage[],
+      roundTools: ConnectorTool[],
+    ): Promise<OllamaChatResponse> => {
+      const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          model: payload.model,
+          messages,
+          ...(roundTools.length ? { tools: roundTools } : {}),
+          options: payload.options,
+          stream: false,
+        }),
+      });
+      if (!r.ok) throw new Error(`Ollama ${r.status}`);
+      return (await r.json()) as OllamaChatResponse;
+    };
+    try {
+      payload.messages = await runToolRounds(payload.messages, tools, {
+        callOllama,
+        execute: (name, args) => execute(userId, name, args),
+      });
+    } catch {
+      // Tool loop failed (Ollama/connector error) — fall through and stream
+      // a normal answer from the original payload rather than hard-failing.
+    }
+  }
 
   let ollamaRes: Response;
   try {
