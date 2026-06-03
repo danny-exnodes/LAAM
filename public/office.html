@@ -13,6 +13,10 @@
   <main class="office" id="office">
     <!-- Iso scene -->
     <div class="office-stage" id="stage">
+      <!-- Sizer holds the scrollable area (= scaled content + pan slack); the
+           scene is transform-scaled on top of it. Keeps scroll bounds correct
+           at every zoom so you can pan to every edge. -->
+      <div class="office-sizer" id="sizer">
       <div class="office-scene" id="scene">
         <div class="office-floor" id="floor"></div>
         <svg class="office-rooms" id="rooms" width="100%" height="100%"></svg>
@@ -20,6 +24,7 @@
         <div class="office-agents" id="agents"></div>
         <div class="office-plaques" id="plaques"></div>
         <svg class="office-links" id="links" width="100%" height="100%"></svg>
+      </div>
       </div>
     </div>
 
@@ -29,6 +34,10 @@
     <div class="office-panel console" id="panel-console"></div>
 
     <div class="office-controls" id="controls">
+      <button class="fsel office-toggle" id="tg-connected" aria-pressed="true" data-i18n-title="office.toggleConnected" data-i18n-aria="office.toggleConnected">👥</button>
+      <button class="fsel office-toggle" id="tg-analytics" aria-pressed="true" data-i18n-title="office.toggleAnalytics" data-i18n-aria="office.toggleAnalytics">📊</button>
+      <button class="fsel office-toggle" id="tg-console" aria-pressed="true" data-i18n-title="office.toggleConsole" data-i18n-aria="office.toggleConsole">📋</button>
+      <span class="sep"></span>
       <button class="fsel" id="zoom-out" data-i18n-title="office.zoomOut" data-i18n-aria="office.zoomOut">−</button>
       <button class="fsel" id="zoom-in" data-i18n-title="office.zoomIn" data-i18n-aria="office.zoomIn">+</button>
       <button class="fsel ghost" id="zoom-fit" data-i18n="office.fit">Canh giữa</button>

@@ -14,10 +14,15 @@
   const TW = (S && S.TILE_W) || 72, TH = (S && S.TILE_H) || 36;
   const $ = (s) => document.querySelector(s);
   const scene = $('#scene'), floor = $('#floor'), roomsSvg = $('#rooms'), furn = $('#furniture'),
-    agentsEl = $('#agents'), plaques = $('#plaques'), links = $('#links'), stage = $('#stage');
+    agentsEl = $('#agents'), plaques = $('#plaques'), links = $('#links'), stage = $('#stage'), sizer = $('#sizer');
   const NS = 'http://www.w3.org/2000/svg';
 
-  const ORIGIN_X = 640, ORIGIN_Y = 150;
+  // PAD bakes blank, pannable slack to the LEFT and TOP of the content (the
+  // origin is shifted in by PAD) so the camera can pull edge agents out from
+  // under the floating panels at any zoom. Right/bottom slack comes from
+  // sizeScene() sizing the scene box to the content extent + PAD.
+  const PAD = 460;
+  const ORIGIN_X = 640 + PAD, ORIGIN_Y = 120 + PAD;
   const isoX = (c, r) => ORIGIN_X + (c - r) * TW / 2;
   const isoY = (c, r) => ORIGIN_Y + (c + r) * TH / 2;
   const depthZ = (c, r, off) => 100 + Math.round((c + r) * 6) + (off || 0);
@@ -38,7 +43,10 @@
         radial-gradient(120% 120% at 60% 0%, color-mix(in srgb, var(--accent) 9%, var(--bg)) 0%, var(--bg) 55%); }
       .office-stage { position: absolute; inset: 0; overflow: auto; cursor: grab; }
       .office-stage.grabbing { cursor: grabbing; }
-      .office-scene { position: relative; transform-origin: 0 0; width: 1640px; height: 980px; }
+      /* Sizer is the real scroll content: JS sets its size to the SCALED scene
+         extent + pan slack, so scroll bounds stay correct at every zoom. */
+      .office-sizer { position: relative; width: 1640px; height: 980px; }
+      .office-scene { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
       .office-floor, .office-furniture, .office-agents, .office-plaques { position: absolute; left: 0; top: 0; }
       .office-rooms { position: absolute; left: 0; top: 0; z-index: 1; overflow: visible; pointer-events: none; }
       .office-plaques { z-index: 8000; }
@@ -87,6 +95,9 @@
       .office-controls { position: absolute; bottom: 14px; right: 14px; z-index: 30; display: flex; gap: 6px; align-items: center;
         background: color-mix(in srgb, var(--bg-elev) 86%, transparent); backdrop-filter: blur(8px); border: 1px solid var(--border); border-radius: 10px; padding: 6px 8px; }
       .office-controls .fsel { padding: 4px 9px; }
+      .office-controls .office-toggle { font-size: 13px; line-height: 1; }
+      .office-controls .office-toggle.off { opacity: .4; }
+      .office-controls .sep { width: 1px; align-self: stretch; background: var(--border); margin: 0 3px; }
       @media (max-width: 720px) {
         /* Compact HUD so the iso scene stays usable on a phone. */
         .office-panel.connected { top: 10px; left: max(10px, env(safe-area-inset-left)); width: min(56vw, 220px); }
@@ -111,12 +122,13 @@
 
   // ---- State ----
   let prev = new Map(), knownSubs = new Set(), events = [];
-  // On phones the 1640×980 scene won't fit — start zoomed out so a useful chunk
-  // is visible, then let the user pan (native scroll) / zoom (buttons).
   const isPhone = window.innerWidth <= 720;
-  let showDone = false, scale = isPhone ? Math.max(0.42, Math.min(0.7, window.innerWidth / 700)) : 1, lastSnapshot = null;
-  let didInitialScroll = false;
+  // Scale is decided by fitView() on first snapshot (frames the whole office).
+  let showDone = false, scale = 1, lastSnapshot = null;
+  let didInitialFit = false;
   const nodeEls = new Map();
+  // Content extent in scene/layout coords (set each render); drives fit + sizing.
+  let contentBox = { minX: 0, minY: 0, maxX: 1640, maxY: 980 };
 
   // Store the i18n key + vars so events can be re-translated on a language switch.
   const pushEvent = (kind, key, vars) => { events.unshift({ ts: Date.now(), kind, key, vars }); if (events.length > 120) events.length = 120; };
@@ -229,6 +241,13 @@
 
     const tilesC = Math.max(FLOOR_COLS, LOUNGE_C + 6);
     const tilesR = Math.max(8, ...rooms.map((rm) => rm.row + rm.h), 7);
+    // Content bounding box (+ sprite/bubble margins) for fit + scene sizing.
+    contentBox = {
+      minX: isoX(0, tilesR) - TW,
+      maxX: isoX(tilesC, 0) + TW,
+      minY: isoY(0, 0) - 150,            // headroom for avatars + chat bubbles
+      maxY: isoY(tilesC, tilesR) + TH * 2,
+    };
     for (let rr = 0; rr < tilesR; rr++) for (let cc = 0; cc < tilesC; cc++) {
       const inLounge = cc >= LOUNGE_C - 1 && rr <= 5;
       placeSprite(floor, S.floorTile({ variant: inLounge ? 'lawn' : 'floor' }), cc, rr, 0);
@@ -288,6 +307,7 @@
       }
     });
 
+    sizeScene();
     applyScale();
   }
 
@@ -348,19 +368,92 @@
     } catch { $('#d-body').innerHTML = `<div class="empty">${esc(t('office.drawerLoadError'))}</div>`; }
   }
 
-  // ---- Camera: zoom + drag-to-pan ----
-  const applyScale = () => { scene.style.transform = `scale(${scale})`; };
-  $('#zoom-in').onclick = () => { scale = Math.min(1.6, scale + 0.15); applyScale(); };
-  $('#zoom-out').onclick = () => { scale = Math.max(0.5, scale - 0.15); applyScale(); };
-  $('#zoom-fit').onclick = () => { scale = 1; applyScale(); stage.scrollTo({ left: 300, top: 0, behavior: 'smooth' }); };
+  // ---- Camera: zoom + pan, framed to fit the whole office ----
+  const MIN_SCALE = 0.2, MAX_SCALE = 1.8;
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const applyScale = () => { scene.style.transform = `scale(${scale})`; sizeScene(); };
+
+  // The sizer (scroll content) spans the SCALED content extent + PAD slack, so
+  // every edge stays reachable at any zoom. Left/top slack also comes from PAD
+  // baked into the origin (content starts at minX>0, leaving room before it).
+  function sizeScene() {
+    sizer.style.width = Math.ceil(contentBox.maxX * scale + PAD) + 'px';
+    sizer.style.height = Math.ceil(contentBox.maxY * scale + PAD) + 'px';
+  }
+  function fitScale() {
+    const sw = stage.clientWidth || window.innerWidth;
+    const sh = stage.clientHeight || window.innerHeight;
+    const cw = contentBox.maxX - contentBox.minX, ch = contentBox.maxY - contentBox.minY;
+    if (cw <= 0 || ch <= 0) return 1;
+    return clamp(Math.min(sw / cw, sh / ch) * 0.96, MIN_SCALE, 1);
+  }
+  // Put the content's center at the stage center.
+  function centerContent() {
+    const cx = (contentBox.minX + contentBox.maxX) / 2 * scale;
+    const cy = (contentBox.minY + contentBox.maxY) / 2 * scale;
+    stage.scrollLeft = cx - stage.clientWidth / 2;
+    stage.scrollTop = cy - stage.clientHeight / 2;
+  }
+  function fitView() { scale = fitScale(); applyScale(); requestAnimationFrame(centerContent); }
+  // Zoom while keeping the current viewport center fixed.
+  function zoomTo(ns) {
+    const sw = stage.clientWidth, sh = stage.clientHeight;
+    const cxL = (stage.scrollLeft + sw / 2) / scale;
+    const cyL = (stage.scrollTop + sh / 2) / scale;
+    scale = clamp(ns, MIN_SCALE, MAX_SCALE); applyScale();
+    stage.scrollLeft = cxL * scale - sw / 2;
+    stage.scrollTop = cyL * scale - sh / 2;
+  }
+  $('#zoom-in').onclick = () => zoomTo(scale + 0.2);
+  $('#zoom-out').onclick = () => zoomTo(scale - 0.2);
+  $('#zoom-fit').onclick = fitView;
   $('#show-done').onchange = (e) => { showDone = e.target.checked; if (lastSnapshot) { render(lastSnapshot.sessions); updatePanels(lastSnapshot.sessions); } };
+
+  // Re-fit on viewport changes (rotate / resize) until the user has interacted.
+  let userMoved = false;
+  let resizeT = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeT);
+    resizeT = setTimeout(() => { if (!userMoved && lastSnapshot) fitView(); }, 200);
+  });
+
   let dragging = false, sx = 0, sy = 0, sl = 0, stp = 0;
   stage.addEventListener('mousedown', (e) => {
-    if (e.target.closest('.av-wrap') || e.target.closest('.office-controls')) return;
-    dragging = true; sx = e.clientX; sy = e.clientY; sl = stage.scrollLeft; stp = stage.scrollTop; stage.classList.add('grabbing');
+    if (e.target.closest('.av-wrap') || e.target.closest('.office-controls') || e.target.closest('.office-panel')) return;
+    dragging = true; userMoved = true; sx = e.clientX; sy = e.clientY; sl = stage.scrollLeft; stp = stage.scrollTop; stage.classList.add('grabbing');
   });
   window.addEventListener('mousemove', (e) => { if (!dragging) return; stage.scrollLeft = sl - (e.clientX - sx); stage.scrollTop = stp - (e.clientY - sy); });
   window.addEventListener('mouseup', () => { dragging = false; stage.classList.remove('grabbing'); });
+  // Touch pans natively (stage overflow:auto); note the interaction so we don't refit under them.
+  stage.addEventListener('touchstart', () => { userMoved = true; }, { passive: true });
+
+  // ---- Floating-panel toggles (show/hide the HUD) ----
+  const PANELS = [
+    { key: 'connected', el: $('#panel-connected'), btn: $('#tg-connected') },
+    { key: 'analytics', el: $('#panel-analytics'), btn: $('#tg-analytics') },
+    { key: 'console', el: $('#panel-console'), btn: $('#tg-console') },
+  ];
+  const PANEL_LS = 'laam.office.panels';
+  function loadPanelState() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem(PANEL_LS) || 'null'); } catch (e) {}
+    // Defaults: desktop shows all; phones hide analytics to keep the scene clear.
+    return Object.assign({ connected: true, analytics: !isPhone, console: true }, saved || {});
+  }
+  let panelState = loadPanelState();
+  function applyPanel(p) {
+    const on = !!panelState[p.key];
+    if (p.el) p.el.style.display = on ? 'block' : 'none';   // inline beats the stylesheet
+    if (p.btn) { p.btn.setAttribute('aria-pressed', String(on)); p.btn.classList.toggle('off', !on); }
+  }
+  PANELS.forEach((p) => {
+    applyPanel(p);
+    if (p.btn) p.btn.onclick = () => {
+      panelState[p.key] = !panelState[p.key];
+      try { localStorage.setItem(PANEL_LS, JSON.stringify(panelState)); } catch (e) {}
+      applyPanel(p);
+    };
+  });
 
   // ---- Mock (?mock=1): includes a live status flip to show walk-to-lounge ----
   function mockSnapshot(flip) {
@@ -397,7 +490,8 @@
   const isMock = new URLSearchParams(location.search).get('mock') === '1';
   function apply(data) {
     lastSnapshot = data; diff(data.sessions || []); render(data.sessions || []); updatePanels(data.sessions || []);
-    if (isPhone && !didInitialScroll) { didInitialScroll = true; requestAnimationFrame(() => stage.scrollTo({ left: 120 * scale, top: 0 })); }
+    // Frame the whole office once the first real layout exists.
+    if (!didInitialFit) { didInitialFit = true; requestAnimationFrame(fitView); }
   }
   if (isMock) {
     pushEvent('info', 'office.evMockMode');

@@ -437,8 +437,14 @@ main { padding: 22px; max-width: 1500px; margin: 0 auto; }
     bottom: calc(10px + env(safe-area-inset-bottom));
     right: max(10px, env(safe-area-inset-right));
     left: max(10px, env(safe-area-inset-left));
-    flex-wrap: wrap; justify-content: flex-end;
+    /* One scrollable row (toggles + zoom + checkbox) so the bar never grows
+       tall enough to overlap the event console docked above it. */
+    flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start;
+    scrollbar-width: none;
   }
+  .office .office-controls::-webkit-scrollbar { display: none; }
+  .office .office-controls > * { flex: 0 0 auto; }
+  .office .office-controls .gchk { white-space: nowrap; }
   /* v2: keep the connected list a slim, scrollable card; shrink the in-scene
      labels so they read at the zoomed-out phone scale and don't overlap. */
   .office .office-panel.connected { width: min(50vw, 188px); max-height: 30dvh; overflow: auto; font-size: 11px; }
