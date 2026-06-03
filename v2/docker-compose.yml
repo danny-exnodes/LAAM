@@ -1,0 +1,40 @@
+# LAAM v2 — DEV INFRA ONLY (Postgres + Adminer).
+# The app itself runs on the host via `npm run dev` (port 3000). Ollama stays
+# native on the host (GPU). The old v0.9 stack (its own compose) runs separately
+# and untouched.
+#
+#   docker compose up -d            # start Postgres + Adminer
+#   docker compose down             # stop (data persists in the volume)
+#   docker compose down -v          # stop and WIPE the database
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: laam-v2-postgres
+    environment:
+      POSTGRES_USER: laam
+      POSTGRES_PASSWORD: laam
+      POSTGRES_DB: laam
+    ports:
+      - "5432:5432"
+    volumes:
+      - laam-v2-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laam -d laam"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Lightweight DB UI at http://localhost:8080 (System: PostgreSQL, Server:
+  # postgres, User/Pass/DB: laam).
+  adminer:
+    image: adminer:latest
+    container_name: laam-v2-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  laam-v2-pg:

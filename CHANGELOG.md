@@ -7,6 +7,65 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ---
 
+## [2.0.0] — 2026-06-03 — Bản viết lại v2 (Next.js + Postgres, đa người dùng)
+
+> **LAAM v2** (`v2/`) là bản viết lại local-first, đa máy, đa người dùng:
+> **Next.js 16 + React 19 + Auth.js v5 + Drizzle + Postgres**. Đạt **parity tính
+> năng** với app vanilla v1 trên 4 trang trọng tâm (Dashboard, Agents, Chat,
+> Connectors) đồng thời thêm auth/RBAC, multi-machine và lưu trữ per-user.
+> Thực hiện theo 5 wave (audit → hạ tầng → Agents → Dashboard → Chat → Connectors).
+> **375 test** (Vitest + RTL), `next build` xanh.
+
+### Đã thêm — Nền tảng (Wave 0)
+- **i18n vi/en/zh** cho App Router (provider + `useT` + cookie `laam_lang`).
+- **SSE real-time** `/api/events` + hook `useLiveSessions` (thay đồng bộ thủ công).
+- **`/api/stats`** — port `lib/stats.js` thành `computeStats` có kiểu.
+- **Rich render**: `MarkdownView` (react-markdown + remark-gfm + rehype-sanitize),
+  ```chart``` (recharts), ```map``` (react-leaflet, SSR-safe), code highlight.
+- **Export util**: CSV / Markdown / JSON / PDF (jsPDF).
+
+### Đã thêm — Agents (Wave 1)
+- Danh sách **live qua SSE** (bỏ "Đồng bộ" thủ công), gom theo project.
+- Thanh lọc: tìm kiếm + project/model/status/branch/thời gian + xoá lọc.
+- **Badge "nghi kẹt"** + thông báo trình duyệt, đồng hồ chạy theo giây/card.
+- Chi tiết sub-agent; **waterfall tool-call** ở `/agents/[id]`; export CSV.
+
+### Đã thêm — Dashboard (Wave 2)
+- KPIs đầy đủ; doughnut status/model/branch; **timeline hoạt động 2 trục**.
+- Bảng so sánh model; cost theo model; tokens theo project; top sessions.
+- Tool leaderboard / errors / slowest; heatmap (hover + chú giải); export CSV/PDF.
+
+### Đã thêm — Chat (Wave 3)
+- 8 endpoint: `ollama/models`, `chat/info`, `fetch-url` (chặn SSRF), **`ocr`**
+  (tesseract), `geocode/reverse/route/nearby`.
+- `/api/chat` nhận **model / temperature / top-p / system prompt**.
+- UI: rich render, settings panel, **đính kèm file/URL/ảnh + OCR** (drag-drop),
+  message actions (copy/sửa/tạo lại/xoá) + timestamp, composer (slash menu/đếm
+  token/phím tắt), sidebar (tìm/đổi tên/xoá), export MD/JSON.
+
+### Đã thêm — Connectors (Wave 4)
+- Framework `lib/connectors/`: **mã hoá AES-256-GCM**, lưu **per-user trong
+  Postgres** (khác v1 dùng file cục bộ), các hàm user-scoped.
+- 7 connector: demo · github · trello · jira · google-drive · google-calendar ·
+  gmail (giữ nguyên tên tool như v1).
+- Trang `/connectors` (kết nối/ngắt/kiểm tra) + nav link.
+- **Vòng tool-calling** trong `/api/chat` (giữ nguyên đường đi khi không có connector).
+
+### Bảo mật
+- Credential connector **mã hoá at-rest per-user**; secret luôn **mask** khi hiển
+  thị, không trả raw về browser. Khoá từ `CONNECTOR_KEY` (fallback `AUTH_SECRET`).
+
+### Lưu ý nâng cấp
+- Cần chạy migration trên host: `cd v2 && npm run db:generate && npm run db:migrate`
+  (bảng `connector_credentials`). Đặt `CONNECTOR_KEY` cho production.
+- Toàn bộ route hiện **dynamic** (root layout đọc cookie ngôn ngữ).
+
+### Chưa làm (residual)
+- Nghiệm thu runtime end-to-end (Ollama `gemma4:e4b` + `tesseract`); luồng OAuth
+  thật cho Google; icon Lucide; cost theo project/ngày; relTime đa ngôn ngữ.
+
+---
+
 ## [Unreleased] — hướng tới v1.0.0
 
 ### Đã thêm — Connectors (kết nối ứng dụng)

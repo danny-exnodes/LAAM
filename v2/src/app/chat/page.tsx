@@ -1,0 +1,20 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { AppHeader } from "@/components/app-header";
+import { ChatClient } from "@/components/chat/ChatClient";
+
+export const dynamic = "force-dynamic";
+
+export default async function ChatPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  return (
+    <div className="flex h-dvh flex-col">
+      <AppHeader current="/chat" role={session.user.role} />
+      <div className="min-h-0 flex-1">
+        <ChatClient />
+      </div>
+    </div>
+  );
+}
