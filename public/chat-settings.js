@@ -25,7 +25,7 @@
     const T = (k, v) => (window.LAAMI18n ? window.LAAMI18n.t(k, v) : k);
     const applyDOM = (root) => { try { if (window.LAAMI18n && window.LAAMI18n.applyDOM) window.LAAMI18n.applyDOM(root); } catch (e) {} };
 
-    const DEFAULT_MODEL = 'qwen3-vl:8b'; // matches the backend default (daily-assistant + tools + vision)
+    const DEFAULT_MODEL = 'gemma4:e4b'; // matches the backend default (daily-assistant: tools + vision + fastest)
     const DEFAULTS = { temperature: 0.8, top_p: 0.9 };
 
     let modelCache = null;   // string[] of available model names (fetched once)
