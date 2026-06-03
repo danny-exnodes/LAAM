@@ -16,6 +16,7 @@ import {
   jsonb,
   timestamp,
   primaryKey,
+  unique,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 
@@ -174,6 +175,31 @@ export const chatMessages = pgTable("chat_message", {
   content: text("content").notNull(),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
+
+// Connector credentials — per-user, ENCRYPTED at rest (the `secret` column holds
+// an AES-256-GCM blob from lib/connectors/crypto, never plaintext). v1 stored
+// these in a local mode-600 JSON file; v2 is multi-user so they live per-user in
+// Postgres. One row per (user, connector).
+export const connectorCredentials = pgTable(
+  "connector_credential",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    connectorId: text("connectorId").notNull(),
+    secret: text("secret").notNull(), // encrypted JSON blob
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userConnector: unique("connector_user_id").on(t.userId, t.connectorId),
+  }),
+);
+
+export type ConnectorCredential = typeof connectorCredentials.$inferSelect;
 
 export type ChatConversation = typeof chatConversations.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
