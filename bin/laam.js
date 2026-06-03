@@ -34,13 +34,18 @@ const STUCK_THRESHOLD_MIN = Number(arg('stuck', process.env.LAAM_STUCK_MIN || 10
 // The /chat page talks to the local model THROUGH the logging proxy (so chats
 // are tracked like any other local session). Hard-locked to the 7B model.
 const PROXY_URL = arg('proxy-url', process.env.LAAM_PROXY_URL || 'http://localhost:11435');
-const CHAT_MODEL = process.env.LAAM_CHAT_MODEL || 'qwen2.5-coder:7b';
+// Default chat model: an all-round daily-assistant with reliable tool/function
+// calling (for connectors) AND vision (reads images/scanned docs natively).
+const CHAT_MODEL = process.env.LAAM_CHAT_MODEL || 'qwen3-vl:8b';
 
 // System prompt teaching the model WHEN and HOW to emit the rich blocks the
 // /chat page can render (charts, maps, GFM tables). Few-shot so a small model
 // copies the exact syntax. The fence MUST be ```chart / ```map (never ```json).
 const CHAT_SYSTEM = [
-  'You are LAAM Chat, a helpful assistant in a web chat UI that can RENDER rich content.',
+  'You are LAAM, a friendly everyday-work assistant in a web chat UI. You help with daily tasks',
+  'for a general user (NOT a coding bot): finding and reading documents (including scanned/photographed',
+  'files, whose text is provided to you), answering questions, summarising, planning, scheduling, and',
+  'quick analysis. You can RENDER rich content and call tools/connectors when they are available.',
   'Choose the best output format for the answer:',
   '',
   '1) CHART — to visualize numbers, comparisons, trends, or proportions. Output a fenced code block whose info string is exactly `chart` (NEVER `json`), containing ONE LINE of valid JSON:',

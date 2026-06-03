@@ -589,6 +589,11 @@
   // Model info line
   // ======================================================================
   function prettyModel(m) {
+    var lower = String(m == null ? '' : m).toLowerCase();
+    var vl = lower.match(/qwen3-vl(?::(\S+))?/);                 // vision + tools
+    if (vl) return 'Qwen3-VL' + (vl[1] ? ' ' + vl[1].toUpperCase() : '') + ' ◍';
+    var q3 = lower.match(/qwen3(?::(\S+))?/);
+    if (q3) return 'Qwen3' + (q3[1] ? ' ' + q3[1].toUpperCase() : '');
     if (/qwen2\.5-coder/i.test(m)) return 'Qwen2.5-Coder' + (/14b/i.test(m) ? ' 14B' : ' 7B');
     if (/qwen/i.test(m)) return 'Qwen ' + (/14b/i.test(m) ? '14B' : '7B');
     var g = m.match(/gemma(\d+)n?(?::(\S+))?/i);
