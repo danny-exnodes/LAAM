@@ -426,6 +426,14 @@
         note.lastChild.textContent = T('chat.mapLocationDenied');
         container.appendChild(note);
       }
+      // Real road routing failed → we drew an approximate straight line.
+      if (cfg.routeStraight) {
+        var rn = document.createElement('div');
+        rn.className = 'chat-map-note';
+        rn.innerHTML = '<span aria-hidden="true">〜</span><span></span>';
+        rn.lastChild.textContent = T('chat.mapRouteStraight');
+        container.appendChild(rn);
+      }
 
       // Leaflet must init AFTER the element is in the document and sized.
       requestAnimationFrame(function () {

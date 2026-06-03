@@ -305,6 +305,9 @@
       };
       if (s.model) body.model = s.model;
       if (s.system) body.system = s.system;
+      // Tell the backend which language to answer in (current UI language) so
+      // the model replies in the user's language instead of drifting.
+      body.lang = (window.LAAMI18n && window.LAAMI18n.getLang) ? window.LAAMI18n.getLang() : 'vi';
       const options = {};
       if (typeof s.temperature === 'number') options.temperature = s.temperature;
       if (typeof s.top_p === 'number') options.top_p = s.top_p;
@@ -722,6 +725,10 @@
       .chat-main {
         flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
         position: relative;
+        /* Own stacking context so Leaflet's high z-index panes/controls (~400+)
+           stay CONTAINED here and never paint over the sidebar drawer (z 30) or
+           its scrim (z 25) on mobile. */
+        z-index: 0;
         padding-left: max(0px, env(safe-area-inset-left)); padding-right: max(0px, env(safe-area-inset-right));
       }
       .chat-sub, .transcript, .dock { width: 100%; max-width: 880px; margin: 0 auto; padding-left: 16px; padding-right: 16px; }

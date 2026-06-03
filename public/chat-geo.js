@@ -28,6 +28,24 @@
     } catch (e) { geoMem[key] = null; return null; }
   }
 
+  // Real road geometry for an ordered list of {lat,lng} points, via the server
+  // OSRM proxy. Returns [[lat,lng],...] or null (caller falls back to a line).
+  var routeMem = {};
+  async function fetchRoute(points) {
+    var pts = (points || []).filter(hasCoords).slice(0, 8);
+    if (pts.length < 2) return null;
+    var qp = pts.map(function (p) { return p.lat.toFixed(5) + ',' + p.lng.toFixed(5); }).join(';');
+    if (Object.prototype.hasOwnProperty.call(routeMem, qp)) return routeMem[qp];
+    try {
+      var r = await fetch('/api/route?points=' + encodeURIComponent(qp));
+      if (!r.ok) { routeMem[qp] = null; return null; }
+      var j = await r.json();
+      var geom = (j && Array.isArray(j.geometry) && j.geometry.length > 1) ? j.geometry : null;
+      routeMem[qp] = geom;
+      return geom;
+    } catch (e) { routeMem[qp] = null; return null; }
+  }
+
   // ---- Current location (device GPS) ------------------------------------
   // "from my place", "vị trí của tôi", "当前位置", or a marker flagged current.
   var CURRENT_RE = /(v[ịi]\s*tr[íi]\s*(hi[ệe]n\s*t[ạa]i|c[ủu]a\s*(t[ôo]i|m[ìi]nh))|ch[ỗo]\s*(t[ôo]i|m[ìi]nh)|đ[ịi]nh\s*v[ịi]|current\s*location|my\s*location|where\s*i\s*am|当前位置|我的位置|我现在的位置|我当前位置)/i;
@@ -106,11 +124,18 @@
     }
     if (dir) { delete dir._from; delete dir._to; } // don't leak temp keys into JSON
 
-    // 3) Centre + a connecting line for a 2-point directions map.
+    // 3) Centre + the connecting ROUTE for a directions map. Prefer real road
+    //    geometry from the server's OSRM proxy; fall back to a straight line.
     usable = (Array.isArray(cfg.markers) ? cfg.markers : []).filter(hasCoords);
     if (usable.length && !Array.isArray(cfg.center)) { cfg.center = [usable[0].lat, usable[0].lng]; changed = true; }
     if (dir && dir.from && dir.to && usable.length >= 2 && !Array.isArray(cfg.route)) {
-      cfg.route = usable.map(function (p) { return [p.lat, p.lng]; });
+      var road = await fetchRoute(usable);
+      if (road && road.length > 1) {
+        cfg.route = road;
+      } else {
+        cfg.route = usable.map(function (p) { return [p.lat, p.lng]; });
+        cfg.routeStraight = true; // tell the renderer to note this is approximate
+      }
       changed = true;
     }
     return changed;

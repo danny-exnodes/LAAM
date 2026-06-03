@@ -67,8 +67,25 @@ const CHAT_SYSTEM = [
   '',
   '4) Otherwise, answer in normal Markdown (headings, lists, **bold**, `code`).',
   '',
-  'RULES: A chart/map fence MUST be ```chart or ```map — never ```json or ```. The JSON must be valid and on a single line. Add one short sentence before a chart/map block. Keep the language of the user (Vietnamese if they write Vietnamese). Use a chart/map/table whenever it fits the question instead of describing the data only in prose.',
+  'RULES: A chart/map fence MUST be ```chart or ```map — never ```json or ```. The JSON must be valid and on a single line. Add one short sentence before a chart/map block. Use a chart/map/table whenever it fits the question instead of describing the data only in prose.',
 ].join('\n');
+
+// A forceful per-request language directive (prepended to the system prompt).
+// Fixes the model drifting into English / injecting Chinese characters.
+const LANG_NAMES = { vi: 'Vietnamese (Tiếng Việt)', en: 'English', zh: 'Simplified Chinese (简体中文)' };
+function langDirective(lang) {
+  const name = LANG_NAMES[lang];
+  if (!name) return '';
+  return [
+    '=== LANGUAGE (highest priority) ===',
+    'You MUST write your ENTIRE reply in ' + name + '.',
+    'Match the language of the user; when in doubt, use ' + name + '.',
+    'NEVER mix languages and NEVER output Chinese characters unless ' + name + ' IS Chinese.',
+    'This includes prose, list items, table headers, and the sentence before any chart/map block.',
+    '',
+    '',
+  ].join('\n');
+}
 
 // Unified scan: Claude transcripts + local-model proxy logs, merged into one
 // snapshot ({ projects, sessions }) consumed by every endpoint.
@@ -125,8 +142,10 @@ app.post('/api/chat', (req, res) => {
   const sid = 'chat-' + String(sessionId || 'web').replace(/[^A-Za-z0-9._-]/g, '-').slice(0, 48);
   // Honor an optional client-chosen model; fall back to the hard-locked default.
   const model = (typeof body.model === 'string' && body.model) ? body.model : CHAT_MODEL;
-  // Honor an optional custom system prompt (else the render-format default).
-  const sysPrompt = (typeof body.system === 'string' && body.system.trim()) ? body.system : CHAT_SYSTEM;
+  // Honor an optional custom system prompt (else the render-format default), then
+  // FORCE the reply language so the model never drifts to English/Chinese.
+  const baseSys = (typeof body.system === 'string' && body.system.trim()) ? body.system : CHAT_SYSTEM;
+  const sysPrompt = langDirective(body.lang) + baseSys;
   // Prepend the system prompt unless the caller already set one.
   const outMsgs = messages[0] && messages[0].role === 'system'
     ? messages
@@ -279,6 +298,49 @@ async function geocodeOne(q) {
 app.get('/api/geocode', async (req, res) => {
   const hit = await geocodeOne(req.query.q);
   if (!hit) return res.status(404).json({ error: 'không tìm thấy địa điểm' });
+  res.json(hit);
+});
+
+// ---- Road routing (real driving geometry, keyless) ----------------------
+// Proxies the public OSRM demo server so the browser avoids CORS, and adds a
+// small cache + gentle throttle to respect the free service. Fail-soft: a 502
+// lets the client fall back to a straight line.
+const routeCache = new Map(); // "lng,lat;lng,lat" -> { geometry:[[lat,lng]], distance, duration } | null
+let lastRouteCall = 0;
+async function routeOne(coords) { // coords: [[lng,lat], ...] (OSRM order), >= 2
+  const key = coords.map((c) => c.join(',')).join(';');
+  if (routeCache.has(key)) return routeCache.get(key);
+  const wait = Math.max(0, 600 - (Date.now() - lastRouteCall));
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  lastRouteCall = Date.now();
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 6000);
+    const seg = coords.map((c) => c[0] + ',' + c[1]).join(';');
+    const url = 'https://router.project-osrm.org/route/v1/driving/' + seg + '?overview=full&geometries=geojson';
+    const r = await fetch(url, { signal: ctrl.signal, headers: { 'User-Agent': 'LAAM-chat/0.1 (local AI agent monitoring; self-host)' } });
+    clearTimeout(timer);
+    const j = await r.json();
+    const route = j && Array.isArray(j.routes) && j.routes[0];
+    const coordsOut = route && route.geometry && Array.isArray(route.geometry.coordinates) ? route.geometry.coordinates : null;
+    const hit = coordsOut && coordsOut.length > 1
+      ? { geometry: coordsOut.map((c) => [c[1], c[0]]), distance: route.distance, duration: route.duration } // [lng,lat] -> [lat,lng]
+      : null;
+    routeCache.set(key, hit);
+    return hit;
+  } catch {
+    return null; // fail soft — client draws a straight line instead
+  }
+}
+app.get('/api/route', async (req, res) => {
+  const toPair = (s) => { const p = String(s || '').split(','); const lat = parseFloat(p[0]); const lng = parseFloat(p[1]); return (isFinite(lat) && isFinite(lng)) ? [lng, lat] : null; };
+  let coords = [];
+  if (req.query.points) coords = String(req.query.points).split(';').map(toPair).filter(Boolean);
+  else { const f = toPair(req.query.from); const t = toPair(req.query.to); if (f) coords.push(f); if (t) coords.push(t); }
+  if (coords.length < 2) return res.status(400).json({ error: 'cần điểm đầu và điểm cuối' });
+  if (coords.length > 8) coords = coords.slice(0, 8); // sanity cap
+  const hit = await routeOne(coords);
+  if (!hit) return res.status(502).json({ error: 'không lấy được tuyến đường' });
   res.json(hit);
 });
 
