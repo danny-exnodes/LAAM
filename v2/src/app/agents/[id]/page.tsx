@@ -4,7 +4,9 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { agentSessions } from "@/db/schema";
+import type { SubAgentJson } from "@/db/schema";
 import { AppHeader } from "@/components/app-header";
+import { ToolWaterfall } from "@/components/agents/ToolWaterfall";
 import { ago, usd, num, shortModel } from "@/lib/format";
 import { getTimeline, getToolCalls } from "@/lib/monitoring/parser.js";
 import { getLocalTimeline } from "@/lib/monitoring/localParser.js";
@@ -89,23 +91,51 @@ export default async function SessionDetailPage({
 
         {toolCalls.length > 0 && (
           <section className="mt-6">
-            <h2 className="mb-2 text-sm font-bold">Tool calls gần đây</h2>
+            <h2 className="mb-2 text-sm font-bold">
+              Tool-call waterfall{" "}
+              <span className="text-neutral-400">{toolCalls.length}</span>
+            </h2>
+            <ToolWaterfall
+              calls={toolCalls.map((t) => ({
+                name: t.name,
+                durationMs: t.durationMs ?? null,
+                isError: t.isError,
+              }))}
+            />
+          </section>
+        )}
+
+        {s.subAgents && s.subAgents.length > 0 && (
+          <section className="mt-6">
+            <h2 className="mb-2 text-sm font-bold">
+              Sub-agents{" "}
+              <span className="text-neutral-400">{s.subAgents.length}</span>
+            </h2>
             <ul className="space-y-1">
-              {toolCalls.map((t, i) => (
+              {(s.subAgents as SubAgentJson[]).map((a) => (
                 <li
-                  key={t.id ?? i}
+                  key={a.id}
                   className="flex items-center gap-3 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs dark:border-neutral-800"
                 >
+                  <span
+                    className={
+                      "inline-block h-2 w-2 shrink-0 rounded-full " +
+                      (a.status === "running"
+                        ? "bg-green-500"
+                        : "bg-neutral-400")
+                    }
+                  />
                   <span className="font-mono font-semibold text-[var(--color-accent)]">
-                    {t.name}
+                    {a.type}
                   </span>
-                  <span className="flex-1 truncate text-neutral-500">{t.detail}</span>
-                  {t.durationMs != null && (
-                    <span className="tabular-nums text-neutral-400">
-                      {Math.round(t.durationMs / 100) / 10}s
-                    </span>
-                  )}
-                  {t.isError && <span className="text-red-500">err</span>}
+                  <span className="flex-1 truncate text-neutral-500">
+                    {a.description || "(không mô tả)"}
+                  </span>
+                  <span className="tabular-nums text-neutral-400">
+                    {a.durationMs != null
+                      ? Math.round(a.durationMs / 100) / 10 + "s"
+                      : "—"}
+                  </span>
                 </li>
               ))}
             </ul>
