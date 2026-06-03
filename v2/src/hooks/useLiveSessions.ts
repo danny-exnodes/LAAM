@@ -6,11 +6,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isStuck } from "@/lib/stuck";
+import type { SubAgentJson } from "@/db/schema";
 
 // JSON-friendly session shape pushed by the /api/events route (Dates → epoch ms).
 export type LiveSession = {
   id: string;
   projectId: string | null;
+  projectName: string | null;
   source: string;
   model: string | null;
   gitBranch: string | null;
@@ -20,6 +22,7 @@ export type LiveSession = {
   messageCount: number;
   toolCount: number;
   subAgentCount: number;
+  subAgents: SubAgentJson[] | null;
   costUsd: number;
   latestActivity: string | null;
   tokensIn: number;
