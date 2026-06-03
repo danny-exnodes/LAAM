@@ -7,6 +7,27 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ---
 
+## [Unreleased] — hướng tới v1.0.0
+
+### Đã thêm — Connectors (kết nối ứng dụng)
+- **Trang `/connectors`**: quản lý kết nối — thẻ từng dịch vụ, trạng thái, nhập
+  credential (token), nút Kết nối / Ngắt / Kiểm tra. Đã thêm vào nav.
+- **Framework connector** (`lib/connectors/`): mỗi connector là **một file** tự
+  đăng ký (thả file vào là chạy). Connector phơi ra **tools** mà model gọi qua
+  chat → backend thực thi **API thật** với credential của người dùng rồi trả kết
+  quả về cho model render (bảng/list). Token người dùng nhập **lưu phía máy chủ**
+  (`~/.laam/connectors.json`, mode 600), **mask** khi hiển thị, **không commit**.
+- **Vòng tool-calling** trong `/api/chat`: khi có connector kết nối, model gọi
+  tool → thực thi → đưa kết quả lại → trả lời (vẫn token-stream khi không có).
+- Connector hiện có: **GitHub** (PAT — chạy thật, đọc cả repo công khai không cần
+  token), **Trello** (key+token), **Jira** (email + API token), **Google Drive /
+  Calendar / Gmail** (dán OAuth access token; luồng OAuth tích hợp sẽ làm sau),
+  và một connector **Demo** không cần credential để minh hoạ.
+- *Cần người dùng cấp credential* mới chạy thật với dữ liệu cá nhân; LAAM **không
+  tự đăng nhập** thay người dùng.
+
+---
+
 ## [0.9.0] — 2026-06-03
 
 > **Cột mốc "pre-connector".** LAAM đã chuyển hướng từ công cụ giám sát thuần tuý
