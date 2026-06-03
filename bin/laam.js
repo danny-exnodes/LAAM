@@ -36,8 +36,9 @@ const STUCK_THRESHOLD_MIN = Number(arg('stuck', process.env.LAAM_STUCK_MIN || 10
 const PROXY_URL = arg('proxy-url', process.env.LAAM_PROXY_URL || 'http://localhost:11435');
 // Default chat model: an all-round daily-assistant with reliable tool/function
 // calling (for connectors) AND vision (reads images/scanned docs natively).
-// gemma4:e4b — newest gen, 6/6 tool-calling, vision, fastest (~26 tok/s), 100% GPU on 16GB.
-const CHAT_MODEL = process.env.LAAM_CHAT_MODEL || 'gemma4:e4b';
+// qwen3-vl:8b — the most CONSISTENT tool-caller (6/6 every trial; gemma4:e4b is
+// faster but drops the email tool 2/3 runs), plus vision and more 16GB headroom.
+const CHAT_MODEL = process.env.LAAM_CHAT_MODEL || 'qwen3-vl:8b';
 
 // System prompt teaching the model WHEN and HOW to emit the rich blocks the
 // /chat page can render (charts, maps, GFM tables). Few-shot so a small model
