@@ -36,7 +36,12 @@ Mục tiêu: dựng các lớp cross-cutting để 4 trang sau không phải là
 
 ---
 
-## Wave 1 — Agents (core monitoring, ROI cao)
+## Wave 1 — Agents ✅ HOÀN THÀNH (2026-06-03)
+
+> Agent Team `laam-v2-wave1` (3 agent: list/detail/backend) + TL prep (mở rộng LiveSession) + TL integration (mount I18nProvider ở root layout).
+> Kết quả: **160 test pass** (31 file), `next build` xanh. Commits: `fe75aaf` prep · `47377a0` C · `2d3bb7f` B · `bdd91c9` i18n mount · `00c6ad6` A.
+> Đã có: live SSE list (bỏ sync thủ công), filter bar (search/project/model/status/branch/time + clear), stuck badge + status=stuck filter, per-card live ticker 1s, sub-agent detail (card + detail page), tool-call waterfall ở /agents/[id], CSV export (cột theo v1, bỏ field LiveSession không mang), i18n vi/en/zh hoạt động thật (provider đã mount).
+> Residual: browser Notification cho stuck đã có trong hook (useLiveSessions) nhưng cần user cấp quyền; threshold hardcode 10'. Toàn bộ route giờ dynamic (root layout đọc cookie lang).
 
 Data đã có trong `agentSessions`; chủ yếu là UI + SSE (Wave 0.2).
 

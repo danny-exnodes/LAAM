@@ -25,7 +25,9 @@ Auth.js: user/account/session/verificationToken + `role`. App: machines(`tokenHa
   - SSE: `src/app/api/events/route.ts` + `src/lib/{stuck,events-bus}.ts` + `src/hooks/useLiveSessions.ts`. **Bus publisher chưa wire → để Wave 1.**
   - rich-render: `src/components/render/{MarkdownView,ChartBlock,MapBlock,LeafletMap,CodeBlock}.tsx`. leaflet qua `dynamic ssr:false`. **SSR-safety mới đảm bảo cấu trúc — exercise thật khi Wave 1/3 nhúng vào page.**
   - export: `src/lib/export/*` (CSV/MD/JSON/PDF jsPDF).
-- Tiếp theo: **Wave 1 Agents** (filter/search, stuck badge+notification, live ticker, sub-agent detail, tool waterfall, CSV) — dùng SSE + i18n + stats + export của Wave 0; nhớ wire bus publisher vào `/api/sync`.
+- **Wave 1 Agents ✅ (2026-06-03)** — Agent Team `laam-v2-wave1` (3 agent). Live SSE list (`AgentsClient` + `useLiveSessions`, bỏ sync thủ công), filter bar + stuck filter/badge + live ticker (`components/agents/*`), sub-agent detail, tool waterfall (`ToolWaterfall` ở `/agents/[id]`), CSV export. Backend: `/api/events` enrich (projectName+subAgents, `mapRowToLiveSession`) + `/api/sync` publish bus. **I18nProvider đã mount ở `app/layout.tsx`** (đọc cookie lang) → useT chạy app-wide. 160 test, build xanh.
+- **i18n integration**: provider mount ở root layout. Trang cũ (dashboard/chat…) vẫn hardcode vi — swap sang useT dần ở các Wave sau.
+- Tiếp theo: **Wave 2 Dashboard** (dùng `/api/stats` + render charts; recharts) — chỉ thiếu UI.
 
 ## Chưa làm
 Bảng `events` (timeline remote), lọc Agents theo máy/owner, connectors + smart-routing (Phase 5), deploy/Tailscale (Phase 6). Phase 0 UI #10/#11 (full-width, gom nút chat) ở app cũ chưa code.
