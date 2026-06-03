@@ -3,3 +3,16 @@
 @theme {
   --color-accent: #6d5efc;
 }
+
+/* Dashboard widget card — shared shell for KPI/chart/table widgets. */
+.chart-card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--color-neutral-200);
+  background: #fff;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+}
+.dark .chart-card {
+  border-color: var(--color-neutral-800);
+  background: var(--color-neutral-900);
+}

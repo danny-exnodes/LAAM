@@ -2,9 +2,12 @@ import { expect, test } from 'vitest';
 import { dashboard } from './dashboard';
 import { resolve } from '../index';
 
-test('dashboard ports every v1 leaf key (106) across 3 langs', () => {
+test('dashboard ports every v1 leaf key (>=106) across 3 langs', () => {
   const keys = Object.keys(dashboard);
-  expect(keys.length).toBe(106);
+  // 106 = the v1 ported baseline; Wave 2 added page-shell + KPI/chart keys.
+  // Guard against dropping v1 keys (never below baseline); every key must
+  // carry all three languages.
+  expect(keys.length).toBeGreaterThanOrEqual(106);
   for (const k of keys) {
     expect(typeof dashboard[k].vi).toBe('string');
     expect(typeof dashboard[k].en).toBe('string');

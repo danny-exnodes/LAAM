@@ -5,6 +5,10 @@
 import type { Dict } from '../types';
 
 export const dashboard: Dict = {
+  // --- page shell (Wave 2 integration) ---
+  'dash.page.title': { vi: 'Bảng điều khiển', en: 'Dashboard', zh: '仪表盘' },
+  'dash.page.loading': { vi: 'Đang tải thống kê…', en: 'Loading stats…', zh: '正在加载统计…' },
+  'dash.page.error': { vi: 'Không tải được thống kê.', en: 'Could not load stats.', zh: '无法加载统计数据。' },
   // exp
   'dash.exp.csv': { vi: 'CSV session', en: 'CSV sessions', zh: 'CSV 会话' },
   'dash.exp.pdf': { vi: 'PDF báo cáo', en: 'PDF report', zh: 'PDF 报告' },
