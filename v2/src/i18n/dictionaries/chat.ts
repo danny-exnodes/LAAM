@@ -152,6 +152,8 @@ export const chat: Dict = {
   'chat.suggest5': { vi: 'Chỉ đường từ Hồ Gươm tới Văn Miếu', en: 'Directions from Hoan Kiem Lake to the Temple of Literature', zh: '从还剑湖到文庙的路线' },
   'chat.suggest6': { vi: 'Tóm tắt lợi ích của năng lượng mặt trời', en: 'Summarize the benefits of solar energy', zh: '总结太阳能的好处' },
   'chat.thinking': { vi: 'đang soạn…', en: 'typing…', zh: '正在输入…' },
+  'chat.errServer': { vi: 'Lỗi máy chủ.', en: 'Server error.', zh: '服务器错误。' },
+  'chat.errConn': { vi: 'Lỗi kết nối tới máy chủ.', en: 'Connection error.', zh: '连接服务器出错。' },
   'chat.annGenerating': { vi: 'Đang tạo phản hồi…', en: 'Generating a reply…', zh: '正在生成回复…' },
   'chat.annError': { vi: 'Lỗi khi tạo phản hồi', en: 'Error while generating', zh: '生成回复时出错' },
   'chat.annStopped': { vi: 'Đã dừng', en: 'Stopped', zh: '已停止' },

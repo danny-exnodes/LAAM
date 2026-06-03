@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AppHeader } from "@/components/app-header";
-import { ChatClient } from "@/components/chat-client";
+import { ChatClient } from "@/components/chat/ChatClient";
 
 export const dynamic = "force-dynamic";
 

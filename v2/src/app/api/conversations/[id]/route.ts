@@ -40,6 +40,30 @@ export async function GET(
   return NextResponse.json({ id: conv.id, title: conv.title, messages });
 }
 
+// PATCH /api/conversations/:id — rename a conversation (owner only).
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { id } = await params;
+  const conv = await ownedConversation(id, session.user.id);
+  if (!conv) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  const body = (await req.json().catch(() => null)) as { title?: unknown } | null;
+  const title = typeof body?.title === "string" ? body.title.trim().slice(0, 120) : "";
+  if (!title) return NextResponse.json({ error: "Empty title" }, { status: 400 });
+
+  await db
+    .update(chatConversations)
+    .set({ title })
+    .where(eq(chatConversations.id, id));
+  return NextResponse.json({ ok: true, title });
+}
+
 // DELETE /api/conversations/:id — delete a conversation (owner only).
 export async function DELETE(
   _req: Request,
