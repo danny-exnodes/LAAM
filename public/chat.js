@@ -591,6 +591,13 @@
   function prettyModel(m) {
     if (/qwen2\.5-coder/i.test(m)) return 'Qwen2.5-Coder' + (/14b/i.test(m) ? ' 14B' : ' 7B');
     if (/qwen/i.test(m)) return 'Qwen ' + (/14b/i.test(m) ? '14B' : '7B');
+    var g = m.match(/gemma(\d+)n?(?::(\S+))?/i);
+    if (g) {
+      var size = g[2] ? ' ' + g[2].toUpperCase() : '';
+      // Gemma 3 4b/12b/27b and all Gemma 4 are multimodal (can see images).
+      var vision = /gemma3:(4|12|27)b/i.test(m) || /gemma4/i.test(m);
+      return 'Gemma ' + g[1] + size + (vision ? ' ◍' : '');
+    }
     return m;
   }
   function setModelInfo(html) { if (subInfo) subInfo.innerHTML = html; }
