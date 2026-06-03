@@ -142,13 +142,9 @@
         }
         for (var i = 0; i < files.length; i++) {
           var f = files[i];
-          // Images can't be read by the coder model — skip with a gentle note.
-          if (f && f.type && /^image\//i.test(f.type)) {
-            note(T('chat.skipImage', { name: f.name }));
-            continue;
-          }
           try {
-            var r = await ingest.parseFile(f);
+            // Images + scanned PDFs are OCR'd inside parseFile; surface progress.
+            var r = await ingest.parseFile(f, function (msg) { note(msg); });
             store.addAttachment({
               name: r.name + (r.truncated ? T('chat.truncatedSuffix') : ''),
               text: r.text,

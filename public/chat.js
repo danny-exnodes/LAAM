@@ -611,10 +611,18 @@
     const file = fileInput.files && fileInput.files[0];
     fileInput.value = '';
     if (!file) return;
+    // Live progress chip — OCR (images / scanned PDFs) can take a few seconds.
+    const chip = { name: file.name, text: '', kind: 'file' };
+    addAttachment(chip);
     try {
-      const r = await window.LAAMChatIngest.parseFile(file);
-      addAttachment({ name: r.name + (r.truncated ? T('chat.truncatedSuffix') : ''), text: r.text, kind: 'file' });
-    } catch (err) { pendingError = (err && err.message) || T('chat.errReadFile'); renderTranscript(); }
+      const r = await window.LAAMChatIngest.parseFile(file, (msg) => { chip.name = msg; renderAttachments(); });
+      chip.name = r.name + (r.truncated ? T('chat.truncatedSuffix') : '');
+      chip.text = r.text;
+      renderAttachments();
+    } catch (err) {
+      attachments = attachments.filter((a) => a !== chip); renderAttachments();
+      pendingError = (err && err.message) || T('chat.errReadFile'); renderTranscript();
+    }
   });
   const attachUrlBtn = $('#attach-url');
   if (attachUrlBtn) attachUrlBtn.addEventListener('click', async () => {

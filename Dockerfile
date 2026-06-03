@@ -3,6 +3,10 @@
 FROM node:20-alpine
 
 # wget is part of busybox in alpine; used by the HEALTHCHECK below.
+# tesseract + language data (vie/eng/chi_sim) power the chat OCR endpoint
+# (/api/ocr) so scanned PDFs and uploaded images become readable text.
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng tesseract-ocr-data-vie tesseract-ocr-data-chi_sim
+
 WORKDIR /app
 
 # Install production dependencies first so this layer is cached unless the

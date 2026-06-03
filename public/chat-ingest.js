@@ -33,14 +33,56 @@
   // ~8K tokens worth of characters. All ingested text is capped to this length.
   var MAX_CHARS = 32000;
 
-  // 5 MB hard cap on uploaded files.
-  var MAX_FILE_BYTES = 5 * 1024 * 1024;
+  // 12 MB hard cap on uploaded files (photos can be large).
+  var MAX_FILE_BYTES = 12 * 1024 * 1024;
 
   // PDF page cap to keep extraction bounded.
   var MAX_PDF_PAGES = 50;
 
+  // For a SCANNED pdf we OCR rendered pages — bounded to keep it responsive.
+  var MAX_OCR_PAGES = 8;
+  // If a PDF yields fewer real characters than this, treat it as a scan → OCR.
+  var MIN_PDF_TEXT = 24;
+
   // Extensions / mime types we treat as plain text.
   var TEXT_EXTS = ['txt', 'md', 'csv', 'json', 'log'];
+  // Image extensions we OCR.
+  var IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'tif', 'tiff'];
+  function isImage(ext, mime) { return IMAGE_EXTS.indexOf(ext) !== -1 || /^image\//i.test(mime || ''); }
+
+  // ---- OCR (server tesseract via /api/ocr) -------------------------------
+  function fileToDataURL(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(fr.result); };
+      fr.onerror = function () { reject(new Error(T('chat.ocrReadFail'))); };
+      fr.readAsDataURL(file);
+    });
+  }
+  async function ocrDataUrl(dataUrl) {
+    var r = await fetch('/api/ocr', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ image: dataUrl }) });
+    var j = null; try { j = await r.json(); } catch (e) {}
+    if (!r.ok) throw new Error((j && j.error) || T('chat.ocrFail'));
+    return (j && typeof j.text === 'string') ? j.text : '';
+  }
+  // Render scanned PDF pages to PNG (pdf.js) and OCR each — needs a canvas.
+  async function ocrPdfPages(doc, onProgress) {
+    var capPages = Math.min(doc.numPages, MAX_OCR_PAGES);
+    var out = [];
+    for (var i = 1; i <= capPages; i++) {
+      if (onProgress) onProgress(T('chat.ocrPdfPage', { i: i, n: capPages }));
+      var page = await doc.getPage(i);
+      var viewport = page.getViewport({ scale: 2 }); // upscale for OCR accuracy
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.min(viewport.width, 2200);
+      canvas.height = Math.round(canvas.width * (viewport.height / viewport.width));
+      var scale = canvas.width / viewport.width;
+      var ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale: 2 * scale }) }).promise;
+      try { var t = await ocrDataUrl(canvas.toDataURL('image/png')); if (t && t.trim()) out.push(t.trim()); } catch (e) { /* skip bad page */ }
+    }
+    return out.join('\n\n');
+  }
 
   function getExt(name) {
     var n = String(name || '');
@@ -68,7 +110,7 @@
   // { type: 'module' } and handing it to pdf.js via workerPort fixes that.
   var pdfWorkerPort = null;
 
-  async function extractPdf(file) {
+  async function extractPdf(file, onProgress) {
     var pdfjs = await import('/vendor/pdf.min.mjs');
     try {
       if (!pdfWorkerPort) {
@@ -99,13 +141,15 @@
       pages.push(tc.items.map(function (it) { return it.str; }).join(' '));
     }
     var text = pages.join('\n').trim();
-    if (!text) {
-      throw new Error(T('chat.ingPdfNoText'));
-    }
-    return text;
+    // A SCANNED pdf has little/no embedded text → OCR the rendered pages.
+    if (text.replace(/\s/g, '').length >= MIN_PDF_TEXT) return text;
+    if (onProgress) onProgress(T('chat.ocrPdfScan'));
+    var ocrText = (await ocrPdfPages(doc, onProgress)).trim();
+    if (!ocrText) throw new Error(text ? text : T('chat.ocrPdfEmpty'));
+    return ocrText;
   }
 
-  async function parseFile(file) {
+  async function parseFile(file, onProgress) {
     if (!file) {
       throw new Error(T('chat.ingNoFile'));
     }
@@ -120,18 +164,26 @@
 
     var isPdf = ext === 'pdf' || mime === 'application/pdf';
     var isText = TEXT_EXTS.indexOf(ext) !== -1 || isTextMime(mime);
+    var isImg = isImage(ext, mime);
 
     var rawText;
     var kind;
 
     if (isPdf) {
       try {
-        rawText = await extractPdf(file);
+        rawText = await extractPdf(file, onProgress);
       } catch (e) {
         var msg = (e && e.message) ? e.message : String(e);
         throw new Error(T('chat.ingPdfFail', { msg: msg }));
       }
       kind = 'pdf';
+    } else if (isImg) {
+      // Image → OCR (vie+eng+chi_sim) so the text-only model can read it.
+      if (onProgress) onProgress(T('chat.ocrRunning'));
+      var durl = await fileToDataURL(file);
+      rawText = (await ocrDataUrl(durl)).trim();
+      if (!rawText) throw new Error(T('chat.ocrImageEmpty'));
+      kind = 'image';
     } else if (isText) {
       rawText = await file.text();
       // CSV is kept as-is (the model can read CSV text); flag its kind separately.

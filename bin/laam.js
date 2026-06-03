@@ -7,6 +7,8 @@ import chokidar from 'chokidar';
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { scanAll, getTimeline, getToolCalls, defaultProjectsDir } from '../lib/parser.js';
 import { scanLocal, getLocalTimeline, defaultLocalLogsDir } from '../lib/localParser.js';
@@ -138,7 +140,7 @@ function scan(now = Date.now()) {
 // ---- App ---------------------------------------------------------------
 const app = express();
 const PUBLIC = path.join(ROOT, 'public');
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '16mb' })); // generous: OCR posts base64 page images
 app.use(express.static(PUBLIC));
 
 // Page routes (clean URLs without .html, so nav links stay tidy).
@@ -502,6 +504,43 @@ app.get('/api/nearby', async (req, res) => {
     res.json({ query: q, center: { lat, lng }, radius, results: list.slice(0, limit) });
   } catch (e) {
     res.status(502).json({ error: 'không tìm được địa điểm quanh đây' });
+  }
+});
+
+// ---- OCR (read text from images / scanned PDF pages) via tesseract --------
+// Accepts a base64 data URL, runs the system `tesseract` (vie+eng+chi_sim),
+// returns the recognised text. The client renders scanned PDF pages to PNG and
+// posts them here one by one. Fail-soft so a blurry scan never breaks the chat.
+let _tessChecked = false, _tessOk = false;
+function tesseractAvailable() {
+  if (_tessChecked) return Promise.resolve(_tessOk);
+  return new Promise((resolve) => {
+    execFile('tesseract', ['--version'], { timeout: 5000 }, (err) => { _tessChecked = true; _tessOk = !err; resolve(_tessOk); });
+  });
+}
+app.post('/api/ocr', async (req, res) => {
+  const body = req.body || {};
+  const dataUrl = typeof body.image === 'string' ? body.image : '';
+  const m = dataUrl.match(/^data:image\/(png|jpe?g|webp|bmp|gif|tiff?);base64,(.+)$/i);
+  if (!m) return res.status(400).json({ error: 'ảnh không hợp lệ' });
+  if (!(await tesseractAvailable())) return res.status(503).json({ error: 'OCR chưa sẵn sàng: thiếu tesseract trên máy chủ' });
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 12 * 1024 * 1024) return res.status(413).json({ error: 'ảnh quá lớn cho OCR' });
+  const ext = m[1].toLowerCase().replace('jpeg', 'jpg').replace('tiff', 'tif');
+  const tmp = path.join(os.tmpdir(), 'laam-ocr-' + Date.now() + '-' + Math.random().toString(36).slice(2) + '.' + ext);
+  const lang = (typeof body.lang === 'string' && /^[a-z+_]+$/i.test(body.lang)) ? body.lang : 'vie+eng+chi_sim';
+  try {
+    await fs.promises.writeFile(tmp, buf);
+    const text = await new Promise((resolve, reject) => {
+      execFile('tesseract', [tmp, 'stdout', '-l', lang], { timeout: 45000, maxBuffer: 16 * 1024 * 1024 }, (err, stdout) => {
+        if (err) reject(err); else resolve(stdout || '');
+      });
+    });
+    res.json({ text: String(text) });
+  } catch (e) {
+    res.status(500).json({ error: 'OCR thất bại: ' + ((e && e.message) ? e.message : String(e)) });
+  } finally {
+    fs.promises.unlink(tmp).catch(() => {});
   }
 });
 
