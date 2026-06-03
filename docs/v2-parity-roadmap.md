@@ -103,7 +103,15 @@ UI (port từ kiến trúc kernel+module của v1):
 
 ---
 
-## Wave 4 — Connectors (xây mới hoàn toàn; phụ thuộc Wave 3 tool-loop)
+## Wave 4 — Connectors ✅ HOÀN THÀNH (2026-06-03) — 🎉 FULL PARITY
+
+> Agent Team `laam-v2-wave4` (5 agent: framework/connectors/connapi/connui/toolloop) + TL prep (schema + locked types).
+> Kết quả: **375 test pass** (75 file), `next build` xanh, `/connectors` live. Commits: `039eb08` prep · `f79e8c5` A · `97aff91` U · `cc1270f` C · `ff35733` F · `544fca8` T.
+> Đã có: framework (AES-256-GCM crypto + Postgres store per-user + index user-scoped), 7 connector (demo/github/trello/jira/gdrive/gcal/gmail), API routes, trang /connectors (+nav link), tool-calling loop trong /api/chat (no-connector path giữ nguyên).
+> **⚠️ Cần migrate trên host:** bảng connector_credentials chưa tồn tại trong DB cho tới khi chạy `npm run db:generate && npm run db:migrate` (drizzle-kit không chạy trong sandbox). Set `CONNECTOR_KEY` (hoặc dùng AUTH_SECRET) cho production.
+> Residual: connector icon = first-char glyph (v2 chưa có lucide-react); OAuth connector (google) vẫn paste-token như v1.
+
+## Wave 4 — Connectors (xây mới hoàn toàn; phụ thuộc Wave 3 tool-loop) — chi tiết gốc
 
 - Schema: bảng `connector_credentials` (userId, connectorId, credentials **mã hoá at-rest**, connectedAt). Migration drizzle.
 - API: `GET /api/connectors`, `POST /api/connectors/:id/{connect,disconnect,test}` — per-user, mask secret.
