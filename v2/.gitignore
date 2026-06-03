@@ -1,0 +1,13 @@
+# deps & build
+node_modules/
+.next/
+out/
+next-env.d.ts
+
+# env / secrets (never commit real values — keep .env.example)
+.env
+.env.local
+.env*.local
+
+# logs
+*.log
