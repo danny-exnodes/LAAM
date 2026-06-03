@@ -360,6 +360,24 @@
   }
 
   // ---- Step 5b: build a map ------------------------------------------------
+  // A teardrop pin drawn with inline SVG via L.divIcon — no marker-icon.png
+  // (Leaflet's default icon 404s when the library is vendored offline).
+  function placeIcon() {
+    var fill = cssVar('--accent', '#6d5efc');
+    var svg = '<svg width="26" height="36" viewBox="0 0 26 36" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '<path d="M13 0C5.82 0 0 5.82 0 13c0 9.2 11.1 21.2 12.3 22.5a1 1 0 0 0 1.4 0C14.9 34.2 26 22.2 26 13 26 5.82 20.18 0 13 0z" fill="' + fill + '"/>' +
+      '<circle cx="13" cy="13" r="5.1" fill="#fff"/></svg>';
+    return window.L.divIcon({ className: 'chat-map-pin', html: svg, iconSize: [26, 36], iconAnchor: [13, 36], popupAnchor: [0, -32] });
+  }
+  // A pulsing blue dot for the user's own (GPS) position.
+  function userIcon() {
+    return window.L.divIcon({
+      className: 'chat-map-userdot',
+      html: '<span class="d-ring"></span><span class="d-core"></span>',
+      iconSize: [14, 14], iconAnchor: [7, 7], popupAnchor: [0, -9],
+    });
+  }
+
   function buildMap(raw) {
     try {
       var cfg = JSON.parse(raw);
@@ -400,6 +418,15 @@
         container.appendChild(a);
       }
 
+      // Could not obtain the user's location → tell them plainly.
+      if (cfg.locationDenied) {
+        var note = document.createElement('div');
+        note.className = 'chat-map-note';
+        note.innerHTML = '<span aria-hidden="true">📍</span><span></span>';
+        note.lastChild.textContent = T('chat.mapLocationDenied');
+        container.appendChild(note);
+      }
+
       // Leaflet must init AFTER the element is in the document and sized.
       requestAnimationFrame(function () {
         try {
@@ -414,7 +441,8 @@
           markers.forEach(function (m) {
             if (m == null || m.lat == null || m.lng == null) return;
             var pt = [m.lat, m.lng];
-            var mk = window.L.marker(pt).addTo(map);
+            var isUser = m.current === true || m.me === true;
+            var mk = window.L.marker(pt, { icon: isUser ? userIcon() : placeIcon() }).addTo(map);
             var lbl = m.label || m.name;
             if (lbl) mk.bindPopup(String(lbl));
             bounds.push(pt);
@@ -617,6 +645,24 @@
       '.chat-map-link {',
       '  display: inline-block; margin-top: 6px; font-size: 12.5px;',
       '  color: var(--accent); text-decoration: underline; text-underline-offset: 2px;',
+      '}',
+      // Self-drawn markers (no external PNGs → no 404, works fully offline).
+      '.chat-map-pin { background: none; border: 0; }',
+      '.chat-map-pin svg { display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }',
+      '.chat-map-userdot { background: none; border: 0; }',
+      '.chat-map-userdot .d-core {',
+      '  position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;',
+      '  border-radius: 50%; background: #2563eb; border: 2.5px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4);',
+      '}',
+      '.chat-map-userdot .d-ring {',
+      '  position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px;',
+      '  border-radius: 50%; background: rgba(37,99,235,.35); animation: laam-geo-pulse 2s ease-out infinite;',
+      '}',
+      '@keyframes laam-geo-pulse { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(3.2); opacity: 0; } }',
+      '@media (prefers-reduced-motion: reduce) { .chat-map-userdot .d-ring { animation: none; } }',
+      // Gentle note when the user\'s location could not be obtained.
+      '.chat-map-note {',
+      '  margin-top: 6px; font-size: 12px; color: var(--text-dim); display: flex; gap: 6px; align-items: flex-start;',
       '}',
       // Block errors
       '.chat-block-error {',

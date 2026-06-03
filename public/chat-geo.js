@@ -28,32 +28,83 @@
     } catch (e) { geoMem[key] = null; return null; }
   }
 
+  // ---- Current location (device GPS) ------------------------------------
+  // "from my place", "vị trí của tôi", "当前位置", or a marker flagged current.
+  var CURRENT_RE = /(v[ịi]\s*tr[íi]\s*(hi[ệe]n\s*t[ạa]i|c[ủu]a\s*(t[ôo]i|m[ìi]nh))|ch[ỗo]\s*(t[ôo]i|m[ìi]nh)|đ[ịi]nh\s*v[ịi]|current\s*location|my\s*location|where\s*i\s*am|当前位置|我的位置|我现在的位置|我当前位置)/i;
+  function isCurrentLoc(s) { return CURRENT_RE.test(String(s == null ? '' : s)); }
+  function markerIsCurrent(m) {
+    if (!m) return false;
+    if (m.current === true || m.me === true || m.currentLocation === true || m.current_location === true) return true;
+    return isCurrentLoc(m.name || m.label || m.place || '');
+  }
+  function userLabel() {
+    try { if (window.LAAMI18n) return window.LAAMI18n.t('chat.mapYourLocation'); } catch (e) {}
+    return 'Vị trí của bạn';
+  }
+
+  // Cached one-shot geolocation. undefined=untried, null=denied/unavailable.
+  var _pos; // {lat,lng}|null
+  function getCurrentPosition() {
+    if (_pos !== undefined) return Promise.resolve(_pos);
+    return new Promise(function (resolve) {
+      try {
+        // Geolocation only works in a secure context (HTTPS or localhost).
+        if (!('geolocation' in navigator) || window.isSecureContext === false) { _pos = null; return resolve(null); }
+        navigator.geolocation.getCurrentPosition(
+          function (p) { _pos = { lat: p.coords.latitude, lng: p.coords.longitude }; resolve(_pos); },
+          function () { _pos = null; resolve(null); },
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+        );
+      } catch (e) { _pos = null; resolve(null); }
+    });
+  }
+
   // Resolve one map config object in place; returns true if it changed.
   async function resolveMapCfg(cfg) {
     if (!cfg || typeof cfg !== 'object') return false;
     var changed = false;
     var markers = Array.isArray(cfg.markers) ? cfg.markers : [];
+    var dir = cfg.directions;
+
+    // 0) CURRENT LOCATION — fill from device GPS where the user asked for it.
+    var fromCurrent = dir && (isCurrentLoc(dir.from) || dir.fromCurrent === true);
+    var toCurrent = dir && isCurrentLoc(dir.to);
+    var curMarkers = markers.filter(markerIsCurrent);
+    if (fromCurrent || toCurrent || curMarkers.length) {
+      var pos = await getCurrentPosition();
+      if (pos) {
+        curMarkers.forEach(function (m) { m.lat = pos.lat; m.lng = pos.lng; m.current = true; if (!m.label) m.label = userLabel(); });
+        if (fromCurrent) dir._from = { lat: pos.lat, lng: pos.lng, label: userLabel(), current: true };
+        if (toCurrent) dir._to = { lat: pos.lat, lng: pos.lng, label: userLabel(), current: true };
+        changed = true;
+      } else {
+        // Denied / unsupported / insecure context → fail soft + flag a note.
+        cfg.locationDenied = true; changed = true;
+        if (curMarkers.length) { cfg.markers = markers = markers.filter(function (m) { return !(markerIsCurrent(m) && !hasCoords(m)); }); }
+      }
+    }
 
     // 1) Geocode markers that have a name/label but no usable coords.
     for (var i = 0; i < markers.length; i++) {
       var m = markers[i];
-      if (m && !hasCoords(m)) {
+      if (m && !hasCoords(m) && !markerIsCurrent(m)) {
         var nm = m.name || m.label || m.place;
         if (nm) { var hit = await geocode(nm); if (hit) { m.lat = hit.lat; m.lng = hit.lng; if (!m.label && m.name) m.label = m.name; changed = true; } }
       }
     }
 
     // 2) Directions with from/to but no usable markers → build markers from them.
-    var dir = cfg.directions;
+    //    A current-location endpoint uses the GPS point resolved in step 0.
     var usable = markers.filter(hasCoords);
     if (dir && dir.from && dir.to && usable.length < 2) {
-      var a = await geocode(dir.from);
-      var b = await geocode(dir.to);
+      var a = dir._from || await geocode(dir.from);
+      var b = dir._to || await geocode(dir.to);
       var pts = [];
-      if (a) pts.push({ lat: a.lat, lng: a.lng, label: dir.from });
-      if (b) pts.push({ lat: b.lat, lng: b.lng, label: dir.to });
-      if (pts.length) { cfg.markers = pts; markers = pts; usable = pts; changed = true; }
+      if (a) pts.push({ lat: a.lat, lng: a.lng, label: a.label || dir.from, current: !!a.current });
+      if (b) pts.push({ lat: b.lat, lng: b.lng, label: b.label || dir.to, current: !!b.current });
+      if (pts.length) { cfg.markers = pts; markers = pts; usable = pts.filter(hasCoords); changed = true; }
     }
+    if (dir) { delete dir._from; delete dir._to; } // don't leak temp keys into JSON
 
     // 3) Centre + a connecting line for a 2-point directions map.
     usable = (Array.isArray(cfg.markers) ? cfg.markers : []).filter(hasCoords);
@@ -88,5 +139,5 @@
     return norm;
   }
 
-  window.LAAMChatGeo = { resolveMaps: resolveMaps };
+  window.LAAMChatGeo = { resolveMaps: resolveMaps, getCurrentPosition: getCurrentPosition, isCurrentLoc: isCurrentLoc };
 })();

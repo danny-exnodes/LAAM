@@ -616,6 +616,27 @@
     } catch (err) { attachments = attachments.filter((a) => a !== chip); renderAttachments(); pendingError = (err && err.message) || T('chat.errLoadUrl'); renderTranscript(); }
   });
 
+  // "Use my current location" — primes the geolocation permission (so the GPS
+  // prompt happens on this explicit tap) and drops a hint into the composer so
+  // the model phrases a from-my-location request. Real coords are resolved at
+  // map-render time by chat-geo.js.
+  const attachLocBtn = $('#attach-loc');
+  if (attachLocBtn) attachLocBtn.addEventListener('click', async () => {
+    attachLocBtn.disabled = true;
+    let pos = null;
+    try { if (window.LAAMChatGeo && window.LAAMChatGeo.getCurrentPosition) pos = await window.LAAMChatGeo.getCurrentPosition(); } catch (e) {}
+    attachLocBtn.disabled = false;
+    if (!pos) { pendingError = T('chat.locDenied'); renderTranscript(); return; }
+    if (input) {
+      const hint = T('chat.locHint');
+      const v = input.value;
+      input.value = (v && !/\s$/.test(v) ? v + ' ' : v) + hint + ' ';
+      input.focus();
+      autoGrow();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+
   // ======================================================================
   // Store + module init
   // ======================================================================

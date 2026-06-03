@@ -165,6 +165,11 @@
 
         // --- geo / render ---
         mapOpenGoogle: '↗ Mở chỉ đường trong Google Maps',
+        mapYourLocation: 'Vị trí của bạn',
+        mapLocationDenied: 'Không lấy được vị trí của bạn (chưa cấp quyền hoặc thiết bị không hỗ trợ) — đã dùng các điểm còn lại.',
+        locTitle: 'Dùng vị trí hiện tại của tôi',
+        locHint: 'từ vị trí hiện tại của tôi',
+        locDenied: 'Không lấy được vị trí của bạn — hãy cấp quyền vị trí cho trang (chỉ chạy trên HTTPS hoặc localhost).',
         chartInvalid: '⚠ chart không hợp lệ',
         mapInvalid: '⚠ map không hợp lệ',
         blockInvalid: '⚠ khối không hợp lệ',
@@ -326,6 +331,11 @@
         annDone: 'Done',
 
         mapOpenGoogle: '↗ Open directions in Google Maps',
+        mapYourLocation: 'Your location',
+        mapLocationDenied: 'Could not get your location (permission denied or unsupported device) — using the remaining points.',
+        locTitle: 'Use my current location',
+        locHint: 'from my current location',
+        locDenied: 'Could not get your location — please allow location access (works only on HTTPS or localhost).',
         chartInvalid: '⚠ invalid chart',
         mapInvalid: '⚠ invalid map',
         blockInvalid: '⚠ invalid block',
@@ -486,6 +496,11 @@
         annDone: '已完成',
 
         mapOpenGoogle: '↗ 在 Google 地图中打开路线',
+        mapYourLocation: '你的位置',
+        mapLocationDenied: '无法获取你的位置（未授权或设备不支持）— 已使用其余地点。',
+        locTitle: '使用我的当前位置',
+        locHint: '从我的当前位置出发',
+        locDenied: '无法获取你的位置 — 请允许位置权限（仅在 HTTPS 或 localhost 下可用）。',
         chartInvalid: '⚠ 图表无效',
         mapInvalid: '⚠ 地图无效',
         blockInvalid: '⚠ 区块无效',
