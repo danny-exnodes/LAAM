@@ -659,6 +659,10 @@
   if (!conversations.length) newConversation();
   else { emit('conversations:change', conversations); emit('conversation:switch', current()); renderTranscript(); }
   focusInput();
+  // Enable the drawer slide-transition only AFTER the first paint, so the
+  // mobile sidebar starts fully off-screen instead of animating in (and
+  // momentarily covering the chat) on load.
+  if (chatEl) requestAnimationFrame(() => requestAnimationFrame(() => chatEl.classList.add('sidebar-anim')));
 
   // ----------------------------------------------------------------------
   // Re-render dynamic JS content on a language switch. Static data-i18n nodes
@@ -792,11 +796,20 @@
       @media (max-width: 860px) {
         .chat-sidebar {
           position: absolute; z-index: 30; top: 0; bottom: 0; left: 0; width: min(82vw, 300px);
-          transform: translateX(-100%); transition: transform .22s ease; box-shadow: var(--shadow);
+          transform: translateX(-100%); box-shadow: var(--shadow);
+          pointer-events: none; /* a CLOSED drawer must never swallow taps */
         }
+        /* Animate only after first paint (kernel adds .sidebar-anim) so the
+           closed drawer doesn't slide in over the chat — and never gets stuck
+           mid-transition covering the screen. */
+        .chat.sidebar-anim .chat-sidebar { transition: transform .22s ease; }
         .chat.sidebar-collapsed .chat-sidebar { display: flex; }
-        .chat.sidebar-open .chat-sidebar { transform: none; }
-        .sidebar-scrim { display: block; position: absolute; inset: 0; z-index: 25; background: rgba(0,0,0,0.38); }
+        .chat.sidebar-open .chat-sidebar { transform: none; pointer-events: auto; }
+        /* Scrim shows ONLY while the drawer is open. It used to be display:block
+           unconditionally, which overrode the [hidden] attribute and left an
+           invisible full-screen overlay blocking every tap on mobile. */
+        .sidebar-scrim { display: none; position: absolute; inset: 0; z-index: 25; background: rgba(0,0,0,0.38); }
+        .chat.sidebar-open .sidebar-scrim { display: block; }
         .msg { max-width: 92%; }
         .dock-inner { gap: 5px; padding: 6px 6px 6px 10px; }
         .send, .stop { padding: 9px 14px; }
