@@ -1,0 +1,31 @@
+# Service: v2 app (`v2/`)
+
+Cập nhật: 2026-06-03. Stack: Next.js 16 + React 19 + TS + Tailwind 4 + Auth.js v5 + Drizzle + Postgres. Spec đầy đủ: `docs/v2-plan.md`.
+
+**Dev:** `cd v2 && docker compose up -d && cp .env.example .env && npm install && npm run db:migrate && npm run dev` (:3000). Docker chỉ chạy Postgres+Adminer; app chạy bằng npm; Ollama native (gemma4:e4b).
+
+## Routes
+- Pages: `/login` `/register` `/dashboard` `/chat` `/agents` `/agents/[id]` `/graph` `/machines`
+- API: `/api/auth/[...nextauth]`, `/api/register`, `/api/sync`, `/api/ingest`, `/api/machines`(+`/[id]`), `/api/chat`, `/api/conversations`(+`/[id]`)
+
+## Trạng thái
+- P1 auth/RBAC ✅ · P2 monitoring (sync, Agents, Session-detail, Dashboard: KPIs+cost chart recharts+heatmap+breakdowns+leaderboard, Graph @xyflow/react) ✅ · P3 collector đa máy (đơn giản: machine-token + ingest + /machines + collector) ✅ · **P4 Chat Gemma 4** ✅ built (streaming Ollama, per-user history) — **chờ test runtime**.
+- Verified LIVE (Chrome): P1+P2+P3. Chat cần Ollama gemma4:e4b + login để test.
+
+## Schema (`v2/src/db/schema.ts`)
+Auth.js: user/account/session/verificationToken + `role`. App: machines(`tokenHash`), projects, agent_sessions (+jsonb subAgents/tools/histo, transcriptPath), chat_conversations, chat_messages, audit_log.
+
+## Lib chính
+`src/lib/sync.ts` (upsertSessions, syncLocalMonitoring) · `src/lib/monitoring/*` (parser copy) · `src/lib/machine-token.ts` · `src/lib/format.ts` · `src/auth.ts` + `auth.config.ts` + `proxy.ts`.
+
+## Parity roadmap (v1→v2) — `docs/v2-parity-roadmap.md`
+- **Wave 0 hạ tầng ✅ (2026-06-03)** — làm bằng Agent Team `laam-v2-wave0` (5 agent song song), TDD. Test harness mới: **vitest + RTL + jsdom** (`npm test`). 123 test pass, next build xanh. Đã build:
+  - i18n vi/en/zh: `src/i18n/*` (resolve + I18nProvider/useT/useLang + cookie + 5 dict ported).
+  - `/api/stats`: `src/lib/stats.ts` (+types) + route — port `lib/stats.js`, shape MỚI (Record/flat array, KHÁC v1 raw — cố ý).
+  - SSE: `src/app/api/events/route.ts` + `src/lib/{stuck,events-bus}.ts` + `src/hooks/useLiveSessions.ts`. **Bus publisher chưa wire → để Wave 1.**
+  - rich-render: `src/components/render/{MarkdownView,ChartBlock,MapBlock,LeafletMap,CodeBlock}.tsx`. leaflet qua `dynamic ssr:false`. **SSR-safety mới đảm bảo cấu trúc — exercise thật khi Wave 1/3 nhúng vào page.**
+  - export: `src/lib/export/*` (CSV/MD/JSON/PDF jsPDF).
+- Tiếp theo: **Wave 1 Agents** (filter/search, stuck badge+notification, live ticker, sub-agent detail, tool waterfall, CSV) — dùng SSE + i18n + stats + export của Wave 0; nhớ wire bus publisher vào `/api/sync`.
+
+## Chưa làm
+Bảng `events` (timeline remote), lọc Agents theo máy/owner, connectors + smart-routing (Phase 5), deploy/Tailscale (Phase 6). Phase 0 UI #10/#11 (full-width, gom nút chat) ở app cũ chưa code.
