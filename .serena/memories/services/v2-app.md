@@ -27,7 +27,9 @@ Auth.js: user/account/session/verificationToken + `role`. App: machines(`tokenHa
   - export: `src/lib/export/*` (CSV/MD/JSON/PDF jsPDF).
 - **Wave 1 Agents ✅ (2026-06-03)** — Agent Team `laam-v2-wave1` (3 agent). Live SSE list (`AgentsClient` + `useLiveSessions`, bỏ sync thủ công), filter bar + stuck filter/badge + live ticker (`components/agents/*`), sub-agent detail, tool waterfall (`ToolWaterfall` ở `/agents/[id]`), CSV export. Backend: `/api/events` enrich (projectName+subAgents, `mapRowToLiveSession`) + `/api/sync` publish bus. **I18nProvider đã mount ở `app/layout.tsx`** (đọc cookie lang) → useT chạy app-wide. 160 test, build xanh.
 - **i18n integration**: provider mount ở root layout. Trang cũ (dashboard/chat…) vẫn hardcode vi — swap sang useT dần ở các Wave sau.
-- Tiếp theo: **Wave 2 Dashboard** (dùng `/api/stats` + render charts; recharts) — chỉ thiếu UI.
+- **Wave 2 Dashboard ✅ (2026-06-03)** — Agent Team `laam-v2-wave2` (3 agent kpi/charts/tables). 14 widget ở `components/dashboard/*` tiêu thụ `/api/stats`; `DashboardClient` (fetch + compose) + `page.tsx` shell mỏng (TL). KPIs, doughnut ×3 (recharts), activity timeline dual-axis, cost-by-model, tokens-by-project, model-comparison table, tool leaderboard/errors/slowest, top sessions, heatmap, export CSV/PDF. `.chart-card` thêm vào globals.css. i18n dashboard dict (+9 key Wave 2). 209 test, build xanh.
+- Residual Wave 2: cost-by-project = token-based, cost-by-day bị bỏ (Stats chưa có field cost-per-project / cost-per-day; `components/cost-chart.tsx` cũ giờ orphan). Thêm field vào `computeStats`/Stats nếu cần parity tuyệt đối.
+- Tiếp theo: **Wave 3 Chat** (gap lớn nhất — 8 API endpoint + rich render MarkdownView/Chart/Map + settings + đính kèm/OCR + message actions + export). Nhúng MarkdownView (Wave 0) vào /chat → cũng exercise leaflet SSR thật.
 
 ## Chưa làm
 Bảng `events` (timeline remote), lọc Agents theo máy/owner, connectors + smart-routing (Phase 5), deploy/Tailscale (Phase 6). Phase 0 UI #10/#11 (full-width, gom nút chat) ở app cũ chưa code.

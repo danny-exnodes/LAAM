@@ -56,7 +56,14 @@ Data đã có trong `agentSessions`; chủ yếu là UI + SSE (Wave 0.2).
 
 ---
 
-## Wave 2 — Dashboard (chỉ thiếu UI, dùng `/api/stats`)
+## Wave 2 — Dashboard ✅ HOÀN THÀNH (2026-06-03)
+
+> Agent Team `laam-v2-wave2` (3 agent: kpi/charts/tables) + TL integration (DashboardClient + page shell + .chart-card).
+> Kết quả: **209 test pass** (45 file), `next build` xanh. Commits: `5a95005` B charts · `496fada` A kpi · `53ca8a7` C tables · `9a1808b` integration.
+> Đã có (14 widget, tiêu thụ `/api/stats`): KpiGrid (đủ totals), doughnut status/model/branch, activity timeline dual-axis, cost-by-model, tokens-by-project, model-comparison table, tool leaderboard/errors/slowest, top sessions (duration+tokens), heatmap (hover+legend), export CSV (model-comparison) + PDF (summary). i18n vi/en/zh.
+> Residual: (1) **cost-by-project là token-based** (Stats.byProject chưa có field cost); (2) **cost-by-day bị bỏ** (Stats chưa có series cost theo ngày; cost-chart.tsx cũ giờ orphan) — cả hai cần thêm field vào Stats nếu muốn parity tuyệt đối. Heatmap accent hardcode #6d5efc.
+
+## Wave 2 — Dashboard (chỉ thiếu UI, dùng `/api/stats`) — chi tiết gốc
 
 - Doughnut: status / model / branch distribution.
 - Activity timeline dual-axis (sessions + tokens theo thời gian).
