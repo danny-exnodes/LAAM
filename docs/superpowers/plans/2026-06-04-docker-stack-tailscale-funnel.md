@@ -155,6 +155,16 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# --- OCR: system tesseract + language data for /api/ocr (execFile "tesseract") ---
+# Needs root, so it runs BEFORE `USER node`. eng is NOT bundled with Alpine's
+# tesseract-ocr package, and route.ts defaults to `-l vie+eng+chi_sim`, so eng
+# must be listed explicitly or every default OCR call fails. (Verified by the
+# claude-ocr session: see .serena/memories/decisions/ocr-tesseract-docker.md.)
+RUN apk add --no-cache \
+      tesseract-ocr \
+      tesseract-ocr-data-eng \
+      tesseract-ocr-data-vie \
+      tesseract-ocr-data-chi_sim
 # Run as the built-in non-root user.
 USER node
 COPY --from=builder --chown=node:node /app/.next/standalone ./
@@ -326,7 +336,15 @@ docker exec laam-v2-app node -e "fetch('http://host.docker.internal:11434/api/ta
 ```
 Expected: `ollama-ok <n>` with n ≥ 1 (the `qwen3-vl` model is listed). Proves `host.docker.internal:11434` bridges into the host GPU Ollama.
 
-- [ ] **Step 6: Confirm the `:3000` dev server is still alive (was never interrupted)**
+- [ ] **Step 6: Confirm Tesseract OCR is available in the image (all 3 languages)**
+
+Run:
+```powershell
+docker exec laam-v2-app tesseract --list-langs 2>&1
+```
+Expected: list includes `chi_sim`, `eng`, `vie` (proves the `apk add` baked the engine + all three traineddata; `eng` present guards the default `vie+eng+chi_sim` path). If any is missing, the runner-stage `apk add` is wrong — fix and rebuild.
+
+- [ ] **Step 7: Confirm the `:3000` dev server is still alive (was never interrupted)**
 
 Run:
 ```powershell
@@ -480,6 +498,7 @@ git -C "D:\Projects\personal_projects\LAAM" commit -m "docs(serena): record Dock
 - [ ] `docker build` produces a clean production image; standalone `server.js` + copied static assets verified.
 - [ ] `docker compose up -d` → app+postgres+adminer healthy.
 - [ ] `http://localhost:3900` serves the app with working assets; container reaches Postgres (internal) and host Ollama.
+- [ ] Tesseract OCR works in-container: `tesseract --list-langs` → chi_sim/eng/vie (per claude-ocr handoff).
 - [ ] `https://danny-gaming-pc.tail41dda4.ts.net` serves the app; CSRF cookie issued over HTTPS; owner can register/login.
 - [ ] `:3000` dev server never interrupted during Tasks 1–9.
 - [ ] No secrets committed; `.env` still gitignored.
