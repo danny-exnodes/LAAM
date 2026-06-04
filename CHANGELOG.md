@@ -9,6 +9,13 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Agent Harness SP-3 (Memory & Proactive)
+- **Lưu tool turns**: bảng mới `chat_tool_call` ghi lại từng lượt gọi công cụ (tên/args/kết quả/ok) trong một lượt chat — trước đây bị bỏ, chỉ lưu câu trả lời cuối. `chat_message` giữ nguyên (consumer hiện có không đổi).
+- **Tóm tắt hội thoại dài**: khi lịch sử vượt ngân sách ký tự, các lượt cũ được **model tóm tắt** (cuộn) và giữ nguyên văn các lượt gần nhất — chat không vỡ context trên model local 16GB.
+- **Cảnh báo chủ động**: trợ lý tự nêu trong chat khi có agent **đang kẹt** hoặc **chi phí cao** (ngưỡng tuyệt đối/burn-rate + dedupe theo hội thoại + cooldown 6h, không lặp mỗi lượt).
+- Hạ tầng: migration **`0003`** (additive — `chat_tool_call` + cột `summary`/`summarizedThroughId`/`proactiveState` trên `chat_conversation`); module thuần `src/lib/agent/{persist,summarize,proactive}.ts` + loader chung `tools/laam/_load.ts`. **435 test** xanh, `tsc` sạch, `next build` xanh.
+- ⚠️ **Cần chạy trên host:** `npm run db:migrate` (áp `0003`) trước khi chạy bản này.
+
 ### Changed
 - **Tái cấu trúc repo:** v2 (Next.js) được đưa lên **root**; v1 (vanilla/Express) archive ở branch `archive/v1`. Root giờ là app v2.
 - Gộp `.gitignore`; viết lại `CLAUDE.md`/`README` cho v2.
