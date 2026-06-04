@@ -1,17 +1,24 @@
+# deps & build
 node_modules/
-.DS_Store
-*.log
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
 
-# local env / secrets — never commit real tokens (keep the template)
+# env / secrets (never commit real values — keep .env.example)
 .env
+.env.local
+.env*.local
 .env.*
 !.env.example
 
-# user-entered connector credentials (tokens) — NEVER commit
+# user-entered connector credentials / local data — NEVER commit
 connectors.json
 .laam/
 
-# screenshot/test proof artifacts
-chat-render-proof/
-responsive-proof/
+# logs & os
+*.log
+.DS_Store
+
+# screenshot / test proof artifacts
 *-proof/

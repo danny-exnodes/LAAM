@@ -92,7 +92,7 @@ export function MachinesManager({
             {issued.token}
           </code>
           <p className="mt-3 text-xs text-neutral-600 dark:text-neutral-400">
-            Chạy collector trên máy đó (trong thư mục <code>v2/</code>):
+            Chạy collector trên máy đó (trong thư mục gốc dự án):
           </p>
           <code className="mt-1 block overflow-x-auto rounded-lg bg-neutral-900 px-3 py-2 font-mono text-xs text-neutral-200">
             {`LAAM_URL=${origin} LAAM_MACHINE_TOKEN=${issued.token} node collector/laam-collector.mjs`}

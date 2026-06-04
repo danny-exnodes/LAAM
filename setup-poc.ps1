@@ -104,7 +104,7 @@ Ok "Build xong"
 Write-Host "`n== HOAN TAT ==" -ForegroundColor White
 Write-Host @"
 Khoi dong app:
-    cd `"$V2`"; npm run start         # http://localhost:3000
+    npm run start                     # http://localhost:3000 (chay tai root)
 
 Nghiem thu POC (4 nhiem vu):
   1) /register   -> tai khoan dau = owner -> dang nhap
