@@ -7,6 +7,8 @@
 
 @theme {
   --color-accent: #6d5efc;
+  --metric-gpu: #22d3ee; /* cyan-400 — graphics accent (GPU) */
+  --metric-vram: #38bdf8; /* sky-400 — graphics memory accent (VRAM) */
 }
 
 /* App-like input feel on phones: kill double-tap-to-zoom + iOS text auto-zoom.
