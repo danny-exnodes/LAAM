@@ -1,0 +1,21 @@
+# Build artifacts & deps (re-installed/built inside the image)
+node_modules
+.next
+out
+
+# Secrets — supplied at runtime via compose env_file, never baked in
+.env
+.env.*
+
+# VCS / tooling / docs not needed at runtime
+.git
+.gitignore
+.serena
+docs
+collector
+drizzle.config.ts
+**/*.test.ts
+**/*.test.tsx
+vitest.config.*
+.vscode
+.claude
