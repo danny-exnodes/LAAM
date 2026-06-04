@@ -6,7 +6,7 @@ Ngày: 2026-06-04. Bối cảnh: chốt model cho POC chạy trên máy host (RT
 - **1 model duy nhất** cho cả chat lẫn tool-call: **`qwen3-vl:8b-instruct-q8_0`** (Q8, 9.8 GB, bản *instruct*).
 - **KHÔNG smart-routing Gemma↔Qwen** ở POC — và lưu ý routing **vốn chưa từng được implement** (code `/api/chat` chỉ dùng `payload.model` cho cả tool-loop; grep `smart/routeModel/qwen` trong source = rỗng).
 - **OCR vẫn do Tesseract** (vie+eng+chi_sim), độc lập model. **Vision của model CHƯA nối dây**: `ChatClient.onAddFiles` → `/api/ocr` → text → `withAttachments` ghép vào message; `buildOllamaPayload` chỉ gửi text. Muốn model "nhìn" ảnh thật = enhancement sau (đẩy `images` vào payload Ollama).
-- **Cấu hình ĐỦ:** `DEFAULT_CHAT_MODEL=qwen3-vl:8b-instruct-q8_0` trong `v2/.env`. `/api/chat/info` trả về giá trị này, `ChatClient` preselect (ghi đè hardcode `gemma4:e4b` ở `types.ts`). Không cần sửa source.
+- **Cấu hình ĐỦ:** `DEFAULT_CHAT_MODEL=qwen3-vl:8b-instruct-q8_0` trong `.env`. `/api/chat/info` trả về giá trị này, `ChatClient` preselect (ghi đè hardcode `gemma4:e4b` ở `types.ts`). Không cần sửa source.
 
 ## Lý do
 - Lý do smart-routing (Gemma rớt tool-call ~2/3 — xem [[v2-architecture]]) **biến mất** nếu lấy thẳng tool-caller giỏi làm model duy nhất. Qwen3-VL đủ mạnh chat + đa phương thức + tool.
@@ -16,5 +16,5 @@ Ngày: 2026-06-04. Bối cảnh: chốt model cho POC chạy trên máy host (RT
 
 ## Hệ quả / liên quan
 - **Lệch khỏi [[v2-architecture]]** (vốn khoá `gemma4:e4b` default + smart-routing). Chỉ áp dụng cho **POC**; revisit khi scale >1 GPU hoặc cần chất lượng chat cao hơn. Service: [[v2-app]]. Host: xem checkpoint + memory host-target.
-- Setup tự động: `v2/setup-poc.ps1`.
+- Setup tự động: `setup-poc.ps1`.
 - Nghiệm thu quan trọng nhất: `/chat` "liệt kê repo của tôi" sau khi connect GitHub → tool-call chạy thật. Pass = chốt single-model.
