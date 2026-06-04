@@ -17,6 +17,7 @@ import {
   timestamp,
   primaryKey,
   unique,
+  boolean,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 
@@ -160,6 +161,11 @@ export const chatConversations = pgTable("chat_conversation", {
     .references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull().default("Cuộc trò chuyện mới"),
   model: text("model"),
+  // SP-3 Memory: rolling summary + watermark (id message cuối đã summarize).
+  summary: text("summary"),
+  summarizedThroughId: text("summarizedThroughId"),
+  // SP-3 Proactive: dedupe per-conversation — alert key -> epoch ms lần nêu cuối.
+  proactiveState: jsonb("proactiveState").$type<{ surfaced: Record<string, number> }>(),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
@@ -177,6 +183,27 @@ export const chatMessages = pgTable("chat_message", {
   // assistant message; user rows stay 0. Default 0 so old rows read cleanly.
   tokensIn: integer("tokensIn").notNull().default(0),
   tokensOut: integer("tokensOut").notNull().default(0),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+});
+
+// SP-3 — lưu mỗi lượt tool (tool_call + result) mà orchestrator chạy trong 1 turn.
+// chat_message GIỮ NGUYÊN (role 'user'|'assistant'); bảng này tách riêng nên consumer
+// hiện có (/api/conversations/[id], ChatClient) không đổi. SP-4 đọc để render.
+export const chatToolCalls = pgTable("chat_tool_call", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  conversationId: text("conversationId")
+    .notNull()
+    .references(() => chatConversations.id, { onDelete: "cascade" }),
+  // assistant message mà lượt tool phục vụ; nullable cho ca câu trả lời rỗng.
+  messageId: text("messageId").references(() => chatMessages.id, { onDelete: "cascade" }),
+  seq: integer("seq").notNull().default(0),
+  name: text("name").notNull(),
+  args: jsonb("args"),
+  result: jsonb("result"),
+  ok: boolean("ok").notNull().default(true),
+  bytes: integer("bytes").notNull().default(0),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
 
@@ -207,6 +234,7 @@ export type ConnectorCredential = typeof connectorCredentials.$inferSelect;
 
 export type ChatConversation = typeof chatConversations.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+export type ChatToolCall = typeof chatToolCalls.$inferSelect;
 
 export type SubAgentJson = {
   id: string;
