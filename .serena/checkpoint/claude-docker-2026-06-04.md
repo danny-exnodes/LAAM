@@ -60,3 +60,13 @@ Detail: [[docker-deploy]]. Plan: docs/superpowers/plans/2026-06-04-docker-stack-
   their unfinished work, not mine. Baseline unaffected by construction. Can run in
   the worktree (clean main + standalone) on request.
 - Funnel now serves the Docker app, not dev :3000. Reversible: `tailscale funnel --bg 3000`.
+
+## Update — 4 (2026-06-04) — Hardware Analytics feature SHIPPED
+- Designed (tech-lead) + spec + plan + IMPLEMENTED CPU/GPU/VRAM/RAM realtime on /machines.
+- Zero-dep host sampler (host-agent/laam-host-metrics.mjs :47600) → /api/host/metrics
+  (auth-gated, 307->login unauth) → useHostMetrics poll 2s → 4 gauge cards + 2 trend charts.
+- 2 new tokens (--metric-gpu/--metric-vram). i18n vi/en/zh. See [[host-metrics-sampler]].
+- VERIFIED live: sampler real data; container reaches it via host.docker.internal;
+  next build + 810 tests green; prod image rebuilt + healthy on :3900.
+- PENDING: sampler durability (Windows service) [[host-metrics-sampler-durability]];
+  visual confirm of cards needs a logged-in /machines (build-verified, not screenshotted).
