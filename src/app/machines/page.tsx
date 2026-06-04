@@ -6,6 +6,7 @@ import { machines } from "@/db/schema";
 import { AppHeader } from "@/components/app-header";
 import { PageHeader } from "@/components/page-header";
 import { MachinesManager } from "@/components/machines-manager";
+import { HardwareAnalytics } from "@/components/machines/HardwareAnalytics";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +44,7 @@ export default async function MachinesPage() {
           title="Machines"
           subtitle="Mỗi máy dev chạy collector để đẩy session về đây (giám sát đa máy). Máy chủ nội bộ tự quét bằng nút Đồng bộ — không cần token."
         />
+        <HardwareAnalytics />
         <MachinesManager initial={list} canManage={canManage} />
       </main>
     </div>
