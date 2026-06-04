@@ -1,11 +1,20 @@
 import { eq, asc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { chatConversations, chatMessages } from "@/db/schema";
+import { chatConversations, chatMessages, chatToolCalls } from "@/db/schema";
 import { chatTools } from "@/lib/connectors";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { runToolRounds, type ChatMessage, type OllamaChatResponse } from "@/lib/agent/orchestrator";
+import { extractToolTurns } from "@/lib/agent/persist";
+import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
+import {
+  detectAlerts,
+  selectNewAlerts,
+  formatProactiveNotice,
+  type ProactiveState,
+} from "@/lib/agent/proactive";
+import { loadSessionRows } from "@/lib/agent/tools/laam/_load";
 
 const OLLAMA_URL = (process.env.OLLAMA_URL ?? "http://localhost:11434").replace(/\/$/, "");
 const MODEL = process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
@@ -60,6 +69,7 @@ function readLang(req: Request): string {
 
 // POST /api/chat — { conversationId?, message }. Streams the Gemma 4 reply
 // (plain text tokens) and persists both the user + assistant messages.
+// SP-3: also runs summarize, proactive detection, and persists tool turns.
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -74,8 +84,11 @@ export async function POST(req: Request) {
   }
   const model = typeof body.model === "string" && body.model.trim() ? body.model : MODEL;
 
-  // Resolve or create the conversation (must belong to the user).
+  // Resolve/create conversation; giữ summary/watermark/proactiveState (SP-3).
   let conversationId = body.conversationId;
+  let convSummary: string | null = null;
+  let convWatermark: string | null = null;
+  let convProactive: ProactiveState | null = null;
   if (conversationId) {
     const rows = await db
       .select()
@@ -85,6 +98,9 @@ export async function POST(req: Request) {
     if (!rows[0] || rows[0].userId !== userId) {
       return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
     }
+    convSummary = rows[0].summary ?? null;
+    convWatermark = rows[0].summarizedThroughId ?? null;
+    convProactive = (rows[0].proactiveState as ProactiveState | null) ?? null;
   } else {
     conversationId = crypto.randomUUID();
     await db.insert(chatConversations).values({
@@ -99,19 +115,39 @@ export async function POST(req: Request) {
   await db.insert(chatMessages).values({ conversationId: convId, role: "user", content: message });
 
   const history = await db
-    .select()
+    .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })
     .from(chatMessages)
     .where(eq(chatMessages.conversationId, convId))
     .orderBy(asc(chatMessages.createdAt));
+
+  const now = Date.now();
+  const lang = readLang(req);
+
+  // --- Summarize (SP-3): bound lịch sử replay theo char-budget. ---
+  const plan = planHistory(history as HistoryMsg[], convSummary, convWatermark);
+  let effectiveSummary = convSummary;
+  if (plan.needsSummary) {
+    try {
+      effectiveSummary = await summarizeMessages(plan.toSummarize, convSummary, lang, {
+        callModel: (prompt) => callModelText(prompt, model),
+      });
+      const through = plan.toSummarize[plan.toSummarize.length - 1]?.id ?? null;
+      await db
+        .update(chatConversations)
+        .set({ summary: effectiveSummary, summarizedThroughId: through })
+        .where(eq(chatConversations.id, convId));
+    } catch (e) {
+      console.error("[chat] summarize failed (fail-soft)", e); // giữ summary cũ; vẫn replay bounded
+    }
+  }
+
   const payload = buildOllamaPayload(
     body,
-    history.map((m) => ({ role: m.role, content: m.content })),
+    plan.toReplay.map((m) => ({ role: m.role, content: m.content })),
     { model: MODEL, system: SYSTEM },
   );
 
   // Internal tools (LAAM) LUÔN có; connector tools nếu user đã kết nối.
-  const now = Date.now();
-  const lang = readLang(req);
   let connectorTools = [] as Awaited<ReturnType<typeof chatTools>>;
   try {
     connectorTools = await chatTools(userId);
@@ -120,16 +156,38 @@ export async function POST(req: Request) {
   }
   const tools = modelToolSchemas(INTERNAL_TOOLS, connectorTools);
 
-  // System prompt động (ghi đè default tĩnh trong buildOllamaPayload), trừ khi user tự đặt system.
-  payload.messages[0] = {
-    role: "system",
-    content:
-      typeof body.system === "string" && body.system.trim()
-        ? body.system
-        : buildSystemPrompt({ lang, now, toolNames: tools.map((t) => t.function.name) }),
-  };
+  // --- System prompt động + proactive notice COMPOSE-AROUND buildSystemPrompt (SP-3). ---
+  const hasSystemOverride = typeof body.system === "string" && body.system.trim().length > 0;
+  let systemContent = hasSystemOverride
+    ? (body.system as string)
+    : buildSystemPrompt({ lang, now, toolNames: tools.map((t) => t.function.name) });
+  if (!hasSystemOverride) {
+    try {
+      const rows = await loadSessionRows();
+      const { toSurface, newState } = selectNewAlerts(detectAlerts(rows, now), convProactive, now);
+      const notice = formatProactiveNotice(toSurface, lang);
+      if (notice) {
+        systemContent = systemContent + "\n\n" + notice;
+        await db
+          .update(chatConversations)
+          .set({ proactiveState: newState })
+          .where(eq(chatConversations.id, convId));
+      }
+    } catch (e) {
+      console.error("[chat] proactive detect failed (fail-soft)", e);
+    }
+  }
+  payload.messages[0] = { role: "system", content: systemContent };
 
-  // Một lượt chat luôn chạy tool-loop (do internal tools luôn bật).
+  // Summary làm system message #2 (sau persona), nếu có.
+  if (effectiveSummary) {
+    payload.messages.splice(1, 0, {
+      role: "system",
+      content: "Bối cảnh hội thoại trước (tóm tắt): " + effectiveSummary,
+    });
+  }
+
+  // Tool-loop. baseLen chụp SAU summary+proactive, TRƯỚC runToolRounds (verdict A1).
   const dispatch = makeDispatch(INTERNAL_TOOLS, { userId, now, lang });
   const callOllama = async (
     messages: ChatMessage[],
@@ -149,11 +207,17 @@ export async function POST(req: Request) {
     if (!r.ok) throw new Error(`Ollama ${r.status}`);
     return (await r.json()) as OllamaChatResponse;
   };
+
+  const baseLen = payload.messages.length;
+  let toolTurns: ReturnType<typeof extractToolTurns> = [];
   try {
     payload.messages = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
+    toolTurns = extractToolTurns(payload.messages, baseLen);
   } catch {
-    // Tool loop lỗi (Ollama/connector) — stream trả lời thường từ payload gốc.
+    // Tool loop lỗi (Ollama/connector) — stream trả lời thường từ payload.
   }
+
+  const assistantMsgId = crypto.randomUUID();
 
   let ollamaRes: Response;
   try {
@@ -183,7 +247,6 @@ export async function POST(req: Request) {
       const encoder = new TextEncoder();
       let buf = "";
       let full = "";
-      // Per-turn token usage from Ollama's final ({done:true}) chunk.
       let tokensIn = 0;
       let tokensOut = 0;
       try {
@@ -215,21 +278,37 @@ export async function POST(req: Request) {
       } finally {
         if (full) {
           await db.insert(chatMessages).values({
+            id: assistantMsgId,
             conversationId: convId,
             role: "assistant",
             content: full,
             tokensIn,
             tokensOut,
           });
-          // Trailing metadata frame: a U+001E (record separator) the client
-          // strips from the visible text, carrying this turn's token counts so
-          // they show live without a reload.
           try {
-            controller.enqueue(
-              encoder.encode("" + JSON.stringify({ i: tokensIn, o: tokensOut })),
-            );
+            // U+001E record separator — client strips this metadata frame from visible text.
+            // Keeps the existing {i,o} token-usage protocol (owned by SP-4) unchanged.
+            controller.enqueue(encoder.encode("\x1e" + JSON.stringify({ i: tokensIn, o: tokensOut })));
           } catch {
-            /* response already cancelled (client aborted) — nothing to send */
+            /* client aborted */
+          }
+        }
+        if (toolTurns.length) {
+          try {
+            await db.insert(chatToolCalls).values(
+              toolTurns.map((t) => ({
+                conversationId: convId,
+                messageId: full ? assistantMsgId : null,
+                seq: t.seq,
+                name: t.name,
+                args: t.args,
+                result: t.result,
+                ok: t.ok,
+                bytes: t.bytes,
+              })),
+            );
+          } catch (e) {
+            console.error("[chat] persist tool turns failed (fail-soft)", e);
           }
         }
         await db
@@ -248,4 +327,16 @@ export async function POST(req: Request) {
       "cache-control": "no-cache",
     },
   });
+}
+
+// Helper SP-3: gọi model 1 lần non-streaming (cho summarize). Hoisted — đặt cuối file OK.
+async function callModelText(prompt: string, model: string): Promise<string> {
+  const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], stream: false }),
+  });
+  if (!r.ok) throw new Error(`Ollama ${r.status}`);
+  const j = (await r.json()) as OllamaChatResponse;
+  return j?.message?.content ?? "";
 }
