@@ -21,6 +21,9 @@ describe("validateArgs", () => {
   test("args không phải object → lỗi", () => {
     expect(validateArgs(params, 42).ok).toBe(false);
   });
+  test("mảng không được coi là object hợp lệ", () => {
+    expect(validateArgs(params, [1, 2]).ok).toBe(false);
+  });
 });
 
 describe("boundOutput", () => {
@@ -30,6 +33,10 @@ describe("boundOutput", () => {
   test("cắt + đánh dấu khi quá ngưỡng", () => {
     const out = boundOutput({ s: "x".repeat(20) }, 10) as { _truncated?: boolean };
     expect(out._truncated).toBe(true);
+  });
+  test("undefined → trả error rõ ràng", () => {
+    const out = boundOutput(undefined) as { error?: string };
+    expect(out.error).toBeTruthy();
   });
 });
 

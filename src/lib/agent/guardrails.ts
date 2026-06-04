@@ -11,9 +11,11 @@ export function validateArgs(
   parameters: object,
   args: unknown,
 ): { ok: true; value: Record<string, unknown> } | { ok: false; error: string } {
-  if (args != null && typeof args !== "object") return { ok: false, error: "args phải là object" };
+  if (args != null && (typeof args !== "object" || Array.isArray(args)))
+    return { ok: false, error: "args phải là object" };
   const obj = (args ?? {}) as Record<string, unknown>;
   const schema = (parameters ?? {}) as JsonSchema;
+  // Coi chuỗi rỗng như "thiếu" cho field required (id rỗng vô nghĩa) — cố ý lệch khỏi JSON Schema chuẩn.
   for (const key of schema.required ?? []) {
     const v = obj[key];
     if (v === undefined || v === null || v === "") return { ok: false, error: `thiếu tham số bắt buộc: ${key}` };
@@ -35,13 +37,14 @@ export function validateArgs(
 }
 
 export function boundOutput(result: unknown, maxBytes = 8192): unknown {
+  if (result === undefined) return { error: "handler không trả về dữ liệu" };
   let json: string;
   try {
     json = JSON.stringify(result);
   } catch {
     return { error: "kết quả không serialize được" };
   }
-  if (json == null || json.length <= maxBytes) return result;
+  if (json.length <= maxBytes) return result;
   return { _truncated: true, preview: json.slice(0, maxBytes) };
 }
 

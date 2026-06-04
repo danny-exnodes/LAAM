@@ -1,7 +1,6 @@
 // L1 — dựng system prompt động (thuần). `now` inject để test ổn định.
 const BASE =
-  "Bạn là LAAM, trợ lý nội bộ thân thiện. Trả lời ngắn gọn, chính xác, hữu ích. " +
-  "Dùng tiếng Việt khi người dùng dùng tiếng Việt.";
+  "Bạn là LAAM, trợ lý nội bộ thân thiện. Trả lời ngắn gọn, chính xác, hữu ích.";
 
 const LANG_HINT: Record<string, string> = {
   vi: "Trả lời bằng tiếng Việt.",
