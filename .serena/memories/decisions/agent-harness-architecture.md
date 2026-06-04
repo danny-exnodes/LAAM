@@ -12,7 +12,7 @@ Harness hiện tại = `/api/chat` + `lib/connectors` (tool-loop `runToolRounds`
 L0 Orchestrator (tổng quát hoá runToolRounds) · L1 Context assembly (system prompt động) · L2 Tool dispatch (union schema + 1 hàm route) · L3 Internal tools (read-only) · L4 Guardrails (validate/ground/gate) · L5 Memory · L6 UX feedback.
 
 ## Build order
-- **SP-1 Foundation** (L0+L1+L2+L3 read + L4 min) — lát cắt dọc, read-only, không đụng connectors/schema. Lấp nghịch lý lớn nhất + lập hợp đồng các lớp.
+- **SP-1 Foundation** (L0+L1+L2+L3 read + L4 min) — lát cắt dọc, read-only, không đụng connectors/schema. Lấp nghịch lý lớn nhất + lập hợp đồng các lớp. **✅ IMPLEMENTED** trên branch `worktree-agent-harness-sp1` (398 test, build xanh, READY TO MERGE — chưa merge). Code hợp đồng thật: `src/lib/agent/*`.
 - **SP-2** Actions & safety (read/write + gate write).
 - **SP-3** Memory & proactive (persist tool turns + summarize + chủ động báo stuck/cost-spike). ⚠️ đụng schema → migration.
 - **SP-4** UX feedback (stream tool events → UI). ⚠️ đụng `components/chat/*` → phối hợp session FE.

@@ -3,7 +3,9 @@
 **Nguồn chân lý:** `docs/superpowers/specs/2026-06-04-agent-harness-architecture.md`
 + decision [[agent-harness-architecture]]. Roadmap đã chốt.
 
-**SP-1 Foundation:** spec `docs/superpowers/specs/2026-06-04-agent-harness-sp1-foundation-design.md` (đã duyệt) + plan TDD `docs/superpowers/plans/2026-06-04-agent-harness-sp1-foundation.md` (đã viết, **chờ execute**). Hợp đồng §2 spec là cái SP-2/3/4 trích dẫn. SP-1 chỉ đụng `src/app/api/chat/route.ts` + thêm `src/lib/agent/*` (+ migrate `tool-loop.test.ts`→`orchestrator.test.ts`); **không** đụng `components/chat/*`, schema, connectors.
+**SP-1 Foundation: ✅ ĐÃ IMPLEMENT** (branch `worktree-agent-harness-sp1`, 8 commit, 398 test pass, build xanh, READY TO MERGE — chưa merge, chờ user). Spec `docs/superpowers/specs/2026-06-04-agent-harness-sp1-foundation-design.md` + plan `docs/superpowers/plans/2026-06-04-agent-harness-sp1-foundation.md`. **Hợp đồng §2 spec (`src/lib/agent/types.ts`) là cái SP-2/3/4 trích dẫn** — giờ đã có code thật: `Tool/ToolContext/ToolEvent`, `makeDispatch` (chokepoint), `runToolRounds` (orchestrator), `INTERNAL_TOOLS`+`modelToolSchemas`, `guard/validateArgs/boundOutput`, 5 tool `laam_*`.
+- SP-1 đã đụng `src/app/api/chat/route.ts` (refactor: bỏ runToolRounds cục bộ, dùng `src/lib/agent/*`) + thêm `src/lib/agent/**` + xoá `tool-loop.test.ts` (migrate sang `orchestrator.test.ts`). **KHÔNG** đụng `components/chat/*`, schema, connectors.
+- ⚠️ Ai đang sửa `src/app/api/chat/route.ts` ở session khác: branch SP-1 đã refactor file này — rebase/merge cẩn thận.
 
 ## Cảnh báo file dùng chung — đừng giẫm chân
 - 🟠 **`src/app/api/chat/route.ts`** — SP-1 sẽ **refactor** route này (tách orchestrator ra `src/lib/agent/*`, route co thành adapter mỏng). Ai sửa `/api/chat` trước khi SP-1 chạy → báo để đồng bộ.

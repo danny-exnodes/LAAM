@@ -27,3 +27,11 @@ Vai trò: technical consultant. Nhiệm vụ: khảo sát hiện trạng + lên 
 ## Blockers / Risks
 - Coordination: SP-1 refactor `/api/chat`; SP-4 đụng `components/chat/*` (session FE). Đã ghi cảnh báo ở backlog/agent-harness-coordination.
 - Roadmap mới là thiết kế — chưa có code/test; success criteria từng SP ở §4 của spec.
+
+## Update — SP-1 ĐÃ IMPLEMENT (subagent-driven)
+- Thực thi SP-1 bằng subagent-driven (worktree `.claude/worktrees/agent-harness-sp1`, branch **`worktree-agent-harness-sp1`**), TDD, mỗi task có spec+quality review.
+- 8 commit (a873774→684cad9): contracts · guardrails(+hardening) · context · orchestrator(move runToolRounds, execute→dispatch) · registry/dispatch · 5 internal tools · wire /api/chat + migrate tool-loop.test→orchestrator.test.
+- **Verify:** `npx vitest run` = **398 pass** (was 375; +tests mới, −3 tool-loop đã migrate); `tsc --noEmit` sạch; `npm run build` xanh. Final review: READY TO MERGE.
+- Ràng buộc giữ đúng: KHÔNG đổi schema, KHÔNG thêm npm dep, KHÔNG đụng `components/chat/*` hay `lib/connectors/*` (chỉ thêm `src/lib/agent/*` + sửa `src/app/api/chat/route.ts`).
+- Minor còn lại (không chặn): find-stuck `stuck` field thừa khi thresholdMin<10; query-stats nhân bản mapping SessionRow của /api/stats (có comment cảnh báo).
+- **Chưa merge vào main** (chờ user quyết — đang có việc chưa commit của 2 session song song). Branch sẵn sàng review/PR/merge.
