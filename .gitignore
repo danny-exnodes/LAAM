@@ -22,3 +22,6 @@ connectors.json
 
 # screenshot / test proof artifacts
 *-proof/
+
+# agent worktrees (other sessions)
+.claude/worktrees/
