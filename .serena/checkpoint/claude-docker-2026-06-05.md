@@ -27,9 +27,8 @@ Spec: `docs/superpowers/specs/2026-06-05-settings-hub-machines-subpage-design.md
 - Commit on main: `feat(settings): Settings hub + Machines as /settings/machines + nav swap`.
 
 ## Next steps
-- **Prod container NOT rebuilt** — public :3900 still runs the prior image (old nav). Rebuild to
-  ship: `git -C <wt> merge --ff-only main; docker build -t laam-app:latest <wt>; docker compose up -d app`.
-  (Left for explicit go since it changes the public app's nav.)
+- **Prod container REBUILT + deployed** (user go) — image @ main `6e2b303`, healthy on :3900,
+  public funnel 200, host sampler up. Routes /settings, /settings/machines, /machines all 307.
 - Visual confirm (logged-in /settings on mobile) — build-verified, not screenshotted (auth-gated).
 - FE boundary note: `comms/active/docker-to-frontend-settings-nav.md` (resolve once FE acks).
 
