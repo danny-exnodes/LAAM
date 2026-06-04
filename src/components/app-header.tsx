@@ -5,7 +5,7 @@ import {
   Bot,
   Network,
   Plug,
-  Server,
+  Settings,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { gravatarUrl } from "@/lib/gravatar";
@@ -21,7 +21,7 @@ const NAV = [
   { href: "/agents", label: "Agents", Icon: Bot },
   { href: "/graph", label: "Graph", Icon: Network },
   { href: "/connectors", label: "Connectors", Icon: Plug },
-  { href: "/machines", label: "Machines", Icon: Server },
+  { href: "/settings", label: "Settings", Icon: Settings },
 ];
 
 function NavLink({
