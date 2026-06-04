@@ -31,7 +31,7 @@ export function ConnectorsClient() {
   }, [load]);
 
   return (
-    <main className="w-full p-6">
+    <main className="w-full p-4 sm:p-6">
       <div className="mb-5">
         <h1 className="mb-1 text-xl font-bold tracking-tight">{t("conn.heading")}</h1>
         <p className="max-w-2xl text-sm leading-relaxed text-neutral-500">{t("conn.sub")}</p>

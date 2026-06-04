@@ -40,8 +40,9 @@ export function Heatmap({ heatmap }: { heatmap: Stats["heatmap"] }) {
         <p className="px-1 py-6 text-sm text-neutral-400">{t("dash.hm.empty")}</p>
       ) : (
         <>
+          <div className="overflow-x-auto">
           <div
-            className="grid items-center gap-[2px]"
+            className="grid min-w-[480px] items-center gap-[2px]"
             style={{ gridTemplateColumns: "34px repeat(24, 1fr)" }}
           >
             {/* Header row: empty corner + 24 hour labels */}
@@ -92,6 +93,7 @@ export function Heatmap({ heatmap }: { heatmap: Stats["heatmap"] }) {
                 }),
               ];
             })}
+          </div>
           </div>
 
           <div className="mt-3 flex items-center gap-2 text-[11px] text-neutral-400">

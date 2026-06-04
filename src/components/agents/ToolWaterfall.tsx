@@ -65,7 +65,7 @@ export function ToolWaterfall({ calls }: { calls: WaterfallCall[] }) {
   return (
     <div>
       {/* time-axis ruler */}
-      <div className="grid grid-cols-[minmax(8rem,14rem)_1fr] items-center gap-3 px-3 pb-1.5 text-[10px] text-neutral-400">
+      <div className="grid grid-cols-[minmax(5rem,7rem)_1fr] items-center gap-3 px-3 pb-1.5 text-[10px] text-neutral-400 sm:grid-cols-[minmax(8rem,14rem)_1fr]">
         <span className="text-right">
           {geom.absolute ? "thời gian →" : "thời lượng →"}
         </span>
@@ -98,7 +98,7 @@ export function ToolWaterfall({ calls }: { calls: WaterfallCall[] }) {
           return (
             <div
               key={i}
-              className="grid grid-cols-[minmax(8rem,14rem)_1fr] items-center gap-3 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs dark:border-neutral-800"
+              className="grid grid-cols-[minmax(5rem,7rem)_1fr] items-center gap-3 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs sm:grid-cols-[minmax(8rem,14rem)_1fr] dark:border-neutral-800"
             >
               <span className="truncate font-mono font-semibold text-[var(--color-accent)]">
                 {c.name}

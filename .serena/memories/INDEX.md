@@ -10,7 +10,13 @@
 - [v2-parity-gap](decisions/v2-parity-gap.md) — **v2 CHƯA parity v1** (Dash ~35%, Agents ~40%, Chat ~8%, Connectors 0%). Quyết định: port đầy đủ theo lộ trình `docs/v2-parity-roadmap.md` (Wave 0 hạ tầng → Agents → Dashboard → Chat → Connectors).
 - [v2-dark-mode-theming](decisions/v2-dark-mode-theming.md) — dark mode v2 là **media-query** (không class `.dark`): viền accent phải inline `borderLeftColor`, chart recharts cần `useChartTheme`, `.dark .x` CSS là code chết. + reset DB làm rỗng `user` → đăng ký lại (đầu tiên = owner).
 - [poc-model-choice](decisions/poc-model-choice.md) — POC dùng **1 model** `qwen3-vl:8b-instruct-q8_0` (chat+tool-call), **không smart-routing** (vốn chưa implement); OCR=Tesseract, vision chưa nối; set `DEFAULT_CHAT_MODEL` là đủ. Host: RTX 5070 Ti 16GB.
+- [ocr-tesseract-docker](decisions/ocr-tesseract-docker.md) — OCR=Tesseract **bake vào image app** (`node:22-alpine`, `apk add tesseract-ocr + data eng/vie/chi_sim`), né UAC trên host. **Gotcha:** Alpine không kèm `eng` mà route mặc định `vie+eng+chi_sim` → phải thêm `eng`. Đã verify OCR ảnh tiếng Việt chuẩn. Handoff: `backlog/docker-stack-tesseract.md`.
+- [responsive-conventions](decisions/responsive-conventions.md) — breakpoint `md` gập nav (**hamburger**, header client, dropdown overlay giữ 56px cho /chat); `p-4 sm:p-6`; lưới dày bọc `overflow-x-auto`; cột nhãn waterfall responsive.
+- [auth-multihost-dev-env](decisions/auth-multihost-dev-env.md) — Vào dev qua hostname Tailscale (HTTPS `:8443`): **2 fix** — (1) `AUTH_URL` trong `.env.development.local` (Edge middleware bỏ qua Host→localhost); (2) `allowedDevOrigins` trong `next.config.ts` (Next chặn dev endpoint cross-origin → trang KHÔNG hydrate → form về GET → login đá về). Cả hai dev-only, prod Docker bỏ qua. **Đã verify login :8443 OK.**
 - [poc-host-and-ollama-ops](decisions/poc-host-and-ollama-ops.md) — Máy host (Ultra 9 285K/128GB/RTX 5070 Ti 16GB); hosting **2 tầng** (lõi Node+Postgres / AI Ollama+Tesseract, degrade nhẹ); Ollama ops 16GB (keep-alive, q8 fit, 30B+ tràn); Gemma 4 lineup.
+
+## Rules (vận hành agent)
+- [agent-ops-rules](decisions/agent-ops-rules.md) — ⛔ **KHÔNG tự ý chạy ngầm service nào** (dev/start/docker/ollama/preview) nếu user chưa cho phép; user tự host dev. Không `build` in-place khi prod đang chạy.
 
 ## Services
 - [v2-app](services/v2-app.md) — Trạng thái app (root): routes, schema, phase status (P1-3 ✅, P4 Chat built chờ test), lib chính, việc chưa làm.
@@ -20,6 +26,7 @@
 
 ## Backlog (v1 chưa migrate — làm sau ở v2)
 - [next-steps](backlog/next-steps.md) — **handoff phiên sau**: nghiệm thu POC 4 nhiệm vụ · cài Tesseract (Admin) · độ bền (Windows Service) · v1-unported · vision enhancement · Phase 6.
+- [docker-stack-tesseract](backlog/docker-stack-tesseract.md) — **handoff cho session docker**: chèn `apk add tesseract-ocr + data eng/vie/chi_sim` vào runner stage của Dockerfile (đã verify, chưa tự sửa Dockerfile của họ để tránh đè).
 - [v1-unported](backlog/v1-unported.md) — Search/Office/proxy/`/api/config` + bảng events + lọc máy/owner + residuals. **Nguồn chân lý:** `docs/v1-to-v2-migration-handoff.md`. ⚠️ chưa xoá v1 (archive sau khi v2 production+nghiệm thu).
 
 ## Trạng thái hiện tại (2026-06-03)
@@ -33,5 +40,5 @@
 - Chốt **host = máy này** (RTX 5070 Ti 16GB / Ultra 9 285K / 128GB), full features + GPU.
 - Chốt **model POC = 1 model `qwen3-vl:8b-instruct-q8_0`** (Q8, 9.8GB), bỏ smart-routing; OCR=Tesseract; vision chưa nối. Xem [poc-model-choice](decisions/poc-model-choice.md).
 - **✅ Restructure MERGED vào `main`** (PR #1 → `97968a4`): v2 lên root, v1 ở `archive/v1`. 375 test xanh.
-- **✅ Setup ĐANG CHẠY:** Postgres+11 bảng · app `:3000` · model `qwen3-vl:8b-instruct-q8_0` **100% GPU**. ⚠️ Tesseract chưa cài (Admin), owner chưa đăng ký.
+- **✅ Setup ĐANG CHẠY:** Postgres+11 bảng · app `:3000` · model `qwen3-vl:8b-instruct-q8_0` **100% GPU**. ⚠️ owner chưa đăng ký. **OCR/Tesseract:** giải pháp Docker đã verify (OCR ảnh tiếng Việt chuẩn trên `node:22-alpine`); chờ session docker bake vào image app — xem [ocr-tesseract-docker](decisions/ocr-tesseract-docker.md).
 - **▶️ Kế hoạch tiếp theo:** [next-steps](backlog/next-steps.md).

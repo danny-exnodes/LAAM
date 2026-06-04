@@ -5,7 +5,7 @@
   "type": "module",
   "description": "LAAM v2 — local-first multi-user (Next.js + Postgres + Auth.js). Dev: npm run dev.",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3100",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

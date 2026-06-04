@@ -6,6 +6,7 @@
 // settings; ingests attachments via /api/fetch-url (URLs) and /api/ocr (images).
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PanelLeft, SlidersHorizontal } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import { ConversationSidebar } from "./ConversationSidebar";
@@ -35,6 +36,7 @@ export function ChatClient() {
   const [streaming, setStreaming] = useState(false);
   const [settings, setSettings] = useState<ChatSettings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [convOpen, setConvOpen] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [query, setQuery] = useState("");
@@ -269,6 +271,7 @@ export function ChatClient() {
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-h,56px))]">
+      {/* Static conversation sidebar on tablet/desktop (sm+) */}
       <aside className="hidden w-72 shrink-0 border-r border-neutral-200 sm:block dark:border-neutral-800">
         <ConversationSidebar
           convs={convs}
@@ -282,14 +285,60 @@ export function ChatClient() {
         />
       </aside>
 
-      <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
+      {/* Mobile slide-in conversation drawer (<sm). Opened from the top-bar button. */}
+      {convOpen && (
+        <div className="fixed inset-0 z-40 flex sm:hidden">
           <button
-            onClick={() => setSettingsOpen((v) => !v)}
-            className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
-          >
-            {t("chat.setTitle")}
-          </button>
+            type="button"
+            aria-label={t("chat.histListAria")}
+            onClick={() => setConvOpen(false)}
+            className="absolute inset-0 bg-black/40"
+          />
+          <div className="relative z-10 flex h-full w-[84%] max-w-xs flex-col bg-white shadow-xl dark:bg-neutral-950">
+            <ConversationSidebar
+              convs={convs}
+              activeId={activeId}
+              query={query}
+              onQuery={setQuery}
+              onOpen={(id) => {
+                openConv(id);
+                setConvOpen(false);
+              }}
+              onNew={() => {
+                newConv();
+                setConvOpen(false);
+              }}
+              onDelete={deleteConv}
+              onRename={renameConv}
+            />
+          </div>
+        </div>
+      )}
+
+      <section className="flex min-w-0 flex-1 flex-col">
+        <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2 sm:px-4 dark:border-neutral-800">
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setConvOpen(true)}
+              aria-label={t("chat.histTitle")}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-neutral-300 text-neutral-600 hover:bg-neutral-50 sm:hidden dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              <PanelLeft size={18} aria-hidden />
+            </button>
+            <button
+              onClick={() => setSettingsOpen((v) => !v)}
+              aria-label={t("chat.setTitle")}
+              title={t("chat.setTitle")}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 sm:px-3 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+            >
+              <SlidersHorizontal size={16} className="sm:hidden" aria-hidden />
+              <span className="hidden sm:inline">{t("chat.setTitle")}</span>
+            </button>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-neutral-500 sm:hidden">
+              {activeTitle}
+            </span>
+          </div>
           <ChatExport messages={messages} title={activeTitle} />
         </div>
 
@@ -300,7 +349,7 @@ export function ChatClient() {
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-4 py-6">
+          <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-6">
             <MessageList
               messages={messages}
               streaming={streaming}
@@ -312,7 +361,7 @@ export function ChatClient() {
           </div>
         </div>
 
-        <div className="border-t border-neutral-200 p-3 dark:border-neutral-800">
+        <div className="border-t border-neutral-200 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 dark:border-neutral-800">
           <div className="mx-auto max-w-3xl">
             <Composer
               value={input}

@@ -32,7 +32,7 @@ export function FilterBar({
         value={value.q}
         onChange={(e) => set({ q: e.target.value })}
         placeholder={t("agents.searchPh")}
-        className={"min-w-[220px] flex-1 " + SELECT_CLS}
+        className={"w-full sm:w-auto sm:min-w-[220px] sm:flex-1 " + SELECT_CLS}
       />
 
       <select aria-label="project-filter" className={SELECT_CLS} value={value.project} onChange={(e) => set({ project: e.target.value })}>
