@@ -7,7 +7,7 @@ import { INTERNAL_TOOLS, modelToolSchemas } from "@/lib/agent/registry";
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => null) }));
 vi.mock("@/db", () => ({ db: {} }));
 
-import { buildOllamaPayload } from "./route";
+import { buildOllamaPayload, isConfirmBody } from "./route";
 
 const defaults = { model: "gemma4:e4b", system: "DEFAULT SYS" };
 const history = [
@@ -71,5 +71,16 @@ describe("harness wiring", () => {
     expect(names).toContain("laam_list_agents");
     expect(names).toContain("laam_find_stuck");
     expect(names.every((n) => typeof n === "string")).toBe(true);
+  });
+});
+
+describe("SP-2 confirm body detection", () => {
+  test("nhận diện body confirm", () => {
+    expect(isConfirmBody({ confirm: { token: "t", approve: true } })).toBe(true);
+  });
+  test("body message thường → không phải confirm", () => {
+    expect(isConfirmBody({ message: "hi" })).toBe(false);
+    expect(isConfirmBody({})).toBe(false);
+    expect(isConfirmBody({ confirm: null })).toBe(false);
   });
 });
