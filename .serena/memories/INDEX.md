@@ -19,6 +19,7 @@
 - `docs/v2-plan.md` — kế hoạch/spec v2 đầy đủ (Phase 0→6).
 
 ## Backlog (v1 chưa migrate — làm sau ở v2)
+- [next-steps](backlog/next-steps.md) — **handoff phiên sau**: nghiệm thu POC 4 nhiệm vụ · cài Tesseract (Admin) · độ bền (Windows Service) · v1-unported · vision enhancement · Phase 6.
 - [v1-unported](backlog/v1-unported.md) — Search/Office/proxy/`/api/config` + bảng events + lọc máy/owner + residuals. **Nguồn chân lý:** `docs/v1-to-v2-migration-handoff.md`. ⚠️ chưa xoá v1 (archive sau khi v2 production+nghiệm thu).
 
 ## Trạng thái hiện tại (2026-06-03)
@@ -31,4 +32,6 @@
 ## Trạng thái POC (2026-06-04)
 - Chốt **host = máy này** (RTX 5070 Ti 16GB / Ultra 9 285K / 128GB), full features + GPU.
 - Chốt **model POC = 1 model `qwen3-vl:8b-instruct-q8_0`** (Q8, 9.8GB), bỏ smart-routing; OCR=Tesseract; vision chưa nối. Xem [poc-model-choice](decisions/poc-model-choice.md).
-- Setup tự động: `setup-poc.ps1` (Ollama+model+Tesseract+Postgres+.env+migrate+build). **Chưa chạy/nghiệm thu live.**
+- **✅ Restructure MERGED vào `main`** (PR #1 → `97968a4`): v2 lên root, v1 ở `archive/v1`. 375 test xanh.
+- **✅ Setup ĐANG CHẠY:** Postgres+11 bảng · app `:3000` · model `qwen3-vl:8b-instruct-q8_0` **100% GPU**. ⚠️ Tesseract chưa cài (Admin), owner chưa đăng ký.
+- **▶️ Kế hoạch tiếp theo:** [next-steps](backlog/next-steps.md).
