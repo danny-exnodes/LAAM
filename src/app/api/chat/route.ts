@@ -166,8 +166,10 @@ export async function POST(req: Request) {
       const rows = await loadSessionRows();
       const { toSurface, newState } = selectNewAlerts(detectAlerts(rows, now), convProactive, now);
       const notice = formatProactiveNotice(toSurface, lang);
-      if (notice) {
-        systemContent = systemContent + "\n\n" + notice;
+      if (notice) systemContent = systemContent + "\n\n" + notice;
+      // Persist dedupe state when something surfaced OR pruning changed it (keep proactiveState bounded).
+      const prevKeyCount = convProactive ? Object.keys(convProactive.surfaced ?? {}).length : 0;
+      if (notice || Object.keys(newState.surfaced).length !== prevKeyCount) {
         await db
           .update(chatConversations)
           .set({ proactiveState: newState })
