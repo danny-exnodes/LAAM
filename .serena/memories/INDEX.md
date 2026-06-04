@@ -10,6 +10,7 @@
 - [v2-parity-gap](decisions/v2-parity-gap.md) — **v2 CHƯA parity v1** (Dash ~35%, Agents ~40%, Chat ~8%, Connectors 0%). Quyết định: port đầy đủ theo lộ trình `docs/v2-parity-roadmap.md` (Wave 0 hạ tầng → Agents → Dashboard → Chat → Connectors).
 - [v2-dark-mode-theming](decisions/v2-dark-mode-theming.md) — dark mode v2 là **media-query** (không class `.dark`): viền accent phải inline `borderLeftColor`, chart recharts cần `useChartTheme`, `.dark .x` CSS là code chết. + reset DB làm rỗng `user` → đăng ký lại (đầu tiên = owner).
 - [poc-model-choice](decisions/poc-model-choice.md) — POC dùng **1 model** `qwen3-vl:8b-instruct-q8_0` (chat+tool-call), **không smart-routing** (vốn chưa implement); OCR=Tesseract, vision chưa nối; set `DEFAULT_CHAT_MODEL` là đủ. Host: RTX 5070 Ti 16GB.
+- [poc-host-and-ollama-ops](decisions/poc-host-and-ollama-ops.md) — Máy host (Ultra 9 285K/128GB/RTX 5070 Ti 16GB); hosting **2 tầng** (lõi Node+Postgres / AI Ollama+Tesseract, degrade nhẹ); Ollama ops 16GB (keep-alive, q8 fit, 30B+ tràn); Gemma 4 lineup.
 
 ## Services
 - [v2-app](services/v2-app.md) — Trạng thái app (root): routes, schema, phase status (P1-3 ✅, P4 Chat built chờ test), lib chính, việc chưa làm.
