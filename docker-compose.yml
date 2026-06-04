@@ -52,6 +52,7 @@ services:
       # tell Auth.js it sits behind the Funnel HTTPS proxy.
       DATABASE_URL: postgresql://laam:laam@postgres:5432/laam
       OLLAMA_URL: http://host.docker.internal:11434
+      HOST_METRICS_URL: http://host.docker.internal:47600
       AUTH_TRUST_HOST: "true"
       AUTH_URL: https://danny-gaming-pc.tail41dda4.ts.net
       NODE_ENV: production
