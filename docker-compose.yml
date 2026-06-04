@@ -36,5 +36,31 @@ services:
       - postgres
     restart: unless-stopped
 
+  # LAAM v2 production app (standalone Next.js, built from the infra/docker-stack
+  # worktree: `docker build -t laam-app:latest <worktree>`). Reaches Postgres
+  # internally (postgres:5432) and host-native GPU Ollama via host.docker.internal.
+  # Published on the dedicated 39xx block; public via Tailscale Funnel -> :3900.
+  app:
+    image: laam-app:latest
+    container_name: laam-v2-app
+    ports:
+      - "3900:3000"
+    env_file:
+      - .env
+    environment:
+      # These override env_file: point at the in-network DB + host Ollama, and
+      # tell Auth.js it sits behind the Funnel HTTPS proxy.
+      DATABASE_URL: postgresql://laam:laam@postgres:5432/laam
+      OLLAMA_URL: http://host.docker.internal:11434
+      AUTH_TRUST_HOST: "true"
+      AUTH_URL: https://danny-gaming-pc.tail41dda4.ts.net
+      NODE_ENV: production
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   laam-v2-pg:
