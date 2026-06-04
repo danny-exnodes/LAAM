@@ -8,6 +8,7 @@
 - [auth-and-proxy](decisions/auth-and-proxy.md) — Auth.js `trustHost:true`; Next 16 `proxy.ts`; **GOTCHA: API public phải thêm vào isPublic** (auth.config.ts); RBAC + user đầu = owner.
 - [monitoring-parser-reuse](decisions/monitoring-parser-reuse.md) — v2 tái dùng parser v0.9 (copy vào v2/src/lib/monitoring); `upsertSessions` dùng chung local + ingest; transcriptPath chỉ live cho host.
 - [v2-parity-gap](decisions/v2-parity-gap.md) — **v2 CHƯA parity v1** (Dash ~35%, Agents ~40%, Chat ~8%, Connectors 0%). Quyết định: port đầy đủ theo lộ trình `docs/v2-parity-roadmap.md` (Wave 0 hạ tầng → Agents → Dashboard → Chat → Connectors).
+- [v2-dark-mode-theming](decisions/v2-dark-mode-theming.md) — dark mode v2 là **media-query** (không class `.dark`): viền accent phải inline `borderLeftColor`, chart recharts cần `useChartTheme`, `.dark .x` CSS là code chết. + reset DB làm rỗng `user` → đăng ký lại (đầu tiên = owner).
 
 ## Services
 - [v2-app](services/v2-app.md) — Trạng thái app `v2/`: routes, schema, phase status (P1-3 ✅, P4 Chat built chờ test), lib chính, việc chưa làm.
@@ -18,5 +19,6 @@
 ## Trạng thái hiện tại (2026-06-03)
 - v2: P1 auth/RBAC ✅ · P2 monitoring ✅ · P3 collector đa máy (đơn giản) ✅ · P4 Chat Gemma 4 đã build, **chờ test runtime**. Verified live P1+P2+P3.
 - App cũ (vanilla, Docker :4317) vẫn chạy; Phase 0 fixes (gemma4 default + toolbar) chưa deploy.
-- DB dùng **migration**; user đã làm baseline sạch.
-- Checkpoint mới nhất: `checkpoint/claude-2026-06-03.md`
+- DB dùng **migration**; user đã làm baseline sạch (→ `user` rỗng; phải đăng ký lại để dùng v2).
+- **Parity-polish (Session 2, 2026-06-03)**: sửa 11 lỗi UI/chức năng v2 trên branch `fix/v2-parity-polish` — connector migrate, full-width, viền/chart dark, lucide-react, Agents drawer+waterfall trục thời gian. 375 test pass. **Chưa commit** (chờ user review).
+- Checkpoint mới nhất: `checkpoint/claude-2026-06-03.md` (có Session 2 ở cuối)

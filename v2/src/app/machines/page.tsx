@@ -37,7 +37,7 @@ export default async function MachinesPage() {
   return (
     <div>
       <AppHeader current="/machines" role={session.user.role} />
-      <main className="mx-auto max-w-4xl p-6">
+      <main className="w-full p-6">
         <h1 className="mb-1 text-xl font-bold tracking-tight">Machines</h1>
         <p className="mb-5 text-sm text-neutral-500">
           Mỗi máy dev chạy collector để đẩy session về đây (giám sát đa máy). Máy

@@ -15,6 +15,7 @@ import type { Stats } from "@/lib/stats.types";
 import { num } from "@/lib/format";
 import { useT } from "@/i18n/provider";
 import { dashboard } from "@/i18n/dictionaries/dashboard";
+import { useChartTheme } from "@/hooks/useChartTheme";
 
 const DAY_MS = 86_400_000;
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -49,11 +50,12 @@ export function ActivityTimeline({
   activity: Stats["activity"];
 }) {
   const t = useT(dashboard);
+  const theme = useChartTheme();
   const data = mapActivity(activity);
 
   return (
     <div className="chart-card">
-      <h3 className="text-sm font-medium text-neutral-700">
+      <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
         {t("dash.chart.activity")}
       </h3>
       {data.length === 0 ? (
@@ -67,24 +69,24 @@ export function ActivityTimeline({
             >
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="#e5e5e5"
+                stroke={theme.grid}
                 vertical={false}
               />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: theme.axis }} />
               <YAxis
                 yAxisId="left"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: theme.axis }}
                 width={40}
                 allowDecimals={false}
               />
               <YAxis
                 yAxisId="right"
                 orientation="right"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: theme.axis }}
                 width={48}
                 tickFormatter={(v) => num(Number(v))}
               />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar
                 yAxisId="left"

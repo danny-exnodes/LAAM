@@ -20,6 +20,7 @@ import {
   Legend,
   CartesianGrid,
 } from "recharts";
+import { useChartTheme } from "@/hooks/useChartTheme";
 
 // Accent-led palette — same leading colors as v1 chartPalette().
 const PALETTE = [
@@ -100,9 +101,9 @@ export function chartToRecharts(raw: string): ChartModel {
   return { kind, title, rows, series };
 }
 
-const AXIS_TICK = { fontSize: 11 } as const;
-
 export function ChartBlock({ raw }: { raw: string }) {
+  const theme = useChartTheme();
+  const axisTick = { fontSize: 11, fill: theme.axis };
   const model = chartToRecharts(raw);
   if ("error" in model) {
     return <div className="chat-block-error">Biểu đồ không hợp lệ.</div>;
@@ -116,7 +117,7 @@ export function ChartBlock({ raw }: { raw: string }) {
         <ResponsiveContainer>
           {kind === "pie" ? (
             <PieChart>
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Pie data={rows} dataKey="value" nameKey="name" outerRadius="80%">
                 {rows.map((_, i) => (
@@ -126,10 +127,10 @@ export function ChartBlock({ raw }: { raw: string }) {
             </PieChart>
           ) : kind === "line" ? (
             <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
-              <XAxis dataKey="name" tick={AXIS_TICK} />
-              <YAxis tick={AXIS_TICK} width={44} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
+              <XAxis dataKey="name" tick={axisTick} />
+              <YAxis tick={axisTick} width={44} />
+              <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {series.map((s) => (
                 <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} />
@@ -137,10 +138,10 @@ export function ChartBlock({ raw }: { raw: string }) {
             </LineChart>
           ) : (
             <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
-              <XAxis dataKey="name" tick={AXIS_TICK} />
-              <YAxis tick={AXIS_TICK} width={44} />
-              <Tooltip contentStyle={{ fontSize: 12, borderRadius: 8 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
+              <XAxis dataKey="name" tick={axisTick} />
+              <YAxis tick={axisTick} width={44} />
+              <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {series.map((s) => (
                 <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} />

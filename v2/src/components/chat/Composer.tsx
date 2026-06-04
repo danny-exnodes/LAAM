@@ -6,6 +6,7 @@
 // state + actions come via props from ChatClient.
 
 import { useRef, useState } from "react";
+import { Paperclip, Link2, ArrowDown, Send } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { Attachment } from "./types";
@@ -118,7 +119,7 @@ export function Composer({
         title={t("chat.scrollBottomAria")}
         className="absolute -top-12 right-3 z-10 grid h-9 w-9 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-500 shadow hover:text-neutral-800 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:text-neutral-100"
       >
-        ↓
+        <ArrowDown size={16} aria-hidden />
       </button>
 
       {/* attachment chips */}
@@ -201,18 +202,18 @@ export function Composer({
             aria-label={t("chat.attachFileAria")}
             title={t("chat.attachFileTitle")}
             onClick={() => fileInput.current?.click()}
-            className="rounded-lg border border-neutral-200 px-2 py-1.5 text-sm text-neutral-500 hover:text-neutral-800 dark:border-neutral-700 dark:hover:text-neutral-100"
+            className="rounded-lg border border-neutral-200 px-2 py-1.5 text-neutral-500 hover:text-neutral-800 dark:border-neutral-700 dark:hover:text-neutral-100"
           >
-            📎
+            <Paperclip size={16} aria-hidden />
           </button>
           <button
             type="button"
             aria-label={t("chat.attachUrlAria")}
             title={t("chat.attachUrlTitle")}
             onClick={pickUrl}
-            className="rounded-lg border border-neutral-200 px-2 py-1.5 text-sm text-neutral-500 hover:text-neutral-800 dark:border-neutral-700 dark:hover:text-neutral-100"
+            className="rounded-lg border border-neutral-200 px-2 py-1.5 text-neutral-500 hover:text-neutral-800 dark:border-neutral-700 dark:hover:text-neutral-100"
           >
-            🔗
+            <Link2 size={16} aria-hidden />
           </button>
           {value.length > 0 && (
             <span className="font-mono text-[11px] text-neutral-400">
@@ -237,8 +238,9 @@ export function Composer({
             aria-label={t("chat.sendAria")}
             onClick={onSend}
             disabled={sendDisabled}
-            className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
+            <Send size={14} aria-hidden />
             {t("chat.send")}
           </button>
         </div>

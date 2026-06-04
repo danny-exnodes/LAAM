@@ -13,6 +13,7 @@ import type { Stats } from "@/lib/stats.types";
 import { shortModel, usd } from "@/lib/format";
 import { useT } from "@/i18n/provider";
 import { dashboard } from "@/i18n/dictionaries/dashboard";
+import { useChartTheme } from "@/hooks/useChartTheme";
 
 /**
  * Estimated cost per model, sorted by cost descending and capped at topN.
@@ -36,11 +37,12 @@ export function CostByModel({
   modelComparison: Stats["modelComparison"];
 }) {
   const t = useT(dashboard);
+  const theme = useChartTheme();
   const data = mapCostByModel(modelComparison);
 
   return (
     <div className="chart-card">
-      <h3 className="text-sm font-medium text-neutral-700">
+      <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
         {t("dash.cost.byModel")}
       </h3>
       {data.length === 0 ? (
@@ -54,18 +56,18 @@ export function CostByModel({
             >
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="#e5e5e5"
+                stroke={theme.grid}
                 vertical={false}
               />
-              <XAxis dataKey="model" tick={{ fontSize: 11 }} />
+              <XAxis dataKey="model" tick={{ fontSize: 11, fill: theme.axis }} />
               <YAxis
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: theme.axis }}
                 width={48}
                 tickFormatter={(v) => usd(Number(v))}
               />
               <Tooltip
                 formatter={(value) => [usd(Number(value)), "USD"]}
-                contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                contentStyle={theme.tooltip}
               />
               <Bar dataKey="costUsd" fill={BAR_COLOR} radius={[4, 4, 0, 0]} />
             </BarChart>

@@ -18,8 +18,10 @@ export async function POST(
 
   switch (action) {
     case "connect": {
-      const fields = (await req.json().catch(() => ({}))) as Record<string, string>;
-      return NextResponse.json(await connect(userId, id, fields));
+      const body = (await req.json().catch(() => ({}))) as {
+        fields?: Record<string, string>;
+      };
+      return NextResponse.json(await connect(userId, id, body.fields ?? {}));
     }
     case "disconnect":
       return NextResponse.json(await disconnect(userId, id));

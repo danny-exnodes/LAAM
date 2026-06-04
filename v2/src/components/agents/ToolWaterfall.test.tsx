@@ -1,34 +1,58 @@
 import { describe, it, expect } from "vitest";
 import { render } from "@testing-library/react";
-import { barWidthPct, ToolWaterfall } from "./ToolWaterfall";
+import { waterfallSpan, barGeom, ToolWaterfall } from "./ToolWaterfall";
 
-describe("barWidthPct (pure)", () => {
-  it("scales each duration relative to the max in the set", () => {
-    expect(barWidthPct(50, 100)).toBe(50);
-    expect(barWidthPct(100, 100)).toBe(100);
-    expect(barWidthPct(25, 100)).toBe(25);
+describe("waterfallSpan (pure)", () => {
+  it("derives an absolute span from call timestamps", () => {
+    const g = waterfallSpan([
+      { name: "a", start: 1000, end: 1200, durationMs: 200 },
+      { name: "b", start: 1200, end: 2200, durationMs: 1000 },
+    ]);
+    expect(g.absolute).toBe(true);
+    expect(g.t0).toBe(1000);
+    expect(g.span).toBe(1200); // 2200 - 1000
   });
 
-  it("clamps a minimum visible width so tiny/zero bars still show", () => {
-    expect(barWidthPct(0, 100)).toBe(2);
-    expect(barWidthPct(1, 100000)).toBe(2);
+  it("falls back to a max-duration scale when no timestamps are present", () => {
+    const g = waterfallSpan([
+      { name: "a", durationMs: 50 },
+      { name: "b", durationMs: 100 },
+    ]);
+    expect(g.absolute).toBe(false);
+    expect(g.span).toBe(100);
+  });
+});
+
+describe("barGeom (pure)", () => {
+  it("offsets each bar by start time and sizes it by duration (absolute)", () => {
+    const g = waterfallSpan([
+      { name: "a", start: 1000, end: 1200, durationMs: 200 },
+      { name: "b", start: 1200, end: 2200, durationMs: 1000 },
+    ]);
+    const [aLeft, aWidth] = barGeom({ name: "a", start: 1000, durationMs: 200 }, g);
+    const [bLeft, bWidth] = barGeom({ name: "b", start: 1200, durationMs: 1000 }, g);
+    expect(aLeft).toBe(0);
+    expect(aWidth).toBeCloseTo((200 / 1200) * 100, 5);
+    expect(bLeft).toBeCloseTo((200 / 1200) * 100, 5); // starts 200ms into a 1200ms span
+    expect(bWidth).toBeCloseTo((1000 / 1200) * 100, 5);
   });
 
-  it("treats null duration as zero (minimum width)", () => {
-    expect(barWidthPct(null, 100)).toBe(2);
-  });
-
-  it("returns full width when max is 0 or missing (avoid divide-by-zero)", () => {
-    expect(barWidthPct(0, 0)).toBe(2);
-    expect(barWidthPct(10, 0)).toBe(100);
+  it("left-aligns bars and clamps a minimum width in fallback mode", () => {
+    const g = waterfallSpan([
+      { name: "a", durationMs: 0 },
+      { name: "b", durationMs: 100 },
+    ]);
+    const [aLeft, aWidth] = barGeom({ name: "a", durationMs: 0 }, g);
+    expect(aLeft).toBe(0);
+    expect(aWidth).toBeGreaterThan(0); // min-width clamp keeps zero bars visible
   });
 });
 
 describe("ToolWaterfall (component)", () => {
   const calls = [
-    { name: "Read", durationMs: 200 },
-    { name: "Bash", durationMs: 1000, isError: true },
-    { name: "Edit", durationMs: null },
+    { name: "Read", start: 1000, end: 1200, durationMs: 200 },
+    { name: "Bash", start: 1200, end: 2200, durationMs: 1000, isError: true },
+    { name: "Edit", start: 2200, end: null, durationMs: null },
   ];
 
   it("renders a row per call with the tool name", () => {
@@ -38,14 +62,13 @@ describe("ToolWaterfall (component)", () => {
     expect(getByText("Edit")).toBeTruthy();
   });
 
-  it("renders the largest bar at 100% width and scales the rest", () => {
+  it("offsets bars along the timeline (not all left-aligned)", () => {
     const { container } = render(<ToolWaterfall calls={calls} />);
     const bars = container.querySelectorAll<HTMLElement>("[data-wf-bar]");
     expect(bars).toHaveLength(3);
-    // Bash is the max (1000) → 100%; Read 200 → 20%; Edit null → clamp 2%
-    expect(bars[0].style.width).toBe("20%");
-    expect(bars[1].style.width).toBe("100%");
-    expect(bars[2].style.width).toBe("2%");
+    // Read starts at the origin; Bash starts later → non-zero left offset.
+    expect(bars[0].style.left).toBe("0%");
+    expect(bars[1].style.left).not.toBe("0%");
   });
 
   it("marks error bars with a data attribute for red styling", () => {

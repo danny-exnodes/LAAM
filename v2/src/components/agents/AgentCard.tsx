@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Hexagon, GitBranch } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { agents } from "@/i18n/dictionaries/agents";
 import { shortModel, usd, num } from "@/lib/format";
@@ -12,6 +12,16 @@ const STATUS_STYLES: Record<string, string> = {
   running: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
   idle: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   done: "bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400",
+};
+
+// Left-accent bar colored by status — the v1 `.card.<status>::before` convention.
+// Applied via inline style (not a Tailwind class) so the colour survives the
+// card's `dark:border-neutral-800`, which would otherwise override the left
+// border colour in dark mode. -500 tones read well on both light/dark cards.
+const STATUS_ACCENT: Record<string, string> = {
+  running: "#22c55e",
+  idle: "#f59e0b",
+  done: "#94a3b8",
 };
 
 // mm:ss / h:mm:ss elapsed from `startedAt`.
@@ -36,14 +46,32 @@ function Elapsed({ startedAt, running }: { startedAt: number | null; running: bo
   return <span data-testid="elapsed">{fmtElapsed(now - startedAt)}</span>;
 }
 
-export function AgentCard({ s, stuck }: { s: LiveSession; stuck: boolean }) {
+export function AgentCard({
+  s,
+  stuck,
+  onSelect,
+}: {
+  s: LiveSession;
+  stuck: boolean;
+  onSelect: (s: LiveSession) => void;
+}) {
   const t = useT(agents);
   const status = s.status ?? "done";
   const running = status === "running";
+  const accent = stuck ? "#ef4444" : STATUS_ACCENT[status] ?? STATUS_ACCENT.done;
   return (
-    <Link
-      href={`/agents/${s.id}`}
-      className="block rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow dark:border-neutral-800 dark:bg-neutral-900 dark:hover:border-neutral-700"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(s)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(s);
+        }
+      }}
+      style={{ borderLeftColor: accent }}
+      className="block cursor-pointer rounded-xl border border-l-4 border-neutral-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] dark:border-neutral-800 dark:bg-neutral-900"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -67,8 +95,8 @@ export function AgentCard({ s, stuck }: { s: LiveSession; stuck: boolean }) {
         <div className="text-right">
           <div className="font-mono text-[11px] text-neutral-500">{shortModel(s.model)}</div>
           {s.source === "local" && (
-            <span title={t("agents.badgeLocalTitle")} className="text-[10px] font-semibold text-sky-500">
-              ⬡ {t("agents.badgeLocal")}
+            <span title={t("agents.badgeLocalTitle")} className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-sky-500">
+              <Hexagon size={11} aria-hidden /> {t("agents.badgeLocal")}
             </span>
           )}
         </div>
@@ -87,10 +115,14 @@ export function AgentCard({ s, stuck }: { s: LiveSession; stuck: boolean }) {
         <span title={t("agents.costTitle")} className="font-medium text-neutral-700 dark:text-neutral-300">
           {usd(s.costUsd)}
         </span>
-        {s.gitBranch && <span className="font-mono">⎇ {s.gitBranch}</span>}
+        {s.gitBranch && (
+          <span className="inline-flex items-center gap-0.5 font-mono">
+            <GitBranch size={11} aria-hidden /> {s.gitBranch}
+          </span>
+        )}
       </div>
 
       {s.subAgents && s.subAgents.length > 0 && <SubAgentList items={s.subAgents} />}
-    </Link>
+    </div>
   );
 }

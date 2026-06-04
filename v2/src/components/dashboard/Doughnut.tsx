@@ -9,6 +9,7 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { useT } from "@/i18n/provider";
 import { dashboard } from "@/i18n/dictionaries/dashboard";
 import { num } from "@/lib/format";
+import { useChartTheme } from "@/hooks/useChartTheme";
 
 // Series palette (matches v1 palette().series order).
 export const SERIES = [
@@ -34,6 +35,7 @@ export function Doughnut({
   slices: Slice[];
 }) {
   const t = useT(dashboard);
+  const theme = useChartTheme();
   const data = slices.filter((s) => s.value > 0);
 
   return (
@@ -67,7 +69,7 @@ export function Doughnut({
                   ))}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                  contentStyle={theme.tooltip}
                   formatter={(value, name) => [num(Number(value)), String(name)]}
                 />
               </PieChart>

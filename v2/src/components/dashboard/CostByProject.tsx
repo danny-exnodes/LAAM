@@ -14,6 +14,7 @@ import type { Stats } from "@/lib/stats.types";
 import { num } from "@/lib/format";
 import { useT } from "@/i18n/provider";
 import { dashboard } from "@/i18n/dictionaries/dashboard";
+import { useChartTheme } from "@/hooks/useChartTheme";
 
 /**
  * Token totals per project (in + out), sorted by total descending and capped
@@ -44,11 +45,12 @@ export function CostByProject({
   byProject: Stats["byProject"];
 }) {
   const t = useT(dashboard);
+  const theme = useChartTheme();
   const data = mapTokensByProject(byProject);
 
   return (
     <div className="chart-card">
-      <h3 className="text-sm font-medium text-neutral-700">
+      <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
         {t("dash.chart.tokens")}
       </h3>
       {data.length === 0 ? (
@@ -62,18 +64,18 @@ export function CostByProject({
             >
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke="#e5e5e5"
+                stroke={theme.grid}
                 vertical={false}
               />
-              <XAxis dataKey="project" tick={{ fontSize: 11 }} />
+              <XAxis dataKey="project" tick={{ fontSize: 11, fill: theme.axis }} />
               <YAxis
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: theme.axis }}
                 width={48}
                 tickFormatter={(v) => num(Number(v))}
               />
               <Tooltip
                 formatter={(value) => num(Number(value))}
-                contentStyle={{ fontSize: 12, borderRadius: 8 }}
+                contentStyle={theme.tooltip}
               />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Bar

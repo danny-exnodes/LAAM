@@ -12,7 +12,11 @@
   padding: 1rem;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
 }
-.dark .chart-card {
-  border-color: var(--color-neutral-800);
-  background: var(--color-neutral-900);
+/* Dark mode is media-query based (no `.dark` class on <html>), so the dark
+   variant must key off prefers-color-scheme to match Tailwind's `dark:` utils. */
+@media (prefers-color-scheme: dark) {
+  .chart-card {
+    border-color: var(--color-neutral-800);
+    background: var(--color-neutral-900);
+  }
 }

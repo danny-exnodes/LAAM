@@ -1,14 +1,22 @@
 import Link from "next/link";
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Bot,
+  Network,
+  Plug,
+  Server,
+} from "lucide-react";
 import { SyncButton } from "@/components/sync-button";
 import { SignOutButton } from "@/components/signout-button";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/chat", label: "Chat" },
-  { href: "/agents", label: "Agents" },
-  { href: "/graph", label: "Graph" },
-  { href: "/connectors", label: "Connectors" },
-  { href: "/machines", label: "Machines" },
+  { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
+  { href: "/chat", label: "Chat", Icon: MessageSquare },
+  { href: "/agents", label: "Agents", Icon: Bot },
+  { href: "/graph", label: "Graph", Icon: Network },
+  { href: "/connectors", label: "Connectors", Icon: Plug },
+  { href: "/machines", label: "Machines", Icon: Server },
 ];
 
 export function AppHeader({
@@ -32,12 +40,13 @@ export function AppHeader({
                 key={n.href}
                 href={n.href}
                 className={
-                  "rounded-lg px-3 py-1.5 text-sm font-medium transition " +
+                  "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition " +
                   (active
                     ? "bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
                     : "text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800")
                 }
               >
+                <n.Icon size={15} strokeWidth={2} aria-hidden />
                 {n.label}
               </Link>
             );

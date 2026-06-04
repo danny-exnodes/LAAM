@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "laam-v2",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd v2 && npm run dev"],
+      "port": 3000
+    },
+    {
       "name": "laam",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],

@@ -23,10 +23,12 @@ function fmtDur(ms: number): string {
   return `${sec}s`;
 }
 
-const TONE_BORDER: Record<Tone, string> = {
-  accent: "border-l-violet-500",
-  running: "border-l-green-500",
-  done: "border-l-neutral-400",
+// Inline accent (see AgentCard) so the left colour survives `dark:border-*`,
+// which would otherwise override border-left-color in dark mode.
+const TONE_ACCENT: Record<Tone, string> = {
+  accent: "#8b5cf6",
+  running: "#22c55e",
+  done: "#94a3b8",
 };
 
 export function KpiGrid({ totals }: { totals: Stats["totals"] }) {
@@ -50,10 +52,8 @@ export function KpiGrid({ totals }: { totals: Stats["totals"] }) {
       {items.map((i) => (
         <div
           key={i.label}
-          className={
-            "rounded-xl border border-l-4 border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 " +
-            TONE_BORDER[i.tone]
-          }
+          style={{ borderLeftColor: TONE_ACCENT[i.tone] }}
+          className="rounded-xl border border-l-4 border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900"
         >
           <div className="text-[11px] font-medium uppercase tracking-wide text-neutral-500">
             {i.label}

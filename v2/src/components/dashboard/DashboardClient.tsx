@@ -56,7 +56,7 @@ export function DashboardClient() {
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-6 p-6">
+    <main className="w-full space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight">{t("dash.page.title")}</h1>
         <DashboardExport stats={stats} />

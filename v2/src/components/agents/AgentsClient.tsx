@@ -12,6 +12,7 @@ import { useT } from "@/i18n/provider";
 import { agents } from "@/i18n/dictionaries/agents";
 import { FilterBar } from "./FilterBar";
 import { AgentCard } from "./AgentCard";
+import { AgentDrawer } from "./AgentDrawer";
 import {
   applyFilters,
   toCsvRow,
@@ -37,6 +38,7 @@ export function AgentsClient() {
   const t = useT(agents);
   const { sessions, connected, stuckIds } = useLiveSessions();
   const [filters, setFilters] = useState<AgentFilters>(EMPTY_FILTERS);
+  const [selected, setSelected] = useState<LiveSession | null>(null);
 
   const projects = useMemo(() => options(sessions, (s) => s.projectName), [sessions]);
   const models = useMemo(() => options(sessions, (s) => s.model), [sessions]);
@@ -66,7 +68,8 @@ export function AgentsClient() {
     downloadCsv("agents.csv", filtered.map(toCsvRow), [...AGENT_CSV_COLUMNS]);
 
   return (
-    <main className="mx-auto max-w-6xl p-6">
+    <>
+      <main className="w-full p-6">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
           Agents
@@ -107,14 +110,21 @@ export function AgentsClient() {
                 {items.length}
               </span>
             </h2>
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {items.map((s) => (
-                <AgentCard key={s.id} s={s} stuck={stuckSet.has(s.id)} />
+                <AgentCard
+                  key={s.id}
+                  s={s}
+                  stuck={stuckSet.has(s.id)}
+                  onSelect={setSelected}
+                />
               ))}
             </div>
           </section>
         ))
       )}
-    </main>
+      </main>
+      <AgentDrawer session={selected} onClose={() => setSelected(null)} />
+    </>
   );
 }

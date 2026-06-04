@@ -6,7 +6,7 @@ Cập nhật: 2026-06-03. Stack: Next.js 16 + React 19 + TS + Tailwind 4 + Auth.
 
 ## Routes
 - Pages: `/login` `/register` `/dashboard` `/chat` `/agents` `/agents/[id]` `/graph` `/machines`
-- API: `/api/auth/[...nextauth]`, `/api/register`, `/api/sync`, `/api/ingest`, `/api/machines`(+`/[id]`), `/api/chat`, `/api/conversations`(+`/[id]`)
+- API: `/api/auth/[...nextauth]`, `/api/register`, `/api/sync`, `/api/ingest`, `/api/machines`(+`/[id]`), `/api/chat`, `/api/conversations`(+`/[id]`), `/api/agents/[id]/timeline` (log cho drawer — Session 2), `/api/connectors`(+`/[id]/[action]`), `/api/stats`, `/api/events`(SSE), map+ocr helpers
 
 ## Trạng thái
 - P1 auth/RBAC ✅ · P2 monitoring (sync, Agents, Session-detail, Dashboard: KPIs+cost chart recharts+heatmap+breakdowns+leaderboard, Graph @xyflow/react) ✅ · P3 collector đa máy (đơn giản: machine-token + ingest + /machines + collector) ✅ · **P4 Chat Gemma 4** ✅ built (streaming Ollama, per-user history) — **chờ test runtime**.
@@ -33,7 +33,9 @@ Auth.js: user/account/session/verificationToken + `role`. App: machines(`tokenHa
 - Residual Wave 3: relTime vi-only; fetch-url không chặn DNS-rebinding; streaming/OCR chưa verify end-to-end (cần Ollama + tesseract trên máy chủ).
 - **Wave 4 Connectors ✅ (2026-06-03) — FULL PARITY** — Agent Team `laam-v2-wave4` (5 agent). `lib/connectors/`: crypto (AES-256-GCM), store (Postgres per-user encrypted), index (user-scoped list/connect/disconnect/test/chatTools/execute + mask), registry + 7 connector (demo/github/trello/jira/gdrive/gcal/gmail). API `app/api/connectors/route.ts` + `[id]/[action]`. UI `app/connectors` + `components/connectors/ConnectorsClient` + nav link. Tool-loop trong `/api/chat` (bounded rounds, no-connector path nguyên vẹn). Bảng `connector_credentials` (per-user, secret mã hoá). 375 test, build xanh.
 - **⚠️ Migration:** `connector_credentials` cần `npm run db:generate && db:migrate` trên host (drizzle-kit không chạy sandbox). Prod set `CONNECTOR_KEY`.
-- **🎉 v1→v2 parity ĐẠT** (Dashboard/Agents/Chat/Connectors). Branch `feat/v2-foundation`. Còn lại: nghiệm thu live (Ollama+tesseract), real OAuth flow cho Google, lucide-react icons, cost-by-project/day, relTime i18n.
+- **🎉 v1→v2 parity ĐẠT** (Dashboard/Agents/Chat/Connectors). Branch `feat/v2-foundation`. Còn lại: nghiệm thu live (Ollama+tesseract), real OAuth flow cho Google, cost-by-project/day, relTime i18n.
+- **Parity-polish ✅ (2026-06-03, Session 2, branch `fix/v2-parity-polish`)** — sửa 11 lỗi user báo khi so v1. Migrate `connector_credential` (drizzle/0001) + sửa route đọc `body.fields`. Full-width mọi trang, agents grid ≤5/hàng, viền card theo trạng thái (inline borderLeftColor), **dark theme chart** (hook `useChartTheme` + fix `.chart-card` media-query — xem [[v2-dark-mode-theming]]), **lucide-react** (đã cài; nav/buttons/cards/composer). **Restructure Agents kiểu v1**: `AgentDrawer` (log + timestamp HH:MM:SS) ở danh sách, `/agents/[id]` chỉ waterfall+meta; `ToolWaterfall` viết lại có trục thời gian thật (offset theo start + ruler). 375 test pass, tsc sạch. Chat/machines/connectors verify LIVE OK (gốc "không chạy" = user table rỗng sau reset).
+- Files mới Session 2: `components/agents/AgentDrawer.tsx`, `hooks/useChartTheme.ts`, `app/api/agents/[id]/timeline/route.ts`.
 
 ## Chưa làm
 Bảng `events` (timeline remote), lọc Agents theo máy/owner, connectors + smart-routing (Phase 5), deploy/Tailscale (Phase 6). Phase 0 UI #10/#11 (full-width, gom nút chat) ở app cũ chưa code.

@@ -8,33 +8,24 @@ import type { SubAgentJson } from "@/db/schema";
 import { AppHeader } from "@/components/app-header";
 import { ToolWaterfall } from "@/components/agents/ToolWaterfall";
 import { ago, usd, num, shortModel } from "@/lib/format";
-import { getTimeline, getToolCalls } from "@/lib/monitoring/parser.js";
-import { getLocalTimeline } from "@/lib/monitoring/localParser.js";
+import { getToolCalls } from "@/lib/monitoring/parser.js";
 
 export const dynamic = "force-dynamic";
 
-type TimelineItem = {
-  ts: number | null;
-  role: string;
-  kind?: string;
-  text?: string;
-  isError?: boolean;
-};
 type ToolCall = {
   id: string;
   name: string;
   detail?: string;
+  start?: number | null;
+  end?: number | null;
   durationMs?: number | null;
   status?: string;
   isError?: boolean;
 };
 
-const ROLE_STYLES: Record<string, string> = {
-  assistant: "text-[var(--color-accent)]",
-  user: "text-green-600 dark:text-green-400",
-  tool: "text-amber-600 dark:text-amber-400",
-};
-
+// Session detail = the tool-call waterfall (with a real time axis) + summary +
+// sub-agents. The message log lives in the Agents drawer (v1-style split), so
+// this page stays short instead of being one long scroll.
 export default async function SessionDetailPage({
   params,
 }: {
@@ -52,16 +43,10 @@ export default async function SessionDetailPage({
   const s = rows[0];
   if (!s) notFound();
 
-  let timeline: TimelineItem[] = [];
   let toolCalls: ToolCall[] = [];
-  if (s.transcriptPath) {
+  if (s.transcriptPath && s.source !== "local") {
     try {
-      if (s.source === "local") {
-        timeline = getLocalTimeline(s.transcriptPath) as unknown as TimelineItem[];
-      } else {
-        timeline = getTimeline(s.transcriptPath) as unknown as TimelineItem[];
-        toolCalls = (getToolCalls(s.transcriptPath) as unknown as ToolCall[]).slice(-12);
-      }
+      toolCalls = (getToolCalls(s.transcriptPath) as unknown as ToolCall[]).slice(-50);
     } catch {
       /* file may have moved/rotated — show summary only */
     }
@@ -70,14 +55,17 @@ export default async function SessionDetailPage({
   return (
     <div>
       <AppHeader current="/agents" role={session.user.role} />
-      <main className="mx-auto max-w-4xl p-6">
-        <Link href="/agents" className="text-sm text-[var(--color-accent)] hover:underline">
+      <main className="w-full p-6">
+        <Link
+          href="/agents"
+          className="text-sm text-[var(--color-accent)] hover:underline"
+        >
           ← Agents
         </Link>
 
         <h1 className="mt-2 font-mono text-lg font-bold break-all">{s.id}</h1>
 
-        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white p-4 text-sm shadow-sm sm:grid-cols-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl border border-neutral-200 bg-white p-4 text-sm shadow-sm sm:grid-cols-3 lg:grid-cols-5 dark:border-neutral-800 dark:bg-neutral-900">
           <Meta k="Trạng thái" v={s.status ?? "—"} />
           <Meta k="Model" v={shortModel(s.model)} />
           <Meta k="Nguồn" v={s.source} />
@@ -89,21 +77,29 @@ export default async function SessionDetailPage({
           <Meta k="Hoạt động" v={ago(s.lastActivity)} />
         </dl>
 
-        {toolCalls.length > 0 && (
-          <section className="mt-6">
-            <h2 className="mb-2 text-sm font-bold">
-              Tool-call waterfall{" "}
-              <span className="text-neutral-400">{toolCalls.length}</span>
-            </h2>
+        <section className="mt-6">
+          <h2 className="mb-2 text-sm font-bold">
+            Tool-call waterfall{" "}
+            <span className="text-neutral-400">{toolCalls.length}</span>
+          </h2>
+          {toolCalls.length > 0 ? (
             <ToolWaterfall
               calls={toolCalls.map((t) => ({
                 name: t.name,
+                start: t.start ?? null,
+                end: t.end ?? null,
                 durationMs: t.durationMs ?? null,
                 isError: t.isError,
               }))}
             />
-          </section>
-        )}
+          ) : (
+            <p className="text-sm text-neutral-500">
+              {s.source === "local"
+                ? "Nguồn local không có waterfall tool-call."
+                : "Phiên này chưa có tool call (hoặc transcript đã xoay vòng)."}
+            </p>
+          )}
+        </section>
 
         {s.subAgents && s.subAgents.length > 0 && (
           <section className="mt-6">
@@ -120,9 +116,7 @@ export default async function SessionDetailPage({
                   <span
                     className={
                       "inline-block h-2 w-2 shrink-0 rounded-full " +
-                      (a.status === "running"
-                        ? "bg-green-500"
-                        : "bg-neutral-400")
+                      (a.status === "running" ? "bg-green-500" : "bg-neutral-400")
                     }
                   />
                   <span className="font-mono font-semibold text-[var(--color-accent)]">
@@ -142,37 +136,16 @@ export default async function SessionDetailPage({
           </section>
         )}
 
-        <section className="mt-6">
-          <h2 className="mb-2 text-sm font-bold">Timeline</h2>
-          {timeline.length === 0 ? (
-            <p className="text-sm text-neutral-500">
-              Không đọc được timeline (file có thể đã xoay vòng, hoặc nguồn ở máy khác — sẽ có khi collector đẩy events ở Phase 3).
-            </p>
-          ) : (
-            <ol className="space-y-3">
-              {timeline.map((it, i) => (
-                <li key={i} className="flex gap-3 border-b border-neutral-100 pb-3 dark:border-neutral-800/60">
-                  <span
-                    className={
-                      "w-20 shrink-0 text-[11px] font-bold uppercase tracking-wide " +
-                      (ROLE_STYLES[it.role] ?? "text-neutral-400")
-                    }
-                  >
-                    {it.role}
-                  </span>
-                  <p
-                    className={
-                      "min-w-0 flex-1 whitespace-pre-wrap break-words text-sm " +
-                      (it.isError ? "text-red-600 dark:text-red-400" : "")
-                    }
-                  >
-                    {(it.text ?? "").slice(0, 2000)}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+        <p className="mt-6 text-xs text-neutral-400">
+          Log tin nhắn hiển thị ở drawer khi mở agent từ trang{" "}
+          <Link
+            href="/agents"
+            className="text-[var(--color-accent)] hover:underline"
+          >
+            Agents
+          </Link>
+          .
+        </p>
       </main>
     </div>
   );

@@ -8,6 +8,13 @@
       "when": 1780485037803,
       "tag": "0000_nebulous_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780502017774,
+      "tag": "0001_young_talkback",
+      "breakpoints": true
     }
   ]
 }

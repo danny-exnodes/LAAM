@@ -19,7 +19,7 @@ function mk(over: Partial<LiveSession> = {}): LiveSession {
 function wrap(s: LiveSession, stuck = false) {
   return render(
     <I18nProvider lang="vi">
-      <AgentCard s={s} stuck={stuck} />
+      <AgentCard s={s} stuck={stuck} onSelect={() => {}} />
     </I18nProvider>,
   );
 }

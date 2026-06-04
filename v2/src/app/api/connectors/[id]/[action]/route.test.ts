@@ -44,7 +44,8 @@ describe("POST /api/connectors/:id/:action", () => {
     const fields = { token: "ghp_secret" };
     mockConnect.mockResolvedValue({ ok: true } as never);
 
-    const res = await POST(req(fields), ctx("github", "connect"));
+    // The client wraps the field map in { fields } (see ConnectorsClient).
+    const res = await POST(req({ fields }), ctx("github", "connect"));
     expect(mockConnect).toHaveBeenCalledWith("u1", "github", fields);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
@@ -52,7 +53,10 @@ describe("POST /api/connectors/:id/:action", () => {
 
   test("connect response never echoes the submitted secret", async () => {
     mockConnect.mockResolvedValue({ ok: true } as never);
-    const res = await POST(req({ token: "ghp_secret" }), ctx("github", "connect"));
+    const res = await POST(
+      req({ fields: { token: "ghp_secret" } }),
+      ctx("github", "connect"),
+    );
     const text = JSON.stringify(await res.json());
     expect(text).not.toContain("ghp_secret");
   });

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { RefreshCw } from "lucide-react";
 
 export function SyncButton() {
   const router = useRouter();
@@ -31,8 +32,9 @@ export function SyncButton() {
       <button
         onClick={sync}
         disabled={loading}
-        className="rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+        className="flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
       >
+        <RefreshCw size={14} className={loading ? "animate-spin" : ""} aria-hidden />
         {loading ? "Đang đồng bộ…" : "Đồng bộ"}
       </button>
     </div>
