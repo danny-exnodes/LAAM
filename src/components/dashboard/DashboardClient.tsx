@@ -16,8 +16,11 @@ import { ModelDoughnut } from "./ModelDoughnut";
 import { BranchDoughnut } from "./BranchDoughnut";
 import { ActivityTimeline } from "./ActivityTimeline";
 import { Heatmap } from "./Heatmap";
+import { CostHeatmap } from "./CostHeatmap";
 import { CostByModel } from "./CostByModel";
 import { CostByProject } from "./CostByProject";
+import { CostByDay } from "./CostByDay";
+import { TokensByDay } from "./TokensByDay";
 import { ModelComparisonTable } from "./ModelComparisonTable";
 import { ToolLeaderboard } from "./ToolLeaderboard";
 import { ToolErrorsTable } from "./ToolErrorsTable";
@@ -73,6 +76,11 @@ export function DashboardClient() {
       <ActivityTimeline activity={stats.activity} />
 
       <div className="grid gap-4 md:grid-cols-2">
+        <CostByDay activity={stats.activity} />
+        <TokensByDay activity={stats.activity} />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
         <CostByModel modelComparison={stats.modelComparison} />
         <CostByProject byProject={stats.byProject} />
       </div>
@@ -89,6 +97,8 @@ export function DashboardClient() {
       <TopSessions byDuration={stats.topByDuration} byTokens={stats.topByTokens} />
 
       <Heatmap heatmap={stats.heatmap} />
+
+      <CostHeatmap costHeatmap={stats.costHeatmap} />
     </main>
   );
 }

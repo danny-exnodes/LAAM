@@ -25,6 +25,9 @@ export const dashboard: Dict = {
   'dash.chart.topDur': { vi: 'Top session theo thời lượng', en: 'Top sessions by duration', zh: '时长最长的会话' },
   'dash.chart.topTok': { vi: 'Top session theo tokens', en: 'Top sessions by tokens', zh: 'token 最多的会话' },
   'dash.chart.empty': { vi: 'Chưa có dữ liệu.', en: 'No data yet.', zh: '暂无数据。' },
+  'dash.chart.costByDay': { vi: 'Chi phí theo thời gian', en: 'Cost over time', zh: '费用随时间变化' },
+  'dash.chart.tokensByDay': { vi: 'Tokens vào/ra theo thời gian', en: 'Tokens in/out over time', zh: '输入/输出 token 随时间变化' },
+  'dash.chart.costHeatmap': { vi: 'Heatmap chi phí (giờ × thứ)', en: 'Cost heatmap (hour × day)', zh: '费用热力图（小时 × 星期）' },
   // act
   'dash.act.daily': { vi: '(theo ngày)', en: '(daily)', zh: '（按天）' },
   'dash.act.hourly': { vi: '(theo giờ)', en: '(hourly)', zh: '（按小时）' },
@@ -55,6 +58,7 @@ export const dashboard: Dict = {
   'dash.ds.tokens': { vi: 'Tokens', en: 'Tokens', zh: 'Token' },
   'dash.ds.input': { vi: 'Input', en: 'Input', zh: '输入' },
   'dash.ds.output': { vi: 'Output', en: 'Output', zh: '输出' },
+  'dash.ds.cost': { vi: 'Chi phí (USD)', en: 'Cost (USD)', zh: '费用（USD）' },
   'dash.ds.toolCalls': { vi: 'Tool calls', en: 'Tool calls', zh: '工具调用' },
   'dash.ds.durationMin': { vi: 'Thời lượng (phút)', en: 'Duration (min)', zh: '时长（分钟）' },
   // axis
@@ -79,8 +83,10 @@ export const dashboard: Dict = {
   'dash.hm.title': { vi: 'Heatmap hoạt động (giờ × thứ)', en: 'Activity heatmap (hour × day)', zh: '活动热力图（小时 × 星期）' },
   'dash.hm.empty': { vi: 'Chưa có dữ liệu hoạt động.', en: 'No activity data yet.', zh: '暂无活动数据。' },
   'dash.hm.cellTitle': { vi: '{day} {hr}h · {n} hoạt động', en: '{day} {hr}h · {n} activity', zh: '{day} {hr}时 · {n} 次活动' },
+  'dash.hm.costCellTitle': { vi: '{day} {hr}h · {cost}', en: '{day} {hr}h · {cost}', zh: '{day} {hr}时 · {cost}' },
   'dash.hm.low': { vi: 'ít', en: 'low', zh: '少' },
   'dash.hm.high': { vi: 'nhiều (tối đa {max})', en: 'high (max {max})', zh: '多（最多 {max}）' },
+  'dash.hm.costHigh': { vi: 'cao (tối đa {max})', en: 'high (max {max})', zh: '高（最多 {max}）' },
   'dash.hm.day.sun': { vi: 'CN', en: 'Sun', zh: '日' },
   'dash.hm.day.mon': { vi: 'T2', en: 'Mon', zh: '一' },
   'dash.hm.day.tue': { vi: 'T3', en: 'Tue', zh: '二' },

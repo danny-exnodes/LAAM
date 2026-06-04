@@ -15,6 +15,8 @@
 - [auth-multihost-dev-env](decisions/auth-multihost-dev-env.md) — Vào dev qua hostname Tailscale (HTTPS `:8443`): **2 fix** — (1) `AUTH_URL` trong `.env.development.local` (Edge middleware bỏ qua Host→localhost); (2) `allowedDevOrigins` trong `next.config.ts` (Next chặn dev endpoint cross-origin → trang KHÔNG hydrate → form về GET → login đá về). Cả hai dev-only, prod Docker bỏ qua. **Đã verify login :8443 OK.**
 - [poc-host-and-ollama-ops](decisions/poc-host-and-ollama-ops.md) — Máy host (Ultra 9 285K/128GB/RTX 5070 Ti 16GB); hosting **2 tầng** (lõi Node+Postgres / AI Ollama+Tesseract, degrade nhẹ); Ollama ops 16GB (keep-alive, q8 fit, 30B+ tràn); Gemma 4 lineup.
 
+- [agent-harness-architecture](decisions/agent-harness-architecture.md) — **Kiến trúc 6 lớp Agent Harness** (L0 orchestrator→L6 UX) + build order SP-1→SP-4. D1: hybrid dispatch hợp nhất, **connectors giữ nguyên**; internal tools đọc `agent_sessions/stats/machines` (lấp nghịch lý "AI mù dữ liệu LAAM"). Roadmap đầy đủ: `docs/superpowers/specs/2026-06-04-agent-harness-architecture.md`. Chờ user review chi tiết.
+
 ## Rules (vận hành agent)
 - [agent-ops-rules](decisions/agent-ops-rules.md) — ⛔ **KHÔNG tự ý chạy ngầm service nào** (dev/start/docker/ollama/preview) nếu user chưa cho phép; user tự host dev. Không `build` in-place khi prod đang chạy.
 
@@ -27,6 +29,7 @@
 ## Backlog (v1 chưa migrate — làm sau ở v2)
 - [next-steps](backlog/next-steps.md) — **handoff phiên sau**: nghiệm thu POC 4 nhiệm vụ · cài Tesseract (Admin) · độ bền (Windows Service) · v1-unported · vision enhancement · Phase 6.
 - [docker-stack-tesseract](backlog/docker-stack-tesseract.md) — **handoff cho session docker**: chèn `apk add tesseract-ocr + data eng/vie/chi_sim` vào runner stage của Dockerfile (đã verify, chưa tự sửa Dockerfile của họ để tránh đè).
+- [agent-harness-coordination](backlog/agent-harness-coordination.md) — **cảnh báo file dùng chung** cho 3 session: SP-1 sẽ refactor `/api/chat`; SP-4 đụng `components/chat/*`; connectors giữ nguyên. Roadmap chốt, chưa implement.
 - [v1-unported](backlog/v1-unported.md) — Search/Office/proxy/`/api/config` + bảng events + lọc máy/owner + residuals. **Nguồn chân lý:** `docs/v1-to-v2-migration-handoff.md`. ⚠️ chưa xoá v1 (archive sau khi v2 production+nghiệm thu).
 
 ## Trạng thái hiện tại (2026-06-03)

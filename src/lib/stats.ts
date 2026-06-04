@@ -23,10 +23,30 @@ function bucketStart(ts: number, size: number): number {
 // short spans, daily for longer ones; gaps filled so the line reads as a real
 // timeline (capped at 90 points). Mirrors v1 buildActivity, emitting the locked
 // {t, sessions, tokens}[] shape.
+type ActivityAcc = {
+  sessions: number;
+  tokens: number;
+  tokensIn: number;
+  tokensOut: number;
+  cost: number;
+};
+const emptyAcc = (): ActivityAcc => ({
+  sessions: 0,
+  tokens: 0,
+  tokensIn: 0,
+  tokensOut: 0,
+  cost: 0,
+});
+
 function buildActivity(sessions: SessionRow[]): Stats["activity"] {
   const starts = sessions
-    .map((s) => ({ ts: s.startedAt, tokens: (s.tokensIn || 0) + (s.tokensOut || 0) }))
-    .filter((x): x is { ts: number; tokens: number } => x.ts != null)
+    .map((s) => ({
+      ts: s.startedAt,
+      tokensIn: s.tokensIn || 0,
+      tokensOut: s.tokensOut || 0,
+      cost: s.costUsd || 0,
+    }))
+    .filter((x): x is { ts: number; tokensIn: number; tokensOut: number; cost: number } => x.ts != null)
     .sort((a, b) => a.ts - b.ts);
   if (!starts.length) return [];
 
@@ -35,12 +55,15 @@ function buildActivity(sessions: SessionRow[]): Stats["activity"] {
   const span = max - min;
   const bucketMs = span > 2 * DAY ? DAY : HOUR;
 
-  const map = new Map<number, { sessions: number; tokens: number }>();
+  const map = new Map<number, ActivityAcc>();
   for (const s of starts) {
     const key = bucketStart(s.ts, bucketMs);
-    const cur = map.get(key) || { sessions: 0, tokens: 0 };
+    const cur = map.get(key) || emptyAcc();
     cur.sessions += 1;
-    cur.tokens += s.tokens;
+    cur.tokensIn += s.tokensIn;
+    cur.tokensOut += s.tokensOut;
+    cur.tokens += s.tokensIn + s.tokensOut;
+    cur.cost += s.cost;
     map.set(key, cur);
   }
 
@@ -49,8 +72,15 @@ function buildActivity(sessions: SessionRow[]): Stats["activity"] {
   const points: Stats["activity"] = [];
   let guard = 0;
   for (let k = firstKey; k <= lastKey && guard < 90; k += bucketMs, guard++) {
-    const v = map.get(k) || { sessions: 0, tokens: 0 };
-    points.push({ t: k, sessions: v.sessions, tokens: v.tokens });
+    const v = map.get(k) || emptyAcc();
+    points.push({
+      t: k,
+      sessions: v.sessions,
+      tokens: v.tokens,
+      tokensIn: v.tokensIn,
+      tokensOut: v.tokensOut,
+      cost: v.cost,
+    });
   }
   return points;
 }
@@ -103,6 +133,9 @@ export function computeStats(sessions: SessionRow[]): Stats {
   >();
 
   const heatmap: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  // Cost heatmap: each session's cost attributed to its start weekday/hour (UTC,
+  // so the aggregation stays deterministic and timezone-independent).
+  const costHeatmap: number[][] = Array.from({ length: 7 }, () => new Array(24).fill(0));
   let totalDurationMs = 0;
 
   for (const s of sessions) {
@@ -168,6 +201,11 @@ export function computeStats(sessions: SessionRow[]): Stats {
       const [d, h] = key.split("_").map(Number);
       if (d >= 0 && d < 7 && h >= 0 && h < 24) heatmap[d][h] += n;
     }
+
+    if (s.startedAt != null && cost > 0) {
+      const dt = new Date(s.startedAt);
+      costHeatmap[dt.getUTCDay()][dt.getUTCHours()] += cost;
+    }
   }
 
   totals.avgDurationMs = totals.sessions
@@ -222,6 +260,7 @@ export function computeStats(sessions: SessionRow[]): Stats {
     toolLeaderboard,
     modelComparison,
     heatmap,
+    costHeatmap,
     activity: buildActivity(sessions),
     topByDuration,
     topByTokens,

@@ -11,6 +11,17 @@ const HOUR = 3_600_000;
 const DAY = 86_400_000;
 const t0 = Date.UTC(2026, 0, 2, 0, 0, 0);
 
+// Build an activity point; mapActivity only reads t/sessions/tokens, so the
+// in/out/cost fields (added in v2) just satisfy the type here.
+const A = (t: number, sessions: number, tokens: number) => ({
+  t,
+  sessions,
+  tokens,
+  tokensIn: 0,
+  tokensOut: 0,
+  cost: 0,
+});
+
 describe("mapActivity (pure)", () => {
   it("returns [] for empty input", () => {
     expect(mapActivity([])).toEqual([]);
@@ -18,8 +29,8 @@ describe("mapActivity (pure)", () => {
 
   it("carries sessions and tokens through unchanged", () => {
     const r = mapActivity([
-      { t: t0, sessions: 3, tokens: 1200 },
-      { t: t0 + HOUR, sessions: 5, tokens: 800 },
+      A(t0, 3, 1200),
+      A(t0 + HOUR, 5, 800),
     ]);
     expect(r.map((x) => x.sessions)).toEqual([3, 5]);
     expect(r.map((x) => x.tokens)).toEqual([1200, 800]);
@@ -27,8 +38,8 @@ describe("mapActivity (pure)", () => {
 
   it("uses hourly labels when buckets are < 1 day apart", () => {
     const r = mapActivity([
-      { t: t0, sessions: 1, tokens: 1 },
-      { t: t0 + HOUR, sessions: 1, tokens: 1 },
+      A(t0, 1, 1),
+      A(t0 + HOUR, 1, 1),
     ]);
     // hourly format is "DD HHh" — must contain an hour marker, not a slash date.
     expect(r[0].label).toMatch(/h$/);
@@ -37,8 +48,8 @@ describe("mapActivity (pure)", () => {
 
   it("uses daily labels when buckets are >= 1 day apart", () => {
     const r = mapActivity([
-      { t: t0, sessions: 1, tokens: 1 },
-      { t: t0 + DAY, sessions: 1, tokens: 1 },
+      A(t0, 1, 1),
+      A(t0 + DAY, 1, 1),
     ]);
     // daily format is "MM/DD" — contains a slash, no hour marker.
     expect(r[0].label).toContain("/");
@@ -46,7 +57,7 @@ describe("mapActivity (pure)", () => {
   });
 
   it("treats a single point as hourly", () => {
-    const r = mapActivity([{ t: t0, sessions: 2, tokens: 9 }]);
+    const r = mapActivity([A(t0, 2, 9)]);
     expect(r).toHaveLength(1);
     expect(r[0].label).toMatch(/h$/);
   });
@@ -56,10 +67,7 @@ describe("ActivityTimeline (render)", () => {
   it("renders its title with data without throwing", () => {
     const { getByText } = wrap(
       <ActivityTimeline
-        activity={[
-          { t: t0, sessions: 3, tokens: 1200 },
-          { t: t0 + HOUR, sessions: 5, tokens: 800 },
-        ]}
+        activity={[A(t0, 3, 1200), A(t0 + HOUR, 5, 800)]}
       />,
     );
     expect(getByText("Hoạt động theo thời gian")).toBeTruthy();

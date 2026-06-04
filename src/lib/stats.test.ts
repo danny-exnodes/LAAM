@@ -186,8 +186,8 @@ describe("computeStats — activity", () => {
       row({ id: "c", startedAt: T0 + HOUR, tokensIn: 1, tokensOut: 0 }), // next hour
     ]);
     expect(stats.activity.length).toBe(2);
-    expect(stats.activity[0]).toEqual({ t: T0, sessions: 2, tokens: 15 });
-    expect(stats.activity[1]).toEqual({ t: T0 + HOUR, sessions: 1, tokens: 1 });
+    expect(stats.activity[0]).toEqual({ t: T0, sessions: 2, tokens: 15, tokensIn: 15, tokensOut: 0, cost: 0 });
+    expect(stats.activity[1]).toEqual({ t: T0 + HOUR, sessions: 1, tokens: 1, tokensIn: 1, tokensOut: 0, cost: 0 });
   });
 
   test("daily buckets when span exceeds 2 days", () => {
@@ -203,6 +203,38 @@ describe("computeStats — activity", () => {
 
   test("empty when no start times", () => {
     expect(computeStats([row({ startedAt: null })]).activity).toEqual([]);
+  });
+
+  test("activity buckets split tokens in/out and sum cost", () => {
+    const stats = computeStats([
+      row({ id: "a", startedAt: T0, tokensIn: 10, tokensOut: 4, costUsd: 1.5 }),
+      row({ id: "b", startedAt: T0 + 10 * 60 * 1000, tokensIn: 2, tokensOut: 6, costUsd: 0.5 }), // same hour
+    ]);
+    expect(stats.activity[0]).toEqual({
+      t: T0,
+      sessions: 2,
+      tokens: 22,
+      tokensIn: 12,
+      tokensOut: 10,
+      cost: 2,
+    });
+  });
+});
+
+describe("computeStats — costHeatmap", () => {
+  test("is 7×24 and attributes session cost to its start weekday/hour (UTC)", () => {
+    const stats = computeStats([
+      row({ startedAt: T0, costUsd: 1.5 }),
+      row({ startedAt: T0, costUsd: 0.5 }),
+      row({ startedAt: null, costUsd: 9 }), // no start → ignored
+    ]);
+    expect(stats.costHeatmap.length).toBe(7);
+    expect(stats.costHeatmap[0].length).toBe(24);
+    const d = new Date(T0).getUTCDay();
+    const h = new Date(T0).getUTCHours();
+    expect(stats.costHeatmap[d][h]).toBeCloseTo(2.0, 6);
+    // total across the grid equals the cost of sessions with a start time
+    expect(stats.costHeatmap.flat().reduce((a, b) => a + b, 0)).toBeCloseTo(2.0, 6);
   });
 });
 

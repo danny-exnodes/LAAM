@@ -49,6 +49,7 @@ const stats: Stats = {
     },
   ],
   heatmap: [],
+  costHeatmap: [],
   activity: [],
   topByDuration: [],
   topByTokens: [],

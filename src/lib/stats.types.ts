@@ -77,8 +77,16 @@ export interface Stats {
     tokensPerMin: number;
     doneRate: number;
   }[];
-  heatmap: number[][]; // [weekday 0-6][hour 0-23]
-  activity: { t: number; sessions: number; tokens: number }[];
+  heatmap: number[][]; // [weekday 0-6][hour 0-23] — activity counts (from histo)
+  costHeatmap: number[][]; // [weekday 0-6][hour 0-23] — summed costUsd by session start (UTC)
+  activity: {
+    t: number;
+    sessions: number;
+    tokens: number;
+    tokensIn: number;
+    tokensOut: number;
+    cost: number;
+  }[];
   topByDuration: { id: string; label: string; durationMs: number }[];
   topByTokens: { id: string; label: string; tokens: number }[];
 }
