@@ -14,6 +14,13 @@ const nextConfig: NextConfig = {
   // so the runtime image needs neither the full node_modules nor `next start`.
   // Build-only — ignored by `next dev`.
   output: "standalone",
+
+  // drizzle's node-postgres driver imports the native `pg` package (which has
+  // optional requires like `pg-native`). Keep `pg` as a runtime external so
+  // Next/Turbopack don't try to bundle it — otherwise any Server Component that
+  // imports `@/db` fails with "Module not found: Can't resolve 'pg'". Applies to
+  // both `next dev` (Turbopack) and the standalone build.
+  serverExternalPackages: ["pg"],
 };
 
 export default nextConfig;
