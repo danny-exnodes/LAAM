@@ -91,6 +91,18 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }
 
+  // Keep --header-h in sync with the REAL sticky-header height. Fixed/sticky page
+  // offsets (chat, office, filterbar, graph) reference var(--header-h) instead of a
+  // hard-coded number, so they never overlap or clip the header when it changes
+  // height (two-line brand, i18n labels, responsive breakpoints, etc.).
+  function syncHeaderHeight() {
+    const bar = document.querySelector('#topbar');
+    if (!bar) return;
+    const h = Math.round(bar.getBoundingClientRect().height);
+    if (h) document.documentElement.style.setProperty('--header-h', h + 'px');
+  }
+  window.addEventListener('resize', syncHeaderHeight);
+
   // ---- Top navigation ----
   const NAV = [
     { href: '/', key: 'nav.dashboard', match: (p) => p === '/' || p === '/index.html' },
@@ -140,6 +152,9 @@
     if (activeLink) try { activeLink.scrollIntoView({ inline: 'center', block: 'nearest' }); } catch {}
     document.querySelector('#theme').onclick = () =>
       applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+    // Header height can shift after icons/fonts/nav settle — sync after paint so
+    // var(--header-h) (chat/office/filterbar/graph offsets) stays correct.
+    requestAnimationFrame(syncHeaderHeight);
   }
 
   // ---- Language picker (vi / en / zh) ----

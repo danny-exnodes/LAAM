@@ -49,7 +49,7 @@
     const st = document.createElement('style');
     st.id = 'office-css';
     st.textContent = `
-      .office { position: fixed; inset: 0; top: 57px; overflow: hidden; background:
+      .office { position: fixed; inset: 0; top: var(--header-h, 57px); overflow: hidden; background:
         radial-gradient(120% 120% at 60% 0%, color-mix(in srgb, var(--accent) 9%, var(--bg)) 0%, var(--bg) 55%); }
       .office-stage { position: absolute; inset: 0; overflow: auto; cursor: grab; }
       .office-stage.grabbing { cursor: grabbing; }

@@ -23,7 +23,7 @@
         attachFileAria: 'Đính kèm file',
         attachUrlTitle: 'Đọc nội dung một URL',
         attachUrlAria: 'Đọc một URL',
-        inputPh: 'Nhắn cho Qwen… (Enter để gửi, Shift+Enter xuống dòng)',
+        inputPh: 'Nhắn cho Gemma… (Enter để gửi, Shift+Enter xuống dòng)',
         inputAria: 'Soạn tin nhắn',
         send: 'Gửi',
         stop: 'Dừng',
@@ -40,7 +40,7 @@
         attachedCaption: 'kèm {n} tài liệu',
 
         // --- kernel: empty state ---
-        empty: 'Bắt đầu trò chuyện với mô hình Qwen chạy cục bộ. Mỗi cuộc hội thoại được theo dõi như một phiên trong LAAM.',
+        empty: 'Bắt đầu trò chuyện với mô hình Gemma chạy cục bộ. Mỗi cuộc hội thoại được theo dõi như một phiên trong LAAM.',
 
         // --- kernel: errors / attachment prompts ---
         errPrefix: 'Lỗi: {msg}',
@@ -139,7 +139,7 @@
         expConvTitle: 'Hội thoại',
         expFileBase: 'hoi-thoai',
         expRoleUser: 'Bạn',
-        expRoleAssistant: 'Qwen',
+        expRoleAssistant: 'Gemma',
         expRoleSystem: 'Hệ thống',
         expMdMeta: 'Xuất từ LAAM · {date} · {n} tin nhắn',
         expMdAtts: '📎 kèm {n} tài liệu',
@@ -208,7 +208,7 @@
         attachFileAria: 'Attach a file',
         attachUrlTitle: 'Read the contents of a URL',
         attachUrlAria: 'Read a URL',
-        inputPh: 'Message Qwen… (Enter to send, Shift+Enter for a new line)',
+        inputPh: 'Message Gemma… (Enter to send, Shift+Enter for a new line)',
         inputAria: 'Compose a message',
         send: 'Send',
         stop: 'Stop',
@@ -223,7 +223,7 @@
         stopped: 'stopped',
         attachedCaption: '{n} attached document(s)',
 
-        empty: 'Start chatting with the Qwen model running locally. Each conversation is tracked as a session in LAAM.',
+        empty: 'Start chatting with the Gemma model running locally. Each conversation is tracked as a session in LAAM.',
 
         errPrefix: 'Error: {msg}',
         errRetry: 'Retry',
@@ -316,7 +316,7 @@
         expConvTitle: 'Conversation',
         expFileBase: 'conversation',
         expRoleUser: 'You',
-        expRoleAssistant: 'Qwen',
+        expRoleAssistant: 'Gemma',
         expRoleSystem: 'System',
         expMdMeta: 'Exported from LAAM · {date} · {n} messages',
         expMdAtts: '📎 {n} attached document(s)',
@@ -382,7 +382,7 @@
         attachFileAria: '附加文件',
         attachUrlTitle: '读取某个 URL 的内容',
         attachUrlAria: '读取 URL',
-        inputPh: '给 Qwen 发消息…（Enter 发送，Shift+Enter 换行）',
+        inputPh: '给 Gemma 发消息…（Enter 发送，Shift+Enter 换行）',
         inputAria: '撰写消息',
         send: '发送',
         stop: '停止',
@@ -397,7 +397,7 @@
         stopped: '已停止',
         attachedCaption: '附带 {n} 个文档',
 
-        empty: '开始与本地运行的 Qwen 模型对话。每段对话都会作为一个会话在 LAAM 中被跟踪。',
+        empty: '开始与本地运行的 Gemma 模型对话。每段对话都会作为一个会话在 LAAM 中被跟踪。',
 
         errPrefix: '错误：{msg}',
         errRetry: '重试',
@@ -490,7 +490,7 @@
         expConvTitle: '对话',
         expFileBase: 'conversation',
         expRoleUser: '你',
-        expRoleAssistant: 'Qwen',
+        expRoleAssistant: 'Gemma',
         expRoleSystem: '系统',
         expMdMeta: '从 LAAM 导出 · {date} · {n} 条消息',
         expMdAtts: '📎 附带 {n} 个文档',

@@ -610,9 +610,9 @@
     const hex = L.icon ? L.icon('hexagon', { size: 13, class: 'lc' }) : '';
     return '<span class="badge-local">' + hex + esc(T('chat.badgeLocal')) + '</span><span>' + esc(T('chat.modelLocalFree', { model: prettyModel(m) })) + '</span>';
   }
-  let lastBadgeModel = 'qwen2.5-coder:7b';
+  let lastBadgeModel = 'gemma4:e4b';
   fetch('/api/chat/info').then((r) => r.json())
-    .then((d) => { lastBadgeModel = (d && d.model) || 'qwen2.5-coder:7b'; setModelInfo(defaultModelBadge(lastBadgeModel)); })
+    .then((d) => { lastBadgeModel = (d && d.model) || 'gemma4:e4b'; setModelInfo(defaultModelBadge(lastBadgeModel)); })
     .catch(() => setModelInfo(defaultModelBadge(lastBadgeModel)));
 
   // ======================================================================
@@ -763,7 +763,7 @@
     const style = document.createElement('style');
     style.id = 'laam-chat-css';
     style.textContent = `
-      .chat { position: fixed; inset: 0; top: 57px; display: flex; }
+      .chat { position: fixed; inset: 0; top: var(--header-h, 57px); display: flex; }
       .chat-sidebar {
         flex: 0 0 264px; width: 264px; background: var(--bg-elev);
         border-right: 1px solid var(--border); display: flex; flex-direction: column;

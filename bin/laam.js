@@ -35,11 +35,11 @@ const STUCK_THRESHOLD_MIN = Number(arg('stuck', process.env.LAAM_STUCK_MIN || 10
 // The /chat page talks to the local model THROUGH the logging proxy (so chats
 // are tracked like any other local session). Hard-locked to the 7B model.
 const PROXY_URL = arg('proxy-url', process.env.LAAM_PROXY_URL || 'http://localhost:11435');
-// Default chat model: an all-round daily-assistant with reliable tool/function
-// calling (for connectors) AND vision (reads images/scanned docs natively).
-// qwen3-vl:8b — the most CONSISTENT tool-caller (6/6 every trial; gemma4:e4b is
-// faster but drops the email tool 2/3 runs), plus vision and more 16GB headroom.
-const CHAT_MODEL = process.env.LAAM_CHAT_MODEL || 'qwen3-vl:8b';
+// Default chat model: gemma4:e4b — the project's PRIMARY model (newest, fast,
+// multimodal/vision). NOTE: gemma4 is a weaker tool-caller (drops tool calls
+// ~2/3 of runs vs qwen3-vl:8b), so connector tool-calling relies on smart-routing
+// to a reliable tool-caller when a tool call is needed (planned — docs/v2-plan.md §6).
+const CHAT_MODEL = process.env.LAAM_CHAT_MODEL || 'gemma4:e4b';
 
 // System prompt teaching the model WHEN and HOW to emit the rich blocks the
 // /chat page can render (charts, maps, GFM tables). Few-shot so a small model

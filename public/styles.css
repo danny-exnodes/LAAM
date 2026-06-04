@@ -9,6 +9,7 @@
   --text-faint: #8b95a1;
   --accent: #6d5efc;
   --accent-soft: #ece9ff;
+  --header-h: 57px;        /* live sticky-header height — kept in sync by common.js syncHeaderHeight() */
   --running: #16a34a;
   --running-soft: #dcfce7;
   --idle: #d97706;
@@ -318,7 +319,7 @@ main { padding: 22px; max-width: 1500px; margin: 0 auto; }
 .filterbar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   padding: 12px 22px; border-bottom: 1px solid var(--border);
-  background: var(--bg-elev); position: sticky; top: 59px; z-index: 15;
+  background: var(--bg-elev); position: sticky; top: var(--header-h); z-index: 15;
 }
 .filterbar .search { min-width: 240px; }
 .fsel {
@@ -382,7 +383,7 @@ main { padding: 22px; max-width: 1500px; margin: 0 auto; }
 @media (max-width: 720px) { .charts { grid-template-columns: 1fr; } .chart-card.wide, .chart-card.half { grid-column: span 1; } }
 
 /* ---- Graph ---- */
-.graphmain { display: flex; height: calc(100vh - 59px - 49px); height: calc(100dvh - 59px - 49px); }
+.graphmain { display: flex; height: calc(100vh - var(--header-h) - 49px); height: calc(100dvh - var(--header-h) - 49px); }
 #net { flex: 1; min-width: 0; background:
   radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0) 0 0 / 26px 26px; }
 .gpanel {
