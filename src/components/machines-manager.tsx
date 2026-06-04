@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { fmtDateTime } from "@/lib/format";
 
 type M = {
   id: string;
@@ -111,7 +112,7 @@ export function MachinesManager({
                   <div className="font-medium">{m.name}</div>
                   <div className="text-xs text-neutral-500">
                     {m.hostname ? m.hostname + " · " : ""}
-                    {m.lastSeen ? "lần cuối " + new Date(m.lastSeen).toLocaleString() : "chưa kết nối"}
+                    {m.lastSeen ? "lần cuối " + fmtDateTime(m.lastSeen) : "chưa kết nối"}
                     {" · "}
                     {m.hasToken ? (
                       <span className="text-green-600 dark:text-green-400">token hoạt động</span>
