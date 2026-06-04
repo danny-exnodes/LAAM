@@ -1,0 +1,29 @@
+import { describe, expect, test, vi } from "vitest";
+import { resolveKind, CONNECTOR_WRITES, CONNECTOR_READS } from "./policy";
+import type { Tool } from "../types";
+
+const internal: Tool[] = [
+  { name: "laam_list_agents", description: "", kind: "read", parameters: {}, handler: async () => ({}) },
+];
+
+describe("resolveKind", () => {
+  test("internal tool dùng Tool.kind", () => {
+    expect(resolveKind("laam_list_agents", internal)).toBe("read");
+  });
+  test("connector write → write", () => {
+    expect(resolveKind("trello_create_card", internal)).toBe("write");
+  });
+  test("connector read → read", () => {
+    expect(resolveKind("github_list_repos", internal)).toBe("read");
+  });
+  test("tool lạ → write (FAIL-CLOSED) + cảnh báo loud", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(resolveKind("evil_unknown_tool", internal)).toBe("write");
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+  test("đúng 1 connector write (trello_create_card); không nằm trong READS", () => {
+    expect([...CONNECTOR_WRITES]).toEqual(["trello_create_card"]);
+    expect(CONNECTOR_READS.has("trello_create_card")).toBe(false);
+  });
+});
