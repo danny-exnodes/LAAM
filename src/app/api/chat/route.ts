@@ -2,8 +2,10 @@ import { eq, asc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages } from "@/db/schema";
-import { chatTools, execute } from "@/lib/connectors";
-import type { ConnectorTool } from "@/lib/connectors/types";
+import { chatTools } from "@/lib/connectors";
+import { buildSystemPrompt } from "@/lib/agent/context";
+import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
+import { runToolRounds, type ChatMessage, type OllamaChatResponse } from "@/lib/agent/orchestrator";
 
 const OLLAMA_URL = (process.env.OLLAMA_URL ?? "http://localhost:11434").replace(/\/$/, "");
 const MODEL = process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
@@ -19,8 +21,6 @@ type ChatBody = {
   topP?: number;
   system?: string;
 };
-type ChatMessage = { role: string; content: string; tool_calls?: unknown[] };
-
 // Build the Ollama /api/chat request payload from the request body, the
 // conversation history, and the server defaults. Pure — no I/O — so the
 // option mapping (temperature/top_p, model + system overrides, defaults) is
@@ -51,50 +51,11 @@ export function buildOllamaPayload(
   };
 }
 
-// --- Connector tool-calling loop -------------------------------------------
-// When the user has connectors connected, the model may want to call their
-// tools before answering. We run bounded NON-streaming rounds: ask Ollama with
-// the tools exposed; if it returns tool_calls, run each via execute() and feed
-// the results back; repeat. The returned message list is what the final
-// (streaming) request sends. Factored out + dependency-injected so the round
-// logic is unit-testable without a live Ollama or real connectors.
-
-type OllamaToolCall = { function?: { name?: string; arguments?: unknown } };
-type OllamaChatMessage = { role?: string; content?: string; tool_calls?: OllamaToolCall[] };
-type OllamaChatResponse = { message?: OllamaChatMessage };
-
-type ToolRoundsDeps = {
-  // Non-streaming Ollama /api/chat call. `tools` is empty on the final round
-  // (forces a text answer instead of another tool_call).
-  callOllama: (messages: ChatMessage[], tools: ConnectorTool[]) => Promise<OllamaChatResponse>;
-  execute: (toolName: string, args: unknown) => Promise<unknown>;
-};
-
-export async function runToolRounds(
-  messages: ChatMessage[],
-  tools: ConnectorTool[],
-  deps: ToolRoundsDeps,
-  maxRounds = 4,
-): Promise<ChatMessage[]> {
-  const convo: ChatMessage[] = messages.slice();
-  for (let i = 0; i < maxRounds; i++) {
-    const allowTools = i < maxRounds - 1; // last round must yield text
-    const res = await deps.callOllama(convo, allowTools ? tools : []);
-    const msg = res?.message ?? {};
-    const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
-    if (allowTools && calls.length) {
-      // Echo the assistant's tool_calls turn, then each tool result.
-      convo.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });
-      for (const tc of calls) {
-        const name = tc.function?.name ?? "";
-        const result = await deps.execute(name, tc.function?.arguments);
-        convo.push({ role: "tool", content: JSON.stringify(result) });
-      }
-      continue;
-    }
-    break; // no tool_calls (or final round) → done
-  }
-  return convo;
+// Đọc ngôn ngữ từ cookie laam_lang (i18n) — không phụ thuộc API next/headers async.
+function readLang(req: Request): string {
+  const m = (req.headers.get("cookie") ?? "").match(/(?:^|;\s*)laam_lang=([^;]+)/);
+  const v = m ? decodeURIComponent(m[1]) : "vi";
+  return ["vi", "en", "zh"].includes(v) ? v : "vi";
 }
 
 // POST /api/chat — { conversationId?, message }. Streams the Gemma 4 reply
@@ -148,44 +109,50 @@ export async function POST(req: Request) {
     { model: MODEL, system: SYSTEM },
   );
 
-  // If the user has connectors connected, let the model call their tools first
-  // (bounded, non-streaming rounds), then stream the final answer below with
-  // the tool-augmented history. With no connectors this is skipped entirely —
-  // the streaming + persistence path stays byte-for-byte identical.
-  let tools: ConnectorTool[] = [];
+  // Internal tools (LAAM) LUÔN có; connector tools nếu user đã kết nối.
+  const now = Date.now();
+  const lang = readLang(req);
+  let connectorTools = [] as Awaited<ReturnType<typeof chatTools>>;
   try {
-    tools = await chatTools(userId);
+    connectorTools = await chatTools(userId);
   } catch {
-    tools = []; // connector framework unavailable → behave as no-connector
+    connectorTools = [];
   }
-  if (tools.length) {
-    const callOllama = async (
-      messages: ChatMessage[],
-      roundTools: ConnectorTool[],
-    ): Promise<OllamaChatResponse> => {
-      const r = await fetch(`${OLLAMA_URL}/api/chat`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          model: payload.model,
-          messages,
-          ...(roundTools.length ? { tools: roundTools } : {}),
-          options: payload.options,
-          stream: false,
-        }),
-      });
-      if (!r.ok) throw new Error(`Ollama ${r.status}`);
-      return (await r.json()) as OllamaChatResponse;
-    };
-    try {
-      payload.messages = await runToolRounds(payload.messages, tools, {
-        callOllama,
-        execute: (name, args) => execute(userId, name, args),
-      });
-    } catch {
-      // Tool loop failed (Ollama/connector error) — fall through and stream
-      // a normal answer from the original payload rather than hard-failing.
-    }
+  const tools = modelToolSchemas(INTERNAL_TOOLS, connectorTools);
+
+  // System prompt động (ghi đè default tĩnh trong buildOllamaPayload), trừ khi user tự đặt system.
+  payload.messages[0] = {
+    role: "system",
+    content:
+      typeof body.system === "string" && body.system.trim()
+        ? body.system
+        : buildSystemPrompt({ lang, now, toolNames: tools.map((t) => t.function.name) }),
+  };
+
+  // Một lượt chat luôn chạy tool-loop (do internal tools luôn bật).
+  const dispatch = makeDispatch(INTERNAL_TOOLS, { userId, now, lang });
+  const callOllama = async (
+    messages: ChatMessage[],
+    roundTools: typeof tools,
+  ): Promise<OllamaChatResponse> => {
+    const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: payload.model,
+        messages,
+        ...(roundTools.length ? { tools: roundTools } : {}),
+        options: payload.options,
+        stream: false,
+      }),
+    });
+    if (!r.ok) throw new Error(`Ollama ${r.status}`);
+    return (await r.json()) as OllamaChatResponse;
+  };
+  try {
+    payload.messages = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
+  } catch {
+    // Tool loop lỗi (Ollama/connector) — stream trả lời thường từ payload gốc.
   }
 
   let ollamaRes: Response;

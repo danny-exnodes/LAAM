@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
+import { INTERNAL_TOOLS, modelToolSchemas } from "@/lib/agent/registry";
 
 // We only exercise the pure buildOllamaPayload helper here, but importing the
 // route module pulls in @/auth (next-auth) and @/db — stub both so the module
@@ -61,5 +62,14 @@ describe("buildOllamaPayload", () => {
     );
     expect(p.options).not.toHaveProperty("temperature");
     expect(p.options).not.toHaveProperty("top_p");
+  });
+});
+
+describe("harness wiring", () => {
+  test("internal laam tools luôn có trong schema cho model (kể cả 0 connector)", () => {
+    const names = modelToolSchemas(INTERNAL_TOOLS, []).map((t) => t.function.name);
+    expect(names).toContain("laam_list_agents");
+    expect(names).toContain("laam_find_stuck");
+    expect(names.every((n) => typeof n === "string")).toBe(true);
   });
 });
