@@ -8,6 +8,14 @@ Ngày: 2026-06-03. Phát hiện khi sửa 11 lỗi parity (so v1). Tailwind 4 (r
 2. **CSS `.dark .X` là CODE CHẾT**: globals.css từng có `.dark .chart-card` → không bao giờ match (không có class `.dark`) → chart-card **nền trắng** giữa dark mode. → Dùng `@media (prefers-color-scheme: dark) { .chart-card {…} }`.
 3. **recharts không nhận Tailwind `dark:`** (render SVG màu literal). → hook `src/hooks/useChartTheme.ts` trả palette {grid, axis, tooltip} theo `matchMedia`, áp vào CartesianGrid `stroke`, XAxis/YAxis `tick.fill`, Tooltip `contentStyle`. **Phải guard `typeof window.matchMedia==='function'`** (jsdom không có → test vỡ).
 
+## ⚠️ CẬP NHẬT 2026-06-04: ĐÃ CHUYỂN SANG CLASS-BASED (có theme toggle)
+Dark mode v2 giờ là **class `.dark`** trên `<html>`, KHÔNG còn media-query.
+- `globals.css`: `@custom-variant dark (&:where(.dark, .dark *));`. Mọi `.dark .x` và `dark:` util key theo class.
+- Theme toggle: `components/theme-toggle.tsx` (system/light/dark, localStorage `laam_theme`). No-flash script + `suppressHydrationWarning` ở `app/layout.tsx`.
+- `useChartTheme`: đọc `document.documentElement.classList.contains('dark')` + MutationObserver (KHÔNG còn matchMedia).
+- "system" = script/toggle áp `.dark` theo `matchMedia` (vẫn theo OS khi ở mode system).
+→ Các bẫy bên dưới (viền inline, .dark .x dùng class) VẪN đúng; chỉ khác là `.dark` giờ THỰC SỰ tồn tại trên html.
+
 ## Quy tắc cho UI v2 sau này
 - Card có accent trạng thái → inline borderLeftColor, đừng tin `dark:border-l-*`.
 - Thêm chart recharts → dùng `useChartTheme()`.

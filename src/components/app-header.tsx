@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { SyncButton } from "@/components/sync-button";
 import { SignOutButton } from "@/components/signout-button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { LangSelect } from "@/components/lang-select";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
@@ -72,7 +74,7 @@ export function AppHeader({
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-neutral-200 bg-neutral-50/80 px-4 py-3 backdrop-blur-md sm:px-6 dark:border-neutral-800 dark:bg-neutral-950/80">
+    <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur-md sm:px-6 dark:border-neutral-800 dark:bg-neutral-900/95">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-5">
           <Link href="/dashboard" className="text-base font-bold tracking-tight">
@@ -87,7 +89,9 @@ export function AppHeader({
         </div>
 
         {/* Desktop actions */}
-        <div className="hidden items-center gap-3 md:flex">
+        <div className="hidden items-center gap-2 md:flex">
+          <LangSelect />
+          <ThemeToggle />
           <RoleBadge role={role} />
           <SyncButton />
           <SignOutButton />
@@ -108,7 +112,7 @@ export function AppHeader({
       {/* Mobile dropdown — absolutely positioned so the header bar keeps its
           ~56px height (chat's --header-h math depends on it). */}
       {open && (
-        <div className="absolute inset-x-0 top-full z-50 flex flex-col gap-1 border-b border-neutral-200 bg-white px-4 py-3 shadow-lg md:hidden dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="anim-slide-down absolute inset-x-0 top-full z-50 flex flex-col gap-1 border-b border-neutral-200 bg-white px-4 py-3 shadow-lg md:hidden dark:border-neutral-800 dark:bg-neutral-900">
           <nav className="flex flex-col gap-1">
             {NAV.map((n) => (
               <NavLink
@@ -121,6 +125,8 @@ export function AppHeader({
           </nav>
           <div className="mt-2 flex flex-wrap items-center gap-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
             <RoleBadge role={role} />
+            <ThemeToggle />
+            <LangSelect />
             <SyncButton />
             <SignOutButton />
           </div>

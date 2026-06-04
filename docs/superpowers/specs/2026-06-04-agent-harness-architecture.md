@@ -38,7 +38,7 @@ LAAM đã có một "harness" tối giản trong `/api/chat` + `src/lib/connecto
 
 - **Pure + testable cores.** Logic harness là hàm thuần (như `buildOllamaPayload`/`runToolRounds` hiện tại), DI cho I/O → test bằng vitest, không cần Ollama/DB sống.
 - **Fail-soft mặc định.** Lỗi tool/Ollama → degrade về trả lời thường, không hard-fail (giữ hành vi hiện tại). Nhưng **fail loud trong log/telemetry** (Rule 12) — không nuốt lỗi im lặng.
-- **No-connector path bất biến.** Khi user chưa bật tool nào, đường stream + persistence giữ **byte-for-byte** như hiện tại (Rule 3).
+- **~~No-connector path bất biến~~ → SỬA bởi SP-1 (D-SP1-1).** Ban đầu chủ trương: khi user chưa bật tool nào, đường stream + persistence giữ byte-for-byte. **Nhưng** internal tools (L3) *luôn bật* nên tool-loop chạy mọi lượt chat — nguyên tắc này không còn áp dụng. Thay bằng: **connector path & UX streaming giữ nguyên hành vi**; chấp nhận thêm ~1 vòng non-streaming/lượt (tối ưu streaming-with-tools để sau). Xem `2026-06-04-agent-harness-sp1-foundation-design.md` §6.
 - **Rule 13 — trust code over LLM.** ID/tên/exact string mà tool trả: ground lại từ DB trước khi dùng/persist; hoặc cho model tham chiếu theo index, code map lại.
 - **Surgical, match conventions.** Không viết lại connectors. Tách module mới `src/lib/agent/*`, không phình `/api/chat`.
 - **Read trước Write.** Internal tools **read-only** trước; write + safety là sub-project sau.

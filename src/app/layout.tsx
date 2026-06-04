@@ -4,6 +4,11 @@ import "./globals.css";
 import { I18nProvider } from "@/i18n/provider";
 import { LANG_COOKIE } from "@/i18n/cookie";
 import type { Lang } from "@/i18n/types";
+import { NoZoom } from "@/components/no-zoom";
+
+// Runs before first paint: applies the saved theme (or the OS preference in
+// "system" mode) by toggling `.dark` on <html>, so there is no light→dark flash.
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('laam_theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}})();`;
 
 export const metadata: Metadata = {
   title: "LAAM v2 — Local AI Agent Monitoring",
@@ -32,8 +37,12 @@ export default async function RootLayout({
   const lang: Lang = raw && SUPPORTED.includes(raw) ? (raw as Lang) : "vi";
 
   return (
-    <html lang={lang}>
+    <html lang={lang} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+      </head>
       <body className="min-h-dvh bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100">
+        <NoZoom />
         <I18nProvider lang={lang}>{children}</I18nProvider>
       </body>
     </html>

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { AuthShell } from "@/components/auth/AuthShell";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -30,10 +31,10 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-7 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <h1 className="text-lg font-bold tracking-tight">Đăng nhập LAAM</h1>
-        <p className="mt-1 text-sm text-neutral-500">Local AI Agent Monitoring</p>
+    <AuthShell>
+      <div className="anim-scale-in rounded-2xl border border-neutral-200 bg-white/80 p-7 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/70">
+        <h1 className="text-xl font-bold tracking-tight">Đăng nhập</h1>
+        <p className="mt-1 text-sm text-neutral-500">Chào mừng trở lại — đăng nhập để tiếp tục.</p>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <Field label="Email" name="email" type="email" autoComplete="email" />
           <Field
@@ -58,7 +59,7 @@ export default function LoginPage() {
           </Link>
         </p>
       </div>
-    </main>
+    </AuthShell>
   );
 }
 

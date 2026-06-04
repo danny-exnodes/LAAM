@@ -336,9 +336,9 @@ export function ChatClient() {
             type="button"
             aria-label={t("chat.histListAria")}
             onClick={() => setConvOpen(false)}
-            className="absolute inset-0 bg-black/40"
+            className="anim-fade-in absolute inset-0 bg-black/40"
           />
-          <div className="relative z-10 flex h-full w-[84%] max-w-xs flex-col bg-white shadow-xl dark:bg-neutral-950">
+          <div className="anim-slide-in-left relative z-10 flex h-full w-[84%] max-w-xs flex-col bg-white shadow-xl dark:bg-neutral-950">
             <ConversationSidebar
               convs={convs}
               activeId={activeId}
@@ -387,7 +387,7 @@ export function ChatClient() {
         </div>
 
         {settingsOpen && (
-          <div className="border-b border-neutral-200 p-4 dark:border-neutral-800">
+          <div className="anim-slide-down border-b border-neutral-200 p-4 dark:border-neutral-800">
             <SettingsPanel settings={settings} models={models} onChange={setSettings} />
           </div>
         )}

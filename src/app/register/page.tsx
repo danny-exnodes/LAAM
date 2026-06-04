@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { AuthShell } from "@/components/auth/AuthShell";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -33,9 +34,9 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="grid min-h-dvh place-items-center p-6">
-      <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-7 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <h1 className="text-lg font-bold tracking-tight">Tạo tài khoản</h1>
+    <AuthShell>
+      <div className="anim-scale-in rounded-2xl border border-neutral-200 bg-white/80 p-7 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/70">
+        <h1 className="text-xl font-bold tracking-tight">Tạo tài khoản</h1>
         <p className="mt-1 text-sm text-neutral-500">
           Người đăng ký đầu tiên sẽ là <b>owner</b>.
         </p>
@@ -65,7 +66,7 @@ export default function RegisterPage() {
           </Link>
         </p>
       </div>
-    </main>
+    </AuthShell>
   );
 }
 

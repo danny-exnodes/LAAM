@@ -17,6 +17,8 @@
 
 - [agent-harness-architecture](decisions/agent-harness-architecture.md) — **Kiến trúc 6 lớp Agent Harness** (L0 orchestrator→L6 UX) + build order SP-1→SP-4. D1: hybrid dispatch hợp nhất, **connectors giữ nguyên**; internal tools đọc `agent_sessions/stats/machines` (lấp nghịch lý "AI mù dữ liệu LAAM"). Roadmap đầy đủ: `docs/superpowers/specs/2026-06-04-agent-harness-architecture.md`. Chờ user review chi tiết.
 
+- [agent-harness-sp-analysis-plan](decisions/agent-harness-sp-analysis-plan.md) — **PM plan** đào sâu SP: song song tối đa **3 orch (SP-2/3/4)** sau **1 pass nền SP-1** (predecessor cứng), +1 reviewer tùy chọn. Nút thắt = SP-1 + băng thông review. User chốt: **main session làm SP-1 trước**.
+
 ## Rules (vận hành agent)
 - [agent-ops-rules](decisions/agent-ops-rules.md) — ⛔ **KHÔNG tự ý chạy ngầm service nào** (dev/start/docker/ollama/preview) nếu user chưa cho phép; user tự host dev. Không `build` in-place khi prod đang chạy.
 

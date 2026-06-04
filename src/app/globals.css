@@ -1,7 +1,19 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: `dark:` utilities key off a `.dark` class on <html>
+   (set by the theme toggle / no-flash script) instead of the OS media query,
+   so the user can override the system preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-accent: #6d5efc;
+}
+
+/* App-like input feel on phones: kill double-tap-to-zoom + iOS text auto-zoom.
+   (Pinch-zoom is blocked by NoZoom's gesture handlers; see components/no-zoom.) */
+html {
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* Dashboard widget card — shared shell for KPI/chart/table widgets. */
@@ -12,19 +24,33 @@
   padding: 1rem;
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
 }
-/* Dark mode is media-query based (no `.dark` class on <html>), so the dark
-   variant must key off prefers-color-scheme to match Tailwind's `dark:` utils. */
-@media (prefers-color-scheme: dark) {
-  .chart-card {
-    border-color: var(--color-neutral-800);
-    background: var(--color-neutral-900);
-  }
+.dark .chart-card {
+  border-color: var(--color-neutral-800);
+  background: var(--color-neutral-900);
 }
 
-/* Lively matte-blue ambient background. Painted on a fixed, click-through layer
-   behind all content (negative z-index over the body's solid bg). Low-alpha
-   desaturated blues = "matte"; slow drift = "sinh động". */
+/* ── Ambient background ───────────────────────────────────────────────────
+   Two fixed, click-through layers behind all content (negative z-index paints
+   over the body's solid bg but under content):
+   ::before = a subtle square grid; ::after = a lively matte-blue gradient. */
 body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(100, 116, 139, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(100, 116, 139, 0.06) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.dark body::before {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+}
+
+body::after {
   content: "";
   position: fixed;
   inset: 0;
@@ -36,14 +62,11 @@ body::before {
     radial-gradient(48% 45% at 90% 16%, rgba(30, 64, 175, 0.07), transparent 70%);
   animation: laam-bg-drift 20s ease-in-out infinite alternate;
 }
-
-@media (prefers-color-scheme: dark) {
-  body::before {
-    background:
-      radial-gradient(65% 55% at 50% 102%, rgba(37, 99, 235, 0.20), transparent 70%),
-      radial-gradient(45% 42% at 10% 6%, rgba(59, 130, 246, 0.11), transparent 70%),
-      radial-gradient(48% 45% at 92% 16%, rgba(29, 78, 216, 0.13), transparent 70%);
-  }
+.dark body::after {
+  background:
+    radial-gradient(65% 55% at 50% 102%, rgba(37, 99, 235, 0.20), transparent 70%),
+    radial-gradient(45% 42% at 10% 6%, rgba(59, 130, 246, 0.11), transparent 70%),
+    radial-gradient(48% 45% at 92% 16%, rgba(29, 78, 216, 0.13), transparent 70%);
 }
 
 @keyframes laam-bg-drift {
@@ -57,9 +80,60 @@ body::before {
   }
 }
 
-/* Respect reduced-motion: keep the gradient, drop the animation. */
+/* ── Enter animations (component show/hide) ──────────────────────────────── */
+@keyframes laam-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes laam-slide-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes laam-slide-in-left {
+  from { opacity: 0; transform: translateX(-100%); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes laam-scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes laam-progress {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(420%); }
+}
+.laam-bar { animation: laam-progress 0.9s ease-in-out infinite; }
+.anim-fade-in { animation: laam-fade-in 0.18s ease-out both; }
+.anim-slide-down { animation: laam-slide-down 0.18s ease-out both; }
+.anim-slide-in-left { animation: laam-slide-in-left 0.22s cubic-bezier(0.4, 0, 0.2, 1) both; }
+.anim-scale-in { animation: laam-scale-in 0.16s ease-out both; }
+
+/* ── Auth hero motion (floating orbs / 3D card glow) ─────────────────────── */
+@keyframes laam-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-16px); }
+}
+@keyframes laam-float-2 {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(10px, 14px); }
+}
+@keyframes laam-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.9; }
+}
+.anim-float { animation: laam-float 7s ease-in-out infinite; }
+.anim-float-2 { animation: laam-float-2 9s ease-in-out infinite; }
+.anim-glow { animation: laam-glow 4s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
-  body::before {
+  body::after,
+  .laam-bar,
+  .anim-fade-in,
+  .anim-slide-down,
+  .anim-slide-in-left,
+  .anim-scale-in,
+  .anim-float,
+  .anim-float-2,
+  .anim-glow {
     animation: none;
   }
 }

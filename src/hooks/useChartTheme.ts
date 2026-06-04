@@ -1,9 +1,9 @@
 "use client";
 
-// Shared recharts palette that follows the OS color scheme. The app uses
-// media-query dark mode (no `.dark` class), so recharts — which renders inline
-// SVG with literal colors, not CSS classes — can't use Tailwind `dark:` utils.
-// This hook resolves grid/axis/tooltip colors and re-renders on scheme change.
+// Shared recharts palette that follows the app theme. Dark mode is class-based
+// (a `.dark` class on <html>, set by the theme toggle); recharts renders inline
+// SVG with literal colors, not CSS classes, so this hook reads that class and
+// re-renders when it changes (theme toggle or system change in "system" mode).
 
 import { useEffect, useState } from "react";
 
@@ -43,24 +43,24 @@ const DARK: ChartTheme = {
   },
 };
 
-function prefersDark(): boolean {
+function hasDarkClass(): boolean {
   return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
+    typeof document !== "undefined" &&
+    document.documentElement.classList.contains("dark")
   );
 }
 
 export function useChartTheme(): ChartTheme {
-  const [dark, setDark] = useState(prefersDark);
+  const [dark, setDark] = useState(hasDarkClass);
   useEffect(() => {
-    // jsdom (and SSR) lack matchMedia — fall back to the light palette there.
-    if (typeof window.matchMedia !== "function") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => setDark(mq.matches);
-    onChange();
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    if (typeof document === "undefined") return;
+    const el = document.documentElement;
+    const sync = () => setDark(el.classList.contains("dark"));
+    sync();
+    // Re-read whenever the <html> class changes (theme toggle / system flip).
+    const obs = new MutationObserver(sync);
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
   }, []);
   return dark ? DARK : LIGHT;
 }
