@@ -7,6 +7,17 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+- **Tái cấu trúc repo:** v2 (Next.js) được đưa lên **root**; v1 (vanilla/Express) archive ở branch `archive/v1`. Root giờ là app v2.
+- Gộp `.gitignore`; viết lại `CLAUDE.md`/`README` cho v2.
+
+### Backlog (chưa migrate từ v1)
+- Search, Office, proxy log Ollama, `/api/config` — xem `.serena/memories/backlog/v1-unported.md`.
+
+---
+
 ## [2.0.0] — 2026-06-03 — Bản viết lại v2 (Next.js + Postgres, đa người dùng)
 
 > **LAAM v2** (`v2/`) là bản viết lại local-first, đa máy, đa người dùng:
@@ -63,27 +74,6 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 ### Chưa làm (residual)
 - Nghiệm thu runtime end-to-end (Ollama `gemma4:e4b` + `tesseract`); luồng OAuth
   thật cho Google; icon Lucide; cost theo project/ngày; relTime đa ngôn ngữ.
-
----
-
-## [Unreleased] — hướng tới v1.0.0
-
-### Đã thêm — Connectors (kết nối ứng dụng)
-- **Trang `/connectors`**: quản lý kết nối — thẻ từng dịch vụ, trạng thái, nhập
-  credential (token), nút Kết nối / Ngắt / Kiểm tra. Đã thêm vào nav.
-- **Framework connector** (`lib/connectors/`): mỗi connector là **một file** tự
-  đăng ký (thả file vào là chạy). Connector phơi ra **tools** mà model gọi qua
-  chat → backend thực thi **API thật** với credential của người dùng rồi trả kết
-  quả về cho model render (bảng/list). Token người dùng nhập **lưu phía máy chủ**
-  (`~/.laam/connectors.json`, mode 600), **mask** khi hiển thị, **không commit**.
-- **Vòng tool-calling** trong `/api/chat`: khi có connector kết nối, model gọi
-  tool → thực thi → đưa kết quả lại → trả lời (vẫn token-stream khi không có).
-- Connector hiện có: **GitHub** (PAT — chạy thật, đọc cả repo công khai không cần
-  token), **Trello** (key+token), **Jira** (email + API token), **Google Drive /
-  Calendar / Gmail** (dán OAuth access token; luồng OAuth tích hợp sẽ làm sau),
-  và một connector **Demo** không cần credential để minh hoạ.
-- *Cần người dùng cấp credential* mới chạy thật với dữ liệu cá nhân; LAAM **không
-  tự đăng nhập** thay người dùng.
 
 ---
 

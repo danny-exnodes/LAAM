@@ -3,7 +3,7 @@
 Ngày: 2026-06-03.
 
 **Quyết định:** Mọi thay đổi schema v2 dùng **migration versioned**:
-`npm run db:generate` (sinh SQL trong `v2/drizzle/`, **commit**) → `npm run db:migrate`.
+`npm run db:generate` (sinh SQL trong `drizzle/`, **commit**) → `npm run db:migrate`.
 KHÔNG dùng `db:push` khi đã có dữ liệu (push chỉ additive-safe lúc prototype; có thể hỏi drop khi diff phức tạp → mất data).
 
 **Baseline:** DB ban đầu tạo bằng push; đã reset sạch (`docker compose down -v`) rồi generate+migrate để có baseline migration-managed (data lúc đó chỉ là test, session re-sync được bằng nút Đồng bộ).

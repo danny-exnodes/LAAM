@@ -1,8 +1,8 @@
-# Service: v2 app (`v2/`)
+# Service: v2 app (root)
 
 Cập nhật: 2026-06-03. Stack: Next.js 16 + React 19 + TS + Tailwind 4 + Auth.js v5 + Drizzle + Postgres. Spec đầy đủ: `docs/v2-plan.md`.
 
-**Dev:** `cd v2 && docker compose up -d && cp .env.example .env && npm install && npm run db:migrate && npm run dev` (:3000). Docker chỉ chạy Postgres+Adminer; app chạy bằng npm; Ollama native (gemma4:e4b).
+**Dev:** `docker compose up -d && cp .env.example .env && npm install && npm run db:migrate && npm run dev` (:3000). Docker chỉ chạy Postgres+Adminer; app chạy bằng npm; Ollama native (gemma4:e4b).
 
 ## Routes
 - Pages: `/login` `/register` `/dashboard` `/chat` `/agents` `/agents/[id]` `/graph` `/machines`
@@ -12,7 +12,7 @@ Cập nhật: 2026-06-03. Stack: Next.js 16 + React 19 + TS + Tailwind 4 + Auth.
 - P1 auth/RBAC ✅ · P2 monitoring (sync, Agents, Session-detail, Dashboard: KPIs+cost chart recharts+heatmap+breakdowns+leaderboard, Graph @xyflow/react) ✅ · P3 collector đa máy (đơn giản: machine-token + ingest + /machines + collector) ✅ · **P4 Chat Gemma 4** ✅ built (streaming Ollama, per-user history) — **chờ test runtime**.
 - Verified LIVE (Chrome): P1+P2+P3. Chat cần Ollama gemma4:e4b + login để test.
 
-## Schema (`v2/src/db/schema.ts`)
+## Schema (`src/db/schema.ts`)
 Auth.js: user/account/session/verificationToken + `role`. App: machines(`tokenHash`), projects, agent_sessions (+jsonb subAgents/tools/histo, transcriptPath), chat_conversations, chat_messages, audit_log.
 
 ## Lib chính
@@ -39,3 +39,5 @@ Auth.js: user/account/session/verificationToken + `role`. App: machines(`tokenHa
 
 ## Chưa làm
 Bảng `events` (timeline remote), lọc Agents theo máy/owner, connectors + smart-routing (Phase 5), deploy/Tailscale (Phase 6). Phase 0 UI #10/#11 (full-width, gom nút chat) ở app cũ chưa code.
+
+> 2026-06-04: v2 đã lên ROOT (paths `v2/src` → `src`, `v2/collector` → `collector`); v1 archive ở branch `archive/v1`.

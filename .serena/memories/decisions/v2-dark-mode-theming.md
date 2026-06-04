@@ -1,6 +1,6 @@
 # Decision/Discovery: v2 dark mode là MEDIA-QUERY (không phải class)
 
-Ngày: 2026-06-03. Phát hiện khi sửa 11 lỗi parity (so v1). Tailwind 4 trong `v2/` mặc định dark mode theo `@media (prefers-color-scheme: dark)` — **KHÔNG có class `.dark`** trên `<html>` (layout.tsx không gắn). Hệ quả không hiển nhiên, dễ tái phạm:
+Ngày: 2026-06-03. Phát hiện khi sửa 11 lỗi parity (so v1). Tailwind 4 (root) mặc định dark mode theo `@media (prefers-color-scheme: dark)` — **KHÔNG có class `.dark`** trên `<html>` (layout.tsx không gắn). Hệ quả không hiển nhiên, dễ tái phạm:
 
 ## 3 cái bẫy (đã sửa, đừng lặp lại)
 1. **Viền accent bị đè ở dark**: `border border-l-4 border-neutral-200 dark:border-neutral-800` + `border-l-<color>` → ở dark, `dark:border-neutral-800` (shorthand border-color cả 4 cạnh) **đè** màu trái. Card trông như "không có màu viền".
