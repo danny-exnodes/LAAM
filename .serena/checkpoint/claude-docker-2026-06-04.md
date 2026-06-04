@@ -36,11 +36,21 @@ Detail: [[docker-deploy]]. Plan: docs/superpowers/plans/2026-06-04-docker-stack-
   container recreated, **healthy on :3900**, local+public /login 200, OCR+Ollama OK.
 - Compose deliberately still `image:` (not `build: .`) — main tree holds FE WIP.
 
+## Update — 3 (2026-06-04, later) — rebuild w/ FE + dashboard work
+- FE (`8033100`,`7c72bf9`) + dashboard charts (`611c4e9`) committed to main.
+- **Lockfile blocker fixed**: `611c4e9` rewrote `package-lock.json` (dropped
+  `@emnapi/runtime`+`@emnapi/core`) with NO package.json dep change → `npm ci`
+  EUSAGE, prod build failed. Restored lock to known-good `e40d764` (`64faa06`);
+  verified `npm ci` passes. See [[harness-lockfile-hygiene]].
+- Worktree ff'd to main `64faa06`; **rebuilt prod from clean worktree** → new image
+  `dd9417b89110`, healthy on :3900, local+public /login 200, OCR+Ollama OK, logs clean.
+- Build source = worktree @ main HEAD (clean committed snapshot; excludes any new WIP).
+
 ## Next steps
-- USER: register first account at the public URL → becomes owner (P0). (Note: `user`
-  table already has 2 rows — may already be done.)
+- USER: register first account at the public URL → becomes owner (P0). (`user` table had 2 rows.)
 - pg/adminer renumber to 39xx still pending — [[docker-port-renumber]].
-- When FE commits their WIP: can switch compose `app` to `build: .` (build from main).
+- Compose still `image:` (rebuild from worktree after `git -C <wt> merge --ff-only main`).
+  Could switch to `build: .` only when main working tree is reliably clean.
 - Cleanup: `backlog/docker-stack-tesseract.md` handoff FULFILLED → can be deleted.
 
 ## Blockers / Risks
