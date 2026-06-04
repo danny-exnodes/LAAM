@@ -55,7 +55,7 @@ export default async function SessionDetailPage({
   return (
     <div>
       <AppHeader current="/agents" role={session.user.role} />
-      <main className="w-full p-4 sm:p-6">
+      <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
         <Link
           href="/agents"
           className="text-sm text-[var(--color-accent)] hover:underline"

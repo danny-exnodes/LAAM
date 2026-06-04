@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { machines } from "@/db/schema";
 import { AppHeader } from "@/components/app-header";
+import { PageHeader } from "@/components/page-header";
 import { MachinesManager } from "@/components/machines-manager";
 
 export const dynamic = "force-dynamic";
@@ -37,12 +38,11 @@ export default async function MachinesPage() {
   return (
     <div>
       <AppHeader current="/machines" role={session.user.role} />
-      <main className="w-full p-4 sm:p-6">
-        <h1 className="mb-1 text-xl font-bold tracking-tight">Machines</h1>
-        <p className="mb-5 text-sm text-neutral-500">
-          Mỗi máy dev chạy collector để đẩy session về đây (giám sát đa máy). Máy
-          chủ nội bộ chạy LAAM tự quét bằng nút <b>Đồng bộ</b> — không cần token.
-        </p>
+      <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
+        <PageHeader
+          title="Machines"
+          subtitle="Mỗi máy dev chạy collector để đẩy session về đây (giám sát đa máy). Máy chủ nội bộ tự quét bằng nút Đồng bộ — không cần token."
+        />
         <MachinesManager initial={list} canManage={canManage} />
       </main>
     </div>

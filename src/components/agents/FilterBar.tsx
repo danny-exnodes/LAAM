@@ -69,7 +69,7 @@ export function FilterBar({
       <button
         type="button"
         onClick={() => onChange(EMPTY_FILTERS)}
-        className="rounded-lg px-2.5 py-1.5 text-sm text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+        className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800"
       >
         {t("agents.clear")}
       </button>
@@ -78,7 +78,7 @@ export function FilterBar({
         type="button"
         onClick={onExport}
         title={t("agents.exportTitle")}
-        className="rounded-lg border border-neutral-200 px-2.5 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-800"
+        className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:bg-neutral-800"
       >
         {t("agents.exportCsv")}
       </button>

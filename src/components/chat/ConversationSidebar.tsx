@@ -6,6 +6,7 @@
 // and delete are per-row. The only durable state is `renaming` (id under edit).
 
 import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { Conv } from "./types";
@@ -140,7 +141,7 @@ export function ConversationSidebar({
                     >
                       {titleOf(c)}
                     </span>
-                    <div className="flex flex-shrink-0 items-center gap-0.5 opacity-0 group-hover:opacity-100">
+                    <div className="flex flex-shrink-0 items-center gap-0.5 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
                       <button
                         type="button"
                         aria-label={t("chat.histRenameAria")}
@@ -149,9 +150,9 @@ export function ConversationSidebar({
                           e.stopPropagation();
                           beginRename(c);
                         }}
-                        className="grid h-6 w-6 place-items-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700 dark:hover:bg-neutral-700"
+                        className="grid h-7 w-7 place-items-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700 dark:hover:bg-neutral-700"
                       >
-                        ✎
+                        <Pencil size={13} aria-hidden />
                       </button>
                       <button
                         type="button"
@@ -161,9 +162,9 @@ export function ConversationSidebar({
                           e.stopPropagation();
                           if (window.confirm(t("chat.histDeleteConfirm"))) onDelete(c.id);
                         }}
-                        className="grid h-6 w-6 place-items-center rounded text-neutral-400 hover:bg-red-500 hover:text-white"
+                        className="grid h-7 w-7 place-items-center rounded text-neutral-400 hover:bg-red-500 hover:text-white"
                       >
-                        ×
+                        <Trash2 size={13} aria-hidden />
                       </button>
                     </div>
                   </>

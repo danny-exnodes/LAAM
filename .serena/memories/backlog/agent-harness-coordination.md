@@ -1,7 +1,9 @@
 # Coordination: Agent Harness (cho các session song song)
 
 **Nguồn chân lý:** `docs/superpowers/specs/2026-06-04-agent-harness-architecture.md`
-+ decision [[agent-harness-architecture]]. Roadmap đã chốt, chờ user review chi tiết; **chưa implement**.
++ decision [[agent-harness-architecture]]. Roadmap đã chốt.
+
+**SP-1 Foundation:** spec `docs/superpowers/specs/2026-06-04-agent-harness-sp1-foundation-design.md` (đã duyệt) + plan TDD `docs/superpowers/plans/2026-06-04-agent-harness-sp1-foundation.md` (đã viết, **chờ execute**). Hợp đồng §2 spec là cái SP-2/3/4 trích dẫn. SP-1 chỉ đụng `src/app/api/chat/route.ts` + thêm `src/lib/agent/*` (+ migrate `tool-loop.test.ts`→`orchestrator.test.ts`); **không** đụng `components/chat/*`, schema, connectors.
 
 ## Cảnh báo file dùng chung — đừng giẫm chân
 - 🟠 **`src/app/api/chat/route.ts`** — SP-1 sẽ **refactor** route này (tách orchestrator ra `src/lib/agent/*`, route co thành adapter mỏng). Ai sửa `/api/chat` trước khi SP-1 chạy → báo để đồng bộ.

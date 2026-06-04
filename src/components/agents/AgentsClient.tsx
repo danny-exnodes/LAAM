@@ -69,7 +69,7 @@ export function AgentsClient() {
 
   return (
     <>
-      <main className="w-full p-4 sm:p-6">
+      <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
           Agents

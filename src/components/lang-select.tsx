@@ -9,10 +9,11 @@ import { Languages } from "lucide-react";
 import { useLang } from "@/i18n/provider";
 import type { Lang } from "@/i18n/types";
 
+// Abbreviated codes keep the header compact (icon + short text).
 const LANGS: { code: Lang; label: string }[] = [
-  { code: "vi", label: "Tiếng Việt" },
-  { code: "en", label: "English" },
-  { code: "zh", label: "中文" },
+  { code: "vi", label: "VI" },
+  { code: "en", label: "EN" },
+  { code: "zh", label: "中" },
 ];
 
 export function LangSelect() {
@@ -32,7 +33,7 @@ export function LangSelect() {
           setLang(e.target.value as Lang);
           router.refresh();
         }}
-        className="appearance-none rounded-lg border border-neutral-300 bg-transparent py-1.5 pr-2 pl-7 text-sm text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+        className="h-9 appearance-none rounded-lg border border-neutral-300 bg-transparent pr-2 pl-7 text-sm text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
       >
         {LANGS.map((l) => (
           <option key={l.code} value={l.code}>

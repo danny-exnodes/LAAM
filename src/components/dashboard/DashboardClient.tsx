@@ -59,7 +59,7 @@ export function DashboardClient() {
   }
 
   return (
-    <main className="w-full space-y-6 p-4 sm:p-6">
+    <main className="w-full space-y-6 px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold tracking-tight">{t("dash.page.title")}</h1>
         <DashboardExport stats={stats} />

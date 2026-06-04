@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useT } from "@/i18n/provider";
 import { connectors as dict } from "@/i18n/dictionaries/connectors";
+import { PageHeader } from "@/components/page-header";
 import type { ConnectorListItem } from "@/lib/connectors/types";
 
 export function ConnectorsClient() {
@@ -31,11 +32,8 @@ export function ConnectorsClient() {
   }, [load]);
 
   return (
-    <main className="w-full p-4 sm:p-6">
-      <div className="mb-5">
-        <h1 className="mb-1 text-xl font-bold tracking-tight">{t("conn.heading")}</h1>
-        <p className="max-w-2xl text-sm leading-relaxed text-neutral-500">{t("conn.sub")}</p>
-      </div>
+    <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
+      <PageHeader title={t("conn.heading")} subtitle={t("conn.sub")} />
 
       {loadErr ? (
         <div className="rounded-2xl border border-dashed border-neutral-300 p-12 text-center text-neutral-500 dark:border-neutral-700">

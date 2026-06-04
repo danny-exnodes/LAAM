@@ -425,7 +425,7 @@ export function ChatClient() {
           )}
         </div>
 
-        <div className="border-t border-neutral-200 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 dark:border-neutral-800">
+        <div className="border-t border-neutral-200 px-3 pt-3 pb-[calc(0.75rem+4.75rem+env(safe-area-inset-bottom))] sm:px-4 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] dark:border-neutral-800">
           <div className="mx-auto max-w-3xl">
             <Composer
               value={input}

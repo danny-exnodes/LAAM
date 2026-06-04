@@ -300,30 +300,61 @@ export function buildSystemPrompt(input: {
 
 ```ts
 import { describe, expect, test, vi } from "vitest";
+// MIGRATED từ src/app/api/chat/tool-loop.test.ts: runToolRounds nay ở đây và nhận
+// deps.dispatch (trước là deps.execute). orchestrator.ts chỉ import 1 TYPE từ
+// @/lib/connectors → không cần mock module nào. (File cũ bị xoá ở Task 7.)
 import { runToolRounds } from "./orchestrator";
-import type { ChatMessage, OllamaChatResponse } from "./orchestrator";
+import type { ChatMessage } from "./orchestrator";
+
+const tools = [
+  { type: "function" as const, function: { name: "github_list_repos", description: "list repos", parameters: {} } },
+];
+const baseMessages: ChatMessage[] = [
+  { role: "system", content: "SYS" },
+  { role: "user", content: "list my repos" },
+];
 
 describe("runToolRounds", () => {
-  test("gọi dispatch khi model trả tool_calls rồi dừng ở text", async () => {
-    const dispatch = vi.fn(async () => ({ agents: [] }));
-    let round = 0;
-    const callOllama = vi.fn(async (): Promise<OllamaChatResponse> => {
-      round++;
-      return round === 1
-        ? { message: { tool_calls: [{ function: { name: "laam_list_agents", arguments: {} } }] } }
-        : { message: { content: "xong" } };
-    });
-    const msgs: ChatMessage[] = [{ role: "user", content: "agent nào chạy?" }];
-    const out = await runToolRounds(msgs, [], { callOllama, dispatch });
-    expect(dispatch).toHaveBeenCalledWith("laam_list_agents", {});
-    expect(out.some((m) => m.role === "tool")).toBe(true);
+  test("chạy tool_call, nối kết quả, trả messages cuối", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "github_list_repos", arguments: { visibility: "public" } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Here are your repos." } });
+    const dispatch = vi.fn(async () => [{ name: "laam" }]);
+
+    const out = await runToolRounds(baseMessages, tools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledWith("github_list_repos", { visibility: "public" });
+    expect(callOllama).toHaveBeenCalledTimes(2);
+    expect(out.slice(0, 2)).toEqual(baseMessages);
+    expect(out.find((m) => m.role === "assistant")).toBeTruthy();
+    const toolMsg = out.find((m) => m.role === "tool");
+    expect(toolMsg!.content).toBe(JSON.stringify([{ name: "laam" }]));
   });
 
-  test("không tool_calls → trả về ngay, không gọi dispatch", async () => {
-    const dispatch = vi.fn();
-    const callOllama = vi.fn(async () => ({ message: { content: "hi" } }));
-    await runToolRounds([{ role: "user", content: "hi" }], [], { callOllama, dispatch });
+  test("không tool_calls → trả nguyên, không gọi dispatch", async () => {
+    const callOllama = vi.fn(async () => ({ message: { content: "Hi there." } }));
+    const dispatch = vi.fn(async () => ({}));
+    const out = await runToolRounds(baseMessages, tools, { callOllama, dispatch });
     expect(dispatch).not.toHaveBeenCalled();
+    expect(callOllama).toHaveBeenCalledTimes(1);
+    expect(out).toEqual(baseMessages);
+  });
+
+  test("bounded — dừng sau maxRounds dù model cứ gọi tool", async () => {
+    const callOllama = vi.fn(async () => ({
+      message: { content: "", tool_calls: [{ function: { name: "github_list_repos", arguments: {} } }] },
+    }));
+    const dispatch = vi.fn(async () => ({ ok: true }));
+    const out = await runToolRounds(baseMessages, tools, { callOllama, dispatch }, 4);
+    expect(callOllama).toHaveBeenCalledTimes(4);
+    const lastCall = callOllama.mock.calls[callOllama.mock.calls.length - 1];
+    expect(lastCall[1]).toEqual([]);
+    expect(dispatch).toHaveBeenCalledTimes(3);
+    expect(out.slice(0, 2)).toEqual(baseMessages);
   });
 });
 ```
@@ -402,6 +433,8 @@ import { describe, expect, test, vi } from "vitest";
 
 // Mock connectors.execute để kiểm route fallback (tên không phải internal).
 vi.mock("@/lib/connectors", () => ({ execute: vi.fn(async () => ({ from: "connector" })) }));
+// registry → tools/laam → @/db (pg Pool) sau Task 6; stub để load dưới jsdom.
+vi.mock("@/db", () => ({ db: {} }));
 
 import { modelToolSchemas, makeDispatch } from "./registry";
 import { execute } from "@/lib/connectors";
@@ -516,7 +549,8 @@ export function makeDispatch(
 - [ ] **Step 1: Test thất bại** — `src/lib/agent/tools/laam/list-agents.test.ts`
 
 ```ts
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+vi.mock("@/db", () => ({ db: {} })); // module nhập @/db (pg Pool) — stub cho jsdom; shaper không cần DB
 import { shapeAgents, type AgentRow } from "./list-agents";
 
 const now = Date.UTC(2026, 5, 4, 12, 0, 0);
@@ -628,7 +662,8 @@ export const listAgents: Tool = {
 - [ ] **Step 1: Test thất bại** — `get-agent.test.ts`
 
 ```ts
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+vi.mock("@/db", () => ({ db: {} })); // get-agent.ts nhập @/db (pg Pool) — stub cho jsdom
 import { shapeAgentDetail } from "./get-agent";
 
 const now = Date.UTC(2026, 5, 4);
@@ -726,7 +761,8 @@ export const getAgent: Tool = {
 - [ ] **Step 1: Test thất bại** — `query-stats.test.ts`
 
 ```ts
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+vi.mock("@/db", () => ({ db: {} })); // query-stats.ts nhập @/db (pg Pool) — stub cho jsdom
 import { shapeStatsSummary } from "./query-stats";
 import { computeStats } from "@/lib/stats";
 import type { SessionRow } from "@/lib/stats.types";
@@ -833,7 +869,8 @@ export const queryStats: Tool = {
 - [ ] **Step 1: Test thất bại** — `list-machines.test.ts`
 
 ```ts
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+vi.mock("@/db", () => ({ db: {} })); // list-machines.ts nhập @/db (pg Pool) — stub cho jsdom
 import { shapeMachines, type MachineRow } from "./list-machines";
 
 const now = Date.UTC(2026, 5, 4, 12, 0, 0);
@@ -897,7 +934,8 @@ export const listMachines: Tool = {
 - [ ] **Step 1: Test thất bại** — `find-stuck.test.ts`
 
 ```ts
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
+vi.mock("@/db", () => ({ db: {} })); // find-stuck.ts (và ./list-agents) nhập @/db — stub cho jsdom
 import { filterStuck } from "./find-stuck";
 import type { AgentRow } from "./list-agents";
 
@@ -979,6 +1017,8 @@ export const LAAM_TOOLS: Tool[] = [listAgents, getAgent, queryStats, listMachine
 
 **Files:**
 - Modify: `src/app/api/chat/route.ts`
+
+- [ ] **Step 0: Xoá test cũ trỏ vào route** — `git rm src/app/api/chat/tool-loop.test.ts`. Test này import `runToolRounds` từ `./route`; Step 1 gỡ symbol đó nên file sẽ vỡ. Coverage đã được MIGRATE sang `src/lib/agent/orchestrator.test.ts` (Task 4) — không mất độ phủ.
 
 - [ ] **Step 1: Xoá khối `runToolRounds` cục bộ + types Ollama trùng** trong `route.ts` (dòng định nghĩa `OllamaToolCall/OllamaChatMessage/OllamaChatResponse/ToolRoundsDeps/runToolRounds` và comment "Connector tool-calling loop"). Chúng nay nằm ở `orchestrator.ts`.
 
