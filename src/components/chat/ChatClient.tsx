@@ -6,7 +6,7 @@
 // settings; ingests attachments via /api/fetch-url (URLs) and /api/ocr (images).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PanelLeft, SlidersHorizontal } from "lucide-react";
+import { PanelLeft, SlidersHorizontal, BarChart3, Navigation, MapPin, CloudSun } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import { ConversationSidebar } from "./ConversationSidebar";
@@ -26,6 +26,15 @@ const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
     : String(Date.now() + Math.random());
+
+// Empty-state sample prompts — one per local-model tool capability (chart /
+// directions / nearby / weather). Keys resolve via the chat dictionary.
+const SAMPLE_PROMPTS = [
+  { key: "chat.suggest4", Icon: BarChart3 }, // vẽ chart
+  { key: "chat.suggest5", Icon: Navigation }, // dẫn đường
+  { key: "chat.suggestNearby", Icon: MapPin }, // tìm quanh đây
+  { key: "chat.suggestWeather", Icon: CloudSun }, // thời tiết
+] as const;
 
 export function ChatClient() {
   const t = useT(chat);
@@ -349,16 +358,36 @@ export function ChatClient() {
         )}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-6">
-            <MessageList
-              messages={messages}
-              streaming={streaming}
-              onCopy={onCopy}
-              onEdit={onEdit}
-              onRegenerate={onRegenerate}
-              onDelete={onDelete}
-            />
-          </div>
+          {messages.length === 0 ? (
+            <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-4 py-8 text-center">
+              <h2 className="mb-1 text-lg font-bold tracking-tight">{t("chat.emptyTitle")}</h2>
+              <p className="mb-5 text-sm leading-relaxed text-neutral-500">{t("chat.empty")}</p>
+              <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                {SAMPLE_PROMPTS.map(({ key, Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setInput(t(key))}
+                    className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white/60 px-3 py-2.5 text-left text-sm text-neutral-700 transition hover:border-[var(--color-accent)] hover:bg-white dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                  >
+                    <Icon size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden />
+                    <span className="line-clamp-2">{t(key)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-6">
+              <MessageList
+                messages={messages}
+                streaming={streaming}
+                onCopy={onCopy}
+                onEdit={onEdit}
+                onRegenerate={onRegenerate}
+                onDelete={onDelete}
+              />
+            </div>
+          )}
         </div>
 
         <div className="border-t border-neutral-200 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4 dark:border-neutral-800">

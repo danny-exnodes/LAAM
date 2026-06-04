@@ -16,6 +16,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Lock pinch/double-tap zoom for an app-like feel on phones.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
 };
 

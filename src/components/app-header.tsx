@@ -72,7 +72,7 @@ export function AppHeader({
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="relative border-b border-neutral-200 px-4 py-3 sm:px-6 dark:border-neutral-800">
+    <header className="sticky top-0 z-30 border-b border-neutral-200 bg-neutral-50/80 px-4 py-3 backdrop-blur-md sm:px-6 dark:border-neutral-800 dark:bg-neutral-950/80">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-5">
           <Link href="/dashboard" className="text-base font-bold tracking-tight">

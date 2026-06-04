@@ -71,6 +71,7 @@ export default async function SessionDetailPage({
           <Meta k="Nguồn" v={s.source} />
           <Meta k="Tin nhắn" v={num(s.messageCount)} />
           <Meta k="Tool" v={num(s.toolCount)} />
+          <Meta k="Tokens (vào/ra)" v={`${num(s.tokensIn)} / ${num(s.tokensOut)}`} />
           <Meta k="Chi phí" v={usd(s.costUsd)} />
           <Meta k="Sub-agent" v={num(s.subAgentCount)} />
           <Meta k="Branch" v={s.gitBranch ?? "—"} />

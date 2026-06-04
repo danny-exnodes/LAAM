@@ -112,6 +112,11 @@ export function AgentCard({
         {running && <Elapsed startedAt={s.startedAt} running={running} />}
         <span>{num(s.messageCount)} {t("agents.msgUnit")}</span>
         <span>{num(s.toolCount)} {t("agents.toolUnit")}</span>
+        {(s.tokensIn > 0 || s.tokensOut > 0) && (
+          <span title={t("agents.tokTitle")} className="tabular-nums">
+            {t("agents.tokInOut", { in: num(s.tokensIn), out: num(s.tokensOut) })}
+          </span>
+        )}
         <span title={t("agents.costTitle")} className="font-medium text-neutral-700 dark:text-neutral-300">
           {usd(s.costUsd)}
         </span>

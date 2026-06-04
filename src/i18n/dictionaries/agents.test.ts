@@ -2,9 +2,9 @@ import { expect, test } from 'vitest';
 import { agents } from './agents';
 import { resolve } from '../index';
 
-test('agents+session ports every v1 leaf key (68) across 3 langs', () => {
+test('agents+session ports every v1 leaf key (+2 v2 token keys) across 3 langs', () => {
   const keys = Object.keys(agents);
-  expect(keys.length).toBe(68);
+  expect(keys.length).toBe(70);
   for (const k of keys) {
     expect(typeof agents[k].vi).toBe('string');
     expect(typeof agents[k].en).toBe('string');

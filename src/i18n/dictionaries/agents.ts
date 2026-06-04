@@ -42,6 +42,8 @@ export const agents: Dict = {
   // card meta
   'agents.msgUnit': { vi: 'msg', en: 'msg', zh: '条' },
   'agents.toolUnit': { vi: 'tool', en: 'tool', zh: '工具' },
+  'agents.tokInOut': { vi: '{in} vào · {out} ra tok', en: '{in} in · {out} out tok', zh: '{in} 入 · {out} 出 tok' },
+  'agents.tokTitle': { vi: 'Tokens vào / ra', en: 'Tokens in / out', zh: '输入 / 输出 tokens' },
   'agents.costTitle': { vi: 'Chi phí ước tính (USD)', en: 'Estimated cost (USD)', zh: '预计费用（USD）' },
   // sub-agents
   'agents.subs': { vi: 'Sub-agents ({n})', en: 'Sub-agents ({n})', zh: '子智能体 ({n})' },
