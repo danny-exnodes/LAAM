@@ -84,8 +84,10 @@ export function buildSystemPrompt(input: {
 export type ToolRoundsDeps = {
   callOllama: (messages: ChatMessage[], tools: ConnectorTool[]) => Promise<OllamaChatResponse>;
   dispatch: (name: string, args: unknown) => Promise<unknown>;   // = makeDispatch(...)
-  onEvent?: (e: ToolEvent) => void;
 };
+// ĐÍNH CHÍNH (2026-06-05, SP-4 phát hiện drift): `onEvent` KHÔNG nằm trong ToolRoundsDeps.
+// Code thật đặt nó ở makeDispatch(internal, ctx, onEvent?) (registry.ts) — đúng chokepoint phát
+// ToolEvent. Bản §2 trước ghi nhầm onEvent ở đây; code mới là nguồn chân lý.
 export function runToolRounds(
   messages: ChatMessage[], tools: ConnectorTool[], deps: ToolRoundsDeps, maxRounds?: number,
 ): Promise<ChatMessage[]>;
@@ -98,7 +100,7 @@ export function boundOutput(result: unknown, maxBytes?: number): unknown;   // c
 export function guard(tool: Tool): Tool;   // bọc handler: validateArgs → run → boundOutput
 ```
 
-**Khác biệt so với hiện tại:** `runToolRounds` đổi từ nhận `execute` sang nhận `dispatch` + thêm `onEvent` (tùy chọn). Chữ ký cũ `deps.execute` được thay bằng `deps.dispatch`; logic vòng lặp/bounded/echo tool-result **giữ nguyên**.
+**Khác biệt so với hiện tại:** `runToolRounds` đổi từ nhận `execute` sang nhận `dispatch`. `onEvent` (phát `ToolEvent`) đặt ở `makeDispatch` (registry.ts), **KHÔNG** ở `ToolRoundsDeps`. Chữ ký cũ `deps.execute` được thay bằng `deps.dispatch`; logic vòng lặp/bounded/echo tool-result **giữ nguyên**.
 
 ---
 

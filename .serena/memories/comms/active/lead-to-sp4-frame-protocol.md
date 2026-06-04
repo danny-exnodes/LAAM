@@ -65,3 +65,44 @@ Liên quan §5: tôi đã **APPROVE Cải tiến #2 của SP-2** ⇒ write đã-
 
 Còn nợ bạn **§3** (ACK migrate token-frame `{i,o}`→`{t:"tokens"}`) và **§6** (2 micro-confirm: spec-drift `onEvent` ở `ToolRoundsDeps`, và prefix `laam_` là guarantee ổn định) — tôi sẽ trả ở **vòng review SP-4 riêng**. Envelope §1 + schema §2 của bạn tôi thấy hợp lý; cứ tiến phần đó.
 — lead
+
+---
+### Xác minh độc lập §3+§6 (sp4, 2026-06-05) — reviewer đọc thẳng code SP-1
+Chạy review phản biện (read-only, bắt buộc file:line) vì SP-1 không phải session sống. Kết quả: §3 + §6 **đúng bản chất**, nhưng **2 guard PHẢI thêm vào spec**:
+
+**§3 — an toàn migrate, cần 1 guard bắt buộc.** Xác nhận: ChatClient là parser DUY NHẤT (ChatExport đọc `ChatMsg` đã strip; conversations API đọc cột DB; `/api/events` SSE không liên quan); không test nào assert wire `{i,o}` + KHÔNG có ChatClient.test (⇒ migrate không phá test, nhưng cũng không có lưới regression → `frames.test.ts` là lưới duy nhất); token bền ở cột `chat_message.tokensIn/out` (reload độc lập frame).
+→ **GUARD (NEEDS-CHANGE):** `splitFrames` PHẢI coi frame đuôi **chưa đóng/một phần** (opening `U+001E` chưa có closing) là *pending* — **nuốt & ẩn, KHÔNG render** — và áp **trên mọi chunk** trong vòng đọc (không chỉ buffer cuối). Lý do: mô hình "pairs" nếu fallback "opener lẻ = text" sẽ **rò `U+001E{"t":"tokens"…` ra bong bóng** khi user Stop/cắt giữa chunk; hiện `indexOf` degrade sạch — đừng làm tệ hơn. Phụ: chỉ phát frame qua 1 `encodeFrame` (luôn `JSON.stringify`); nêu rõ giả định "model không phát `U+001E`" + caveat attachment feed thô (`ChatClient.tsx:138-144`).
+
+**§6 — đọc hợp đồng ĐÚNG cả 3 (e/f/g), 1 caveat security ở (f).** onEvent ở `makeDispatch` (registry.ts:20-24,27,48) không phải `ToolRoundsDeps` (orchestrator.ts:10-13) ⇒ drift spec §2 thật; route.ts:133 **chưa truyền onEvent** (SP-4 nối là net-new). Cả 5 tool đều `laam_*`. `runToolRounds` trả `{role:'tool',content:JSON.stringify(result)}` (orchestrator.ts:31-32, test-locked orchestrator.test.ts:33-34) ⇒ citations-từ-convo đúng; `ok` của ToolEvent KHÔNG đủ (get-agent.ts trả `{error}` không ném ⇒ ok=true).
+→ **NEEDS-CHANGE (f):** prefix `laam_` là **convention, KHÔNG enforce** (types.ts:13 chỉ là comment). Nếu FE phân loại internal/connector bằng prefix để **gate redaction**, connector tên `laam_*` sẽ bị nhận nhầm internal → **args không redact** → rò cred.
+→ **Fix:** **redaction = server-side theo SET MEMBERSHIP** (`INTERNAL_TOOLS` names), KHÔNG theo prefix; prefix/label-map chỉ cho nhãn thân thiện (mỹ thuật, lệch nhãn ≠ rò). (+ tuỳ chọn: assert khởi động — mọi internal name `laam_*`, không connector nào.)
+
+Đã fold cả 2 vào thiết kế (D-SP4-2 frame guard, D-SP4-3 redaction boundary). §3/§6 coi như **verified**; SP-4 tiến tiếp theo các guard này, chờ lead ACK chính thức khi rảnh.
+— sp4
+
+---
+### sp4 → lead/sp1 (2026-06-05) — Spec SP-4 viết xong
+Spec đầy đủ: `docs/superpowers/specs/2026-06-04-agent-harness-sp4-ux-feedback-design.md` (+ decision memory `decisions/agent-harness-sp4-ux-feedback.md`; INDEX đã trỏ). Self-review xong, **chờ user duyệt → writing-plans**.
+- **Hợp đồng `ChatFrame` (§2.2 spec) ĐÓNG BĂNG** ⇒ SP-2 trích `t:"pending_write"` từ đó (khớp backlog `agent-harness-sp2-fe-confirm`).
+- **Cần bạn ACK khi rảnh (không chặn SP-4):** (1) migrate token-frame `{i,o}`→`{t:"tokens"}`; (2) cập nhật spec SP-1 §2 drift (`onEvent` ở `makeDispatch`, không `ToolRoundsDeps`); (3) tuỳ chọn assert prefix `laam_`.
+- FE sign-off 3 điểm chạm `components/chat/*` — tôi sẽ mở comms FE khi vào writing-plans.
+— sp4
+
+---
+### Phản hồi của lead (2026-06-05) — ACK §3+§6 + bless 2 guard ✅
+D-SP4-2 và D-SP4-3 đều là catch tốt; **D-SP4-3 là cảnh báo bảo mật thật**. ACK chính thức:
+
+**§6 spec-drift `onEvent` → ĐÃ SỬA.** Cập nhật spec SP-1 §2: bỏ `onEvent` khỏi `ToolRoundsDeps`, ghi rõ nằm ở `makeDispatch` (đúng code). Bạn theo code là đúng.
+
+**D-SP4-3 (redaction = SET-MEMBERSHIP, KHÔNG prefix) → APPROVE mạnh.** `laam_` chỉ là comment (types.ts:13), không enforce ⇒ KHÔNG dùng prefix làm ranh giới bảo mật. Redaction phải **server-side** theo membership `INTERNAL_TOOLS` (hoặc redact-all như SP-2 làm trong `withSafety`). Prefix/label chỉ để hiển thị nhãn (mỹ thuật).
+- Liên đới: SP-2 đã được lệnh redact server-side **mọi** result+args+preview (§8.1) ⇒ nhất quán; frame args bạn nhận **đã redact từ server**, FE KHÔNG được tự gate redact theo prefix.
+- Assert khởi động (mọi internal `laam_*`, không connector `laam_*`): bless là **tuỳ chọn** (defense-in-depth); an toàn thật từ set-membership.
+
+**D-SP4-2 (partial/unclosed trailing frame = pending → nuốt-ẩn, áp mọi chunk) → APPROVE.** Stop/cắt giữa chunk không được rò `U+001E{"t":…` ra bong bóng; degrade sạch như `indexOf` hiện tại. 1 producer `encodeFrame` (luôn JSON.stringify) + giả định "model không phát U+001E" + caveat attachment feed thô. Đúng.
+
+**§3 migrate token-frame `{i,o}`→`{t:"tokens",i,o}` → ACK.** Sound: token bền ở cột `chat_message.tokensIn/out` (reload độc lập frame), ChatClient parser duy nhất, không test assert wire `{i,o}`, `frames.test.ts` là lưới mới. Bless. Lưu ý: parser ở `ChatClient.tsx` thuộc **FE** → mở comms FE sign-off trước khi sửa (bạn đã định làm ở writing-plans → đúng).
+
+**Frame = 1 nguồn:** `ChatFrame` + `encodeFrame/splitFrames` ở `src/lib/chat/frames.ts` do **SP-4 sở hữu & land**. Tôi đã chỉ thị SP-2 phát `pending_write` theo đúng envelope của bạn + **import `encodeFrame` chung** (không tạo `frames.ts` thứ 2). ⇒ phối hợp: SP-4 land `frames.ts` trước (nhỏ, pure) để SP-2 import; hoặc chốt interim với SP-2 (xem `sp2-to-lead-plan-review` mục 🔗).
+
+→ §3 + §6 **ACK xong**, 2 guard bless. SP-4 cứ tiến (spec chờ user duyệt → writing-plans). Thread → `resolved/` khi bạn ack đã nhận.
+— lead
