@@ -51,15 +51,25 @@ Set-Cookie. So secure cookies/callbacks are correct behind the proxy.
 Built in worktree `D:\Projects\personal_projects\LAAM-docker` (branch
 `infra/docker-stack`, commits `0f1503e`, `ba318d1`) so the only `next dev`-watched
 edit (`next.config.ts`) never touched the FE session's live `:3000` tree. Compose
-on main references the **pre-built** `image: laam-app:latest`, so main needs no
-Dockerfile yet. The branch is merged + compose switched to `build: .` only in the
-deferred final step.
+on main references the **pre-built** `image: laam-app:latest`.
 
-## Not done yet (deferred — coordinate with FE session; needs the dev server bounced)
-Final step: renumber pg→3932/adminer→3980, move dev→3100 (update `.env`
-`DATABASE_URL` host port), merge `infra/docker-stack` to main, switch compose
-`app` to `build: .`, remove worktree. Plan Task 10 in
-`docs/superpowers/plans/2026-06-04-docker-stack-tailscale-funnel.md`.
+## Merge landed (2026-06-04, per user) — branch + worktree RETAINED
+`infra/docker-stack` **merged into main** (`fc52207`); Dockerfile/.dockerignore/
+next.config(standalone) now on main. next.config conflict resolved to the
+**combined** dev+prod config (FE's `allowedDevOrigins` + `output:standalone`,
+commit `0fc23c7`) — FE's uncommitted fix preserved verbatim.
+- **Branch `infra/docker-stack` and worktree `LAAM-docker` kept** (user: don't delete).
+- **Compose still uses `image: laam-app:latest` (NOT `build: .`)** — deliberate:
+  main's working tree holds FE's uncommitted WIP, so `build: .` would bake unfinished
+  work into prod. Rebuild from the CLEAN worktree:
+  `docker build -t laam-app:latest D:\Projects\personal_projects\LAAM-docker`.
+  Switch to `build: .` only once FE work is committed.
+- Image rebuilt post-merge = byte-identical (no app-code change committed). Healthy on :3900.
+- Dev moved to `:3100` by the USER themselves (+ Tailscale Serve :8443 HTTPS, see
+  [[networking-dev-ssl-and-auth-url]]).
+
+## Still pending
+pg/adminer port renumber to 39xx — see [[docker-port-renumber]] (deferred by user).
 
 ## Commits (main)
 `854498e` spec · `6e6d9c5` plan · `e40d764` plan(+tesseract) · `0ab2822` compose app service.

@@ -25,13 +25,23 @@ Detail: [[docker-deploy]]. Plan: docs/superpowers/plans/2026-06-04-docker-stack-
 - Public: https://danny-gaming-pc.tail41dda4.ts.net/login 200; /api/auth/csrf 200 + Secure cookie.
 - **Dev :3000 NEVER interrupted** (still 200 throughout) — FE session unaffected.
 
+## Update — 2 (2026-06-04, later)
+- **Dev SSL**: set up Tailscale Serve HTTPS `:8443 → :3100` (tailnet-only, valid LE
+  cert); prod Funnel `:443→:3900` unchanged. Responded to FE handoff
+  [[networking-dev-ssl-and-auth-url]] (FE to set dev `AUTH_URL=https://...:8443`).
+- **Merged `infra/docker-stack` → main** (`fc52207`); next.config conflict resolved to
+  combined dev+prod config (`0fc23c7`, FE's `allowedDevOrigins` preserved).
+  **Branch + worktree RETAINED** (user said don't delete).
+- **Rebuilt prod image** from clean worktree → byte-identical (no app code committed);
+  container recreated, **healthy on :3900**, local+public /login 200, OCR+Ollama OK.
+- Compose deliberately still `image:` (not `build: .`) — main tree holds FE WIP.
+
 ## Next steps
-- USER: register first account at the public URL → becomes owner (P0).
-- DEFERRED final step (coordinate w/ FE, bounces dev server): renumber pg→3932 /
-  adminer→3980, dev→3100 (+.env DATABASE_URL), merge `infra/docker-stack` to main,
-  switch compose `app` to `build: .`, remove worktree. See plan Task 10.
-- Cleanup: `backlog/docker-stack-tesseract.md` handoff is FULFILLED → can be deleted
-  (left in place; it's another session's untracked file).
+- USER: register first account at the public URL → becomes owner (P0). (Note: `user`
+  table already has 2 rows — may already be done.)
+- pg/adminer renumber to 39xx still pending — [[docker-port-renumber]].
+- When FE commits their WIP: can switch compose `app` to `build: .` (build from main).
+- Cleanup: `backlog/docker-stack-tesseract.md` handoff FULFILLED → can be deleted.
 
 ## Blockers / Risks
 - Test suite NOT run: my changes add no tested source to main (compose/Dockerfile
