@@ -15,6 +15,13 @@
       "when": 1780502017774,
       "tag": "0001_young_talkback",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780583189880,
+      "tag": "0002_natural_chat",
+      "breakpoints": true
     }
   ]
 }

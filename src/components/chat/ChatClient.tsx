@@ -79,12 +79,22 @@ export function ChatClient() {
     const r = await fetch(`/api/conversations/${id}`);
     const d = await r.json().catch(() => ({ messages: [] }));
     setMessages(
-      (d.messages ?? []).map((m: { role: string; content: string; createdAt?: string }) => ({
-        id: uid(),
-        role: m.role === "user" ? "user" : "assistant",
-        content: m.content,
-        createdAt: m.createdAt ? new Date(m.createdAt).getTime() : undefined,
-      })),
+      (d.messages ?? []).map(
+        (m: {
+          role: string;
+          content: string;
+          createdAt?: string;
+          tokensIn?: number;
+          tokensOut?: number;
+        }) => ({
+          id: uid(),
+          role: m.role === "user" ? "user" : "assistant",
+          content: m.content,
+          createdAt: m.createdAt ? new Date(m.createdAt).getTime() : undefined,
+          tokensIn: m.tokensIn,
+          tokensOut: m.tokensOut,
+        }),
+      ),
     );
   }
 
@@ -109,11 +119,15 @@ export function ChatClient() {
     setConvs((cs) => cs.map((c) => (c.id === id ? { ...c, title } : c)));
   }
 
-  function setLastAssistant(prev: ChatMsg[], content: string): ChatMsg[] {
+  function setLastAssistant(
+    prev: ChatMsg[],
+    content: string,
+    tokens?: { tokensIn: number; tokensOut: number },
+  ): ChatMsg[] {
     const copy = [...prev];
     for (let i = copy.length - 1; i >= 0; i--) {
       if (copy[i].role === "assistant") {
-        copy[i] = { ...copy[i], content };
+        copy[i] = { ...copy[i], content, ...(tokens ?? {}) };
         break;
       }
     }
@@ -156,13 +170,34 @@ export function ChatClient() {
         }
         const reader = res.body.getReader();
         const dec = new TextDecoder();
-        let acc = "";
+        const SEP = ""; // record separator before the trailing token-count frame
+        let raw = "";
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
-          acc += dec.decode(value, { stream: true });
-          setMessages((p) => setLastAssistant(p, acc));
+          raw += dec.decode(value, { stream: true });
+          const sep = raw.indexOf(SEP);
+          setMessages((p) => setLastAssistant(p, sep >= 0 ? raw.slice(0, sep) : raw));
         }
+        // Split off the trailing {i,o} token-count frame and attach it so usage
+        // shows live (also persisted server-side, so reloads keep it).
+        const sepIdx = raw.indexOf(SEP);
+        const text = sepIdx >= 0 ? raw.slice(0, sepIdx) : raw;
+        let meta: { i?: number; o?: number } | null = null;
+        if (sepIdx >= 0) {
+          try {
+            meta = JSON.parse(raw.slice(sepIdx + 1));
+          } catch {
+            meta = null;
+          }
+        }
+        setMessages((p) =>
+          setLastAssistant(
+            p,
+            text,
+            meta ? { tokensIn: meta.i ?? 0, tokensOut: meta.o ?? 0 } : undefined,
+          ),
+        );
         if (!activeId && convId) setActiveId(convId);
         void loadConvs();
       } catch (e) {

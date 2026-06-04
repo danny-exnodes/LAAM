@@ -173,6 +173,10 @@ export const chatMessages = pgTable("chat_message", {
     .references(() => chatConversations.id, { onDelete: "cascade" }),
   role: text("role").notNull(), // user | assistant
   content: text("content").notNull(),
+  // Per-turn token usage from Ollama (prompt_eval_count / eval_count). Set on the
+  // assistant message; user rows stay 0. Default 0 so old rows read cleanly.
+  tokensIn: integer("tokensIn").notNull().default(0),
+  tokensOut: integer("tokensOut").notNull().default(0),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
 

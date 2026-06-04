@@ -155,6 +155,8 @@ export const chat: Dict = {
   'chat.suggestWeather': { vi: 'Thời tiết Hà Nội hôm nay thế nào?', en: 'Weather in Hanoi today?', zh: '今天河内天气怎么样？' },
   'chat.emptyTitle': { vi: 'Bắt đầu trò chuyện', en: 'Start a conversation', zh: '开始对话' },
   'chat.thinking': { vi: 'đang soạn…', en: 'typing…', zh: '正在输入…' },
+  'chat.msgTokens': { vi: '{in} vào · {out} ra tok', en: '{in} in · {out} out tok', zh: '{in} 入 · {out} 出 tok' },
+  'chat.msgTokensTitle': { vi: 'Tokens vào / ra của lượt này', en: 'Tokens in / out for this turn', zh: '本轮输入 / 输出 tokens' },
   'chat.errServer': { vi: 'Lỗi máy chủ.', en: 'Server error.', zh: '服务器错误。' },
   'chat.errConn': { vi: 'Lỗi kết nối tới máy chủ.', en: 'Connection error.', zh: '连接服务器出错。' },
   'chat.annGenerating': { vi: 'Đang tạo phản hồi…', en: 'Generating a reply…', zh: '正在生成回复…' },

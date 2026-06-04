@@ -123,6 +123,15 @@ export function MessageItem({
         {msg.createdAt != null && (
           <span className="ml-1 text-xs text-neutral-400">{relTime(msg.createdAt)}</span>
         )}
+
+        {isAssistant && (msg.tokensOut ?? 0) > 0 && (
+          <span
+            className="text-xs tabular-nums text-neutral-400"
+            title={t("chat.msgTokensTitle")}
+          >
+            {t("chat.msgTokens", { in: msg.tokensIn ?? 0, out: msg.tokensOut ?? 0 })}
+          </span>
+        )}
       </div>
     </div>
   );

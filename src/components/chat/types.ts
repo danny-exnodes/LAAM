@@ -9,6 +9,8 @@ export type ChatMsg = {
   role: ChatRole;
   content: string;
   createdAt?: number; // epoch ms
+  tokensIn?: number; // per-turn prompt tokens (assistant messages)
+  tokensOut?: number; // per-turn completion tokens (assistant messages)
 };
 
 export type ChatSettings = {

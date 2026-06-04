@@ -216,6 +216,9 @@ export async function POST(req: Request) {
       const encoder = new TextEncoder();
       let buf = "";
       let full = "";
+      // Per-turn token usage from Ollama's final ({done:true}) chunk.
+      let tokensIn = 0;
+      let tokensOut = 0;
       try {
         for (;;) {
           const { done, value } = await reader.read();
@@ -233,6 +236,10 @@ export async function POST(req: Request) {
                 full += tok;
                 controller.enqueue(encoder.encode(tok));
               }
+              if (j?.done) {
+                if (typeof j.prompt_eval_count === "number") tokensIn = j.prompt_eval_count;
+                if (typeof j.eval_count === "number") tokensOut = j.eval_count;
+              }
             } catch {
               /* skip partial line */
             }
@@ -240,9 +247,23 @@ export async function POST(req: Request) {
         }
       } finally {
         if (full) {
-          await db
-            .insert(chatMessages)
-            .values({ conversationId: convId, role: "assistant", content: full });
+          await db.insert(chatMessages).values({
+            conversationId: convId,
+            role: "assistant",
+            content: full,
+            tokensIn,
+            tokensOut,
+          });
+          // Trailing metadata frame: a U+001E (record separator) the client
+          // strips from the visible text, carrying this turn's token counts so
+          // they show live without a reload.
+          try {
+            controller.enqueue(
+              encoder.encode("" + JSON.stringify({ i: tokensIn, o: tokensOut })),
+            );
+          } catch {
+            /* response already cancelled (client aborted) — nothing to send */
+          }
         }
         await db
           .update(chatConversations)

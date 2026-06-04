@@ -32,6 +32,8 @@ export async function GET(
       id: chatMessages.id,
       role: chatMessages.role,
       content: chatMessages.content,
+      tokensIn: chatMessages.tokensIn,
+      tokensOut: chatMessages.tokensOut,
     })
     .from(chatMessages)
     .where(eq(chatMessages.conversationId, id))
