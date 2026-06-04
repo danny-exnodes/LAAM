@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) and other AI agents 
 
 ## Project Overview
 
-**LAAM (Local AI Agent Monitoring)** is an internal web tool that lets a developer team watch **Claude AI agents** running on their local machine in real time — with no changes to the agents themselves. It reads the JSONL transcripts that Claude Code / the Agent SDK write to `~/.claude/projects/`, groups them by **project**, and shows each agent: which orchestrator it belongs to, its status, how long it has run, and what it is currently working on.
+**LAAM (Local AI Agent Monitoring)** is an internal web tool that lets a developer team watch **Claude AI agents** running on their local machine in real time — with no changes to the agents themselves. It reads the JSONL transcripts that Claude Code / the Agent SDK write to `~/.claude/projects/`, groups them by **project**, and shows each agent: which orchestrator it belongs to, its status, how long it has run, and what it is currently working on. The repo root **is** the v2 (Next.js) app; the legacy v1 (vanilla JS + Express) is archived on branch `archive/v1`.
 
-As of **v0.9.0** LAAM expanded from a pure monitor into a **local-first daily-work assistant**: real-time monitoring, a multimodal local-model **chat assistant**, and **connectors** to external apps — all running locally, with the local model free ($0). The next milestone (→ v1.0.0) is the connector framework.
+LAAM is a **local-first daily-work assistant**: real-time monitoring, a multimodal local-model **chat assistant**, and **connectors** to external apps — all running locally, with the local model free ($0). **v2.0.0** (the Next.js rewrite, now at the repo root) shipped full v1 feature parity plus auth/RBAC, multi-machine monitoring, and per-user Postgres storage.
 
 Canonical documentation: `README.md` (Vietnamese) and `CHANGELOG.md`.
 
@@ -14,78 +14,41 @@ Canonical documentation: `README.md` (Vietnamese) and `CHANGELOG.md`.
 
 | Layer | Technology |
 |---|---|
-| Runtime | Node.js ≥ 18 (ESM) |
-| Server | Express + Server-Sent Events (live updates) |
-| File watching | chokidar |
-| Frontend | Vanilla JS + HTML + CSS — **no build step**, no framework |
-| Charts | Chart.js (dashboard + chat) |
-| Graph | vis-network |
-| Maps | Leaflet + OpenStreetMap (Nominatim geocode, OSRM routing) |
-| Markdown render | marked + DOMPurify (XSS-safe) |
-| PDF | jsPDF (export), pdf.js (read) |
-| Icons | Lucide (vendored offline) |
-| Local LLM | Ollama (GPU) behind a logging proxy (`proxy/server.js`) |
-| OCR | Tesseract (vie + eng + chi_sim) for images / scanned PDFs |
-| i18n | Lightweight in-house engine — Vietnamese / English / 中文 |
-| Persistence | **None server-side** — reads transcript files from disk; chat history lives in browser `localStorage`; connector creds in `~/.laam/connectors.json` (mode 600) |
-| Tests | Node built-in test runner (`node test/run.mjs`) |
-| Infra | Docker Compose (Ollama + proxy + LAAM); macOS override keeps Ollama native for GPU |
+| Framework | Next.js 16 (App Router, React 19, TypeScript) |
+| Auth | Auth.js v5 (Credentials, JWT) + RBAC (owner/admin/member/viewer) |
+| DB / ORM | PostgreSQL 16 (Docker) + Drizzle ORM (node-postgres) |
+| Styling | Tailwind CSS v4 |
+| Realtime | Server-Sent Events (`/api/events` + `useLiveSessions`) |
+| Charts / Graph / Map | recharts · @xyflow/react · react-leaflet |
+| Markdown | react-markdown + remark-gfm + rehype-sanitize |
+| Local LLM | Ollama (GPU), default `qwen3-vl:8b-instruct-q8_0` (POC) — see `.serena/memories/decisions/poc-model-choice.md` |
+| OCR | system `tesseract` (vie+eng+chi_sim) |
+| i18n | in-house provider (vi/en/zh, cookie `laam_lang`) |
+| Tests | Vitest + Testing Library + jsdom |
 
-All frontend libraries are **vendored offline** in `public/vendor/` (no CDN calls). Runtime npm dependencies are intentionally minimal: `express`, `chokidar`.
-
-> Note: this is the **current** stack. A SaaS / multi-user direction (Postgres, auth, per-user data) is being planned separately — see `docs/` for v2 planning. Do not assume those exist in the code yet.
+The repo root **is** the Next.js app. The legacy v1 (vanilla JS + Express) is archived on branch `archive/v1`.
 
 ## Architecture
 
-Two data sources feed the same UI:
-1. **Claude Code transcripts** — `~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`
-2. **Local-model logs** — written by the Ollama logging proxy to `~/.laam/local-logs/<session>.jsonl`
+Next.js App Router app; PostgreSQL via Drizzle; Ollama for chat. Monitoring data is parsed from Claude transcripts (`~/.claude/projects`) and local-model logs, upserted into Postgres, and streamed to the UI via SSE.
 
-Data flow:
+### Backend (`src/`)
+- `src/db/schema.ts` — Drizzle schema (Auth.js tables + `machines`/`projects`/`agent_sessions`/`chat_*`/`connector_credentials`/`audit_log`).
+- `src/lib/monitoring/*` — transcript + local-log parsers (ported from v1).
+- `src/lib/sync.ts` — `upsertSessions`, `syncLocalMonitoring`.
+- `src/lib/stats.ts` — `/api/stats` aggregation.
+- `src/lib/connectors/*` — self-registering connectors (crypto + Postgres store + 7 services).
+- `src/auth.ts` · `auth.config.ts` · `proxy.ts` — Auth.js + route protection.
 
-```
-~/.claude/projects/…jsonl ─┐
-                           ├─► lib/parser.js · lib/localParser.js   (parse, group by project, detect Task/sub-agents, status & timing)
-~/.laam/local-logs/…jsonl ─┘
-        │
-        ▼
-   bin/laam.js   ── Express API + SSE; chokidar watches files; serves pages & /api/*
-        │
-        ▼
-   lib/stats.js  ── aggregate cost / tool leaderboard / heatmap / model comparison
-        │
-        ▼
-   public/       ── vanilla-JS pages (no build step)
-```
+### Routes (`src/app`)
+- Pages: `/login /register /dashboard /agents /agents/[id] /chat /connectors /graph /machines`
+- API: `/api/auth/[...nextauth]`, `/api/register`, `/api/sync`, `/api/ingest`, `/api/chat`(+`/info`), `/api/conversations`(+`/[id]`), `/api/connectors`(+`/[id]/[action]`), `/api/stats`, `/api/events`(SSE), `/api/ollama/models`, `/api/ocr`, `/api/fetch-url`, map helpers (`/api/geocode|reverse|route|nearby`), `/api/agents/[id]/timeline`.
 
-### Backend (`lib/`)
-- `parser.js` — parse & analyse Claude Code JSONL (per-tool stats, histograms, tool-call timing, sub-agent detection)
-- `localParser.js` — parse local-model proxy logs (the second data source)
-- `stats.js` — aggregate metrics for `/api/stats`
-- `search.js` — full-text transcript search
-- `pricing.js` — manual USD price table per model (**may be stale — edit by hand**; local model = $0)
-- `connectors/` — self-registering connector modules (one file per service)
+### Multi-machine
+`collector/laam-collector.mjs` (zero-dep) runs on each dev machine → pushes transcripts to `/api/ingest` (machine-token auth).
 
-### Frontend (`public/`) — pages
-
-| Route | Page | Purpose |
-|---|---|---|
-| `/` | Dashboard | KPIs + charts (status / model / branch), cost, hour×weekday heatmap, tool leaderboard, model comparison; CSV/PDF export |
-| `/agents` | Agents | Real-time agents grouped by project; filters (project / model / status / branch / time); stuck-agent badge + browser notification; per-session cost; CSV export |
-| `/graph` | Graph | orchestrator → sub-agent network (vis-network) |
-| `/search` | Search | full-text search across transcripts |
-| `/session?id=…` | Session detail | one session + tool-call waterfall |
-| `/chat` | Chat | chat with a local Ollama model (streamed through the proxy → tracked as a local source); model picker + temperature / top-p / system prompt; multi-conversation history; file & URL attachments; OCR; location-awareness; rich render (tables, Chart.js charts, Leaflet maps); connector tool-calling; export MD/JSON |
-| `/connectors` | Connectors | manage external-app connections (token / OAuth-token); connect / disconnect / test |
-| `/office` | Office | isometric "agents office" — rooms per project, agents move/pair, drag to rotate, toggleable HUD |
-
-The chat page uses a **kernel + module** architecture: `chat.js` builds `window.LAAMChat`, then initialises feature modules registered in `window.LAAM_CHAT_MODULES` (`chat-history.js`, `chat-composer.js`, `chat-settings.js`, `chat-export.js`, `chat-ux.js`, `chat-actions.js`, plus the `chat-render` / `chat-geo` / `chat-ingest` helpers). Modules must not run logic at load time beyond registering themselves. Note: chat layout CSS (`.chat-sub`, `.chat-toolbar`, `.dock`, …) is **injected by these JS modules**, not in `styles.css`.
-
-### Connectors
-Each connector is a self-registering file in `lib/connectors/` exposing **tools** the chat model can call. When a connector is connected, `/api/chat` runs a tool-calling loop: model calls a tool → backend executes the real API with the user's credential → result is fed back for the model to render. Credentials are stored **server-side only** in `~/.laam/connectors.json` (mode 600), masked on display, never committed. Available: **GitHub** (PAT; public repos work without a token), **Trello** (key+token), **Jira** (email + API token), **Google Drive / Calendar / Gmail** (paste OAuth access token; full OAuth flow planned), plus a credential-free **Demo**. LAAM never logs in on the user's behalf.
-
-### Key API endpoints
-`GET /api/sessions`, `GET /api/session/:id`, `GET /api/stats`, `GET /api/search?q=`, `GET /api/config`, `GET /api/events` (SSE), `GET /api/health`, `POST /api/chat`, `GET /api/chat/info`, `GET /api/ollama/models`, `GET /api/connectors`, plus map helpers (`/api/geocode`, `/api/route`, `/api/reverse`, `/api/nearby`) and `/api/fetch-url` (SSRF-guarded).
+### Not yet ported from v1
+See `.serena/memories/backlog/v1-unported.md` (Search, Office, proxy, `/api/config`, events table, machine/owner filter).
 
 ## Language Notes
 
@@ -362,25 +325,21 @@ flowchart TD
 ## Build & Run Commands
 
 ```bash
-npm install                       # install deps (express, chokidar)
-npm start                         # start server → http://localhost:4317
-npm run dev                       # start with Node --watch (auto-restart)
-npm test                          # run tests (node test/run.mjs)
+# Infra (Postgres + Adminer)
+docker compose up -d
 
-# CLI flags / env vars
-npm start -- --port 8080          # change port (default 4317)                 [LAAM_PORT]
-npm start -- --dir /path          # projects dir to watch                      [LAAM_PROJECTS_DIR]
-npm start -- --local /path        # local-model logs dir (~/.laam/local-logs)  [LAAM_LOCAL_LOGS]
-npm start -- --stuck 15           # stuck-agent threshold in minutes (def. 10) [LAAM_STUCK_MIN]
+# Env + schema (first run)
+cp .env.example .env            # set AUTH_SECRET, DEFAULT_CHAT_MODEL, CONNECTOR_KEY
+npm ci
+npm run db:generate && npm run db:migrate
 
-# Local model (free, $0): install Ollama, then
-ollama pull qwen3-vl:8b
-node proxy/server.js              # logging proxy :11435 → Ollama :11434 (logs → ~/.laam/local-logs)
+# Dev / prod
+npm run dev                     # http://localhost:3000 (Turbopack)
+npm run build && npm run start  # production
+npm test                        # Vitest
 
-# Docker
-docker compose build && docker compose up -d                                   # Linux / CPU — full stack
-ollama serve &                                                                 # macOS: keep Ollama native (GPU)…
-docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d --build # …run proxy + LAAM in Docker
+# Local LLM (POC): Ollama + qwen3-vl:8b-instruct-q8_0 ; OCR: tesseract (vie)
+# One-shot host setup: ./setup-poc.ps1  (Windows, run as Admin)
 ```
 
-No build step and no database are required to run LAAM.
+DB uses **migrations** (`db:generate` → commit `drizzle/` → `db:migrate`), never `db:push` on real data.

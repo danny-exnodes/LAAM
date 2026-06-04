@@ -1,3 +1,9 @@
+# LAAM — Local AI Agent Monitoring
+
+Theo dõi real-time các Claude agent chạy local + trợ lý chat model-local + connectors — all local, model $0. **Next.js 16 + PostgreSQL + Auth.js + Drizzle.** Bản v1 (vanilla/Express) lưu ở branch `archive/v1`.
+
+---
+
 # LAAM v2 (in development)
 
 **Local-first, multi-user (internal).** Next.js 16 + PostgreSQL + Auth.js v5 + Drizzle.
