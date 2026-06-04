@@ -15,8 +15,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
 # Standalone omits public/ and .next/static/ by design — copy them in.
-RUN cp -r public .next/standalone/public \
- && cp -r .next/static .next/standalone/.next/static
+# .next/static always exists after build; public/ is optional (this app has
+# none today), so guard it to keep the build resilient if it's added later.
+RUN cp -r .next/static .next/standalone/.next/static \
+ && if [ -d public ]; then cp -r public .next/standalone/public; fi
 
 # ---- runner: minimal production image ----
 FROM node:22-alpine AS runner
