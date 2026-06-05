@@ -56,3 +56,14 @@
 
 ## Next = Task 8 E2E host (USER chạy — agent-ops)
 `npm run db:migrate` (áp 0004) → /connectors bật Demo → POST /api/workflows (seed graph 1 connector→1 agent, xem plan Task 8) → POST /api/workflows/[id]/run → verify: run.status=succeeded · 2 step (n1 output, n2 tóm tắt) · SSE.
+
+---
+# AUTONOMOUS RUN A1→E (user giao toàn quyền 2026-06-05) — operating: worktree/group từ local HEAD, merge local main/group, KHÔNG push, KHÔNG dev/preview/OS-task, subagent-driven.
+
+## ✅ G1 ENGINE v2 — DONE + MERGED (`60a5a2a`)
+- Worktree `feat/wf-engine` (local HEAD). 1 opus implementer (6 task TDD) + 1 opus adversarial review (7 invariant + 8 probe → APPROVED). Merge clean. **tsc 0 · 73 workflow test · 679 full repo (0 regression).**
+- Thêm: `condition` (predicate + cạnh label true/false), `foreach` (body lồng, item/index trong vars, parentStepId child), budget (maxSteps+maxForeachItems cap), `predicate.ts` (comparator+all/any, arg-sink, exists/not_exists tolerate-missing), validate v2 (`assertRunnable`), run.ts (input populated, finalize-on-throw). **A0 contracts frozen + intact.**
+- Decisions (documented): condition no-reconverge (tree); token-precise budget hoãn (step/item cap đủ chặn runaway).
+
+## ▶ Next autonomous: G2 SCHEDULER (B)
+workflow_schedule table + DB-claim atomic (claim+advance 1 tx — PIN-D1) + tick endpoint (localhost) + missed (skip/fire-once) + blast-radius gate (extend policy.ts; v1 BLAST_LOW-only) + observability tối thiểu (runs list + needs-attention). ⚠️ Windows Task poke = host step (build code+doc, KHÔNG cài). Rồi G3 templates · G4 editor · G5 mgmt page.
