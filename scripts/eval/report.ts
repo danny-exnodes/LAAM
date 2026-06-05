@@ -11,14 +11,28 @@ function cell(s: ScenarioScore, d: DimKey): string {
   return `${c.passed}/${c.total}${mark}`;
 }
 
+// Per-dimension aggregate (passed/total summed across scenarios that graded it).
+// Shared by the scorecard totals row and the DB persist (persist-run.ts).
+export function aggregateDims(scores: ScenarioScore[]): Record<string, { passed: number; total: number }> {
+  const out: Record<string, { passed: number; total: number }> = {};
+  for (const s of scores) {
+    for (const [dim, c] of Object.entries(s.perDim)) {
+      const cell = (out[dim] ??= { passed: 0, total: 0 });
+      cell.passed += c.passed;
+      cell.total += c.total;
+    }
+  }
+  return out;
+}
+
 export function renderScorecard(scores: ScenarioScore[], meta: { k: number; model: string; at: string }): string {
   const rows = scores.map((s) =>
     `| ${s.id} | ${s.capability} | ${DIMS.map((d) => cell(s, d)).join(" | ")} | ${s.avgMs} |`);
   // Tổng pass-rate từng chiều (gộp mọi scenario có chấm chiều đó).
+  const agg = aggregateDims(scores);
   const totals = DIMS.map((d) => {
-    let p = 0, t = 0;
-    for (const s of scores) { const c = s.perDim[d]; if (c) { p += c.passed; t += c.total; } }
-    return t ? `${Math.round((100 * p) / t)}%` : "—";
+    const c = agg[d];
+    return c && c.total ? `${Math.round((100 * c.passed) / c.total)}%` : "—";
   });
   const fails = scores.flatMap((s) => s.fails);
   return [

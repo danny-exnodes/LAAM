@@ -18,3 +18,18 @@ describe("renderScorecard", () => {
     expect(md).toContain("billing-svc");  // chi tiết trượt được liệt kê
   });
 });
+
+import { aggregateDims } from "./report";
+
+describe("aggregateDims", () => {
+  test("sums passed/total per dimension across scenarios", () => {
+    const scores = [
+      { id: "a", capability: "tool-selection", runs: 5, perDim: { "tool-selection": { passed: 5, total: 5 }, grounding: { passed: 3, total: 5 } }, fails: [], avgMs: 0 },
+      { id: "b", capability: "tool-selection", runs: 5, perDim: { "tool-selection": { passed: 4, total: 5 } }, fails: [], avgMs: 0 },
+    ];
+    const dims = aggregateDims(scores as never);
+    expect(dims["tool-selection"]).toEqual({ passed: 9, total: 10 });
+    expect(dims["grounding"]).toEqual({ passed: 3, total: 5 });
+    expect(dims["args"]).toBeUndefined();
+  });
+});
