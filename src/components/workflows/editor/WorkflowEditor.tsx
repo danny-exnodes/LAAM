@@ -59,8 +59,18 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
     <div
       style={{
         background: "#fff",
-        border: `2px solid ${selected ? color : "#e2e8f0"}`,
-        borderLeft: `4px solid ${color}`,
+        // Per-side longhand only (no `border` shorthand) so the accent left border
+        // doesn't conflict with the shorthand on rerender — React 19 warns when
+        // mixing `border` + `borderLeft` while a value updates (selected toggle).
+        borderStyle: "solid",
+        borderTopWidth: 2,
+        borderRightWidth: 2,
+        borderBottomWidth: 2,
+        borderLeftWidth: 4,
+        borderTopColor: selected ? color : "#e2e8f0",
+        borderRightColor: selected ? color : "#e2e8f0",
+        borderBottomColor: selected ? color : "#e2e8f0",
+        borderLeftColor: color,
         borderRadius: 10,
         padding: "8px 12px",
         minWidth: 160,
