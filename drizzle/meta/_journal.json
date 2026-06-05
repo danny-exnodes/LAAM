@@ -43,6 +43,13 @@
       "when": 1780663913169,
       "tag": "0005_cooing_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780666740699,
+      "tag": "0006_gigantic_blizzard",
+      "breakpoints": true
     }
   ]
 }
