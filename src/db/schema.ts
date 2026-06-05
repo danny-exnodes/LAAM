@@ -20,6 +20,7 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
+import type { WorkflowGraph } from "@/lib/workflow/types";
 
 /** Role-based access control. Single internal org → roles, not multi-tenant. */
 export const roleEnum = pgEnum("role", ["owner", "admin", "member", "viewer"]);
@@ -254,3 +255,63 @@ export type User = typeof users.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];
 export type AgentSession = typeof agentSessions.$inferSelect;
 export type Project = typeof projects.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Workflow orchestration (A0) — manual-trigger linear runs. workflow_schedule +
+// condition/foreach columns arrive in later phases. graph = 1 JSONB (clone=copy
+// 1 row). run.graphSnapshot = kế hoạch tĩnh lúc start (spec PIN-D4a). userId =
+// danh tính thực thi (cred per-user). (spec §4.)
+// ---------------------------------------------------------------------------
+
+export const workflows = pgTable("workflow", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  graph: jsonb("graph").$type<WorkflowGraph>().notNull(),
+  isTemplate: boolean("isTemplate").notNull().default(false),
+  status: text("status").notNull().default("draft"), // draft | active | disabled
+  version: integer("version").notNull().default(1),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});
+
+export const workflowRuns = pgTable("workflow_run", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  workflowId: text("workflowId").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+  userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  trigger: text("trigger").notNull(), // manual | schedule
+  status: text("status").notNull().default("queued"), // queued|running|succeeded|failed|cancelled
+  graphSnapshot: jsonb("graphSnapshot").$type<WorkflowGraph>().notNull(),
+  context: jsonb("context"),
+  error: text("error"),
+  tokensIn: integer("tokensIn").notNull().default(0),
+  tokensOut: integer("tokensOut").notNull().default(0),
+  costUsd: doublePrecision("costUsd").notNull().default(0),
+  startedAt: timestamp("startedAt", { mode: "date" }),
+  finishedAt: timestamp("finishedAt", { mode: "date" }),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+});
+
+export const workflowRunSteps = pgTable("workflow_run_step", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  runId: text("runId").notNull().references(() => workflowRuns.id, { onDelete: "cascade" }),
+  nodeId: text("nodeId").notNull(),
+  parentStepId: text("parentStepId"), // foreach lồng (A2)
+  seq: integer("seq").notNull(),
+  kind: text("kind").notNull(), // agent|connector|condition|foreach
+  status: text("status").notNull(), // running|succeeded|failed|skipped
+  input: jsonb("input"),
+  output: jsonb("output"),
+  error: text("error"),
+  tokensIn: integer("tokensIn").notNull().default(0),
+  tokensOut: integer("tokensOut").notNull().default(0),
+  costUsd: doublePrecision("costUsd").notNull().default(0),
+  startedAt: timestamp("startedAt", { mode: "date" }),
+  finishedAt: timestamp("finishedAt", { mode: "date" }),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+});
+
+export type Workflow = typeof workflows.$inferSelect;
+export type WorkflowRun = typeof workflowRuns.$inferSelect;
+export type WorkflowRunStep = typeof workflowRunSteps.$inferSelect;
