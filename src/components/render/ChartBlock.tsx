@@ -53,6 +53,14 @@ export type ChartModel =
 const PIE_TYPES = new Set(["pie", "doughnut", "polararea"]);
 const LINE_TYPES = new Set(["line", "radar"]);
 
+// Coerce to a finite number. `?? 0` only catches null/undefined — a non-numeric
+// value (Number("oops") = NaN) would leak into bars + value labels and trigger
+// React's "Received NaN for the children attribute" warning. Default bad → 0.
+const finiteNum = (x: unknown): number => {
+  const n = Number(x);
+  return Number.isFinite(n) ? n : 0;
+};
+
 // Pure: parse v1 chart JSON → recharts-ready model (or an error).
 export function chartToRecharts(raw: string): ChartModel {
   const cfg = looseJsonParse(raw); // S5: tolerate trailing commas / smart quotes / fences
@@ -75,7 +83,7 @@ export function chartToRecharts(raw: string): ChartModel {
   if (PIE_TYPES.has(type)) {
     const ds = datasets[0]?.data ?? [];
     const names = labels.length ? labels : ds.map((_, i) => String(i + 1));
-    const rows = names.map((name, i) => ({ name, value: Number(ds[i] ?? 0) }));
+    const rows = names.map((name, i) => ({ name, value: finiteNum(ds[i]) }));
     const sliceColors = rows.map((_, i) => PALETTE[i % PALETTE.length]);
     return { kind: "pie", title, rows, series: [{ key: "value", label: "value", color: PALETTE[0] }], sliceColors };
   }
@@ -91,7 +99,7 @@ export function chartToRecharts(raw: string): ChartModel {
   for (let i = 0; i < rowCount; i++) {
     const row: Record<string, number | string> = { name: labels[i] ?? String(i + 1) };
     datasets.forEach((ds, di) => {
-      row[series[di].key] = Number(ds.data?.[i] ?? 0);
+      row[series[di].key] = finiteNum(ds.data?.[i]);
     });
     rows.push(row);
   }

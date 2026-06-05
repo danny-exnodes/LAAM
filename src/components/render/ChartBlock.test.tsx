@@ -68,6 +68,27 @@ describe("chartToRecharts (pure mapper)", () => {
     const r = chartToRecharts(JSON.stringify({ type: "bar" }));
     expect("error" in r).toBe(true);
   });
+
+  it("coerces non-numeric / missing values to 0 (no NaN leaks into recharts)", () => {
+    const r = chartToRecharts(
+      JSON.stringify({ type: "bar", data: { labels: ["a", "b", "c"], datasets: [{ label: "x", data: [12, "oops", null] }] } }),
+    );
+    if ("error" in r) throw new Error("unexpected error");
+    const vals = r.rows.map((row) => row[r.series[0].key]);
+    expect(vals).toEqual([12, 0, 0]); // "oops"→0, null→0, none are NaN
+    expect(vals.every((v) => Number.isFinite(v as number))).toBe(true);
+  });
+
+  it("coerces non-numeric pie values to 0", () => {
+    const r = chartToRecharts(
+      JSON.stringify({ type: "pie", data: { labels: ["A", "B"], datasets: [{ data: ["bad", 7] }] } }),
+    );
+    if ("error" in r) throw new Error("unexpected error");
+    expect(r.rows).toEqual([
+      { name: "A", value: 0 },
+      { name: "B", value: 7 },
+    ]);
+  });
 });
 
 describe("ChartBlock (component)", () => {
