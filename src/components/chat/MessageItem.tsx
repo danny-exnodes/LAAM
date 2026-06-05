@@ -69,17 +69,19 @@ export function MessageItem({
         }
       >
         {isAssistant && isEmpty && streaming ? (
-          // S3: animated processing indicator while the turn works (model + any
-          // tool-loop). Per-tool live chips need a streaming-pipeline refactor —
-          // the completed tool trace still renders once the reply arrives.
-          <span className="inline-flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
-            {t("chat.thinking")}
-            <span className="inline-flex gap-0.5" aria-hidden>
-              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
-              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
-              <span className="h-1 w-1 animate-bounce rounded-full bg-current" />
+          // S3: while the turn works, show LIVE tool chips (ToolTrace renders "đang
+          // gọi <tool>…" for in-flight calls) above an animated processing indicator.
+          <>
+            <ToolTrace items={msg.toolTrace} />
+            <span className="inline-flex items-center gap-1.5 text-neutral-500 dark:text-neutral-400">
+              {t("chat.thinking")}
+              <span className="inline-flex gap-0.5" aria-hidden>
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:-0.3s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:-0.15s]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current" />
+              </span>
             </span>
-          </span>
+          </>
         ) : isAssistant ? (
           <>
             <ToolTrace items={msg.toolTrace} />

@@ -13,7 +13,7 @@ import { runResume, buildResumeRequest } from "@/lib/agent/safety/resume";
 import { recordWrite, isNonceUsed } from "@/lib/agent/safety/audit";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { deriveConvTitle } from "@/lib/chat/title";
-import { makeFrameCollector, deriveCitations } from "@/lib/chat/trace";
+import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
 import { extractToolTurns } from "@/lib/agent/persist";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
 import {
@@ -243,96 +243,240 @@ export async function POST(req: Request) {
     });
   }
 
-  // SP-4: collector nối onEvent → gom tool frames (gán c, redact args). SP-2: gate bọc
-  // dispatch — read/confirmed write đi qua (onEvent phát); unconfirmed write THROW
-  // PendingWriteSignal (onEvent KHÔNG phát cho write — nó hiện thành pending_write frame).
-  const { onEvent, frames: toolFrames } = makeFrameCollector(INTERNAL_NAMES);
-  const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
-    internal: INTERNAL_TOOLS,
-  });
-  const callOllama = async (
-    messages: ChatMessage[],
-    roundTools: typeof tools,
-  ): Promise<OllamaChatResponse> => {
-    const r = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: payload.model,
-        messages,
-        ...(roundTools.length ? { tools: roundTools } : {}),
-        options: payload.options,
-        stream: false,
-      }),
-    });
-    if (!r.ok) throw new Error(`Ollama ${r.status}`);
-    return (await r.json()) as OllamaChatResponse;
-  };
-
-  // baseLen chụp SAU summary+proactive, TRƯỚC runToolRounds (verdict A1 SP-3).
+  // baseLen chụp SAU summary+proactive, TRƯỚC tool-loop (verdict A1 SP-3).
   const baseLen = payload.messages.length;
-  let toolTurns: ReturnType<typeof extractToolTurns> = [];
-  let cites: string[] = [];
-  try {
-    payload.messages = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
-    toolTurns = extractToolTurns(payload.messages, baseLen); // SP-3: capture tool turns to persist
-    cites = deriveCitations(payload.messages, baseLen); // SP-4: "Nguồn" từ tool có data
-  } catch (e) {
-    if (e instanceof PendingWriteSignal) {
-      // SP-2: a write was proposed — suspend. SP-4: flush the read tool frames that ran
-      // BEFORE the write (Task 3-C) so the trace isn't lost; the write itself surfaces
-      // as the pending_write frame (onEvent didn't fire for it).
-      return suspendForConfirm(e, convId, userId, now, toolFrames);
-    }
-    // Real tool-loop error (Ollama/connector) — stream a normal reply from the
-    // original payload (fail-soft, as before). toolTurns/cites stay [].
-  }
+  // S3 realtime: stream the WHOLE turn in one response — tool-call frames go out
+  // LIVE as the loop dispatches them, then the completion streams, then trailing
+  // cite/proactive/token frames. (handleConfirm still uses streamOllama.)
+  return streamMainTurn({ convId, userId, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced });
+}
 
-  const assistantMsgId = crypto.randomUUID();
-  const trailingFrames: ChatFrame[] = [
-    ...toolFrames,
-    ...(cites.length ? [{ t: "cite", names: cites } as ChatFrame] : []),
-    ...(proactiveSurfaced.length
-      ? [
-          {
-            t: "proactive",
-            alerts: proactiveSurfaced.map((a) => ({
-              type: a.type,
-              key: a.key,
-              sessionId: a.sessionId,
-              project: a.project ?? a.sessionId,
-              minutesIdle: a.minutesIdle,
-              costUsd: a.costUsd,
-            })),
-          } as ChatFrame,
-        ]
-      : []),
-  ];
+// S3 — the main chat turn as a single live stream. Replaces the old "await the
+// whole tool-loop, THEN stream" flow + suspendForConfirm: tool-call frames are
+// emitted the instant the loop dispatches them, so the UI shows "đang gọi <tool>…"
+// in real time. An unconfirmed write still suspends (pending_write frame). Mirrors
+// streamOllama's token-read + persist; that fn stays for the confirm round-trip.
+function streamMainTurn(opts: {
+  convId: string;
+  userId: string;
+  now: number;
+  lang: string;
+  payload: ReturnType<typeof buildOllamaPayload>;
+  tools: ReturnType<typeof modelToolSchemas>;
+  baseLen: number;
+  proactive: ProactiveAlert[];
+}): Response {
+  const { convId, userId, now, lang, payload, tools, baseLen, proactive } = opts;
+  const enc = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (f: ChatFrame) => {
+        try {
+          controller.enqueue(enc.encode(encodeFrame(f)));
+        } catch {
+          /* client aborted */
+        }
+      };
+      // LIVE tool frames: assign the call→result counter `c` + redact args, then
+      // enqueue immediately (was collected and flushed only at the end).
+      let c = -1;
+      const onEvent = (e: { type: "tool_call"; name: string; args: unknown } | { type: "tool_result"; name: string; ok: boolean }) => {
+        if (e.type === "tool_call") {
+          c++;
+          emit({ t: "tool", phase: "call", c, name: e.name, args: summarizeArgs(e.args, INTERNAL_NAMES.has(e.name)) });
+        } else {
+          emit({ t: "tool", phase: "result", c, name: e.name, ok: e.ok });
+        }
+      };
+      const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
+        internal: INTERNAL_TOOLS,
+      });
+      const callOllama = async (
+        messages: ChatMessage[],
+        roundTools: typeof tools,
+      ): Promise<OllamaChatResponse> => {
+        const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: payload.model,
+            messages,
+            ...(roundTools.length ? { tools: roundTools } : {}),
+            options: payload.options,
+            stream: false,
+          }),
+        });
+        if (!r.ok) throw new Error(`Ollama ${r.status}`);
+        return (await r.json()) as OllamaChatResponse;
+      };
 
-  let ollamaRes: Response;
-  try {
-    ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-  } catch {
-    return new Response(
-      `Không kết nối được Ollama (${OLLAMA_URL}). Đảm bảo Ollama đang chạy và đã 'ollama pull ${model}'.`,
-      { status: 502, headers: { "x-conversation-id": convId } },
-    );
-  }
-  if (!ollamaRes.ok || !ollamaRes.body) {
-    const t = await ollamaRes.text().catch(() => "");
-    return new Response(`Ollama lỗi ${ollamaRes.status}: ${t.slice(0, 200)}`, {
-      status: 502,
-      headers: { "x-conversation-id": convId },
-    });
-  }
+      let convo: ChatMessage[] = payload.messages;
+      let toolTurns: ReturnType<typeof extractToolTurns> = [];
+      let cites: string[] = [];
+      try {
+        convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
+        toolTurns = extractToolTurns(convo, baseLen);
+        cites = deriveCitations(convo, baseLen);
+      } catch (e) {
+        if (e instanceof PendingWriteSignal) {
+          // SP-2 suspend (inline): code-built preview + sealed token + pending_write
+          // frame; the read tool frames already went out live. Persist the proposal.
+          const preview = buildPreview(e.tool, e.args);
+          const token = sealPendingWrite({
+            v: 1,
+            name: e.tool,
+            args: e.args,
+            conversationId: convId,
+            userId,
+            iat: now,
+            exp: now + PENDING_TTL_MS,
+            nonce: crypto.randomUUID(),
+          });
+          try {
+            controller.enqueue(enc.encode(preview.summary));
+          } catch {
+            /* aborted */
+          }
+          emit({ t: "pending_write", token, tool: e.tool, title: preview.title, summary: preview.summary, fields: preview.fields });
+          try {
+            await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: preview.summary });
+            await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+          } catch (err) {
+            console.error("[chat] suspend persist failed (fail-soft)", err);
+          }
+          controller.close();
+          return;
+        }
+        // Real tool-loop error → fail-soft: complete from the original messages.
+      }
 
-  return streamOllama(ollamaRes, convId, {
-    persist: { toolTurns, assistantMsgId },
-    frames: trailingFrames,
+      let ollamaRes: Response;
+      try {
+        ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ model: payload.model, messages: convo, options: payload.options, stream: true }),
+        });
+      } catch {
+        try {
+          controller.enqueue(enc.encode(`Không kết nối được Ollama (${OLLAMA_URL}).`));
+        } catch {
+          /* aborted */
+        }
+        controller.close();
+        return;
+      }
+      if (!ollamaRes.ok || !ollamaRes.body) {
+        try {
+          controller.enqueue(enc.encode(`Ollama lỗi ${ollamaRes.status}.`));
+        } catch {
+          /* aborted */
+        }
+        controller.close();
+        return;
+      }
+
+      const reader = ollamaRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let full = "";
+      let tokensIn = 0;
+      let tokensOut = 0;
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            const tl = line.trim();
+            if (!tl) continue;
+            try {
+              const j = JSON.parse(tl);
+              const tok = j?.message?.content ?? "";
+              if (tok) {
+                full += tok;
+                controller.enqueue(enc.encode(tok));
+              }
+              if (j?.done) {
+                if (typeof j.prompt_eval_count === "number") tokensIn = j.prompt_eval_count;
+                if (typeof j.eval_count === "number") tokensOut = j.eval_count;
+              }
+            } catch {
+              /* skip partial line */
+            }
+          }
+        }
+      } finally {
+        const assistantMsgId = crypto.randomUUID();
+        if (full) {
+          try {
+            await db.insert(chatMessages).values({
+              id: assistantMsgId,
+              conversationId: convId,
+              role: "assistant",
+              content: full,
+              tokensIn,
+              tokensOut,
+            });
+          } catch (e) {
+            console.error("[chat] persist assistant failed (fail-soft)", e);
+          }
+          // Trailing frames (tool frames already emitted live): citations → proactive → tokens.
+          try {
+            if (cites.length) emit({ t: "cite", names: cites });
+            if (proactive.length) {
+              emit({
+                t: "proactive",
+                alerts: proactive.map((a) => ({
+                  type: a.type,
+                  key: a.key,
+                  sessionId: a.sessionId,
+                  project: a.project ?? a.sessionId,
+                  minutesIdle: a.minutesIdle,
+                  costUsd: a.costUsd,
+                })),
+              });
+            }
+            emit({ t: "tokens", i: tokensIn, o: tokensOut });
+          } catch {
+            /* aborted */
+          }
+          if (toolTurns.length) {
+            try {
+              await db.insert(chatToolCalls).values(
+                toolTurns.map((tt) => ({
+                  conversationId: convId,
+                  messageId: assistantMsgId,
+                  seq: tt.seq,
+                  name: tt.name,
+                  args: tt.args,
+                  result: tt.result,
+                  ok: tt.ok,
+                  bytes: tt.bytes,
+                })),
+              );
+            } catch (e) {
+              console.error("[chat] persist tool turns failed (fail-soft)", e);
+            }
+          }
+        }
+        try {
+          await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+        } catch {
+          /* ignore */
+        }
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "x-conversation-id": convId,
+      "cache-control": "no-cache",
+    },
   });
 }
 
@@ -467,39 +611,6 @@ function streamText(convId: string, text: string, frames: ChatFrame[] = []): Res
       "cache-control": "no-cache",
     },
   });
-}
-
-// Turn 1 suspend: a write was proposed. Build a CODE preview (never the model's
-// prose — Rule 13), persist it as the (never-empty) proposal assistant message,
-// seal the token, and emit the read tool frames (flush — Task 3-C) + pending_write
-// frame. (SP-2 + SP-4.)
-function suspendForConfirm(
-  sig: PendingWriteSignal,
-  convId: string,
-  userId: string,
-  now: number,
-  toolFrames: ChatFrame[],
-): Response {
-  const preview = buildPreview(sig.tool, sig.args);
-  const token = sealPendingWrite({
-    v: 1,
-    name: sig.tool,
-    args: sig.args,
-    conversationId: convId,
-    userId,
-    iat: now,
-    exp: now + PENDING_TTL_MS,
-    nonce: crypto.randomUUID(),
-  });
-  const pendingFrame: ChatFrame = {
-    t: "pending_write",
-    token,
-    tool: sig.tool,
-    title: preview.title,
-    summary: preview.summary,
-    fields: preview.fields,
-  };
-  return streamText(convId, preview.summary, [...toolFrames, pendingFrame]);
 }
 
 // Turn 2 confirm: open the token, run the resume, stream the result (or cancel/reject).

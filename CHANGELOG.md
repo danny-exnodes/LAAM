@@ -12,7 +12,7 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 ### Đã thêm — Chat: nâng cấp sau E2E (2026-06-05, đợt 2)
 - **Dọn dữ liệu cũ (S1)**: `POST /api/conversations {action:"backfill-titles"}` re-derive tiêu đề conv bị lẫn byte file (nút "Dọn tiêu đề" hiện khi có); badge **"trùng"** cảnh báo conv trùng tên (không tự xoá). Helper thuần `src/lib/chat/title.ts` (`retitleFromMessage`).
 - **Proactive card (S2)**: dismiss **bền qua localStorage** (TTL 24h) + mỗi cảnh báo **click mở `/agents/[id]`** (thêm `key`+`sessionId` vào frame `proactive`).
-- **Tool status (S3)**: chỉ báo "đang xử lý…" có hoạt ảnh khi tool-loop chạy. *(Chip realtime per-tool hoãn — cần refactor pipeline stream, rủi ro cao trên prod chưa có test tích hợp POST.)*
+- **Tool status realtime (S3)**: refactor `/api/chat` thành **một stream** phát frame tool **LIVE** ngay khi loop dispatch → UI hiện chip "đang gọi `<tool>`…" tức thì (trace hiện cả lúc đang chờ); suspend (`pending_write`) + persist dời vào trong stream; `streamOllama` giữ cho confirm round-trip. Bỏ `suspendForConfirm` (gộp inline).
 - **Biểu đồ dễ đọc (S4)**: nhãn giá trị trên cột/đường (single-series), cao hơn (300px), cột bo góc.
 - **Parse khoan dung (S5)**: `looseJsonParse` (bỏ dấu phẩy thừa / smart-quote / fence) cho ```chart/```map; lỗi → hiện raw; map có nút **"Thử lại"**.
 - **Nearby (S6)**: prompt hướng dẫn `near` vs vị-trí-trình-duyệt; nút "Thử lại" khi từ chối định vị.
