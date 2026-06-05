@@ -36,3 +36,19 @@ Spec: `docs/superpowers/specs/2026-06-05-settings-hub-machines-subpage-design.md
 - Touched FE-owned `app-header.tsx` (was clean; 1-line NAV swap). Coordinated via comms note.
 - Desktop nav active-state: Settings highlights on `/settings` (exact) but not `/settings/machines`
   (kept exact-match to stay surgical; BottomNav does highlight via startsWith).
+
+## Update — 5 (2026-06-05) — bug fixes (tech-lead debug)
+- **ChatClient "Maximum update depth"** (vòng lặp render khi streaming): root cause =
+  auto-scroll lập trình (effect [messages] → scrollToBottom → el.scrollTo) bắn event
+  scroll → onScroll đo dist nhất thời >200 (scrollHeight đang lớn) → setShowScrollBtn
+  dao động → vượt nestedUpdateCount. Fix = `programmaticRef` guard: onScroll bỏ qua
+  echo từ scrollTo của chính mình (xoá cờ ở rAF). Commit 20732b1. Build + 499 test xanh.
+  Chi tiết: comms/active/docker-to-frontend-chat-loop-fix.md.
+- **`Can't resolve 'pg'`**: đã fix sẵn bởi `serverExternalPackages:["pg"]` trong
+  next.config (session khác) → chỉ cần restart `npm run dev` (Turbopack đọc config lúc boot).
+- Giới hạn: vòng lặp phụ thuộc layout DOM → jsdom không repro được unit test; verify bằng
+  build/test + phân tích root cause; xác nhận cuối = stream chat trong browser.
+
+## Next steps (cập nhật)
+- Prod :3900 chưa có fix chat → rebuild khi user yêu cầu (outward-facing).
+- Code đã push lên origin/main.
