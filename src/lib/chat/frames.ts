@@ -1,7 +1,7 @@
 // Giao thức frame chung cho stream /api/chat: text thường + frame metadata bọc cặp
 // U+001E. THUẦN — server dùng encodeFrame, client dùng splitFrames. SP-4 sở hữu (D-SP4-2).
 // SP-2 import encodeFrame + ChatFrame ('pending_write') từ ĐÂY (1 nguồn, không bản 2).
-export const FRAME_SEP = ""; // U+001E record separator
+export const FRAME_SEP = "\x1e"; // U+001E record separator
 
 export type ChatFrame =
   | { t: "tokens"; i: number; o: number }
