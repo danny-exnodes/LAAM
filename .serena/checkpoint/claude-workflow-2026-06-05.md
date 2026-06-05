@@ -99,3 +99,10 @@ Static template catalog (`src/lib/workflow/templates.ts`, ≥2 moat-leaning đ�
 - A0(prior) · G1 engine v2 · G2 scheduler · G3 templates · E mgmt · D editor. tsc 0, full suite green. Migrations 0004(wf)+0006(scheduler) [+0005 eval]. Review-then-push (user+CTO).
 - **HOST STEPS (user):** `db:migrate` (0006) · set `WORKFLOW_TICK_SECRET` · install Windows Task poke (→/api/workflows/tick) · **live UI QA** (editor canvas + mgmt page) · Task 8 E2E.
 - Follow-ups (non-blocking): NodeConfigPanel i18n · token-precise budget (deferred, step/foreach caps suffice) · cron tz/DST · condition reconverge/DAG · manual BLAST_HIGH (PIN-6 suspend-continue) · `package-lock.json` dirty (not mine — left).
+
+## 🚀 SHIP (2026-06-05) — commit + push + prod docker build
+- **Pushed `origin/main`** `3a1b7c9` (41 commit feature+parallel + handoff doc + editor fix). origin đồng bộ.
+- `package-lock.json` **restore HEAD** (KHÔNG commit Windows-pruned — sẽ vỡ Linux `npm ci`); `.claude/launch.json` để nguyên (session khác).
+- **Handoff:** `docs/workflow-feature-handoff.md` (CTO review map + QA E2E plan + host setup + limitations).
+- **Prod Docker rebuilt:** `laam-app:latest` img `6c017045` (465MB). `next build` **bắt + fix 1 bug** (editor `ssr:false` trong Server Component — Next 16 cấm; sửa = import trực tiếp như /graph). Live container `laam-v2-app` UNTOUCHED (old img, healthy) — image mới CHƯA deploy.
+- **Deploy (user khi sẵn sàng):** `npm run db:migrate` (0004+0006) cho prod DB TRƯỚC → `docker compose up -d app` (recreate với image mới). Recurring: cài Windows Task poke.
