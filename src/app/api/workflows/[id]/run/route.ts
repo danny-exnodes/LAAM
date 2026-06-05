@@ -14,12 +14,16 @@ import type { RunContext, WfNode } from "@/lib/workflow/types";
 // tool union chỉ internal read tools; withSafety bọc dispatch (write → throw).
 function buildRunNode(userId: string) {
   const tools = modelToolSchemas(INTERNAL_TOOLS, []); // A0: internal read tools only
+  // Engine xử lý condition/foreach NỘI BỘ → runNode chỉ nhận agent|connector (hợp đồng A0).
   return (node: WfNode, ctx: RunContext) => {
     if (node.kind === "connector") {
       return runConnectorNode(node, ctx, { execute: (action, args) => connectorExecute(userId, action, args) });
     }
-    const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now: Date.now(), lang: "vi" }), { internal: INTERNAL_TOOLS });
-    return runAgentNode(node, ctx, { runRounds: runToolRounds, callOllama: callOllamaChat, dispatch, tools });
+    if (node.kind === "agent") {
+      const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now: Date.now(), lang: "vi" }), { internal: INTERNAL_TOOLS });
+      return runAgentNode(node, ctx, { runRounds: runToolRounds, callOllama: callOllamaChat, dispatch, tools });
+    }
+    throw new Error(`runNode: kind không thực thi trực tiếp "${(node as { kind: string }).kind}" (engine xử lý nội bộ)`);
   };
 }
 
