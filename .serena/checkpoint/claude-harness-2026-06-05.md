@@ -51,3 +51,22 @@ Vai trò: technical lead Agent Harness. Nhiệm vụ phiên này: review code SP
 - **Follow-up không chặn:** DRY deriveCitations↔extractToolTurns · persist confirm-path tool-turn · SP-2 FE confirm-card render · repoint /api/stats→_load · integration test route (read/write/confirm).
 - `package-lock.json` vẫn dirty (−117, không rõ nguồn, không phải task) — flag user.
 - Branch/worktree SP-2/3/4 chưa xoá (harness-owned; cleanup khi user OK).
+
+---
+## Session update — 2026-06-05 (lead: reviews · integration · FE confirm-card MERGED)
+### Đã làm
+- **Review qua comms (Serena):** SP-2 spec+plan APPROVED · SP-3 implementation READY-TO-MERGE (1 opus reviewer độc lập + lead tự spot-check 2 cornerstone) · SP-4 spec APPROVED + ACK frame protocol (§3 migrate, §6 guards D-SP4-2/3) + sửa drift SP-1 §2 (`onEvent` ở makeDispatch) · FE confirm-card APPROVED.
+- **P0 false-alarm "main RED":** tôi báo nhầm (chạy tsc trên working-tree bẩn của session khác, không phải HEAD); integration owner đính chính → blob committed luôn sạch. Bài học: verify committed blob, đừng tin tsc trên cây bẩn (Rule 13 áp ngược chính mình).
+- **FE confirm-card:** viết spec+plan+comms pickup → FE implement (7 task, additive) → tôi review (đọc diff + tự chạy: tsc 0, 498 test) → **MERGE `73e78b8`** (auto-resolve no-conflict với open-space-UX) → thread resolved.
+- Dọn worktree SP-1/2/3/4 + fe-confirm-card: git de-register + xoá branch; gỡ junction an toàn; **dir vật lý còn khoá bởi session đang mở → user xoá khi đóng**.
+- Viết `docs/superpowers/plans/2026-06-05-agent-harness-integration.md`.
+
+### Trạng thái (main HEAD ~04a1a66)
+- **TẤT CẢ harness trên main, tsc xanh, 498 test:** SP-1 (orchestrator/dispatch/5 internal tools) · SP-2 (write-gate + confirm-card UI) · SP-3 (memory+proactive, migration 0003 đã chạy host) · SP-4 (tool-trace+citations) · +num_ctx fix · +open-space chat UX. **Luồng write dùng được trên browser.**
+
+### Next
+- 🎯 **Phase 2 — nghiệm thu E2E host** (user đã bắt đầu: commit num_ctx). Smoke: tool+trace+cite · write→confirm→execute 1 lần · proactive · summarize.
+- Follow-up không chặn: ChatClient round-trip test-harness · DRY deriveCitations↔extractToolTurns · persist confirm-path tool-turn · /api/stats→_load · dọn dir worktree khi đóng session.
+
+### Push
+- `git push origin main` (ahead 72) — publish toàn bộ harness work.
