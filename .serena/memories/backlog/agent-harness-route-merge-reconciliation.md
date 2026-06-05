@@ -31,5 +31,13 @@ SP-2 (`feat/agent-harness-sp2` @ `2b5b3e0`) và SP-3 (`feat/agent-harness-sp3` @
 4. Chạy `npm run db:migrate` trên host trước khi live.
 5. (Follow-up) persist tool-turn cho path confirm; repoint `/api/stats` → `_load`.
 
+## ⚠️ ĐÍNH CHÍNH (2026-06-05, lead#2 — verify độc lập) — main HIỆN ĐỎ, KHÔNG "tsc sạch"
+`npx tsc --noEmit` trên HEAD `2705f4a` = **5 lỗi ở `route.ts`** (Rule 13: trust code > claim):
+- dòng 10 & 17: **Duplicate identifier `encodeFrame`/`ChatFrame`** (2 import từ `@/lib/chat/frames`).
+- dòng 11: **Cannot find module `@/lib/chat/trace`** (`makeFrameCollector, deriveCitations` — đồ SP-4, `trace.ts` ở branch `2be5db0` chưa merge; **chỉ ở import, body KHÔNG dùng**).
+⇒ Các import SP-4 đã **lọt vào route.ts tại merge SP-3 (`4fa6625`)** — KHÔNG phải "CÒN LẠI cho SP-4" mà đang **live & gãy build**. Claim "tsc sạch + 471 pass" ở §STATUS **không khớp** state hiện tại (có lẽ verify nhầm state / chưa chạy tsc trên bản reconcile cuối).
+**Fix P0 (≈3 dòng, KHÔNG cần SP-4):** xoá import `@/lib/chat/trace` + gộp 2 import frames → `import { encodeFrame, SEP, type ChatFrame } from "@/lib/chat/frames";` (+ xoá `ToolEvent` nếu unused). Chi tiết + verify: **`docs/superpowers/plans/2026-06-05-agent-harness-integration.md` Task 0**.
+→ ⚠️ Mọi session đang branch/build từ main ĐỎ này (docker standalone, FE sẽ fail). Cần áp Task 0 NGAY.
+
 ## Liên quan
-[[agent-harness-coordination]] · [[agent-harness-sp2-actions-safety]] · [[agent-harness-sp3-memory-proactive]] · [[agent-harness-sp2-fe-confirm]] (FE confirm card cần SP-4 `splitFrames`).
+[[agent-harness-coordination]] · [[agent-harness-sp2-actions-safety]] · [[agent-harness-sp3-memory-proactive]] · [[agent-harness-sp2-fe-confirm]] (FE confirm card cần SP-4 `splitFrames`). Plan tích hợp đầy đủ: `docs/superpowers/plans/2026-06-05-agent-harness-integration.md`.
