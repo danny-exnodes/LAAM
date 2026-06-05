@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { executeRun } from "./run";
+import { executeRun, executeRunRow } from "./run";
 import type { WorkflowGraph } from "./types";
 
 const graph: WorkflowGraph = {
@@ -103,6 +103,58 @@ describe("executeRun", () => {
     const runFinal = updated.find((u) => (u as { status?: string }).status === "failed") as { status?: string; error?: string } | undefined;
     expect(runFinal).toBeDefined();
     expect(runFinal!.error).toMatch(/budget/i);
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: "workflow_run", status: "failed" }));
+  });
+
+  test("executeRunRow chạy row CÓ SẴN (queued→running→succeeded) + finalize + SSE", async () => {
+    // Không select workflow (row đã có graphSnapshot). Mô phỏng row queued từ tickClaim.
+    const updated: { status?: string; startedAt?: Date; finishedAt?: Date }[] = [];
+    const inserted: unknown[] = [];
+    const db = {
+      insert: () => ({ values: async (v: unknown) => { inserted.push(v); } }),
+      update: () => ({ set: (v: { status?: string }) => ({ where: async () => { updated.push(v); } }) }),
+    };
+    const publish = vi.fn();
+    const buildRunNode = () => vi.fn(async (node: { id: string }) => (node.id === "n1" ? { count: 3 } : "ok"));
+    const { status, steps } = await executeRunRow(
+      { id: "r1", workflowId: "w1", userId: "u1", graphSnapshot: graph, trigger: "schedule" },
+      { db: db as never, publish, buildRunNode },
+    );
+    expect(status).toBe("succeeded");
+    expect(steps.map((s) => s.nodeId)).toEqual(["n1", "n2"]);
+    // phải set running TRƯỚC (có startedAt) rồi mới succeeded.
+    expect(updated.some((u) => u.status === "running" && u.startedAt instanceof Date)).toBe(true);
+    expect(updated.some((u) => u.status === "succeeded" && u.finishedAt instanceof Date)).toBe(true);
+    // thứ tự: running trước succeeded.
+    const iRun = updated.findIndex((u) => u.status === "running");
+    const iDone = updated.findIndex((u) => u.status === "succeeded");
+    expect(iRun).toBeLessThan(iDone);
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: "workflow_run", runId: "r1", status: "succeeded" }));
+  });
+
+  test("executeRunRow finalize FAILED khi engine throw (budget)", async () => {
+    const g: WorkflowGraph = {
+      nodes: [
+        { id: "a", kind: "agent", prompt: "a" },
+        { id: "b", kind: "agent", prompt: "b" },
+      ],
+      edges: [{ from: "a", to: "b" }],
+    };
+    const updated: { status?: string; error?: string }[] = [];
+    const db = {
+      insert: () => ({ values: async () => {} }),
+      update: () => ({ set: (v: { status?: string }) => ({ where: async () => { updated.push(v); } }) }),
+    };
+    const publish = vi.fn();
+    const buildRunNode = () => vi.fn(async () => "x");
+    const { status } = await executeRunRow(
+      { id: "r1", workflowId: "w1", userId: "u1", graphSnapshot: g, trigger: "schedule" },
+      { db: db as never, publish, buildRunNode, budget: { maxSteps: 1, maxForeachItems: 100 } },
+    );
+    expect(status).toBe("failed");
+    const failed = updated.find((u) => u.status === "failed");
+    expect(failed).toBeDefined();
+    expect(failed!.error).toMatch(/budget/i);
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: "workflow_run", status: "failed" }));
   });
 
