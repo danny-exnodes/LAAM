@@ -1,7 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import { runWorkflow } from "./engine";
+import { evalPredicate } from "./predicate";
 import { emptyContext } from "./types";
-import type { WorkflowGraph, StepRecord } from "./types";
+import type { WorkflowGraph, StepRecord, WfNode, RunContext } from "./types";
 
 const chain: WorkflowGraph = {
   nodes: [
@@ -11,11 +12,15 @@ const chain: WorkflowGraph = {
   edges: [{ from: "n1", to: "n2" }],
 };
 
+// helper deps: runNode trả theo map id→output; evalPredicate thật trừ khi override.
+const noStep = async () => {};
+const idOutput = (m: Record<string, unknown>) => vi.fn(async (n: WfNode) => m[n.id]);
+
 describe("runWorkflow (linear)", () => {
   test("chạy đúng thứ tự, truyền context, succeeded", async () => {
     const steps: StepRecord[] = [];
     const runNode = vi.fn(async (node) => (node.id === "n1" ? { count: 2 } : "OK"));
-    const r = await runWorkflow(chain, { runNode, onStep: async (s) => { steps.push({ ...s }); } }, emptyContext({}));
+    const r = await runWorkflow(chain, { runNode, onStep: async (s) => { steps.push({ ...s }); }, evalPredicate }, emptyContext({}));
     expect(r.status).toBe("succeeded");
     expect(runNode.mock.calls.map((c) => c[0].id)).toEqual(["n1", "n2"]);
     expect(r.context.steps["n1"].output).toEqual({ count: 2 });
@@ -28,7 +33,7 @@ describe("runWorkflow (linear)", () => {
   test("node lỗi → fail-stop, node sau KHÔNG chạy", async () => {
     const calls: string[] = [];
     const runNode = vi.fn(async (node) => { calls.push(node.id); if (node.id === "n1") throw new Error("boom"); return "x"; });
-    const r = await runWorkflow(chain, { runNode, onStep: async () => {} }, emptyContext({}));
+    const r = await runWorkflow(chain, { runNode, onStep: noStep, evalPredicate }, emptyContext({}));
     expect(r.status).toBe("failed");
     expect(r.failedNodeId).toBe("n1");
     expect(r.error).toMatch(/boom/);
@@ -40,6 +45,145 @@ describe("runWorkflow (linear)", () => {
       nodes: [...chain.nodes, { id: "n3", kind: "agent", prompt: "y" }],
       edges: [{ from: "n1", to: "n2" }, { from: "n1", to: "n3" }],
     };
-    await expect(runWorkflow(branch, { runNode: vi.fn(), onStep: async () => {} }, emptyContext({}))).rejects.toThrow(/branch|nhánh/i);
+    await expect(runWorkflow(branch, { runNode: vi.fn(), onStep: noStep, evalPredicate }, emptyContext({}))).rejects.toThrow(/branch|nhánh/i);
+  });
+});
+
+describe("runWorkflow (condition)", () => {
+  const condGraph: WorkflowGraph = {
+    nodes: [
+      { id: "c", kind: "condition", when: { left: "{{steps.x.output}}", op: "gt", right: 0 } },
+      { id: "t", kind: "agent", prompt: "yes" },
+      { id: "f", kind: "agent", prompt: "no" },
+    ],
+    edges: [{ from: "c", to: "t", label: "true" }, { from: "c", to: "f", label: "false" }],
+  };
+
+  test("true-branch: chỉ chạy node 't'", async () => {
+    const runNode = idOutput({ t: "TRUE", f: "FALSE" });
+    const evalP = vi.fn(() => true);
+    const r = await runWorkflow(condGraph, { runNode, onStep: noStep, evalPredicate: evalP }, emptyContext({}));
+    expect(r.status).toBe("succeeded");
+    expect(runNode.mock.calls.map((c) => (c[0] as WfNode).id)).toEqual(["t"]);
+    expect(r.context.steps["c"].output).toBe(true);
+    expect(r.context.steps["t"].output).toBe("TRUE");
+    expect(r.context.steps["f"]).toBeUndefined();
+  });
+
+  test("false-branch: chỉ chạy node 'f'", async () => {
+    const runNode = idOutput({ t: "TRUE", f: "FALSE" });
+    const evalP = vi.fn(() => false);
+    const r = await runWorkflow(condGraph, { runNode, onStep: noStep, evalPredicate: evalP }, emptyContext({}));
+    expect(runNode.mock.calls.map((c) => (c[0] as WfNode).id)).toEqual(["f"]);
+    expect(r.context.steps["c"].output).toBe(false);
+    expect(r.context.steps["f"].output).toBe("FALSE");
+    expect(r.context.steps["t"]).toBeUndefined();
+  });
+});
+
+describe("runWorkflow (foreach)", () => {
+  const feGraph: WorkflowGraph = {
+    nodes: [
+      { id: "src", kind: "connector", connectorId: "demo", action: "list", args: {} },
+      { id: "loop", kind: "foreach", items: "{{steps.src.output}}", body: { nodes: [{ id: "b", kind: "agent", prompt: "do {{vars.item}}" }], edges: [] } },
+    ],
+    edges: [{ from: "src", to: "loop" }],
+  };
+
+  test("chạy body mỗi item với vars.item; output = mảng kết quả", async () => {
+    const seenItems: unknown[] = [];
+    const seenIndexes: unknown[] = [];
+    const runNode = vi.fn(async (node: WfNode, ctx: RunContext) => {
+      if (node.id === "src") return ["a", "b"];
+      seenItems.push(ctx.vars.item);
+      seenIndexes.push(ctx.vars.index);
+      return `R:${String(ctx.vars.item)}`;
+    });
+    const r = await runWorkflow(feGraph, { runNode, onStep: noStep, evalPredicate }, emptyContext({}));
+    expect(r.status).toBe("succeeded");
+    expect(seenItems).toEqual(["a", "b"]);
+    expect(seenIndexes).toEqual([0, 1]);
+    expect(r.context.steps["loop"].output).toEqual(["R:a", "R:b"]);
+  });
+
+  test("body isolation: mỗi iteration có steps riêng (không rò rỉ)", async () => {
+    const sawBKeys: string[][] = [];
+    const runNode = vi.fn(async (node: WfNode, ctx: RunContext) => {
+      if (node.id === "src") return ["a", "b"];
+      sawBKeys.push(Object.keys(ctx.steps)); // body's ctx.steps phải rỗng đầu mỗi vòng
+      return 1;
+    });
+    await runWorkflow(feGraph, { runNode, onStep: noStep, evalPredicate }, emptyContext({}));
+    expect(sawBKeys).toEqual([[], []]); // không thấy step của vòng trước
+  });
+
+  test("foreach children emit parentNodeId = id foreach", async () => {
+    const steps: StepRecord[] = [];
+    const runNode = vi.fn(async (node: WfNode) => (node.id === "src" ? ["a"] : "x"));
+    await runWorkflow(feGraph, { runNode, onStep: async (s) => { steps.push({ ...s }); }, evalPredicate }, emptyContext({}));
+    const bRunning = steps.find((s) => s.nodeId === "b" && s.status === "running");
+    expect(bRunning?.parentNodeId).toBe("loop");
+  });
+
+  test("foreach items không phải mảng → throw", async () => {
+    const runNode = vi.fn(async (node: WfNode) => (node.id === "src" ? { not: "array" } : "x"));
+    await expect(runWorkflow(feGraph, { runNode, onStep: noStep, evalPredicate }, emptyContext({}))).rejects.toThrow(/array|mảng/i);
+  });
+
+  test("body lỗi → fail-stop, foreach failed", async () => {
+    const runNode = vi.fn(async (node: WfNode, ctx: RunContext) => {
+      if (node.id === "src") return ["a", "b"];
+      if (ctx.vars.item === "b") throw new Error("body boom");
+      return "ok";
+    });
+    const r = await runWorkflow(feGraph, { runNode, onStep: noStep, evalPredicate }, emptyContext({}));
+    expect(r.status).toBe("failed");
+    expect(r.error).toMatch(/body boom/);
+  });
+});
+
+describe("runWorkflow (budget)", () => {
+  test("maxSteps vượt → throw /budget/", async () => {
+    const g: WorkflowGraph = {
+      nodes: [
+        { id: "a", kind: "agent", prompt: "a" },
+        { id: "b", kind: "agent", prompt: "b" },
+        { id: "c", kind: "agent", prompt: "c" },
+      ],
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }],
+    };
+    const runNode = idOutput({ a: 1, b: 2, c: 3 });
+    await expect(
+      runWorkflow(g, { runNode, onStep: noStep, evalPredicate }, emptyContext({}), { maxSteps: 2, maxForeachItems: 100 }),
+    ).rejects.toThrow(/budget/i);
+  });
+
+  test("maxForeachItems vượt → throw /foreach/", async () => {
+    const g: WorkflowGraph = {
+      nodes: [
+        { id: "src", kind: "connector", connectorId: "demo", action: "list", args: {} },
+        { id: "loop", kind: "foreach", items: "{{steps.src.output}}", body: { nodes: [{ id: "b", kind: "agent", prompt: "x" }], edges: [] } },
+      ],
+      edges: [{ from: "src", to: "loop" }],
+    };
+    const runNode = vi.fn(async (node: WfNode) => (node.id === "src" ? [1, 2, 3, 4] : "x"));
+    await expect(
+      runWorkflow(g, { runNode, onStep: noStep, evalPredicate }, emptyContext({}), { maxSteps: 200, maxForeachItems: 3 }),
+    ).rejects.toThrow(/foreach/i);
+  });
+
+  test("budget đếm node LỒNG trong foreach (shared counter)", async () => {
+    // foreach 3 item, body 1 node → 1(src)+1(foreach)+3(body) = 5 lần exec. maxSteps=4 → throw.
+    const g: WorkflowGraph = {
+      nodes: [
+        { id: "src", kind: "connector", connectorId: "demo", action: "list", args: {} },
+        { id: "loop", kind: "foreach", items: "{{steps.src.output}}", body: { nodes: [{ id: "b", kind: "agent", prompt: "x" }], edges: [] } },
+      ],
+      edges: [{ from: "src", to: "loop" }],
+    };
+    const runNode = vi.fn(async (node: WfNode) => (node.id === "src" ? [1, 2, 3] : "x"));
+    await expect(
+      runWorkflow(g, { runNode, onStep: noStep, evalPredicate }, emptyContext({}), { maxSteps: 4, maxForeachItems: 100 }),
+    ).rejects.toThrow(/budget/i);
   });
 });
