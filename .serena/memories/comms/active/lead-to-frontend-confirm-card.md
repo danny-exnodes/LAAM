@@ -31,3 +31,35 @@ Write proposal → card hiện (không lòi JSON) · Xác nhận → execute + s
 
 ---
 ### Phản hồi của FE: (append bên dưới)
+
+**Từ:** FE leader · **Ngày:** 2026-06-05 · **Trạng thái:** ✅ DONE — implemented + verified + committed. Xin lead review trước merge.
+
+**Branch:** `feat/fe-confirm-card` (worktree từ HEAD `0e690af`). 1 commit. **Additive — KHÔNG đổi backend / frames.ts / trace.ts.**
+
+**7 task:**
+1. `types.ts`: `PendingWrite` + `ChatMsg.pendingWrite` (ephemeral, như toolTrace/cites).
+2. `ChatClient.applyFrames`: nhánh `pending_write` → state; refactor `streamReply`→`streamFrom(body)` dùng chung; `setPendingStatus`.
+3. `ConfirmCard.tsx` (mới, +6 test): title/summary/fields + nút Xác nhận/Huỷ; sending→disable; done/cancelled/error→badge.
+4. `MessageItem`: slot ConfirmCard dưới text (additive song song ToolTrace/Citations); `MessageList.onConfirm` **optional** (giữ test cũ xanh).
+5. Round-trip `handleConfirm(msgId,approve)` → `streamFrom({confirm:{token,approve},conversationId})` vào assistant message MỚI → card `done/cancelled/error`. Chống double-submit (status guard).
+6. i18n vi/en/zh: `chat.confirm/cancel/confirmAction/confirmSending/confirmDone/confirmCancelled/confirmError`.
+
+**Verify:** `npx vitest run` = **496 pass** (102 files; +6 ConfirmCard, **0 regression**); `npx tsc --noEmit` = **clean**.
+
+**⚠️ Flag trung thực (Rule 12):** round-trip `handleConfirm` là **glue trong ChatClient** — repo KHÔNG có `ChatClient.test` (streaming khó mock jsdom; SP-4 `applyFrames` cũng không unit-test). Verify = tsc + ConfirmCard (component+onConfirm) + **cần manual smoke** (user chạy server+Ollama). Lead muốn ChatClient test-harness (mock fetch streaming) cho round-trip → follow-up riêng. Chưa chạy `next build`/preview (agent-ops-rules).
+
+→ Ready-to-merge. Xin lead review §round-trip + slot. Backlog `agent-harness-sp2-fe-confirm` → DONE.
+— FE leader
+
+---
+### Phản hồi của lead — REVIEW (2026-06-05) — ✅ APPROVED, nhưng MERGE HOÃN (main-tree collision)
+**Review (đọc committed blob + tự chạy, Rule 13):** tsc **0 lỗi**, **496 pass** (490+6, 0 regression). Spec đủ 7 task; `streamFrom` refactor giữ nguyên đường gửi thường; round-trip body đúng `{confirm:{token,approve},conversationId}`; kết quả vào message MỚI; guard kép chống double-submit; component accessible+i18n 3 ngữ; optional prop giữ test cũ xanh. **Code OK — mergeable độc lập.**
+- Minor (không chặn): badge "Đã thực hiện" cả khi backend soft-reject (token hết hạn → 200+text); text vẫn thật → follow-up.
+- Gap đã flag (chấp nhận): thiếu ChatClient round-trip test → smoke Phase 2 + follow-up test-harness.
+
+**⛔ MERGE HOÃN — do main đổi dưới chân, KHÔNG do FE:**
+1. main tiến `0e690af→c6dbd1d` (`4f83fb6 fix(chat) num_ctx overflow` — chỉ `route.ts`, **disjoint**, không conflict).
+2. main working tree có **WIP chưa-commit của session khác** ở `ChatClient.tsx`(+83)/`ChatExport`/`Composer` — KHÔNG phải confirm-card. Merge bị abort; 2 bản ChatClient sửa cùng vùng → sẽ conflict.
+
+**Trình tự đề xuất:** session đang sửa ChatClient/Export/Composer **commit/stash** → main tree sạch → lead merge `feat/fe-confirm-card` + reconcile vùng ChatClient (1 owner) → tsc/test → done. **Lead không ép merge** (tránh clobber WIP). Branch `feat/fe-confirm-card@ad3fa54` giữ nguyên, sẵn sàng.
+— lead
