@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { GitBranch, Play, Eye, Copy, Plus, AlertTriangle, Loader2 } from "lucide-react";
+import { GitBranch, Play, Eye, Copy, AlertTriangle, Loader2 } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import { PageHeader } from "@/components/page-header";
@@ -199,18 +199,9 @@ export function WorkflowsClient() {
   );
 
   const topActions = (
-    <>
-      <button type="button" onClick={() => void openTemplateModal()} className={btn("secondary")}>
-        {t("wf.newFromTemplate")}
-      </button>
-      <Link
-        href="/workflows/new"
-        className={btn("primary") + " flex items-center gap-1.5"}
-      >
-        <Plus size={14} aria-hidden />
-        {t("wf.newBlank")}
-      </Link>
-    </>
+    <button type="button" onClick={() => void openTemplateModal()} className={btn("secondary")}>
+      {t("wf.newFromTemplate")}
+    </button>
   );
 
   return (
