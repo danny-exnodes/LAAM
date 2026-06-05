@@ -106,3 +106,8 @@ Static template catalog (`src/lib/workflow/templates.ts`, ≥2 moat-leaning đ�
 - **Handoff:** `docs/workflow-feature-handoff.md` (CTO review map + QA E2E plan + host setup + limitations).
 - **Prod Docker rebuilt:** `laam-app:latest` img `6c017045` (465MB). `next build` **bắt + fix 1 bug** (editor `ssr:false` trong Server Component — Next 16 cấm; sửa = import trực tiếp như /graph). Live container `laam-v2-app` UNTOUCHED (old img, healthy) — image mới CHƯA deploy.
 - **Deploy (user khi sẵn sàng):** `npm run db:migrate` (0004+0006) cho prod DB TRƯỚC → `docker compose up -d app` (recreate với image mới). Recurring: cài Windows Task poke.
+
+## 🩹 FIX migration desync (2026-06-05, user báo "tạo workflow lỗi — no table")
+- **Root cause (multi-session journal desync):** DB `drizzle.__drizzle_migrations` ghi `0000,0001,0002,0003,0005(eval)` — **THIẾU 0004(workflow)**. eval session generate migration eval khi nó còn là `0004`; sau merge đổi tên thành `0005`, nhưng DB đã record hash eval ở vị trí đó → gap tại idx4. `db:migrate` thấy 0005 là latest → chỉ thử 0006 → `ALTER workflow_run` (bảng chưa có vì 0004 chưa chạy) → **abort, không tạo gì**.
+- **Fix (DB-state repair, KHÔNG đổi code/migration files):** (1) áp trực tiếp `0004` + `0006` SQL qua psql → tạo 4 bảng workflow + alter + unique slot (verify cột đủ). (2) record `0004`(hash a79e9f95) + `0006`(53eb8c7c) vào journal — **hash verify bằng cách reproduce 5 hash đã biết** (sha256 raw .sql = drizzle algo). → journal đủ 7 → `db:migrate` giờ **no-op sạch**.
+- **Prod = CÙNG DB** (docker `laam-v2-postgres`; dev localhost:5432 = prod postgres:5432) → đã fix luôn cho prod. Fresh DB migrate từ 0000 vẫn sạch (desync chỉ riêng DB lịch sử đa-session này).
