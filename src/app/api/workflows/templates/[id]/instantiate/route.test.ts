@@ -1,7 +1,6 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
 
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
-vi.mock("@/db", () => ({ db: {} }));
 vi.mock("@/db/schema", () => ({
   workflows: Object.assign({}, { [Symbol.for("drizzle:Name")]: "workflow" }),
 }));
