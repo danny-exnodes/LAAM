@@ -2,30 +2,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { publish } from "@/lib/events-bus";
 import { executeRun } from "@/lib/workflow/run";
-import { runToolRounds } from "@/lib/agent/orchestrator";
-import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
-import { withSafety } from "@/lib/agent/safety/gate";
-import { execute as connectorExecute } from "@/lib/connectors";
-import { callOllamaChat } from "@/lib/workflow/ollama";
-import { runAgentNode, runConnectorNode } from "@/lib/workflow/executors";
-import type { RunContext, WfNode } from "@/lib/workflow/types";
-
-// Wire executors với runtime thật (closure userId). Agent node A0 = read-only:
-// tool union chỉ internal read tools; withSafety bọc dispatch (write → throw).
-function buildRunNode(userId: string) {
-  const tools = modelToolSchemas(INTERNAL_TOOLS, []); // A0: internal read tools only
-  // Engine xử lý condition/foreach NỘI BỘ → runNode chỉ nhận agent|connector (hợp đồng A0).
-  return (node: WfNode, ctx: RunContext) => {
-    if (node.kind === "connector") {
-      return runConnectorNode(node, ctx, { execute: (action, args) => connectorExecute(userId, action, args) });
-    }
-    if (node.kind === "agent") {
-      const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now: Date.now(), lang: "vi" }), { internal: INTERNAL_TOOLS });
-      return runAgentNode(node, ctx, { runRounds: runToolRounds, callOllama: callOllamaChat, dispatch, tools });
-    }
-    throw new Error(`runNode: kind không thực thi trực tiếp "${(node as { kind: string }).kind}" (engine xử lý nội bộ)`);
-  };
-}
+import { buildRunNode } from "@/lib/workflow/runtime";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();

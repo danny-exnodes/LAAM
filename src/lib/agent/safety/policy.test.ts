@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { resolveKind, CONNECTOR_WRITES, CONNECTOR_READS } from "./policy";
+import { resolveKind, resolveBlast, BLAST_LOW, CONNECTOR_WRITES, CONNECTOR_READS } from "./policy";
 import type { Tool } from "../types";
 
 const internal: Tool[] = [
@@ -29,5 +29,20 @@ describe("resolveKind", () => {
     expect([...CONNECTOR_WRITES].sort()).toEqual(["demo_create_task", "trello_create_card"]);
     expect(CONNECTOR_READS.has("trello_create_card")).toBe(false);
     expect(CONNECTOR_READS.has("demo_create_task")).toBe(false);
+  });
+});
+
+describe("resolveBlast (G2 — blast-radius tier, v1 LOW-only allowlist)", () => {
+  test("demo_create_task = LOW (allowlisted)", () => {
+    expect(resolveBlast("demo_create_task")).toBe("low");
+  });
+  test("BLAST_LOW chứa đúng demo_create_task (v1)", () => {
+    expect([...BLAST_LOW]).toEqual(["demo_create_task"]);
+  });
+  test("write khác (trello_create_card) → HIGH", () => {
+    expect(resolveBlast("trello_create_card")).toBe("high");
+  });
+  test("tool không trong allowlist → HIGH (mặc định fail-closed)", () => {
+    expect(resolveBlast("anything_else")).toBe("high");
   });
 });
