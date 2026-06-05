@@ -15,6 +15,8 @@ import { MarkdownView } from "@/components/render/MarkdownView";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { ChatMsg } from "./types";
+import { ToolTrace } from "./ToolTrace";
+import { Citations } from "./Citations";
 
 // Relative-time line from an epoch-ms timestamp. Local + dependency-free: the
 // shared format.ago() takes a Date and is Vietnamese-only, while createdAt here
@@ -66,7 +68,11 @@ export function MessageItem({
         {isAssistant && isEmpty && streaming ? (
           <span className="text-neutral-500 dark:text-neutral-400">{t("chat.thinking")}</span>
         ) : isAssistant ? (
-          <MarkdownView source={msg.content} />
+          <>
+            <ToolTrace items={msg.toolTrace} />
+            <MarkdownView source={msg.content} />
+            <Citations names={msg.cites} />
+          </>
         ) : (
           msg.content
         )}

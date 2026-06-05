@@ -11,7 +11,8 @@ import { sealPendingWrite, openPendingWrite } from "@/lib/agent/safety/token";
 import { buildPreview } from "@/lib/agent/safety/preview";
 import { runResume, buildResumeRequest } from "@/lib/agent/safety/resume";
 import { recordWrite, isNonceUsed } from "@/lib/agent/safety/audit";
-import { encodeFrame, SEP, type ChatFrame } from "@/lib/chat/frames";
+import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
+import { makeFrameCollector, deriveCitations } from "@/lib/chat/trace";
 import { extractToolTurns } from "@/lib/agent/persist";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
 import {
@@ -28,6 +29,8 @@ const SYSTEM =
   "Bạn là LAAM, trợ lý nội bộ thân thiện. Trả lời ngắn gọn, chính xác, hữu ích. " +
   "Dùng tiếng Việt khi người dùng dùng tiếng Việt.";
 const PENDING_TTL_MS = 5 * 60_000; // §5: pending-write token expiry
+// SP-4: tên internal tool — redact args theo set-membership (D-SP4-3) khi gom tool frames.
+const INTERNAL_NAMES = new Set(INTERNAL_TOOLS.map((t) => t.name));
 
 type ChatBody = {
   conversationId?: string;
@@ -82,9 +85,9 @@ export function isConfirmBody(body: unknown): body is { confirm: { token: string
 
 // POST /api/chat — { message } streams a reply (running the gated tool-loop); an
 // unconfirmed write proposal SUSPENDS the turn with a pending_write frame (SP-2).
-// { confirm } resumes a previously-proposed write. SP-3: also summarizes long
-// history, surfaces proactive alerts, and persists tool turns. Persists user +
-// assistant messages.
+// { confirm } resumes a previously-proposed write. SP-3: summarizes long history,
+// surfaces proactive alerts, persists tool turns. SP-4: streams tool-trace +
+// citation + token frames. Persists user + assistant messages.
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -207,9 +210,11 @@ export async function POST(req: Request) {
     });
   }
 
-  // SP-2: the gate wraps dispatch. A read / confirmed write passes through; an
-  // unconfirmed write THROWS PendingWriteSignal, which unwinds runToolRounds to here.
-  const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }), {
+  // SP-4: collector nối onEvent → gom tool frames (gán c, redact args). SP-2: gate bọc
+  // dispatch — read/confirmed write đi qua (onEvent phát); unconfirmed write THROW
+  // PendingWriteSignal (onEvent KHÔNG phát cho write — nó hiện thành pending_write frame).
+  const { onEvent, frames: toolFrames } = makeFrameCollector(INTERNAL_NAMES);
+  const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
     internal: INTERNAL_TOOLS,
   });
   const callOllama = async (
@@ -234,19 +239,27 @@ export async function POST(req: Request) {
   // baseLen chụp SAU summary+proactive, TRƯỚC runToolRounds (verdict A1 SP-3).
   const baseLen = payload.messages.length;
   let toolTurns: ReturnType<typeof extractToolTurns> = [];
+  let cites: string[] = [];
   try {
     payload.messages = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
     toolTurns = extractToolTurns(payload.messages, baseLen); // SP-3: capture tool turns to persist
+    cites = deriveCitations(payload.messages, baseLen); // SP-4: "Nguồn" từ tool có data
   } catch (e) {
     if (e instanceof PendingWriteSignal) {
-      // SP-2: a write was proposed — suspend the turn and ask the user to confirm.
-      return suspendForConfirm(e, convId, userId, now);
+      // SP-2: a write was proposed — suspend. SP-4: flush the read tool frames that ran
+      // BEFORE the write (Task 3-C) so the trace isn't lost; the write itself surfaces
+      // as the pending_write frame (onEvent didn't fire for it).
+      return suspendForConfirm(e, convId, userId, now, toolFrames);
     }
     // Real tool-loop error (Ollama/connector) — stream a normal reply from the
-    // original payload (fail-soft, as before). toolTurns stays [].
+    // original payload (fail-soft, as before). toolTurns/cites stay [].
   }
 
   const assistantMsgId = crypto.randomUUID();
+  const trailingFrames: ChatFrame[] = [
+    ...toolFrames,
+    ...(cites.length ? [{ t: "cite", names: cites } as ChatFrame] : []),
+  ];
 
   let ollamaRes: Response;
   try {
@@ -269,19 +282,26 @@ export async function POST(req: Request) {
     });
   }
 
-  return streamOllama(ollamaRes, convId, { toolTurns, assistantMsgId });
+  return streamOllama(ollamaRes, convId, {
+    persist: { toolTurns, assistantMsgId },
+    frames: trailingFrames,
+  });
 }
 
 // Stream Ollama tokens to the client, persist the assistant message + (SP-3) the
-// tool turns, and emit the trailing {i,o} token-usage frame. Extracted from POST
-// (SP-2) so the resume path reuses it. `persist` carries the SP-3 tool-turn rows +
-// the assistant message id they FK to; the resume path omits it (no tool turns).
-// (Legacy single-SEP token frame, unchanged from SP-1; SP-4 migrates it to
-// encodeFrame({t:"tokens"}) in their §3.)
+// tool turns, and emit the trailing frames (SP-4: tool trace → citations → token
+// usage, all via encodeFrame). Extracted from POST (SP-2) so the resume path reuses
+// it. `persist` carries the SP-3 tool-turn rows + the assistant message id they FK
+// to; `frames` are the trailing tool/cite frames (the {t:"tokens"} frame is appended
+// here from the live token counts). The legacy single-SEP {i,o} frame is gone —
+// ChatClient now parses every frame via splitFrames (SP-4 token-frame migrate).
 function streamOllama(
   ollamaRes: Response,
   convId: string,
-  persist?: { toolTurns: ReturnType<typeof extractToolTurns>; assistantMsgId: string },
+  opts: {
+    persist?: { toolTurns: ReturnType<typeof extractToolTurns>; assistantMsgId: string };
+    frames?: ChatFrame[];
+  } = {},
 ): Response {
   const stream = new ReadableStream({
     async start(controller) {
@@ -323,26 +343,32 @@ function streamOllama(
           await db.insert(chatMessages).values({
             // SP-3: when persisting tool turns we need a known id for the FK; the
             // resume path omits `persist` and lets the column default generate one.
-            ...(persist ? { id: persist.assistantMsgId } : {}),
+            ...(opts.persist ? { id: opts.persist.assistantMsgId } : {}),
             conversationId: convId,
             role: "assistant",
             content: full,
             tokensIn,
             tokensOut,
           });
+          // SP-4: trailing frames (bọc U+001E): tool trace → citations → token usage.
+          // Fail-soft: enqueue lỗi (client aborted) → bỏ qua.
           try {
-            controller.enqueue(encoder.encode(SEP + JSON.stringify({ i: tokensIn, o: tokensOut })));
+            const trailing: ChatFrame[] = [
+              ...(opts.frames ?? []),
+              { t: "tokens", i: tokensIn, o: tokensOut },
+            ];
+            for (const f of trailing) controller.enqueue(encoder.encode(encodeFrame(f)));
           } catch {
             /* response already cancelled (client aborted) — nothing to send */
           }
         }
         // SP-3: persist tool turns (main turn only; resume path omits `persist`).
-        if (persist && persist.toolTurns.length) {
+        if (opts.persist && opts.persist.toolTurns.length) {
           try {
             await db.insert(chatToolCalls).values(
-              persist.toolTurns.map((t) => ({
+              opts.persist.toolTurns.map((t) => ({
                 conversationId: convId,
-                messageId: full ? persist.assistantMsgId : null,
+                messageId: full ? opts.persist!.assistantMsgId : null,
                 seq: t.seq,
                 name: t.name,
                 args: t.args,
@@ -372,15 +398,15 @@ function streamOllama(
   });
 }
 
-// Stream a CODE-BUILT text plus an optional trailing frame, persisting the
-// assistant message. Used for the suspend (proposal + pending_write) and the
-// cancel/reject (plain text) turns. (SP-2.)
-function streamText(convId: string, text: string, frame?: ChatFrame): Response {
+// Stream a CODE-BUILT text plus trailing frames, persisting the assistant message.
+// Used for the suspend (proposal + flushed read frames + pending_write) and the
+// cancel/reject (plain text) turns. (SP-2 + SP-4 frames.)
+function streamText(convId: string, text: string, frames: ChatFrame[] = []): Response {
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
       controller.enqueue(enc.encode(text));
-      if (frame) controller.enqueue(enc.encode(encodeFrame(frame)));
+      for (const f of frames) controller.enqueue(enc.encode(encodeFrame(f)));
       await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: text });
       await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
       controller.close();
@@ -397,12 +423,14 @@ function streamText(convId: string, text: string, frame?: ChatFrame): Response {
 
 // Turn 1 suspend: a write was proposed. Build a CODE preview (never the model's
 // prose — Rule 13), persist it as the (never-empty) proposal assistant message,
-// seal the token, and emit the pending_write frame. (SP-2.)
+// seal the token, and emit the read tool frames (flush — Task 3-C) + pending_write
+// frame. (SP-2 + SP-4.)
 function suspendForConfirm(
   sig: PendingWriteSignal,
   convId: string,
   userId: string,
   now: number,
+  toolFrames: ChatFrame[],
 ): Response {
   const preview = buildPreview(sig.tool, sig.args);
   const token = sealPendingWrite({
@@ -415,7 +443,7 @@ function suspendForConfirm(
     exp: now + PENDING_TTL_MS,
     nonce: crypto.randomUUID(),
   });
-  const frame: ChatFrame = {
+  const pendingFrame: ChatFrame = {
     t: "pending_write",
     token,
     tool: sig.tool,
@@ -423,12 +451,13 @@ function suspendForConfirm(
     summary: preview.summary,
     fields: preview.fields,
   };
-  return streamText(convId, preview.summary, frame);
+  return streamText(convId, preview.summary, [...toolFrames, pendingFrame]);
 }
 
 // Turn 2 confirm: open the token, run the resume, stream the result (or cancel/reject).
 // The resume reuses streamOllama WITHOUT `persist` — tool-turn persistence for the
-// confirmed write is a documented follow-up (backlog: route-merge-reconciliation). (SP-2.)
+// confirmed write is a documented follow-up (backlog: route-merge-reconciliation).
+// SP-4: the confirmed write runs through makeDispatch(onEvent) so it surfaces a tool frame. (SP-2.)
 async function handleConfirm(
   req: Request,
   confirm: { token: string; approve: boolean },
@@ -455,7 +484,8 @@ async function handleConfirm(
   const lang = readLang(req); // tri-lingual: narrate the result in the user's language
   const system = buildSystemPrompt({ lang, now, toolNames: [] });
 
-  const gated = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }), {
+  const { onEvent, frames: confirmFrames } = makeFrameCollector(INTERNAL_NAMES);
+  const gated = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
     internal: INTERNAL_TOOLS,
     confirmedAction: { name: signed.name, args: signed.args },
   });
@@ -494,7 +524,8 @@ async function handleConfirm(
       headers: { "x-conversation-id": convId },
     });
   }
-  return streamOllama(ollamaRes, convId);
+  // SP-4: emit the confirmed write's tool frame (onEvent fired during runResume).
+  return streamOllama(ollamaRes, convId, { frames: confirmFrames });
 }
 
 // Helper SP-3: gọi model 1 lần non-streaming (cho summarize). Hoisted — đặt cuối file OK.
