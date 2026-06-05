@@ -193,4 +193,12 @@ export const chat: Dict = {
   'chat.ocrImageEmpty': { vi: 'Không nhận được chữ nào trong ảnh.', en: 'No text found in the image.', zh: '图片中未识别到文字。' },
   'chat.ocrReadFail': { vi: 'Không đọc được tệp ảnh.', en: 'Could not read the image file.', zh: '无法读取图片文件。' },
   'chat.ocrFail': { vi: 'OCR thất bại.', en: 'OCR failed.', zh: 'OCR 失败。' },
+  // --- SP-4: tool trace + citations ---
+  'chat.toolUsed': { vi: 'Đã dùng {n} công cụ', en: 'Used {n} tool(s)', zh: '已用 {n} 个工具' },
+  'chat.source': { vi: 'Nguồn', en: 'Source', zh: '来源' },
+  'chat.toolListAgents': { vi: 'Liệt kê agent', en: 'List agents', zh: '列出 agent' },
+  'chat.toolGetAgent': { vi: 'Xem chi tiết agent', en: 'Get agent', zh: '查看 agent' },
+  'chat.toolQueryStats': { vi: 'Thống kê hệ thống', en: 'System stats', zh: '系统统计' },
+  'chat.toolListMachines': { vi: 'Liệt kê máy', en: 'List machines', zh: '列出机器' },
+  'chat.toolFindStuck': { vi: 'Tìm agent kẹt', en: 'Find stuck agents', zh: '查找卡住的 agent' },
 };
