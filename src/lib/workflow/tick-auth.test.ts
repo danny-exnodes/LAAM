@@ -37,4 +37,30 @@ describe("isTickAuthorized — tick endpoint auth (localhost OR secret, KHÔNG s
     expect(isTickAuthorized(H({ host: "remote.example", "x-workflow-tick-secret": "" }), {})).toBe(false);
     expect(isTickAuthorized(H({ host: "remote.example", "x-workflow-tick-secret": "" }), { WORKFLOW_TICK_SECRET: "" })).toBe(false);
   });
+
+  // ── Fix 2: secret SET → KHÔNG fallback localhost-trust (chống giả Host) ──────
+  test("secret SET + Host: localhost + KHÔNG header secret → REJECT (không tin localhost khi có secret)", () => {
+    // localhost giả-được nếu port 3100 truy cập trực tiếp → khi secret đã set, chỉ
+    // header khớp mới qua. Đây là trọng tâm hardening của Fix 2.
+    expect(isTickAuthorized(H({ host: "localhost:3100" }), { WORKFLOW_TICK_SECRET: "S3CRET" })).toBe(false);
+    expect(isTickAuthorized(H({ host: "127.0.0.1" }), { WORKFLOW_TICK_SECRET: "S3CRET" })).toBe(false);
+  });
+
+  test("secret SET + Host: localhost + secret SAI → REJECT", () => {
+    expect(isTickAuthorized(H({ host: "localhost:3100", "x-workflow-tick-secret": "wrong" }), { WORKFLOW_TICK_SECRET: "S3CRET" })).toBe(false);
+  });
+
+  test("secret SET + Host: localhost + secret ĐÚNG → ALLOW", () => {
+    expect(isTickAuthorized(H({ host: "localhost:3100", "x-workflow-tick-secret": "S3CRET" }), { WORKFLOW_TICK_SECRET: "S3CRET" })).toBe(true);
+  });
+
+  test("secret SET + độ dài header LỆCH (prefix/superstring) → REJECT (timingSafeEqual không ném)", () => {
+    // timingSafeEqual ném nếu buffer khác độ dài → secretMatches phải tự reject trước.
+    expect(isTickAuthorized(H({ host: "x", "x-workflow-tick-secret": "S3CRE" }), { WORKFLOW_TICK_SECRET: "S3CRET" })).toBe(false);
+    expect(isTickAuthorized(H({ host: "x", "x-workflow-tick-secret": "S3CRETT" }), { WORKFLOW_TICK_SECRET: "S3CRET" })).toBe(false);
+  });
+
+  test("secret UNSET + Host: localhost → ALLOW (đường dev giữ nguyên)", () => {
+    expect(isTickAuthorized(H({ host: "localhost:3100" }), {})).toBe(true);
+  });
 });

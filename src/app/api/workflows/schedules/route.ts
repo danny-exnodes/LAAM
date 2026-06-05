@@ -32,7 +32,14 @@ export async function POST(req: Request) {
   }
 
   const id = crypto.randomUUID();
-  const next = cronNext(body.cron, new Date());
+  // cron hợp-lệ-cú-pháp nhưng KHÔNG tính được mốc kế trong 366 ngày (vd "0 0 29 2 *")
+  // → cronNext ném. Bắt → 400 (lỗi đầu vào của user), KHÔNG để rơi xuống 500.
+  let next: Date;
+  try {
+    next = cronNext(body.cron, new Date());
+  } catch (e) {
+    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "cron không tính được mốc kế" }), { status: 400 });
+  }
   await db.insert(workflowSchedules).values({
     id,
     workflowId: body.workflowId,

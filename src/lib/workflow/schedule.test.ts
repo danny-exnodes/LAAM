@@ -1,5 +1,6 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { tickClaim, tickExecute } from "./schedule";
+import * as cron from "./cron";
 
 const local = (y: number, mo: number, d: number, h: number, mi: number) => new Date(y, mo - 1, d, h, mi, 0, 0);
 
@@ -184,6 +185,116 @@ describe("tickClaim — atomic claim (PIN-D1) + skip-realign", () => {
     const claimed = await tickClaim(db as never, local(2026, 6, 5, 12, 0));
     expect(claimed).toEqual([]);
     expect(txCalls).toBe(0);
+  });
+});
+
+describe("tickClaim — cô lập lỗi 1 schedule (không kẹt, không đói siblings)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test("schedule ĐẦU làm cronNext ném → auto-disable + KHÔNG ném + schedule SAU vẫn được claim", async () => {
+    // Hai schedule due. badSched có cron khiến cronNext ném (vd "0 0 29 2 *" không có
+    // mốc 29/2 trong 366 ngày). goodSched bình thường. Trước fix: cronNext ném NGOÀI
+    // try → (a) badSched không advance → re-select mỗi tick → ném mãi (wedge); (b) cả
+    // vòng lặp chết → goodSched + tickExecute đói. Sau fix: badSched bị auto-disable,
+    // goodSched vẫn claim.
+    const badSched = {
+      id: "bad", workflowId: "wBad", userId: "u1", cron: "0 0 29 2 *",
+      nextRunAt: local(2026, 6, 5, 12, 0), missedCount: 0, enabled: true,
+    };
+    const goodSched = {
+      id: "good", workflowId: "wGood", userId: "u1", cron: "*/5 * * * *",
+      nextRunAt: local(2026, 6, 5, 12, 0), missedCount: 0, enabled: true,
+    };
+    const wfGood = { id: "wGood", userId: "u1", graph: { nodes: [], edges: [] } };
+
+    // Stub cronNext: ném CHỈ cho cron của badSched, còn lại dùng impl thật.
+    const realNext = cron.nextRunAt;
+    vi.spyOn(cron, "nextRunAt").mockImplementation((expr: string, from: Date) => {
+      if (expr === "0 0 29 2 *") throw new Error("cron: không tìm thấy mốc kế trong 366 ngày");
+      return realNext(expr, from);
+    });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // db: select trả [badSched, goodSched] (bad trước → nếu vòng lặp chết, good đói).
+    // db.update (top-level) = auto-disable; ghi lại các lần disable. transaction =
+    // claim cho goodSched (ghi insert + advance).
+    const disabled: { id: string; set: { enabled?: boolean } }[] = [];
+    let goodInsert = false;
+    let goodAdvance: { nextRunAt?: Date } | undefined;
+    const db = {
+      select: () => ({ from: () => ({ where: async () => [badSched, goodSched] }) }),
+      // auto-disable đi qua db.update(...).set(...).where(...) — bắt id qua where eq().
+      update: () => ({
+        set: (v: { enabled?: boolean }) => ({
+          where: async () => { disabled.push({ id: "captured", set: v }); },
+        }),
+      }),
+      transaction: async (fn: (tx: unknown) => Promise<void>) => {
+        const tx = {
+          select: () => ({ from: () => ({ where: () => ({ limit: async () => [wfGood] }) }) }),
+          insert: () => ({
+            values: () => ({ onConflictDoNothing: () => ({ returning: async () => { goodInsert = true; return [{ id: "rGood" }]; } }) }),
+          }),
+          update: () => ({ set: (v: { nextRunAt?: Date }) => ({ where: async () => { goodAdvance = v; } }) }),
+        };
+        await fn(tx);
+      },
+    };
+
+    let threw = false;
+    let claimed: string[] = [];
+    try {
+      claimed = await tickClaim(db as never, local(2026, 6, 5, 12, 1));
+    } catch {
+      threw = true;
+    }
+
+    // (1) tickClaim KHÔNG ném dù schedule đầu lỗi.
+    expect(threw).toBe(false);
+    // (2) bad schedule bị auto-disable (enabled=false).
+    expect(disabled).toHaveLength(1);
+    expect(disabled[0].set.enabled).toBe(false);
+    // (3) good schedule (đứng SAU) vẫn được claim: run insert + nextRunAt advance.
+    expect(goodInsert).toBe(true);
+    expect(goodAdvance?.nextRunAt).toEqual(local(2026, 6, 5, 12, 5)); // mốc */5 sau 12:01
+    expect(claimed).toHaveLength(1); // CHỈ good được claim (bad bị bỏ, không claim)
+    // log lỗi đã phát ra cho bad schedule.
+    expect(errSpy).toHaveBeenCalled();
+  });
+
+  test("lỗi load workflow trong tx (tx ném) → schedule đó auto-disable, KHÔNG ném ra ngoài", async () => {
+    // tx.select ném → cả tx fail → catch bắt → auto-disable. Chứng minh catch bao
+    // trùm CẢ lỗi trong transaction (không chỉ cronNext).
+    const sched = {
+      id: "boom", workflowId: "wX", userId: "u1", cron: "*/5 * * * *",
+      nextRunAt: local(2026, 6, 5, 12, 0), missedCount: 0, enabled: true,
+    };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const disabled: { enabled?: boolean }[] = [];
+    const db = {
+      select: () => ({ from: () => ({ where: async () => [sched] }) }),
+      update: () => ({ set: (v: { enabled?: boolean }) => ({ where: async () => { disabled.push(v); } }) }),
+      transaction: async (fn: (tx: unknown) => Promise<void>) => {
+        const tx = {
+          select: () => ({ from: () => ({ where: () => ({ limit: async () => { throw new Error("db down"); } }) }) }),
+          insert: () => ({ values: () => ({ onConflictDoNothing: () => ({ returning: async () => [] }) }) }),
+          update: () => ({ set: () => ({ where: async () => {} }) }),
+        };
+        await fn(tx);
+      },
+    };
+    let threw = false;
+    let claimed: string[] = [];
+    try {
+      claimed = await tickClaim(db as never, local(2026, 6, 5, 12, 1));
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(false);
+    expect(disabled).toEqual([{ enabled: false, updatedAt: local(2026, 6, 5, 12, 1) }]);
+    expect(claimed).toEqual([]);
   });
 });
 
