@@ -1,18 +1,9 @@
 import { redirect } from "next/navigation";
-import nextDynamic from "next/dynamic";
 import { auth } from "@/auth";
 import { AppHeader } from "@/components/app-header";
+import { WorkflowEditor } from "@/components/workflows/editor/WorkflowEditor";
 
 export const dynamic = "force-dynamic";
-
-// WorkflowEditor uses @xyflow/react — must NOT render server-side.
-const WorkflowEditor = nextDynamic(
-  () =>
-    import("@/components/workflows/editor/WorkflowEditor").then(
-      (m) => m.WorkflowEditor,
-    ),
-  { ssr: false },
-);
 
 export default async function WorkflowEditPage({
   params,
