@@ -1,7 +1,7 @@
 import { eq, asc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { chatConversations, chatMessages } from "@/db/schema";
+import { chatConversations, chatMessages, chatToolCalls } from "@/db/schema";
 import { chatTools } from "@/lib/connectors";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
@@ -12,6 +12,15 @@ import { buildPreview } from "@/lib/agent/safety/preview";
 import { runResume, buildResumeRequest } from "@/lib/agent/safety/resume";
 import { recordWrite, isNonceUsed } from "@/lib/agent/safety/audit";
 import { encodeFrame, SEP, type ChatFrame } from "@/lib/chat/frames";
+import { extractToolTurns } from "@/lib/agent/persist";
+import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
+import {
+  detectAlerts,
+  selectNewAlerts,
+  formatProactiveNotice,
+  type ProactiveState,
+} from "@/lib/agent/proactive";
+import { loadSessionRows } from "@/lib/agent/tools/laam/_load";
 
 const OLLAMA_URL = (process.env.OLLAMA_URL ?? "http://localhost:11434").replace(/\/$/, "");
 const MODEL = process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
@@ -71,9 +80,11 @@ export function isConfirmBody(body: unknown): body is { confirm: { token: string
   return !!c && typeof (c as { token?: unknown }).token === "string";
 }
 
-// POST /api/chat — { message } streams a reply (running the gated tool-loop); a
-// write proposal SUSPENDS the turn with a pending_write frame. { confirm } resumes
-// a previously-proposed write. Persists user + assistant messages.
+// POST /api/chat — { message } streams a reply (running the gated tool-loop); an
+// unconfirmed write proposal SUSPENDS the turn with a pending_write frame (SP-2).
+// { confirm } resumes a previously-proposed write. SP-3: also summarizes long
+// history, surfaces proactive alerts, and persists tool turns. Persists user +
+// assistant messages.
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {
@@ -91,8 +102,11 @@ export async function POST(req: Request) {
   }
   const model = typeof body.model === "string" && body.model.trim() ? body.model : MODEL;
 
-  // Resolve or create the conversation (must belong to the user).
+  // Resolve/create conversation; giữ summary/watermark/proactiveState (SP-3).
   let conversationId = body.conversationId;
+  let convSummary: string | null = null;
+  let convWatermark: string | null = null;
+  let convProactive: ProactiveState | null = null;
   if (conversationId) {
     const rows = await db
       .select()
@@ -102,6 +116,9 @@ export async function POST(req: Request) {
     if (!rows[0] || rows[0].userId !== userId) {
       return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
     }
+    convSummary = rows[0].summary ?? null;
+    convWatermark = rows[0].summarizedThroughId ?? null;
+    convProactive = (rows[0].proactiveState as ProactiveState | null) ?? null;
   } else {
     conversationId = crypto.randomUUID();
     await db.insert(chatConversations).values({
@@ -116,19 +133,39 @@ export async function POST(req: Request) {
   await db.insert(chatMessages).values({ conversationId: convId, role: "user", content: message });
 
   const history = await db
-    .select()
+    .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })
     .from(chatMessages)
     .where(eq(chatMessages.conversationId, convId))
     .orderBy(asc(chatMessages.createdAt));
+
+  const now = Date.now();
+  const lang = readLang(req);
+
+  // --- Summarize (SP-3): bound lịch sử replay theo char-budget. ---
+  const plan = planHistory(history as HistoryMsg[], convSummary, convWatermark);
+  let effectiveSummary = convSummary;
+  if (plan.needsSummary) {
+    try {
+      effectiveSummary = await summarizeMessages(plan.toSummarize, convSummary, lang, {
+        callModel: (prompt) => callModelText(prompt, model),
+      });
+      const through = plan.toSummarize[plan.toSummarize.length - 1]?.id ?? null;
+      await db
+        .update(chatConversations)
+        .set({ summary: effectiveSummary, summarizedThroughId: through })
+        .where(eq(chatConversations.id, convId));
+    } catch (e) {
+      console.error("[chat] summarize failed (fail-soft)", e); // giữ summary cũ; vẫn replay bounded
+    }
+  }
+
   const payload = buildOllamaPayload(
     body,
-    history.map((m) => ({ role: m.role, content: m.content })),
+    plan.toReplay.map((m) => ({ role: m.role, content: m.content })),
     { model: MODEL, system: SYSTEM },
   );
 
   // Internal tools (LAAM) LUÔN có; connector tools nếu user đã kết nối.
-  const now = Date.now();
-  const lang = readLang(req);
   let connectorTools = [] as Awaited<ReturnType<typeof chatTools>>;
   try {
     connectorTools = await chatTools(userId);
@@ -137,14 +174,38 @@ export async function POST(req: Request) {
   }
   const tools = modelToolSchemas(INTERNAL_TOOLS, connectorTools);
 
-  // System prompt động (ghi đè default tĩnh trong buildOllamaPayload), trừ khi user tự đặt system.
-  payload.messages[0] = {
-    role: "system",
-    content:
-      typeof body.system === "string" && body.system.trim()
-        ? body.system
-        : buildSystemPrompt({ lang, now, toolNames: tools.map((t) => t.function.name) }),
-  };
+  // --- System prompt động + proactive notice COMPOSE-AROUND buildSystemPrompt (SP-3). ---
+  const hasSystemOverride = typeof body.system === "string" && body.system.trim().length > 0;
+  let systemContent = hasSystemOverride
+    ? (body.system as string)
+    : buildSystemPrompt({ lang, now, toolNames: tools.map((t) => t.function.name) });
+  if (!hasSystemOverride) {
+    try {
+      const rows = await loadSessionRows();
+      const { toSurface, newState } = selectNewAlerts(detectAlerts(rows, now), convProactive, now);
+      const notice = formatProactiveNotice(toSurface, lang);
+      if (notice) systemContent = systemContent + "\n\n" + notice;
+      // Persist dedupe state when something surfaced OR pruning changed it (keep proactiveState bounded).
+      const prevKeyCount = convProactive ? Object.keys(convProactive.surfaced ?? {}).length : 0;
+      if (notice || Object.keys(newState.surfaced).length !== prevKeyCount) {
+        await db
+          .update(chatConversations)
+          .set({ proactiveState: newState })
+          .where(eq(chatConversations.id, convId));
+      }
+    } catch (e) {
+      console.error("[chat] proactive detect failed (fail-soft)", e);
+    }
+  }
+  payload.messages[0] = { role: "system", content: systemContent };
+
+  // Summary làm system message #2 (sau persona), nếu có. (SP-3 — trước baseLen.)
+  if (effectiveSummary) {
+    payload.messages.splice(1, 0, {
+      role: "system",
+      content: "Bối cảnh hội thoại trước (tóm tắt): " + effectiveSummary,
+    });
+  }
 
   // SP-2: the gate wraps dispatch. A read / confirmed write passes through; an
   // unconfirmed write THROWS PendingWriteSignal, which unwinds runToolRounds to here.
@@ -169,16 +230,23 @@ export async function POST(req: Request) {
     if (!r.ok) throw new Error(`Ollama ${r.status}`);
     return (await r.json()) as OllamaChatResponse;
   };
+
+  // baseLen chụp SAU summary+proactive, TRƯỚC runToolRounds (verdict A1 SP-3).
+  const baseLen = payload.messages.length;
+  let toolTurns: ReturnType<typeof extractToolTurns> = [];
   try {
     payload.messages = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
+    toolTurns = extractToolTurns(payload.messages, baseLen); // SP-3: capture tool turns to persist
   } catch (e) {
     if (e instanceof PendingWriteSignal) {
-      // A write was proposed — suspend the turn and ask the user to confirm.
+      // SP-2: a write was proposed — suspend the turn and ask the user to confirm.
       return suspendForConfirm(e, convId, userId, now);
     }
     // Real tool-loop error (Ollama/connector) — stream a normal reply from the
-    // original payload (fail-soft, as before).
+    // original payload (fail-soft, as before). toolTurns stays [].
   }
+
+  const assistantMsgId = crypto.randomUUID();
 
   let ollamaRes: Response;
   try {
@@ -201,14 +269,20 @@ export async function POST(req: Request) {
     });
   }
 
-  return streamOllama(ollamaRes, convId);
+  return streamOllama(ollamaRes, convId, { toolTurns, assistantMsgId });
 }
 
-// Stream Ollama tokens to the client, persist the assistant message, and emit the
-// trailing {i,o} token-usage frame. Extracted from POST so the resume path reuses
-// it. (Legacy single-SEP token frame, unchanged from SP-1; SP-4 migrates it to
+// Stream Ollama tokens to the client, persist the assistant message + (SP-3) the
+// tool turns, and emit the trailing {i,o} token-usage frame. Extracted from POST
+// (SP-2) so the resume path reuses it. `persist` carries the SP-3 tool-turn rows +
+// the assistant message id they FK to; the resume path omits it (no tool turns).
+// (Legacy single-SEP token frame, unchanged from SP-1; SP-4 migrates it to
 // encodeFrame({t:"tokens"}) in their §3.)
-function streamOllama(ollamaRes: Response, convId: string): Response {
+function streamOllama(
+  ollamaRes: Response,
+  convId: string,
+  persist?: { toolTurns: ReturnType<typeof extractToolTurns>; assistantMsgId: string },
+): Response {
   const stream = new ReadableStream({
     async start(controller) {
       const reader = ollamaRes.body!.getReader();
@@ -247,6 +321,9 @@ function streamOllama(ollamaRes: Response, convId: string): Response {
       } finally {
         if (full) {
           await db.insert(chatMessages).values({
+            // SP-3: when persisting tool turns we need a known id for the FK; the
+            // resume path omits `persist` and lets the column default generate one.
+            ...(persist ? { id: persist.assistantMsgId } : {}),
             conversationId: convId,
             role: "assistant",
             content: full,
@@ -257,6 +334,25 @@ function streamOllama(ollamaRes: Response, convId: string): Response {
             controller.enqueue(encoder.encode(SEP + JSON.stringify({ i: tokensIn, o: tokensOut })));
           } catch {
             /* response already cancelled (client aborted) — nothing to send */
+          }
+        }
+        // SP-3: persist tool turns (main turn only; resume path omits `persist`).
+        if (persist && persist.toolTurns.length) {
+          try {
+            await db.insert(chatToolCalls).values(
+              persist.toolTurns.map((t) => ({
+                conversationId: convId,
+                messageId: full ? persist.assistantMsgId : null,
+                seq: t.seq,
+                name: t.name,
+                args: t.args,
+                result: t.result,
+                ok: t.ok,
+                bytes: t.bytes,
+              })),
+            );
+          } catch (e) {
+            console.error("[chat] persist tool turns failed (fail-soft)", e);
           }
         }
         await db
@@ -278,7 +374,7 @@ function streamOllama(ollamaRes: Response, convId: string): Response {
 
 // Stream a CODE-BUILT text plus an optional trailing frame, persisting the
 // assistant message. Used for the suspend (proposal + pending_write) and the
-// cancel/reject (plain text) turns.
+// cancel/reject (plain text) turns. (SP-2.)
 function streamText(convId: string, text: string, frame?: ChatFrame): Response {
   const enc = new TextEncoder();
   const stream = new ReadableStream({
@@ -301,7 +397,7 @@ function streamText(convId: string, text: string, frame?: ChatFrame): Response {
 
 // Turn 1 suspend: a write was proposed. Build a CODE preview (never the model's
 // prose — Rule 13), persist it as the (never-empty) proposal assistant message,
-// seal the token, and emit the pending_write frame.
+// seal the token, and emit the pending_write frame. (SP-2.)
 function suspendForConfirm(
   sig: PendingWriteSignal,
   convId: string,
@@ -331,6 +427,8 @@ function suspendForConfirm(
 }
 
 // Turn 2 confirm: open the token, run the resume, stream the result (or cancel/reject).
+// The resume reuses streamOllama WITHOUT `persist` — tool-turn persistence for the
+// confirmed write is a documented follow-up (backlog: route-merge-reconciliation). (SP-2.)
 async function handleConfirm(
   req: Request,
   confirm: { token: string; approve: boolean },
@@ -397,4 +495,16 @@ async function handleConfirm(
     });
   }
   return streamOllama(ollamaRes, convId);
+}
+
+// Helper SP-3: gọi model 1 lần non-streaming (cho summarize). Hoisted — đặt cuối file OK.
+async function callModelText(prompt: string, model: string): Promise<string> {
+  const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], stream: false }),
+  });
+  if (!r.ok) throw new Error(`Ollama ${r.status}`);
+  const j = (await r.json()) as OllamaChatResponse;
+  return j?.message?.content ?? "";
 }
