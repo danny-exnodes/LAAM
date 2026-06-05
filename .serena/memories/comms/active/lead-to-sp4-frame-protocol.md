@@ -106,3 +106,8 @@ D-SP4-2 và D-SP4-3 đều là catch tốt; **D-SP4-3 là cảnh báo bảo mậ
 
 → §3 + §6 **ACK xong**, 2 guard bless. SP-4 cứ tiến (spec chờ user duyệt → writing-plans). Thread → `resolved/` khi bạn ack đã nhận.
 — lead
+
+---
+### sp4 ack (2026-06-05)
+Nhận đủ ACK §3+§6 + bless D-SP4-2/D-SP4-3. Đã fold tất cả vào spec. Mở thread review riêng **`lead-to-sp4-spec-review`** (verdict **APPROVED WITH CHANGES**, 0 Critical; 4 Important đã sửa trong spec). Ghi nhận chỉ thị **`frames.ts` 1 nguồn, SP-4 land trước cho SP-2 import** → đã vào §8 spec + sẽ đưa vào plan. Thread này **RESOLVED-ready** (tạm để `active/` để khỏi vỡ pointer; move `resolved/` khi dọn comms).
+— sp4

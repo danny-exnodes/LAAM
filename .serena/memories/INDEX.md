@@ -20,6 +20,12 @@
 
 - [agent-harness-sp-analysis-plan](decisions/agent-harness-sp-analysis-plan.md) — **PM plan** đào sâu SP: song song tối đa **3 orch (SP-2/3/4)** sau **1 pass nền SP-1** (predecessor cứng), +1 reviewer tùy chọn. Nút thắt = SP-1 + băng thông review. User chốt: **main session làm SP-1 trước**.
 
+- [agent-harness-sp2-actions-safety](decisions/agent-harness-sp2-actions-safety.md) — **SP-2 spec:** gate write = lớp bọc `withSafety` quanh dispatch (**zero đổi hợp đồng SP-1**); token niêm phong = `encryptJson` tái dùng connector crypto (stateless, TTL 5'); resume execute signed write **1 lần** + text-only (chống double-execute, Rule 13); redact+bound connector (vá lỗ hổng L4); audit qua `audit_log` sẵn có. Write surface hiện tại = **1 tool** `trello_create_card` (YAGNI: khung an toàn, không thêm write). Chờ lead re-review §6.
+
+- [agent-harness-sp3-memory-proactive](decisions/agent-harness-sp3-memory-proactive.md) — **SP-3 spec:** persist tool turns = bảng mới `chat_tool_call` (chat_message KHÔNG đổi); summarize hội thoại dài (cột `summary`+watermark, model sinh, giữ nguyên văn lượt gần); proactive stuck/cost **in-chat** (compose quanh `buildSystemPrompt`, dedupe `proactiveState jsonb`, cost-alert tuyệt đối/burn-rate — không phải spike windowed). **Migration `0003` ADDITIVE** (SP duy nhất đụng schema). Token-undercount→backlog SP-1. Verdict A1–A4 chủ SP-1 đã chốt (`comms/resolved/sp3-to-lead-design-review`). Chờ user review.
+
+- [agent-harness-sp4-ux-feedback](decisions/agent-harness-sp4-ux-feedback.md) — **SP-4 spec (UX feedback, L6):** stream tool events (trace ✓/✗ + args) + citations ("Nguồn: …") ra chat; frame protocol chung `src/lib/chat/frames.ts` (**envelope U+001E**, SP-2 dùng `pending_write`); **Gộp** nay / Trực-tiếp sau (server-only, protocol+FE bất biến theo thời điểm); redaction **set-membership** `INTERNAL_TOOLS`; citations từ `convo` (verdict A1, không đổi `ToolEvent`); ephemeral nay → bền qua `chat_tool_call` SP-3 sau. §3/§6 đã verify độc lập; chờ lead ACK migrate token-frame + spec §2 drift. **Spec viết xong, chờ user review.**
+
 ## Rules (vận hành agent)
 - [agent-ops-rules](decisions/agent-ops-rules.md) — ⛔ **KHÔNG tự ý chạy ngầm service nào** (dev/start/docker/ollama/preview) nếu user chưa cho phép; user tự host dev. Không `build` in-place khi prod đang chạy.
 
@@ -33,6 +39,8 @@
 - [next-steps](backlog/next-steps.md) — **handoff phiên sau**: nghiệm thu POC 4 nhiệm vụ · cài Tesseract (Admin) · độ bền (Windows Service) · v1-unported · vision enhancement · Phase 6.
 - [docker-stack-tesseract](backlog/docker-stack-tesseract.md) — **handoff cho session docker**: chèn `apk add tesseract-ocr + data eng/vie/chi_sim` vào runner stage của Dockerfile (đã verify, chưa tự sửa Dockerfile của họ để tránh đè).
 - [agent-harness-coordination](backlog/agent-harness-coordination.md) — **cảnh báo file dùng chung** cho 3 session: SP-1 sẽ refactor `/api/chat`; SP-4 đụng `components/chat/*`; connectors giữ nguyên. Roadmap chốt, chưa implement.
+- [agent-harness-route-merge-reconciliation](backlog/agent-harness-route-merge-reconciliation.md) — **SP-2 + SP-3 cùng viết lại `/api/chat/route.ts`** từ base `12a97d7` → merge = 3-way thủ công (4 điểm reconcile + gap persist confirm-path). Migration `0003` = hard gate. Mở từ review code SP-2/SP-3 (lead, 2026-06-05).
+- [agent-harness-sp2-fe-confirm](backlog/agent-harness-sp2-fe-confirm.md) — **handoff FE:** SP-2 gate write giao wire contract confirm card (frame `{t:"pending_write"}` + POST `/api/chat {confirm}`); FE sở hữu `components/chat/*` thêm card + router frame (phối hợp SP-4). SP-2 không tự sửa FE.
 - [v1-unported](backlog/v1-unported.md) — Search/Office/proxy/`/api/config` + bảng events + lọc máy/owner + residuals. **Nguồn chân lý:** `docs/v1-to-v2-migration-handoff.md`. ⚠️ chưa xoá v1 (archive sau khi v2 production+nghiệm thu).
 
 ## Trạng thái hiện tại (2026-06-03)

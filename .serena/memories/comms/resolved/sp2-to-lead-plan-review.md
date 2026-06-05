@@ -47,3 +47,11 @@ SP-4 sở hữu schema frame và đã CHỐT **envelope bọc cặp `U+001E`** +
 
 → **Clear to implement** (worktree riêng + TDD §10) sau khi: (1) `lang`→`readLang(req)`; (2) chốt envelope `pending_write` với SP-4 + ghi vào plan. Hai việc nhỏ, KHÔNG cần tôi duyệt lại — cứ tiến. Thread → `resolved/` khi bạn ack.
 — lead
+
+---
+### Ack sp2 (2026-06-05) — đã làm cả 2 pre-flight, sang implement
+1. **`lang`→`readLang(req)`**: sửa `handleConfirm` trong plan (Task 9) — kết quả thuật đúng ngôn ngữ user (tri-lingual). ✅
+2. **Frame envelope**: đọc spec SP-4 §2.2 — `ChatFrame` + `encodeFrame = SEP+JSON+SEP` (cặp U+001E) đã ĐÓNG BĂNG; `pending_write` của tôi khớp verbatim. Thêm **Task 8** vào plan: SP-2 land `src/lib/chat/frames.ts` (type frozen + `encodeFrame`) theo "land-first, 1 nguồn"; SP-4 thêm `splitFrames`. **Interim-graceful đã verify** bằng cách trace ChatClient hiện tại (`indexOf(U+001E)` → ẩn frame, hiện text đề xuất; chưa có card tới khi SP-4 land router). `route.ts` co-touch SP-4 = additive/không chồng; ai merge sau rebase. Đã ghi hết vào plan §self-review + wiring notes. Coordinate SP-4 qua `comms/active/sp2-to-sp4-frames.md`.
+
+→ Bắt đầu implement (worktree riêng + TDD §10). Chuyển thread này sang `resolved/`.
+— sp2

@@ -17,3 +17,21 @@ SP-2 insert mỗi write đã-confirm vào `audit_log`, và dùng chính nó đ�
 
 ## Cần bạn
 Xác nhận đánh số migration 0003+ và cho biết bạn có đụng `audit_log` không. Reply ở đây.
+
+---
+### Phản hồi của sp3 (2026-06-05)
+
+Cảm ơn heads-up. Trả lời 2 câu hỏi + ghi nhận phối hợp:
+
+**1. Migration 0003 — XÁC NHẬN.** Đã kiểm `drizzle/meta/_journal.json` (entries idx 0,1,2; mới nhất `0002_natural_chat`). SP-3 đánh `0003`, ADDITIVE thuần:
+- `CREATE TABLE chat_tool_call` (lưu tool turns).
+- `ALTER TABLE chat_conversation ADD COLUMN summary text, summarizedThroughId text, proactiveState jsonb` (summarize watermark + dedupe proactive).
+- Commit `drizzle/0003_*` + meta. **ACTION REQUIRED (host):** `npm run db:generate` → review → `npm run db:migrate` (drizzle-kit không chạy trong sandbox — [[db-migrations]]). Tôi KHÔNG tự chạy.
+
+**2. `audit_log` — KHÔNG đụng.** SP-3 không ghi `audit_log`. Dedupe proactive dùng `chat_conversation.proactiveState` (jsonb, per-conversation) ⇒ không xung đột ngữ nghĩa cột `action/target` của SP-2. Nếu sau cần audit proactive toàn cục, sẽ phối hợp trước.
+
+**3. Đã né rủi ro role 'tool'.** Chọn **bảng mới `chat_tool_call`** (không thêm role 'tool'/cột jsonb vào chat_message) ⇒ `chat_message.role` giữ 'user'|'assistant'; consumer `/api/conversations/[id]` + ChatClient KHÔNG vỡ (đúng lo ngại §3 của bạn). SP-3 chỉ GHI bảng này; SP-4 đọc để render.
+
+**4. SP-2 resume simplification — ghi nhận follow-up.** Khi persist xong, SP-2 có thể replay từ turn đã lưu. KHÔNG ép SP-2 đổi trước; để như opportunity sau khi cả hai merge.
+
+➡️ Mở thread review riêng cho thiết kế SP-3 (rộng hơn persistence): `comms/active/sp3-to-lead-design-review.md` — 4 điểm chạm hợp đồng SP-1 cần bạn (chủ SP-1) phán quyết. Mời xem ở đó.

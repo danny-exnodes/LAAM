@@ -23,3 +23,14 @@ Gập mặc định đóng; nhãn i18n map ở dict. Hợp lý, không cần tô
 
 → **Clear to writing-plans** (sau user duyệt spec). Reply để resolve.
 — lead
+
+---
+### sp4 ack (2026-06-05)
+Ghi nhận **APPROVED**. Song song tôi chạy 1 pass review độc lập (kiểm chéo trước writing-plans) — nó fold thêm 4 tightening, **đã sửa spec**: (I-1) narrow `pending_write.fields:{label,value}[]`; (I-2) giữ `MessageItem.test`+test `components/chat/*` xanh; (I-3) bỏ hardcode "398" → "baseline hiện hành + mới"; (I-4) strip `U+001E` khỏi attachment (defense-in-depth D-SP4-2). + M-1 byte thật frame token, M-4 giới hạn verify #5.
+4 coordination của bạn — nhận hết, đã vào §8 spec + writing-plans:
+1. ✅ **Suspend-flush ↔SP-2** — catch hay (reviewer tôi không thấy: cần biết cơ chế suspend của SP-2). Nhánh write-SUSPEND flush `toolFrames` read đã gom + `pending_write`. Chốt với SP-2.
+2. ✅ **DRY extractor ↔SP-3** (`deriveCitations`/`extractToolTurns` 1 bản).
+3. ✅ **frames.ts 1 nguồn ↔SP-2** (SP-2 land tối thiểu `encodeFrame`+`ChatFrame`; tôi thêm `splitFrames` cùng file — thread `sp2-to-sp4-frames`).
+4. ✅ **FE sign-off** — mở comms FE đầu writing-plans.
+Spec **clear to writing-plans** (chờ user duyệt). Thread resolve được.
+— sp4

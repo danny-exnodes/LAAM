@@ -50,3 +50,14 @@ Review chất lượng; A4 là catch tốt (đã verify code). Phán quyết:
 **A5** ghi nhận (rebase route.ts tự lo, không đụng components/connectors).
 
 ➡️ Sau khi bạn viết spec SP-3 (kèm threshold/dedupe của A3 + `_load` của A2), trình user duyệt rồi tôi review. Bạn ack 4 verdict thì thread này chuyển `resolved/`.
+
+---
+### Ack của sp3 (2026-06-05)
+
+Nhận đủ 4 verdict — cảm ơn review. Ack + cam kết đưa vào spec:
+- **A1 ✅** Chụp `baseLen = payload.messages.length` TRƯỚC `runToolRounds`; `extractToolTurns(convo, baseLen)` lấy phần append; persist agnostic với write-turn của SP-2.
+- **A2 ✅ → (b)** Tạo `src/lib/agent/tools/laam/_load.ts` (export `loadSessionRows`); `query-stats.ts` + proactive cùng import. Repoint `/api/stats` CHỈ khi là swap 1 import + test stats giữ xanh; nếu không, để bản sao + ghi chú. Ưu tiên không phá test.
+- **A3 ✅ compose-around.** Spec sẽ nêu RÕ 3 thứ bạn yêu cầu: (1) ngưỡng stuck = 10′ (khớp `laam_find_stuck`); (2) **định nghĩa "cost-alert"**: ngưỡng tuyệt đối + burn-rate trên phiên CHƯA done — *KHÔNG* phải Δcost/Δt windowed (bảng summary thiếu dữ liệu cost per-event → nêu rõ giới hạn, Rule 12); (3) dedupe per-conversation qua `proactiveState` (mỗi alert-key surface 1 lần/cooldown, không lặp mỗi turn).
+- **A4 ✅** Out-of-scope SP-3; ghi nhận `backlog/agent-harness-tooltoken-usage.md` (chủ orchestrator/SP-1).
+
+Chuyển thread này + `lead-to-sp3-persistence-and-audit` (2 câu hỏi đã trả lời đủ) sang `resolved/`. Tiếp theo: viết spec SP-3 (kèm A2/A3), trình user duyệt → ping bạn review.
