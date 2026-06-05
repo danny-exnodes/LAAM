@@ -55,6 +55,7 @@ export function ChatClient() {
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true); // dính đáy: auto-scroll khi user đang ở cuối
+  const programmaticRef = useRef(false); // true khi *mình* tự cuộn → onScroll bỏ qua echo
   const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   useEffect(() => {
@@ -81,13 +82,25 @@ export function ChatClient() {
 
   function scrollToBottom(behavior: ScrollBehavior = "smooth") {
     const el = scrollRef.current;
-    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+    if (el) {
+      // Đánh dấu: event `scroll` sắp tới là do mình tự cuộn (không phải user).
+      programmaticRef.current = true;
+      el.scrollTo({ top: el.scrollHeight, behavior });
+      // Xoá cờ ở frame kế — sau khi event scroll lập trình đã bắn xong.
+      requestAnimationFrame(() => {
+        programmaticRef.current = false;
+      });
+    }
     stickRef.current = true;
     setShowScrollBtn(false);
   }
 
   // Theo dõi vị trí cuộn: gần đáy thì vẫn dính (auto-scroll), xa đáy thì hiện nút.
   function onScroll() {
+    // Bỏ qua echo từ scroll lập trình của chính mình. Nếu không, khi streaming
+    // (scrollHeight đang lớn dần) dist đo được nhất thời >200 → setShowScrollBtn
+    // dao động với effect [messages] → "Maximum update depth exceeded".
+    if (programmaticRef.current) return;
     const el = scrollRef.current;
     if (!el) return;
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
