@@ -6,6 +6,7 @@ import {
   Network,
   Plug,
   Settings,
+  Gauge,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { gravatarUrl } from "@/lib/gravatar";
@@ -19,6 +20,7 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/chat", label: "Chat", Icon: MessageSquare },
   { href: "/agents", label: "Agents", Icon: Bot },
+  { href: "/eval", label: "Reliability", Icon: Gauge },
   { href: "/graph", label: "Graph", Icon: Network },
   { href: "/connectors", label: "Connectors", Icon: Plug },
   { href: "/settings", label: "Settings", Icon: Settings },

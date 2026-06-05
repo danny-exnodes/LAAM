@@ -14,7 +14,8 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "eval": "vitest run -c vitest.eval.config.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "1.11.2",

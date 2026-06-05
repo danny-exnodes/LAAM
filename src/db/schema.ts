@@ -254,3 +254,36 @@ export type User = typeof users.$inferSelect;
 export type Role = (typeof roleEnum.enumValues)[number];
 export type AgentSession = typeof agentSessions.$inferSelect;
 export type Project = typeof projects.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Eval (reliability tracking). One row per `npm run eval` run. Populated by
+// scripts/eval/persist-run.ts; surfaced by /eval. `dims` is the per-dimension
+// aggregate (cheap trend reads); `scores` is the full per-scenario detail.
+// ---------------------------------------------------------------------------
+
+// Mirror of the eval's ScenarioScore (scripts/eval/types.ts). Declared here so
+// the app never imports from scripts/eval — the JSONB shape IS the contract.
+export type EvalScenarioScore = {
+  id: string;
+  capability: string;
+  runs: number;
+  perDim: Record<string, { passed: number; total: number }>;
+  fails: string[];
+  avgMs: number;
+};
+export type EvalDims = Record<string, { passed: number; total: number }>;
+
+export const evalRuns = pgTable("eval_run", {
+  id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+  ranAt: timestamp("ranAt", { mode: "date" }).notNull().defaultNow(),
+  model: text("model").notNull(),
+  k: integer("k").notNull().default(1),
+  label: text("label"),
+  gitSha: text("gitSha"),
+  totalScenarios: integer("totalScenarios").notNull().default(0),
+  totalRuns: integer("totalRuns").notNull().default(0),
+  dims: jsonb("dims").$type<EvalDims>().notNull(),
+  scores: jsonb("scores").$type<EvalScenarioScore[]>().notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+});
+export type EvalRun = typeof evalRuns.$inferSelect;
