@@ -65,5 +65,11 @@
 - Thêm: `condition` (predicate + cạnh label true/false), `foreach` (body lồng, item/index trong vars, parentStepId child), budget (maxSteps+maxForeachItems cap), `predicate.ts` (comparator+all/any, arg-sink, exists/not_exists tolerate-missing), validate v2 (`assertRunnable`), run.ts (input populated, finalize-on-throw). **A0 contracts frozen + intact.**
 - Decisions (documented): condition no-reconverge (tree); token-precise budget hoãn (step/item cap đủ chặn runaway).
 
-## ▶ Next autonomous: G2 SCHEDULER (B)
-workflow_schedule table + DB-claim atomic (claim+advance 1 tx — PIN-D1) + tick endpoint (localhost) + missed (skip/fire-once) + blast-radius gate (extend policy.ts; v1 BLAST_LOW-only) + observability tối thiểu (runs list + needs-attention). ⚠️ Windows Task poke = host step (build code+doc, KHÔNG cài). Rồi G3 templates · G4 editor · G5 mgmt page.
+## ✅ G2 SCHEDULER (B) — DONE + MERGED (`6f4e760`)
+- opus impl (6 task TDD) + opus adversarial review (bắt 1 BLOCKING: `tickClaim` `cronNext`-throw → wedge + sibling-starvation) → opus fix (try/catch auto-disable, no starvation, có test chứng minh) → merge clean. **tsc 0 · 136 workflow · 746 full repo.**
+- Added: `workflow_schedule` + `workflow_run.scheduleId/scheduledFor` + unique slot (migration **0006**); `cron.ts` (hand-rolled 5-field, NO dep); `schedule.ts` (`tickClaim` atomic same-tx PIN-D1 + `tickExecute` tách); `runtime.ts` (shared `buildRunNode` + blast gate: LOW=`demo_create_task`, HIGH-write→fail-closed manual+scheduled); `tick-auth` (localhost/secret timingSafeEqual, require-secret-when-set); routes `tick`/`schedules`/`runs`.
+- ⚠️ **Host steps (user):** `db:migrate` (0006), set `WORKFLOW_TICK_SECRET`, cài Windows Task poke (→ `POST /api/workflows/tick`). KHÔNG do tôi.
+- Decisions: cron tz=server-local (DST deferred); missedCount observational (harmless); bad-cron schedule auto-disable + surface.
+
+## ▶ Next: G3 TEMPLATES (C)
+Static template catalog (`src/lib/workflow/templates.ts`, ≥2 moat-leaning đọc LAAM agent_sessions/stats qua SP-1 internal tools) + instantiate/clone (deep-copy graph → user workflow, credential-free) + list endpoint. Rồi G4 editor (React Flow) · G5 mgmt page. (G4/G5 = UI: build + RTL + tsc, KHÔNG live-verify.)
