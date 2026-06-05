@@ -19,8 +19,10 @@ import {
   Tooltip,
   Legend,
   CartesianGrid,
+  LabelList,
 } from "recharts";
 import { useChartTheme } from "@/hooks/useChartTheme";
+import { looseJsonParse } from "@/lib/chat/loose-json";
 
 // Accent-led palette — same leading colors as v1 chartPalette().
 const PALETTE = [
@@ -53,12 +55,7 @@ const LINE_TYPES = new Set(["line", "radar"]);
 
 // Pure: parse v1 chart JSON → recharts-ready model (or an error).
 export function chartToRecharts(raw: string): ChartModel {
-  let cfg: unknown;
-  try {
-    cfg = JSON.parse(raw);
-  } catch {
-    return { error: "invalid" };
-  }
+  const cfg = looseJsonParse(raw); // S5: tolerate trailing commas / smart quotes / fences
   if (!cfg || typeof cfg !== "object") return { error: "invalid" };
   const c = cfg as {
     type?: string;
@@ -106,14 +103,20 @@ export function ChartBlock({ raw }: { raw: string }) {
   const axisTick = { fontSize: 11, fill: theme.axis };
   const model = chartToRecharts(raw);
   if ("error" in model) {
-    return <div className="chat-block-error">Biểu đồ không hợp lệ.</div>;
+    // S5: don't lose the model's content — show it under the error for inspection.
+    return (
+      <details className="chat-block-error">
+        <summary>Biểu đồ không hợp lệ.</summary>
+        <pre style={{ whiteSpace: "pre-wrap", fontSize: 11, marginTop: 6 }}>{raw}</pre>
+      </details>
+    );
   }
   const { kind, title, rows, series, sliceColors } = model;
 
   return (
     <div className="chat-chart">
       {title ? <h4>{title}</h4> : null}
-      <div style={{ position: "relative", width: "100%", height: 260 }}>
+      <div style={{ position: "relative", width: "100%", height: 300 }}>
         <ResponsiveContainer>
           {kind === "pie" ? (
             <PieChart>
@@ -126,25 +129,30 @@ export function ChartBlock({ raw }: { raw: string }) {
               </Pie>
             </PieChart>
           ) : kind === "line" ? (
-            <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
+            <LineChart data={rows} margin={{ top: 24, right: 12, bottom: 0, left: -12 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
               <XAxis dataKey="name" tick={axisTick} />
               <YAxis tick={axisTick} width={44} />
               <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {series.map((s) => (
-                <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2} dot={false} />
+                <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2.5} dot={{ r: 3, fill: s.color }}>
+                  {series.length === 1 && <LabelList dataKey={s.key} position="top" fontSize={11} fill={theme.axis} />}
+                </Line>
               ))}
             </LineChart>
           ) : (
-            <BarChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
+            <BarChart data={rows} margin={{ top: 24, right: 12, bottom: 0, left: -12 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
               <XAxis dataKey="name" tick={axisTick} />
               <YAxis tick={axisTick} width={44} />
               <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {series.map((s) => (
-                <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} />
+                <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={64}>
+                  {/* S4: value labels so bars are readable without reading the axis (single-series only, to avoid clutter) */}
+                  {series.length === 1 && <LabelList dataKey={s.key} position="top" fontSize={11} fill={theme.axis} />}
+                </Bar>
               ))}
             </BarChart>
           )}

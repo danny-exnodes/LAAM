@@ -9,6 +9,18 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Chat: nâng cấp sau E2E (2026-06-05, đợt 2)
+- **Dọn dữ liệu cũ (S1)**: `POST /api/conversations {action:"backfill-titles"}` re-derive tiêu đề conv bị lẫn byte file (nút "Dọn tiêu đề" hiện khi có); badge **"trùng"** cảnh báo conv trùng tên (không tự xoá). Helper thuần `src/lib/chat/title.ts` (`retitleFromMessage`).
+- **Proactive card (S2)**: dismiss **bền qua localStorage** (TTL 24h) + mỗi cảnh báo **click mở `/agents/[id]`** (thêm `key`+`sessionId` vào frame `proactive`).
+- **Tool status (S3)**: chỉ báo "đang xử lý…" có hoạt ảnh khi tool-loop chạy. *(Chip realtime per-tool hoãn — cần refactor pipeline stream, rủi ro cao trên prod chưa có test tích hợp POST.)*
+- **Biểu đồ dễ đọc (S4)**: nhãn giá trị trên cột/đường (single-series), cao hơn (300px), cột bo góc.
+- **Parse khoan dung (S5)**: `looseJsonParse` (bỏ dấu phẩy thừa / smart-quote / fence) cho ```chart/```map; lỗi → hiện raw; map có nút **"Thử lại"**.
+- **Nearby (S6)**: prompt hướng dẫn `near` vs vị-trí-trình-duyệt; nút "Thử lại" khi từ chối định vị.
+- **Token total ở header (S7)**: tổng token (miễn phí local) cho conv hiện hành.
+- **Lang a11y (S8)**: aria-label bộ chọn ngôn ngữ i18n (native `<select>` vốn đã accessible bàn phím).
+- **Smart rename (S9)**: hành động ✨ mỗi conv → `POST {action:"retitle",id}` đặt lại tên theo tin nhắn đầu.
+- Verify: **toàn bộ test xanh**, `tsc` sạch, không đổi schema (pin/dismiss = localStorage).
+
 ### Đã sửa — Chat QA E2E (2026-06-05): lỗi giao diện & chức năng
 - **U1** Composer lệch 144px + tràn dưới sidebar → thêm `relative` cho `<section>` (composer `absolute` neo đúng cột chat).
 - **F1** Slash command `/moi /xoa /xuat /caidat` "chết" → nối handler từ ChatClient (trước chỉ `/dung` chạy). `/xuat` mở menu export (ChatExport thành controlled).

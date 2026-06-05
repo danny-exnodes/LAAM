@@ -8,7 +8,7 @@
 // so this component does not re-filter and hide content-only matches.
 
 import { useEffect, useState } from "react";
-import { Pencil, Trash2, Pin, CheckSquare, Square } from "lucide-react";
+import { Pencil, Trash2, Pin, CheckSquare, Square, Sparkles, Eraser } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { Conv } from "./types";
@@ -35,6 +35,8 @@ export function ConversationSidebar({
   onDelete,
   onBulkDelete,
   onRename,
+  onCleanup,
+  onSmartRename,
 }: {
   convs: Conv[];
   loading?: boolean;
@@ -47,6 +49,8 @@ export function ConversationSidebar({
   onDelete(id: string): void;
   onBulkDelete?(ids: string[]): void;
   onRename(id: string, title: string): void;
+  onCleanup?(): void; // S1: backfill polluted titles
+  onSmartRename?(id: string): void; // S9: re-derive one conv's title from its content
 }) {
   const t = useT(chat);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -63,6 +67,16 @@ export function ConversationSidebar({
   // Title filter is client-side unless the parent already content-filtered.
   const shown = q && !serverFiltered ? convs.filter((c) => titleOf(c).toLowerCase().includes(q)) : convs;
   const groups = groupConversations(shown, pinned, Date.now());
+
+  // S1: offer cleanup only when some titles leaked attachment bytes ("--- Tệp:…").
+  const hasPolluted = convs.some((c) => (c.title || "").startsWith("--- "));
+  // S1: flag duplicate titles (warn, non-destructive — user removes via multi-select).
+  const titleCounts = new Map<string, number>();
+  for (const c of convs) {
+    const k = titleOf(c).toLowerCase();
+    titleCounts.set(k, (titleCounts.get(k) || 0) + 1);
+  }
+  const isDup = (c: Conv) => (titleCounts.get(titleOf(c).toLowerCase()) || 0) > 1;
 
   function beginRename(c: Conv) {
     setRenaming(c.id);
@@ -174,8 +188,30 @@ export function ConversationSidebar({
             >
               {titleOf(c)}
             </span>
+            {isDup(c) && !selectMode && (
+              <span
+                title={t("chat.dupTitle")}
+                className="shrink-0 rounded bg-neutral-200 px-1 text-[10px] text-neutral-500 dark:bg-neutral-700 dark:text-neutral-400"
+              >
+                {t("chat.dupBadge")}
+              </span>
+            )}
             {!selectMode && (
               <div className="flex flex-shrink-0 items-center gap-0.5 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
+                {onSmartRename && (
+                  <button
+                    type="button"
+                    aria-label={t("chat.smartRenameAria")}
+                    title={t("chat.smartRenameAria")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSmartRename(c.id);
+                    }}
+                    className="grid h-7 w-7 place-items-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700 dark:hover:bg-neutral-700"
+                  >
+                    <Sparkles size={13} aria-hidden />
+                  </button>
+                )}
                 <button
                   type="button"
                   aria-label={isPinned ? t("chat.unpinAria") : t("chat.pinAria")}
@@ -230,6 +266,17 @@ export function ConversationSidebar({
           {t("chat.histTitle")}
         </span>
         <div className="flex items-center gap-1.5">
+          {hasPolluted && onCleanup && (
+            <button
+              type="button"
+              aria-label={t("chat.cleanupTitles")}
+              title={t("chat.cleanupTitles")}
+              onClick={onCleanup}
+              className="grid h-7 w-7 place-items-center rounded-lg border border-amber-300 text-amber-600 hover:bg-amber-50 dark:border-amber-500/40 dark:text-amber-400 dark:hover:bg-amber-950/40"
+            >
+              <Eraser size={13} aria-hidden />
+            </button>
+          )}
           <button
             type="button"
             aria-label={selectMode ? t("chat.selectDone") : t("chat.selectMode")}

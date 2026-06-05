@@ -15,6 +15,7 @@ import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { ChatExport } from "./ChatExport";
 import { ProactiveCard, type ProactiveAlertView } from "./ProactiveCard";
+import { loadDismissed, dismissAlerts } from "./proactiveDismiss";
 import {
   DEFAULT_SETTINGS,
   type Attachment,
@@ -200,6 +201,28 @@ export function ChatClient() {
     void loadConvs();
   }
 
+  // S1: re-derive every conversation whose title leaked attachment bytes.
+  async function cleanupTitles() {
+    await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "backfill-titles" }),
+    }).catch(() => {});
+    void loadConvs();
+  }
+
+  // S9: re-derive ONE conversation's title from its first user message.
+  async function smartRename(id: string) {
+    const r = await fetch("/api/conversations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "retitle", id }),
+    }).catch(() => null);
+    const d = r && r.ok ? await r.json().catch(() => null) : null;
+    if (d?.title) setConvs((cs) => cs.map((c) => (c.id === id ? { ...c, title: d.title } : c)));
+    else void loadConvs();
+  }
+
   async function renameConv(id: string, title: string) {
     await fetch(`/api/conversations/${id}`, {
       method: "PATCH",
@@ -288,7 +311,11 @@ export function ChatClient() {
               else { cur.ok = f.ok; cur.done = true; }
               trace.set(f.c, cur);
             } else if (f.t === "cite") cites = f.names;
-            else if (f.t === "proactive") setProactive(f.alerts); // FEAT-2: surface as a banner card
+            else if (f.t === "proactive") {
+              // FEAT-2 + S2: surface as a banner, minus alerts the user dismissed (24h).
+              const dismissed = loadDismissed(Date.now());
+              setProactive(f.alerts.filter((a) => !dismissed.has(a.key)));
+            }
             else if (f.t === "tokens") tokens = { tokensIn: f.i, tokensOut: f.o };
             else if (f.t === "pending_write")
               pendingWrite = {
@@ -476,6 +503,8 @@ export function ChatClient() {
   // full list. serverFiltered tells the sidebar not to re-filter by title.
   const searching = query.trim().length > 0;
   const sidebarConvs = searching ? searchResults : convs;
+  // S7: running token total for the active conversation (local model → free).
+  const totalTokens = messages.reduce((s, m) => s + (m.tokensIn ?? 0) + (m.tokensOut ?? 0), 0);
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-h,56px))]">
@@ -493,6 +522,8 @@ export function ChatClient() {
           onDelete={deleteConv}
           onBulkDelete={bulkDelete}
           onRename={renameConv}
+          onCleanup={cleanupTitles}
+          onSmartRename={smartRename}
         />
       </aside>
 
@@ -524,6 +555,8 @@ export function ChatClient() {
               onDelete={deleteConv}
               onBulkDelete={bulkDelete}
               onRename={renameConv}
+              onCleanup={cleanupTitles}
+              onSmartRename={smartRename}
             />
           </div>
         </div>
@@ -553,12 +586,26 @@ export function ChatClient() {
               {activeTitle}
             </span>
           </div>
+          {totalTokens > 0 && (
+            <span
+              className="hidden shrink-0 text-xs text-neutral-400 sm:inline"
+              title={t("chat.expTotalTokens", { n: totalTokens })}
+            >
+              {t("chat.expTotalTokens", { n: totalTokens })}
+            </span>
+          )}
           <ChatExport messages={messages} title={activeTitle} open={exportOpen} onOpenChange={setExportOpen} />
         </div>
 
         {proactive.length > 0 && (
           <div className="px-3 pt-2 sm:px-4">
-            <ProactiveCard alerts={proactive} onDismiss={() => setProactive([])} />
+            <ProactiveCard
+              alerts={proactive}
+              onDismiss={() => {
+                dismissAlerts(proactive.map((a) => a.key), Date.now()); // S2: remember dismissal (24h)
+                setProactive([]);
+              }}
+            />
           </div>
         )}
 

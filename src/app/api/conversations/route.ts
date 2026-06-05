@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { eq, desc, and, or, ilike, exists } from "drizzle-orm";
+import { eq, desc, asc, and, or, ilike, exists } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages } from "@/db/schema";
+import { retitleFromMessage } from "@/lib/chat/title";
 
 // GET /api/conversations — the current user's conversations (newest first).
 // FEAT-1: ?q= filters by title OR message content (so a search finds a
@@ -50,4 +51,67 @@ export async function GET(req: Request) {
       updatedAt: r.updatedAt ? r.updatedAt.toISOString() : null,
     })),
   });
+}
+
+// First user message of a conversation (for re-deriving its title).
+async function firstUserMessage(convId: string): Promise<string | null> {
+  const rows = await db
+    .select({ content: chatMessages.content })
+    .from(chatMessages)
+    .where(and(eq(chatMessages.conversationId, convId), eq(chatMessages.role, "user")))
+    .orderBy(asc(chatMessages.createdAt))
+    .limit(1);
+  return rows[0]?.content ?? null;
+}
+
+// POST /api/conversations — title maintenance (owner-scoped, non-destructive):
+//   { action: "backfill-titles" } — S1: re-derive every conversation whose title
+//     leaked attachment bytes ("--- Tệp:|URL:") from its stored first user message.
+//   { action: "retitle", id }     — S9: re-derive ONE conversation's title.
+export async function POST(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const userId = session.user.id;
+  const body = (await req.json().catch(() => null)) as { action?: string; id?: string } | null;
+
+  if (body?.action === "retitle" && typeof body.id === "string") {
+    const rows = await db
+      .select()
+      .from(chatConversations)
+      .where(eq(chatConversations.id, body.id))
+      .limit(1);
+    const conv = rows[0];
+    if (!conv || conv.userId !== userId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+    const msg = await firstUserMessage(body.id);
+    const next = msg ? retitleFromMessage(msg) : null;
+    if (next && next !== conv.title) {
+      await db.update(chatConversations).set({ title: next }).where(eq(chatConversations.id, body.id));
+    }
+    return NextResponse.json({ title: next ?? conv.title });
+  }
+
+  if (body?.action === "backfill-titles") {
+    const convs = await db
+      .select({ id: chatConversations.id, title: chatConversations.title })
+      .from(chatConversations)
+      .where(eq(chatConversations.userId, userId));
+    let retitled = 0;
+    for (const c of convs) {
+      if (!c.title || !c.title.startsWith("--- ")) continue; // only fix polluted titles
+      const msg = await firstUserMessage(c.id);
+      if (!msg) continue;
+      const next = retitleFromMessage(msg);
+      if (next && next !== c.title) {
+        await db.update(chatConversations).set({ title: next }).where(eq(chatConversations.id, c.id));
+        retitled++;
+      }
+    }
+    return NextResponse.json({ scanned: convs.length, retitled });
+  }
+
+  return NextResponse.json({ error: "unknown action" }, { status: 400 });
 }

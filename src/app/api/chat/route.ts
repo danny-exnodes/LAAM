@@ -12,6 +12,7 @@ import { buildPreview } from "@/lib/agent/safety/preview";
 import { runResume, buildResumeRequest } from "@/lib/agent/safety/resume";
 import { recordWrite, isNonceUsed } from "@/lib/agent/safety/audit";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
+import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations } from "@/lib/chat/trace";
 import { extractToolTurns } from "@/lib/agent/persist";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
@@ -61,18 +62,6 @@ type ChatBody = {
   presencePenalty?: number;
   system?: string;
 };
-
-// F4 — a new conversation's title. The persisted `message` prepends attachment
-// blocks (so the model sees them), which made a PDF's raw bytes become the title.
-// Prefer the FE's raw user text (titleHint, Rule 13: don't title from a blob);
-// with no hint, fall back to the first attachment's NAME — never its bytes.
-export function deriveConvTitle(message: string, titleHint?: string): string {
-  const hint = (titleHint ?? "").trim();
-  if (hint) return hint.slice(0, 60);
-  const m = message.match(/^--- (?:Tệp|URL): (.+?) ---/);
-  if (m) return m[1].slice(0, 60);
-  return message.slice(0, 60);
-}
 // Build the Ollama /api/chat request payload from the request body, the
 // conversation history, and the server defaults. Pure — no I/O — so the
 // option mapping (temperature/top_p, model + system overrides, defaults) is
@@ -309,6 +298,8 @@ export async function POST(req: Request) {
             t: "proactive",
             alerts: proactiveSurfaced.map((a) => ({
               type: a.type,
+              key: a.key,
+              sessionId: a.sessionId,
               project: a.project ?? a.sessionId,
               minutesIdle: a.minutesIdle,
               costUsd: a.costUsd,

@@ -19,7 +19,8 @@ const RENDER_GUIDE =
   '{"type":"bar|line|pie","title":"…","data":{"labels":[…],"datasets":[{"label":"…","data":[…]}]}}. ' +
   "Để chỉ đường hoặc hiển thị địa điểm, chèn một khối ```map chứa JSON dùng TÊN địa điểm: " +
   'chỉ đường → {"directions":{"from":"điểm đầu","to":"điểm cuối"}}; ' +
-  'tìm quanh một nơi → {"nearby":{"query":"loại địa điểm","near":"khu vực"}}; ' +
+  'tìm quanh một khu vực → {"nearby":{"query":"loại địa điểm","near":"khu vực"}} ' +
+  '(bỏ "near" nếu người dùng nói "quanh đây/gần tôi" để dùng vị trí trình duyệt); ' +
   'một địa điểm → {"place":"tên địa điểm"}. ' +
   "Hệ thống tự tra toạ độ và vẽ tuyến — đừng tự bịa toạ độ hay số liệu; " +
   "chỉ chèn khối khi câu hỏi thực sự cần biểu đồ hoặc bản đồ.";

@@ -6,7 +6,8 @@
 
 import { useRouter } from "next/navigation";
 import { Languages } from "lucide-react";
-import { useLang } from "@/i18n/provider";
+import { useLang, useT } from "@/i18n/provider";
+import { common } from "@/i18n/dictionaries/common";
 import type { Lang } from "@/i18n/types";
 
 // Abbreviated codes keep the header compact (icon + short text).
@@ -18,6 +19,7 @@ const LANGS: { code: Lang; label: string }[] = [
 
 export function LangSelect() {
   const { lang, setLang } = useLang();
+  const t = useT(common);
   const router = useRouter();
   return (
     <div className="relative inline-flex items-center">
@@ -27,7 +29,7 @@ export function LangSelect() {
         aria-hidden
       />
       <select
-        aria-label="Ngôn ngữ"
+        aria-label={t("lang.label")}
         value={lang}
         onChange={(e) => {
           setLang(e.target.value as Lang);

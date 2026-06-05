@@ -7,7 +7,7 @@ import { INTERNAL_TOOLS, modelToolSchemas } from "@/lib/agent/registry";
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => null) }));
 vi.mock("@/db", () => ({ db: {} }));
 
-import { buildOllamaPayload, isConfirmBody, deriveConvTitle } from "./route";
+import { buildOllamaPayload, isConfirmBody } from "./route";
 
 const defaults = { model: "gemma4:e4b", system: "DEFAULT SYS" };
 const history = [
@@ -86,32 +86,6 @@ describe("harness wiring", () => {
     expect(names).toContain("laam_list_agents");
     expect(names).toContain("laam_find_stuck");
     expect(names.every((n) => typeof n === "string")).toBe(true);
-  });
-});
-
-describe("deriveConvTitle (F4 — title not polluted by attachment bytes)", () => {
-  const PDF_BYTES =
-    "--- Tệp: [C4K]Point2PointSolution.pdf ---\n%PDF-1.3\n%âãÏÓ binary…\n\nTóm tắt file này";
-
-  test("prefers the raw user text (titleHint) over the attachment-prefixed message", () => {
-    expect(deriveConvTitle(PDF_BYTES, "Tóm tắt file này")).toBe("Tóm tắt file này");
-  });
-
-  test("falls back to the attachment filename (never the raw bytes) when no hint", () => {
-    expect(deriveConvTitle(PDF_BYTES)).toBe("[C4K]Point2PointSolution.pdf");
-  });
-
-  test("falls back to a URL attachment name", () => {
-    expect(deriveConvTitle("--- URL: Example Domain ---\n<html>…")).toBe("Example Domain");
-  });
-
-  test("uses the message head for a plain (no-attachment) message", () => {
-    expect(deriveConvTitle("Giải thích closure trong JS")).toBe("Giải thích closure trong JS");
-  });
-
-  test("clamps to 60 characters", () => {
-    expect(deriveConvTitle("x".repeat(100)).length).toBe(60);
-    expect(deriveConvTitle("ignored", "y".repeat(100)).length).toBe(60);
   });
 });
 

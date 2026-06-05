@@ -5,12 +5,15 @@
 // (Rule 13) and arrives via the {t:"proactive"} stream frame. Purely
 // presentational: data + onDismiss come from ChatClient.
 
+import Link from "next/link";
 import { AlertTriangle, X } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 
 export type ProactiveAlertView = {
   type: "stuck" | "cost";
+  key: string;
+  sessionId: string;
   project: string;
   minutesIdle?: number;
   costUsd?: number;
@@ -37,9 +40,12 @@ export function ProactiveCard({
         <ul className="mt-1 space-y-0.5">
           {alerts.map((a, i) => (
             <li key={i} className="truncate">
-              {a.type === "stuck"
-                ? t("chat.proactiveStuck", { project: a.project, n: a.minutesIdle ?? 0 })
-                : t("chat.proactiveCost", { project: a.project, c: (a.costUsd ?? 0).toFixed(2) })}
+              {/* S2: deep-link to the agent that triggered the alert */}
+              <Link href={`/agents/${a.sessionId}`} className="hover:underline">
+                {a.type === "stuck"
+                  ? t("chat.proactiveStuck", { project: a.project, n: a.minutesIdle ?? 0 })
+                  : t("chat.proactiveCost", { project: a.project, c: (a.costUsd ?? 0).toFixed(2) })}
+              </Link>
             </li>
           ))}
         </ul>

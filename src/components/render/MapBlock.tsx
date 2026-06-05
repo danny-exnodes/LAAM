@@ -12,6 +12,7 @@ import {
   type GeoDeps,
   type MapSpec,
 } from "@/lib/chat/geo-resolve";
+import { looseJsonParse } from "@/lib/chat/loose-json";
 
 const HANOI: [number, number] = [21.0278, 105.8342];
 
@@ -61,12 +62,7 @@ export function buildGoogleMapsUrl(cfg: {
 
 // Pure: parse + validate v1 map JSON into a render-ready config (or an error).
 export function parseMapConfig(raw: string): MapConfig | { error: string } {
-  let cfg: unknown;
-  try {
-    cfg = JSON.parse(raw);
-  } catch {
-    return { error: "invalid" };
-  }
+  const cfg = looseJsonParse(raw); // S5: tolerate trailing commas / smart quotes / fences
   if (!cfg || typeof cfg !== "object") return { error: "invalid" };
   const c = cfg as {
     center?: unknown;
@@ -166,16 +162,12 @@ const browserGeoDeps: GeoDeps = {
 };
 
 function safeParseSpec(raw: string): MapSpec | null {
-  try {
-    const o = JSON.parse(raw);
-    return o && typeof o === "object" ? (o as MapSpec) : null;
-  } catch {
-    return null;
-  }
+  const o = looseJsonParse(raw);
+  return o && typeof o === "object" ? (o as MapSpec) : null;
 }
 
 // Render-only: takes an already-resolved config and draws the map + chrome.
-function MapView({ cfg }: { cfg: MapConfig }) {
+function MapView({ cfg, onRetry }: { cfg: MapConfig; onRetry?: () => void }) {
   return (
     <div className="chat-map-wrap">
       <LeafletMap config={cfg} />
@@ -184,7 +176,17 @@ function MapView({ cfg }: { cfg: MapConfig }) {
           Mở Google Maps
         </a>
       ) : null}
-      {cfg.locationDenied ? <div className="chat-map-note">Không lấy được vị trí của bạn.</div> : null}
+      {cfg.locationDenied ? (
+        <div className="chat-map-note">
+          Không lấy được vị trí của bạn.{" "}
+          {/* S6: retry after the user grants location permission */}
+          {onRetry ? (
+            <button type="button" onClick={onRetry} className="underline">
+              Thử lại
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {cfg.routeStraight ? <div className="chat-map-note">Tuyến đường gần đúng (đường thẳng).</div> : null}
       {cfg.nearbyEmpty ? <div className="chat-map-note">Không tìm thấy địa điểm nào quanh đây.</div> : null}
       {cfg.places && cfg.places.length ? (
@@ -212,6 +214,7 @@ export function MapBlock({ raw }: { raw: string }) {
   const requiresResolve = !!spec && needsResolution(spec);
   const [resolvedRaw, setResolvedRaw] = useState<string | null>(null);
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
+  const [retry, setRetry] = useState(0); // S5: re-run geo-resolve on demand (transient failures)
 
   useEffect(() => {
     if (!requiresResolve || !spec) return;
@@ -234,11 +237,18 @@ export function MapBlock({ raw }: { raw: string }) {
     return () => {
       cancelled = true;
     };
-  }, [raw, requiresResolve, spec]);
+  }, [raw, requiresResolve, spec, retry]);
 
   if (requiresResolve) {
     if (phase === "error") {
-      return <div className="chat-block-error">Không dựng được bản đồ.</div>;
+      return (
+        <div className="chat-block-error">
+          Không dựng được bản đồ.{" "}
+          <button type="button" onClick={() => setRetry((r) => r + 1)} className="underline">
+            Thử lại
+          </button>
+        </div>
+      );
     }
     if (phase === "loading" || !resolvedRaw) {
       return (
@@ -249,7 +259,7 @@ export function MapBlock({ raw }: { raw: string }) {
     }
     const cfg = parseMapConfig(resolvedRaw);
     if ("error" in cfg) return <div className="chat-block-error">Bản đồ không hợp lệ.</div>;
-    return <MapView cfg={cfg} />;
+    return <MapView cfg={cfg} onRetry={() => setRetry((r) => r + 1)} />;
   }
 
   const cfg = parseMapConfig(raw);

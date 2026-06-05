@@ -82,6 +82,11 @@ export const chat: Dict = {
   'chat.bulkDelete': { vi: 'Xoá đã chọn', en: 'Delete selected', zh: '删除所选' },
   'chat.bulkDeleteConfirm': { vi: 'Xoá {n} cuộc trò chuyện đã chọn?', en: 'Delete {n} selected conversations?', zh: '删除选中的 {n} 段对话？' },
   'chat.selectRowAria': { vi: 'Chọn cuộc trò chuyện', en: 'Select conversation', zh: '选择对话' },
+  'chat.cleanupTitles': { vi: 'Dọn tiêu đề cũ', en: 'Clean up old titles', zh: '清理旧标题' },
+  'chat.cleanupDone': { vi: 'Đã dọn {n} tiêu đề', en: 'Cleaned {n} title(s)', zh: '已清理 {n} 个标题' },
+  'chat.dupBadge': { vi: 'trùng', en: 'dup', zh: '重复' },
+  'chat.dupTitle': { vi: 'Tiêu đề trùng lặp — dùng "Chọn nhiều" để xoá bớt', en: 'Duplicate title — use multi-select to remove extras', zh: '标题重复 — 可用多选删除' },
+  'chat.smartRenameAria': { vi: 'Đặt lại tên theo nội dung', en: 'Rename from content', zh: '按内容重命名' },
 
   // --- per-message actions ---
   'chat.actCopy': { vi: 'Chép', en: 'Copy', zh: '复制' },
