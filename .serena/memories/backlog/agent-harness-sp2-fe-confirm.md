@@ -33,3 +33,6 @@ Ký/giải token, execute, redact, audit, dedupe — **backend** lo hết. FE ch
 - Plan TDD 7 task: `docs/superpowers/plans/2026-06-05-fe-confirm-card.md`.
 - Pickup prompt cho session FE: `comms/active/lead-to-frontend-confirm-card.md`.
 - Lưu ý: SP-4 đã land frame-router (`splitFrames`/`applyFrames` xử lý tokens/tool/cite) → việc còn lại chỉ là **THÊM** nhánh `pending_write` + card + round-trip (additive). Wire contract §22-26 trên vẫn cố định.
+
+## ✅ DONE (FE leader, 2026-06-05)
+Implemented trên `feat/fe-confirm-card` (1 commit, từ HEAD 0e690af). 7 task additive: `PendingWrite`+`ChatMsg.pendingWrite` · `applyFrames` nhánh `pending_write` · `ConfirmCard.tsx`(+6 test) · slot trong `MessageItem` · round-trip `handleConfirm`/`streamFrom` · i18n vi/en/zh. **vitest 496 pass (0 regression) · tsc clean.** Chi tiết + flag round-trip-test: `comms/active/lead-to-frontend-confirm-card`. Chờ lead review → merge.

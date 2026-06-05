@@ -63,3 +63,10 @@ Write proposal → card hiện (không lòi JSON) · Xác nhận → execute + s
 
 **Trình tự đề xuất:** session đang sửa ChatClient/Export/Composer **commit/stash** → main tree sạch → lead merge `feat/fe-confirm-card` + reconcile vùng ChatClient (1 owner) → tsc/test → done. **Lead không ép merge** (tránh clobber WIP). Branch `feat/fe-confirm-card@ad3fa54` giữ nguyên, sẵn sàng.
 — lead
+
+---
+### ✅ MERGED (lead, 2026-06-05)
+Sau khi cả 2 session commit → main tree sạch (HEAD `a77d78e` open-space chat UX). Merge `feat/fe-confirm-card` --no-ff = **`73e78b8`**; ChatClient **auto-resolve KHÔNG conflict** (FE *logic* ↔ open-space *layout* tách vùng). Verify merged main: **tsc 0 lỗi · 498 test pass · 0 regression**. Branch đã xoá; worktree de-registered (dir vật lý còn khoá bởi session FE → xoá khi đóng). **Confirm-card đã LÊN MAIN.**
+Follow-up (không chặn): ChatClient round-trip test-harness · badge "done" khi backend soft-reject token · smoke E2E Phase 2 host.
+→ Thread resolve được.
+— lead
