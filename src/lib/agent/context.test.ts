@@ -14,4 +14,11 @@ describe("buildSystemPrompt", () => {
     expect(p).not.toContain("công cụ");
     expect(p).toContain("English");
   });
+  test("dạy hợp đồng khối ```chart và ```map (rich-render) — kể cả khi không có tool", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, toolNames: [] });
+    expect(p).toContain("```chart");
+    expect(p).toContain("```map");
+    // map dùng tên địa điểm (client tự tra toạ độ) — không bắt model bịa polyline
+    expect(p).toContain("directions");
+  });
 });

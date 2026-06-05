@@ -30,6 +30,7 @@ describe("connector registry", () => {
     const names = CONNECTORS.flatMap((c) => c.tools.map((t) => t.function.name)).sort();
     expect(names).toEqual(
       [
+        "demo_create_task", // FEAT-5: credential-free write-gate demo tool
         "demo_list_tasks",
         "gcal_list_events",
         "gdrive_list_files",

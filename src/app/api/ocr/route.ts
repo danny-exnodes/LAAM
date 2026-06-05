@@ -42,6 +42,17 @@ function runTesseract(tmp: string, lang: string): Promise<string> {
   });
 }
 
+// GET /api/ocr — report whether OCR is usable on this host. The FE calls this
+// once so it can degrade gracefully (disable the image-attach affordance, warn
+// up front) instead of letting an image upload fail with "thiếu tesseract".
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  }
+  return Response.json({ available: await tesseractAvailable() });
+}
+
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) {

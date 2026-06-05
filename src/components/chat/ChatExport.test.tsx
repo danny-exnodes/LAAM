@@ -6,10 +6,12 @@ import { I18nProvider } from "@/i18n/provider";
 // without touching Blob / anchor download machinery (mirrors DashboardExport.test).
 const downloadMarkdown = vi.fn();
 const downloadJson = vi.fn();
+const downloadPdf = vi.fn();
 const toMarkdown = vi.fn((..._a: unknown[]) => "MD-OUTPUT");
 vi.mock("@/lib/export", () => ({
   downloadMarkdown: (...a: unknown[]) => downloadMarkdown(...a),
   downloadJson: (...a: unknown[]) => downloadJson(...a),
+  downloadPdf: (...a: unknown[]) => downloadPdf(...a),
   toMarkdown: (...a: unknown[]) => toMarkdown(...a),
 }));
 
@@ -33,6 +35,7 @@ function wrap() {
 beforeEach(() => {
   downloadMarkdown.mockClear();
   downloadJson.mockClear();
+  downloadPdf.mockClear();
   toMarkdown.mockClear();
 });
 
@@ -58,4 +61,38 @@ test("JSON item (via dropdown) downloads the messages array under <title>.json",
   fireEvent.click(screen.getByText("Tải .json"));
   expect(downloadJson).toHaveBeenCalledTimes(1);
   expect(downloadJson).toHaveBeenCalledWith("my-chat.json", msgs);
+});
+
+test("PDF item (FEAT-3) renders the markdown body under <title>.pdf", () => {
+  wrap();
+  fireEvent.click(screen.getByLabelText("Xuất hội thoại"));
+  fireEvent.click(screen.getByText("Tải .pdf"));
+  expect(downloadPdf).toHaveBeenCalledTimes(1);
+  expect(downloadPdf).toHaveBeenCalledWith("my-chat.pdf", "my-chat", "MD-OUTPUT");
+});
+
+test("Copy-conversation item (FEAT-3) writes the markdown to the clipboard", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.assign(navigator, { clipboard: { writeText } });
+  wrap();
+  fireEvent.click(screen.getByLabelText("Xuất hội thoại"));
+  fireEvent.click(screen.getByText("Sao chép Markdown"));
+  expect(writeText).toHaveBeenCalledWith("MD-OUTPUT");
+});
+
+test("shows the conversation token total (FEAT-3)", () => {
+  render(
+    <I18nProvider lang="vi">
+      <ChatExport
+        title="t"
+        messages={[
+          { id: "a", role: "assistant", content: "x", tokensIn: 201, tokensOut: 193 },
+          { id: "b", role: "assistant", content: "y", tokensIn: 10, tokensOut: 5 },
+        ]}
+      />
+    </I18nProvider>,
+  );
+  fireEvent.click(screen.getByLabelText("Xuất hội thoại"));
+  // 201+193+10+5 = 409
+  expect(screen.getByText(/409 token/)).toBeInTheDocument();
 });

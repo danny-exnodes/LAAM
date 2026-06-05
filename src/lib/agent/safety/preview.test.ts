@@ -15,6 +15,15 @@ describe("buildPreview", () => {
     const p = buildPreview("trello_create_card", { idList: "l1", name: "X", desc: "ghi chú" });
     expect(p.fields.some((f) => f.label === "Mô tả" && f.value === "ghi chú")).toBe(true);
   });
+  test("demo_create_task → title/summary/fields (FEAT-5)", () => {
+    const p = buildPreview("demo_create_task", { title: "Chuẩn bị họp", status: "doing" });
+    expect(p.title).toBe("Tạo công việc (demo)");
+    expect(p.summary).toContain("Chuẩn bị họp");
+    expect(p.fields).toEqual([
+      { label: "Tên", value: "Chuẩn bị họp" },
+      { label: "Trạng thái", value: "doing" },
+    ]);
+  });
   test("tool lạ → preview tổng quát liệt kê args", () => {
     const p = buildPreview("future_write", { a: "1" });
     expect(p.title).toBe("Hành động ghi");

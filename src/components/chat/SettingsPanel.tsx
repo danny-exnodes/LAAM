@@ -26,10 +26,11 @@ export function SettingsPanel({
   const t = useT(chat);
 
   // Always offer the current model as an option even if Ollama doesn't report
-  // it, so the user's choice never silently disappears.
-  const list = models.includes(settings.model)
-    ? models
-    : [settings.model, ...models];
+  // it, so the user's choice never silently disappears. filter(Boolean) drops the
+  // empty initial model (before /api/chat/info loads) so there's no blank option.
+  const list = (models.includes(settings.model) ? models : [settings.model, ...models]).filter(
+    Boolean,
+  );
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">

@@ -5,7 +5,10 @@
 // new read is gated until added to CONNECTOR_READS. (Spec §3.)
 import type { Tool } from "../types";
 
-export const CONNECTOR_WRITES: ReadonlySet<string> = new Set(["trello_create_card"]);
+export const CONNECTOR_WRITES: ReadonlySet<string> = new Set([
+  "trello_create_card",
+  "demo_create_task", // FEAT-5: credential-free write-gate demo
+]);
 
 export const CONNECTOR_READS: ReadonlySet<string> = new Set([
   "demo_list_tasks",

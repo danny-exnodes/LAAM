@@ -23,6 +23,18 @@ export function buildPreview(name: string, args: Record<string, unknown>): Write
       if (safe.desc) fields.push({ label: "Mô tả", value: str(safe.desc) });
       return { title: "Tạo card Trello", summary: `Tạo card "${card}" trong danh sách ${list}.`, fields };
     }
+    case "demo_create_task": {
+      const title = str(safe.title);
+      const status = str(safe.status) || "todo";
+      return {
+        title: "Tạo công việc (demo)",
+        summary: `Tạo công việc "${title}" (${status}).`,
+        fields: [
+          { label: "Tên", value: title },
+          { label: "Trạng thái", value: status },
+        ],
+      };
+    }
     default:
       return {
         title: "Hành động ghi",

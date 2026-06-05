@@ -18,6 +18,17 @@ export const common: Dict = {
   'conn.lost': { vi: 'Mất kết nối', en: 'Disconnected', zh: '已断开' },
 
   'theme.toggle': { vi: 'Đổi giao diện sáng/tối', en: 'Toggle light/dark theme', zh: '切换浅色/深色主题' },
+  // Header actions (U3 — theme / sync / account were hardcoded vi).
+  'theme.current': { vi: 'Giao diện: {state}', en: 'Theme: {state}', zh: '主题：{state}' },
+  'theme.system': { vi: 'Hệ thống', en: 'System', zh: '系统' },
+  'theme.light': { vi: 'Sáng', en: 'Light', zh: '浅色' },
+  'theme.dark': { vi: 'Tối', en: 'Dark', zh: '深色' },
+  'sync.label': { vi: 'Đồng bộ', en: 'Sync', zh: '同步' },
+  'sync.title': { vi: 'Đồng bộ session', en: 'Sync sessions', zh: '同步会话' },
+  'sync.error': { vi: 'Lỗi đồng bộ', en: 'Sync failed', zh: '同步失败' },
+  'sync.result': { vi: '{n} session', en: '{n} sessions', zh: '{n} 个会话' },
+  'account.label': { vi: 'Tài khoản', en: 'Account', zh: '账户' },
+  'account.signOut': { vi: 'Đăng xuất', en: 'Sign out', zh: '退出登录' },
 
   'lang.label': { vi: 'Ngôn ngữ', en: 'Language', zh: '语言' },
 

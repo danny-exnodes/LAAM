@@ -5,6 +5,13 @@
 // loaded via next/dynamic({ssr:false}) so it never executes during SSR/next build.
 
 import dynamic from "next/dynamic";
+import { useEffect, useMemo, useState } from "react";
+import {
+  needsResolution,
+  resolveMapSpec,
+  type GeoDeps,
+  type MapSpec,
+} from "@/lib/chat/geo-resolve";
 
 const HANOI: [number, number] = [21.0278, 105.8342];
 
@@ -110,11 +117,65 @@ const LeafletMap = dynamic(() => import("./LeafletMap"), {
   loading: () => <div className="chat-map" style={{ height: 320 }} />,
 });
 
-export function MapBlock({ raw }: { raw: string }) {
-  const cfg = parseMapConfig(raw);
-  if ("error" in cfg) {
-    return <div className="chat-block-error">Bản đồ không hợp lệ.</div>;
+// Browser implementation of the geo deps — calls the existing keyless endpoints
+// (the resolver's pure logic lives in @/lib/chat/geo-resolve). All fail-soft:
+// a failed lookup returns null so the map still renders what it can.
+const browserGeoDeps: GeoDeps = {
+  async geocode(q) {
+    try {
+      const r = await fetch(`/api/geocode?q=${encodeURIComponent(q)}`);
+      if (!r.ok) return null;
+      const d = await r.json();
+      return typeof d?.lat === "number" && typeof d?.lng === "number" ? d : null;
+    } catch {
+      return null;
+    }
+  },
+  async route(from, to) {
+    try {
+      const qs = `from=${from[0]},${from[1]}&to=${to[0]},${to[1]}`;
+      const r = await fetch(`/api/route?${qs}`);
+      if (!r.ok) return null;
+      const d = await r.json();
+      return Array.isArray(d?.geometry) ? d : null;
+    } catch {
+      return null;
+    }
+  },
+  async nearby(lat, lng, query) {
+    try {
+      const qs = `lat=${lat}&lng=${lng}&q=${encodeURIComponent(query)}`;
+      const r = await fetch(`/api/nearby?${qs}`);
+      if (!r.ok) return null;
+      const d = await r.json();
+      return Array.isArray(d?.results) ? d : { results: [] };
+    } catch {
+      return null;
+    }
+  },
+  geolocate() {
+    return new Promise((resolve) => {
+      if (typeof navigator === "undefined" || !navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => resolve(null),
+        { timeout: 8000, maximumAge: 60_000 },
+      );
+    });
+  },
+};
+
+function safeParseSpec(raw: string): MapSpec | null {
+  try {
+    const o = JSON.parse(raw);
+    return o && typeof o === "object" ? (o as MapSpec) : null;
+  } catch {
+    return null;
   }
+}
+
+// Render-only: takes an already-resolved config and draws the map + chrome.
+function MapView({ cfg }: { cfg: MapConfig }) {
   return (
     <div className="chat-map-wrap">
       <LeafletMap config={cfg} />
@@ -125,6 +186,7 @@ export function MapBlock({ raw }: { raw: string }) {
       ) : null}
       {cfg.locationDenied ? <div className="chat-map-note">Không lấy được vị trí của bạn.</div> : null}
       {cfg.routeStraight ? <div className="chat-map-note">Tuyến đường gần đúng (đường thẳng).</div> : null}
+      {cfg.nearbyEmpty ? <div className="chat-map-note">Không tìm thấy địa điểm nào quanh đây.</div> : null}
       {cfg.places && cfg.places.length ? (
         <ol className="chat-map-places">
           {cfg.places.map((p, i) => (
@@ -139,4 +201,60 @@ export function MapBlock({ raw }: { raw: string }) {
       ) : null}
     </div>
   );
+}
+
+export function MapBlock({ raw }: { raw: string }) {
+  // A name-based spec ({directions}/{nearby}/{place}) is resolved client-side into
+  // real coordinates + a route polyline before rendering (F2). An explicit-coord
+  // spec renders immediately. `raw` is stable once the streamed fence closes, so
+  // the resolve effect runs once per block (invalid partial JSON never resolves).
+  const spec = useMemo(() => safeParseSpec(raw), [raw]);
+  const requiresResolve = !!spec && needsResolution(spec);
+  const [resolvedRaw, setResolvedRaw] = useState<string | null>(null);
+  const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
+
+  useEffect(() => {
+    if (!requiresResolve || !spec) return;
+    let cancelled = false;
+    setPhase("loading");
+    setResolvedRaw(null);
+    resolveMapSpec(spec, browserGeoDeps)
+      .then((r) => {
+        if (cancelled) return;
+        if ("error" in r) {
+          setPhase("error");
+        } else {
+          setResolvedRaw(JSON.stringify(r));
+          setPhase("ready");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPhase("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [raw, requiresResolve, spec]);
+
+  if (requiresResolve) {
+    if (phase === "error") {
+      return <div className="chat-block-error">Không dựng được bản đồ.</div>;
+    }
+    if (phase === "loading" || !resolvedRaw) {
+      return (
+        <div className="chat-map" style={{ height: 320, display: "grid", placeItems: "center" }}>
+          <span className="text-sm text-neutral-400">Đang dựng bản đồ…</span>
+        </div>
+      );
+    }
+    const cfg = parseMapConfig(resolvedRaw);
+    if ("error" in cfg) return <div className="chat-block-error">Bản đồ không hợp lệ.</div>;
+    return <MapView cfg={cfg} />;
+  }
+
+  const cfg = parseMapConfig(raw);
+  if ("error" in cfg) {
+    return <div className="chat-block-error">Bản đồ không hợp lệ.</div>;
+  }
+  return <MapView cfg={cfg} />;
 }

@@ -26,6 +26,8 @@
 
 - [agent-harness-sp4-ux-feedback](decisions/agent-harness-sp4-ux-feedback.md) — **SP-4 spec (UX feedback, L6):** stream tool events (trace ✓/✗ + args) + citations ("Nguồn: …") ra chat; frame protocol chung `src/lib/chat/frames.ts` (**envelope U+001E**, SP-2 dùng `pending_write`); **Gộp** nay / Trực-tiếp sau (server-only, protocol+FE bất biến theo thời điểm); redaction **set-membership** `INTERNAL_TOOLS`; citations từ `convo` (verdict A1, không đổi `ToolEvent`); ephemeral nay → bền qua `chat_tool_call` SP-3 sau. §3/§6 đã verify độc lập; chờ lead ACK migrate token-frame + spec §2 drift. **Spec viết xong, chờ user review.**
 
+- [harness-reliability-eval](decisions/harness-reliability-eval.md) — **Phase Reliability/Eval (lát 1):** `npm run eval` live scorecard 6 chiều (selection/args/ground/restraint/term/write) × ~10 scenario, k-runs sampler prod, stub-output (không seed-DB), **vitest-project riêng (zero devDep)**. Đo trước F2/internal-tools, không fix. Spec `docs/superpowers/specs/2026-06-05-harness-reliability-eval-design.md`. Chờ user review.
+
 ## Rules (vận hành agent)
 - [agent-ops-rules](decisions/agent-ops-rules.md) — ⛔ **KHÔNG tự ý chạy ngầm service nào** (dev/start/docker/ollama/preview) nếu user chưa cho phép; user tự host dev. Không `build` in-place khi prod đang chạy.
 
@@ -42,6 +44,12 @@
 - [agent-harness-route-merge-reconciliation](backlog/agent-harness-route-merge-reconciliation.md) — **SP-2 + SP-3 cùng viết lại `/api/chat/route.ts`** từ base `12a97d7` → merge = 3-way thủ công (4 điểm reconcile + gap persist confirm-path). Migration `0003` = hard gate. Mở từ review code SP-2/SP-3 (lead, 2026-06-05).
 - [agent-harness-sp2-fe-confirm](backlog/agent-harness-sp2-fe-confirm.md) — **handoff FE:** SP-2 gate write giao wire contract confirm card (frame `{t:"pending_write"}` + POST `/api/chat {confirm}`); FE sở hữu `components/chat/*` thêm card + router frame (phối hợp SP-4). SP-2 không tự sửa FE.
 - [v1-unported](backlog/v1-unported.md) — Search/Office/proxy/`/api/config` + bảng events + lọc máy/owner + residuals. **Nguồn chân lý:** `docs/v1-to-v2-migration-handoff.md`. ⚠️ chưa xoá v1 (archive sau khi v2 production+nghiệm thu).
+
+### QA E2E Chat (2026-06-05) — ✅ **ĐÃ XỬ LÝ TOÀN BỘ 12 mục (code)** — lead, 2026-06-05 (`checkpoint/lead-2026-06-05.md`; 540 test xanh, tsc sạch, **chưa commit**). Findings gốc: `checkpoint/qa-e2e-chat-2026-06-05.md`. **Còn lại = runtime-verify** (model emit chart/map; OCR cần Docker/native; bật connector Demo test write-gate).
+- [chat-qa-functional-bugs](backlog/chat-qa-functional-bugs.md) — **F1** slash inert · **F2** chart/map không render (0 geo-tool call) · **F3** OCR chết (thiếu tesseract) · **F4** title lẫn byte file đính kèm.
+- [chat-qa-ui-bugs](backlog/chat-qa-ui-bugs.md) — **U1** composer lệch 144px + tràn sidebar (`<section>` thiếu `relative`, fix 1 dòng) · **U2** branding "Gemma" sai (model=qwen3) · **U3** nút header (theme/sync/account) không i18n.
+- [chat-qa-feature-upgrades](backlog/chat-qa-feature-upgrades.md) — quản lý conv (bulk/pin/group/dedupe/search nội dung) · proactive thành card · export PDF + token/cost · panel đính kèm · demo connector write-gate.
+- [chat-qa-ux-improvements](backlog/chat-qa-ux-improvements.md) — sample-prompt auto-send · URL input inline (bỏ `window.prompt`) · tên model động · nút cuộn-đáy · trạng thái gọi tool · a11y message actions.
 
 ## Trạng thái hiện tại (2026-06-03)
 - v2: P1 auth/RBAC ✅ · P2 monitoring ✅ · P3 collector đa máy (đơn giản) ✅ · P4 Chat Gemma 4 đã build, **chờ test runtime**. Verified live P1+P2+P3.

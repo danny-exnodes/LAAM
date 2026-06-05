@@ -7,7 +7,10 @@ export type ChatFrame =
   | { t: "tokens"; i: number; o: number }
   | { t: "tool"; phase: "call" | "result"; c: number; name: string; args?: string; ok?: boolean }
   | { t: "cite"; names: string[] }
-  | { t: "pending_write"; token: string; tool: string; title: string; summary: string; fields?: { label: string; value: string }[] };
+  | { t: "pending_write"; token: string; tool: string; title: string; summary: string; fields?: { label: string; value: string }[] }
+  // SP-3/FEAT-2: proactive alert surfaced as a distinct card (not appended to the
+  // model's reply). Numbers are code-derived from agent_session (Rule 13).
+  | { t: "proactive"; alerts: { type: "stuck" | "cost"; project: string; minutesIdle?: number; costUsd?: number }[] };
 
 // 1 frame = SEP + JSON-1-dòng + SEP. JSON.stringify đảm bảo không lọt SEP thô vào JSON.
 export function encodeFrame(f: ChatFrame): string {

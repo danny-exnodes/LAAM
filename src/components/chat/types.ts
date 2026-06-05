@@ -53,7 +53,10 @@ export type Conv = {
 };
 
 export const DEFAULT_SETTINGS: ChatSettings = {
-  model: "gemma4:e4b",
+  // Empty until /api/chat/info reports the real deployed model — avoids hardcoding
+  // a brand (U2: was "gemma4:e4b" while the host actually runs qwen3). The UI shows
+  // a neutral fallback label until it loads; the backend defaults via env if blank.
+  model: "",
   temperature: 0.6, // góp ý team: Qwen3-Q8 ổn định nhất ở 0.4–0.7 (giảm lặp từ)
   topP: 0.9,
   system: "",

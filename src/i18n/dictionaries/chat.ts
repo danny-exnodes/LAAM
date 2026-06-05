@@ -17,7 +17,8 @@ export const chat: Dict = {
   'chat.attachFileAria': { vi: 'Đính kèm file', en: 'Attach a file', zh: '附加文件' },
   'chat.attachUrlTitle': { vi: 'Đọc nội dung một URL', en: 'Read the contents of a URL', zh: '读取某个 URL 的内容' },
   'chat.attachUrlAria': { vi: 'Đọc một URL', en: 'Read a URL', zh: '读取 URL' },
-  'chat.inputPh': { vi: 'Nhắn cho Gemma… (Enter để gửi, Shift+Enter xuống dòng)', en: 'Message Gemma… (Enter to send, Shift+Enter for a new line)', zh: '给 Gemma 发消息…（Enter 发送，Shift+Enter 换行）' },
+  'chat.inputPh': { vi: 'Nhắn cho {model}… (Enter để gửi, Shift+Enter xuống dòng)', en: 'Message {model}… (Enter to send, Shift+Enter for a new line)', zh: '给 {model} 发消息…（Enter 发送，Shift+Enter 换行）' },
+  'chat.modelFallback': { vi: 'mô hình cục bộ', en: 'the local model', zh: '本地模型' },
   'chat.inputAria': { vi: 'Soạn tin nhắn', en: 'Compose a message', zh: '撰写消息' },
   'chat.send': { vi: 'Gửi', en: 'Send', zh: '发送' },
   'chat.stop': { vi: 'Dừng', en: 'Stop', zh: '停止' },
@@ -34,7 +35,7 @@ export const chat: Dict = {
   'chat.attachedCaption': { vi: 'kèm {n} tài liệu', en: '{n} attached document(s)', zh: '附带 {n} 个文档' },
 
   // --- empty state ---
-  'chat.empty': { vi: 'Bắt đầu trò chuyện với mô hình Gemma chạy cục bộ. Mỗi cuộc hội thoại được theo dõi như một phiên trong LAAM.', en: 'Start chatting with the Gemma model running locally. Each conversation is tracked as a session in LAAM.', zh: '开始与本地运行的 Gemma 模型对话。每段对话都会作为一个会话在 LAAM 中被跟踪。' },
+  'chat.empty': { vi: 'Bắt đầu trò chuyện với {model} chạy cục bộ. Mỗi cuộc hội thoại được theo dõi như một phiên trong LAAM.', en: 'Start chatting with {model} running locally. Each conversation is tracked as a session in LAAM.', zh: '开始与本地运行的 {model} 对话。每段对话都会作为一个会话在 LAAM 中被跟踪。' },
 
   // --- errors / attachment prompts ---
   'chat.errPrefix': { vi: 'Lỗi: {msg}', en: 'Error: {msg}', zh: '错误：{msg}' },
@@ -45,6 +46,9 @@ export const chat: Dict = {
   'chat.attachDocLabel': { vi: '[Tài liệu đính kèm: {name}]', en: '[Attached document: {name}]', zh: '[附加文档：{name}]' },
   'chat.truncatedSuffix': { vi: ' (cắt bớt)', en: ' (truncated)', zh: '（已截断）' },
   'chat.urlPrompt': { vi: 'Dán URL để mô hình đọc (chỉ fetch URL bạn chủ động nhập):', en: 'Paste a URL for the model to read (only URLs you enter are fetched):', zh: '粘贴一个 URL 供模型读取（只会抓取你主动输入的 URL）：' },
+  'chat.urlInputAria': { vi: 'Nhập URL để đọc', en: 'Enter a URL to read', zh: '输入要读取的 URL' },
+  'chat.urlInputPh': { vi: 'https://… (Enter để thêm)', en: 'https://… (Enter to add)', zh: 'https://…（Enter 添加）' },
+  'chat.urlAdd': { vi: 'Thêm', en: 'Add', zh: '添加' },
   'chat.urlLoading': { vi: 'Đang tải URL…', en: 'Loading URL…', zh: '正在加载 URL…' },
   'chat.urlMetaTitle': { vi: 'Tiêu đề: {title}', en: 'Title: {title}', zh: '标题：{title}' },
 
@@ -64,6 +68,20 @@ export const chat: Dict = {
   'chat.histDeleteTitle': { vi: 'Xoá', en: 'Delete', zh: '删除' },
   'chat.histRenameInputAria': { vi: 'Tên cuộc trò chuyện', en: 'Conversation name', zh: '对话名称' },
   'chat.histDeleteConfirm': { vi: 'Xoá cuộc trò chuyện này?', en: 'Delete this conversation?', zh: '删除这段对话？' },
+  // FEAT-1: time groups, pin, multi-select
+  'chat.grpPinned': { vi: 'Đã ghim', en: 'Pinned', zh: '已置顶' },
+  'chat.grpToday': { vi: 'Hôm nay', en: 'Today', zh: '今天' },
+  'chat.grpYesterday': { vi: 'Hôm qua', en: 'Yesterday', zh: '昨天' },
+  'chat.grp7days': { vi: '7 ngày qua', en: 'Last 7 days', zh: '过去 7 天' },
+  'chat.grpOlder': { vi: 'Cũ hơn', en: 'Older', zh: '更早' },
+  'chat.pinAria': { vi: 'Ghim cuộc trò chuyện', en: 'Pin conversation', zh: '置顶对话' },
+  'chat.unpinAria': { vi: 'Bỏ ghim cuộc trò chuyện', en: 'Unpin conversation', zh: '取消置顶' },
+  'chat.selectMode': { vi: 'Chọn nhiều', en: 'Select', zh: '多选' },
+  'chat.selectDone': { vi: 'Xong', en: 'Done', zh: '完成' },
+  'chat.selectedCount': { vi: 'Đã chọn {n}', en: '{n} selected', zh: '已选 {n}' },
+  'chat.bulkDelete': { vi: 'Xoá đã chọn', en: 'Delete selected', zh: '删除所选' },
+  'chat.bulkDeleteConfirm': { vi: 'Xoá {n} cuộc trò chuyện đã chọn?', en: 'Delete {n} selected conversations?', zh: '删除选中的 {n} 段对话？' },
+  'chat.selectRowAria': { vi: 'Chọn cuộc trò chuyện', en: 'Select conversation', zh: '选择对话' },
 
   // --- per-message actions ---
   'chat.actCopy': { vi: 'Chép', en: 'Copy', zh: '复制' },
@@ -128,12 +146,15 @@ export const chat: Dict = {
   'chat.expDownloadMdTitle': { vi: 'Tải hội thoại dạng Markdown', en: 'Download conversation as Markdown', zh: '将对话下载为 Markdown' },
   'chat.expDownloadJson': { vi: 'Tải .json', en: 'Download .json', zh: '下载 .json' },
   'chat.expDownloadJsonTitle': { vi: 'Tải hội thoại dạng JSON', en: 'Download conversation as JSON', zh: '将对话下载为 JSON' },
+  'chat.expDownloadPdf': { vi: 'Tải .pdf', en: 'Download .pdf', zh: '下载 .pdf' },
+  'chat.expDownloadPdfTitle': { vi: 'Tải hội thoại dạng PDF', en: 'Download conversation as PDF', zh: '将对话下载为 PDF' },
+  'chat.expTotalTokens': { vi: '{n} token · miễn phí (local)', en: '{n} tokens · free (local)', zh: '{n} token · 免费（本地）' },
   'chat.expCopied': { vi: 'Đã chép', en: 'Copied', zh: '已复制' },
   'chat.expCopyErr': { vi: 'Lỗi chép', en: 'Copy failed', zh: '复制失败' },
   'chat.expConvTitle': { vi: 'Hội thoại', en: 'Conversation', zh: '对话' },
   'chat.expFileBase': { vi: 'hoi-thoai', en: 'conversation', zh: 'conversation' },
   'chat.expRoleUser': { vi: 'Bạn', en: 'You', zh: '你' },
-  'chat.expRoleAssistant': { vi: 'Gemma', en: 'Gemma', zh: 'Gemma' },
+  'chat.expRoleAssistant': { vi: 'Trợ lý', en: 'Assistant', zh: '助手' },
   'chat.expRoleSystem': { vi: 'Hệ thống', en: 'System', zh: '系统' },
   'chat.expMdMeta': { vi: 'Xuất từ LAAM · {date} · {n} tin nhắn', en: 'Exported from LAAM · {date} · {n} messages', zh: '从 LAAM 导出 · {date} · {n} 条消息' },
   'chat.expMdAtts': { vi: '📎 kèm {n} tài liệu', en: '📎 {n} attached document(s)', zh: '📎 附带 {n} 个文档' },
@@ -154,6 +175,7 @@ export const chat: Dict = {
   'chat.suggestNearby': { vi: 'Tìm quán cà phê quanh đây', en: 'Find coffee shops near me', zh: '查找我附近的咖啡馆' },
   'chat.suggestWeather': { vi: 'Thời tiết Hà Nội hôm nay thế nào?', en: 'Weather in Hanoi today?', zh: '今天河内天气怎么样？' },
   'chat.emptyTitle': { vi: 'Bắt đầu trò chuyện', en: 'Start a conversation', zh: '开始对话' },
+  'chat.recentTitle': { vi: 'Tiếp tục gần đây', en: 'Continue recent', zh: '继续最近对话' },
   'chat.thinking': { vi: 'đang soạn…', en: 'typing…', zh: '正在输入…' },
   'chat.msgTokens': { vi: '{in} vào · {out} ra tok', en: '{in} in · {out} out tok', zh: '{in} 入 · {out} 出 tok' },
   'chat.msgTokensTitle': { vi: 'Tokens vào / ra của lượt này', en: 'Tokens in / out for this turn', zh: '本轮输入 / 输出 tokens' },
@@ -193,6 +215,8 @@ export const chat: Dict = {
   'chat.ocrImageEmpty': { vi: 'Không nhận được chữ nào trong ảnh.', en: 'No text found in the image.', zh: '图片中未识别到文字。' },
   'chat.ocrReadFail': { vi: 'Không đọc được tệp ảnh.', en: 'Could not read the image file.', zh: '无法读取图片文件。' },
   'chat.ocrFail': { vi: 'OCR thất bại.', en: 'OCR failed.', zh: 'OCR 失败。' },
+  'chat.ocrOff': { vi: 'OCR chưa sẵn sàng trên máy chủ — ảnh sẽ không đọc được chữ', en: 'OCR is not available on the server — images won’t be read', zh: '服务器上 OCR 不可用 — 无法识别图片文字' },
+  'chat.ocrOffAttach': { vi: 'OCR chưa sẵn sàng trên máy chủ', en: 'OCR not available on the server', zh: '服务器上 OCR 不可用' },
   // --- SP-4: tool trace + citations ---
   'chat.toolUsed': { vi: 'Đã dùng {n} công cụ', en: 'Used {n} tool(s)', zh: '已用 {n} 个工具' },
   'chat.source': { vi: 'Nguồn', en: 'Source', zh: '来源' },
@@ -201,6 +225,12 @@ export const chat: Dict = {
   'chat.toolQueryStats': { vi: 'Thống kê hệ thống', en: 'System stats', zh: '系统统计' },
   'chat.toolListMachines': { vi: 'Liệt kê máy', en: 'List machines', zh: '列出机器' },
   'chat.toolFindStuck': { vi: 'Tìm agent kẹt', en: 'Find stuck agents', zh: '查找卡住的 agent' },
+  // --- FEAT-2: proactive alert card (system alert, distinct from the model reply) ---
+  'chat.proactiveTitle': { vi: 'Cảnh báo hệ thống', en: 'System alert', zh: '系统提示' },
+  'chat.proactiveStuck': { vi: '{project} — agent kẹt {n} phút', en: '{project} — agent stuck {n} min', zh: '{project} — agent 卡住 {n} 分钟' },
+  'chat.proactiveCost': { vi: '{project} — chi phí cao ${c}', en: '{project} — high cost ${c}', zh: '{project} — 费用偏高 ${c}' },
+  'chat.proactiveDismiss': { vi: 'Bỏ qua', en: 'Dismiss', zh: '忽略' },
+  'chat.proactiveHint': { vi: 'Số liệu từ giám sát agent (agent_session).', en: 'Figures from agent monitoring (agent_session).', zh: '数据来自 agent 监控（agent_session）。' },
   // --- SP-2: write-gate confirm card (chrome only; title/summary/fields do backend cấp) ---
   'chat.confirmAction': { vi: 'Cần xác nhận hành động', en: 'Action needs confirmation', zh: '操作需确认' },
   'chat.confirm': { vi: 'Xác nhận', en: 'Confirm', zh: '确认' },

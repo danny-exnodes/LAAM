@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => h.authResult) }));
 vi.mock("node:child_process", () => ({ execFile: h.execFile, default: { execFile: h.execFile } }));
 
-import { POST, parseImageDataUrl } from "./route";
+import { POST, GET, parseImageDataUrl } from "./route";
 
 // A 1x1 transparent PNG as a valid base64 data URL.
 const PNG =
@@ -77,5 +77,28 @@ describe("POST /api/ocr", () => {
     h.tessOk = false;
     const res = await POST(reqWith(PNG));
     expect(res.status).toBe(503);
+  });
+});
+
+describe("GET /api/ocr (availability)", () => {
+  test("401 when unauthenticated", async () => {
+    h.authResult = null;
+    const res = await GET();
+    expect(res.status).toBe(401);
+  });
+
+  test("reports available:true when tesseract is present", async () => {
+    h.authResult = { user: { id: "u1" } };
+    h.tessOk = true;
+    const res = await GET();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ available: true });
+  });
+
+  test("reports available:false when tesseract is missing", async () => {
+    h.authResult = { user: { id: "u1" } };
+    h.tessOk = false;
+    const res = await GET();
+    expect(await res.json()).toEqual({ available: false });
   });
 });

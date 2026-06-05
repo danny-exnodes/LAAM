@@ -6,12 +6,14 @@
 
 import { useEffect, useState } from "react";
 import { Sun, Moon, Monitor } from "lucide-react";
+import { useT } from "@/i18n/provider";
+import { common } from "@/i18n/dictionaries/common";
 
 type Theme = "system" | "light" | "dark";
 export const THEME_KEY = "laam_theme";
 const ORDER: Theme[] = ["system", "light", "dark"];
 const ICON = { system: Monitor, light: Sun, dark: Moon } as const;
-const LABEL = { system: "Hệ thống", light: "Sáng", dark: "Tối" } as const;
+const LABEL_KEY = { system: "theme.system", light: "theme.light", dark: "theme.dark" } as const;
 
 function systemDark(): boolean {
   return (
@@ -27,6 +29,7 @@ function apply(theme: Theme): void {
 }
 
 export function ThemeToggle() {
+  const t = useT(common);
   const [theme, setTheme] = useState<Theme>("system");
 
   useEffect(() => {
@@ -51,12 +54,13 @@ export function ThemeToggle() {
   }
 
   const Icon = ICON[theme];
+  const label = t("theme.current", { state: t(LABEL_KEY[theme]) });
   return (
     <button
       type="button"
       onClick={cycle}
-      aria-label={`Giao diện: ${LABEL[theme]}`}
-      title={`Giao diện: ${LABEL[theme]}`}
+      aria-label={label}
+      title={label}
       className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-neutral-300 text-neutral-600 transition hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
     >
       <Icon size={16} aria-hidden />

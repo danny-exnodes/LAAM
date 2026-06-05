@@ -9,6 +9,25 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã sửa — Chat QA E2E (2026-06-05): lỗi giao diện & chức năng
+- **U1** Composer lệch 144px + tràn dưới sidebar → thêm `relative` cho `<section>` (composer `absolute` neo đúng cột chat).
+- **F1** Slash command `/moi /xoa /xuat /caidat` "chết" → nối handler từ ChatClient (trước chỉ `/dung` chạy). `/xuat` mở menu export (ChatExport thành controlled).
+- **F3** OCR chết im lặng → thêm `GET /api/ocr` báo `{available}`; composer **chủ động báo trước** + bỏ qua call OCR khi thiếu tesseract (thay vì fail sau upload). *(Image Docker đã bake tesseract; host trần chạy `next start` thì chưa có — chạy bản Docker hoặc cài native.)*
+- **F4** Tiêu đề hội thoại lẫn byte file đính kèm (`%PDF…`) → thêm `titleHint` (text user thật); fallback lấy **tên file**, không bao giờ là byte (Rule 13).
+- **U2** Bỏ hardcode "Gemma" (empty-state/placeholder/export, cả vi/en/zh) → **tên model động** từ `/api/chat/info`, fallback trung tính.
+- **U3** Nút header (giao diện/đồng bộ/tài khoản) nay **i18n** đủ vi/en/zh.
+- **U-minor** Hết nháy "Chưa có cuộc trò chuyện" lúc mount → skeleton tới khi load xong.
+
+### Đã thêm — Chat: rich-render, UX & nâng cấp
+- **F2** Khôi phục render **biểu đồ/bản đồ**: dạy model hợp đồng khối ```` ```chart ````/```` ```map ```` trong system prompt; **giải mã địa lý phía client** (`/api/geocode|route|nearby`) từ tên địa điểm → marker + tuyến thật (model chỉ nêu **tên**, không bịa toạ độ — Rule 13). Module thuần `src/lib/chat/geo-resolve.ts`.
+- **UX**: prompt mẫu **tự gửi** 1 chạm (UX-1); nhập URL **inline** thay `window.prompt` (UX-2); nút cuộn-đáy hiện khi rời đáy (UX-4); empty-state gợi ý **hội thoại gần đây** (UX-6); message actions hiện khi **focus bàn phím** (UX-7, a11y).
+- **FEAT-1** Quản lý hội thoại: **nhóm theo thời gian** (Hôm nay/Hôm qua/7 ngày/Cũ hơn), **chọn nhiều — xoá hàng loạt**, **ghim lên đầu** (localStorage), **tìm theo nội dung tin nhắn** (`/api/conversations?q=`).
+- **FEAT-2** Cảnh báo chủ động tách thành **card hệ thống riêng** (frame `proactive`, có nút bỏ qua) thay vì nhét vào câu trả lời của model; ngưỡng cấu hình qua env `PROACTIVE_STUCK_MIN`/`PROACTIVE_COST_USD`.
+- **FEAT-3** Export **PDF** + **copy cả hội thoại** + **tổng token** (model local → miễn phí) trong menu xuất.
+- **FEAT-4** Composer báo OCR off + chip đính kèm xem trước trích đoạn (hover).
+- **FEAT-5** **Demo write-gate không cần credential**: tool `demo_create_task` (connector Demo) chạy đủ luồng gate → Confirm Card → execute offline. Doc: `docs/demo-connector-write-gate.md`.
+- Verify: **540 test** xanh (từ 499), `tsc` sạch. Không đổi schema (pin = localStorage; không migration).
+
 ### Đã thêm — Agent Harness SP-3 (Memory & Proactive)
 - **Lưu tool turns**: bảng mới `chat_tool_call` ghi lại từng lượt gọi công cụ (tên/args/kết quả/ok) trong một lượt chat — trước đây bị bỏ, chỉ lưu câu trả lời cuối. `chat_message` giữ nguyên (consumer hiện có không đổi).
 - **Tóm tắt hội thoại dài**: khi lịch sử vượt ngân sách ký tự, các lượt cũ được **model tóm tắt** (cuộn) và giữ nguyên văn các lượt gần nhất — chat không vỡ context trên model local 16GB.

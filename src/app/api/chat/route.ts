@@ -18,7 +18,7 @@ import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/sum
 import {
   detectAlerts,
   selectNewAlerts,
-  formatProactiveNotice,
+  type ProactiveAlert,
   type ProactiveState,
 } from "@/lib/agent/proactive";
 import { loadSessionRows } from "@/lib/agent/tools/laam/_load";
@@ -44,16 +44,35 @@ const REPLAY_BUDGET_CHARS = Math.max(8000, Math.floor((NUM_CTX - 3072 - 2560) * 
 const DEFAULT_PRESENCE_PENALTY = Number.isFinite(Number(process.env.CHAT_PRESENCE_PENALTY))
   ? Number(process.env.CHAT_PRESENCE_PENALTY)
   : 0.2;
+// FEAT-2: proactive alert thresholds are deployment-configurable via env
+// (stuck-minutes / cost-USD). Unset → the module defaults (10′ / $1) apply.
+const PROACTIVE_OPTS = {
+  stuckMin: Number(process.env.PROACTIVE_STUCK_MIN) > 0 ? Number(process.env.PROACTIVE_STUCK_MIN) : undefined,
+  costUsd: Number(process.env.PROACTIVE_COST_USD) > 0 ? Number(process.env.PROACTIVE_COST_USD) : undefined,
+};
 
 type ChatBody = {
   conversationId?: string;
   message?: string;
+  titleHint?: string; // F4: raw user text for the conversation title (message includes attachment blocks)
   model?: string;
   temperature?: number;
   topP?: number;
   presencePenalty?: number;
   system?: string;
 };
+
+// F4 — a new conversation's title. The persisted `message` prepends attachment
+// blocks (so the model sees them), which made a PDF's raw bytes become the title.
+// Prefer the FE's raw user text (titleHint, Rule 13: don't title from a blob);
+// with no hint, fall back to the first attachment's NAME — never its bytes.
+export function deriveConvTitle(message: string, titleHint?: string): string {
+  const hint = (titleHint ?? "").trim();
+  if (hint) return hint.slice(0, 60);
+  const m = message.match(/^--- (?:Tệp|URL): (.+?) ---/);
+  if (m) return m[1].slice(0, 60);
+  return message.slice(0, 60);
+}
 // Build the Ollama /api/chat request payload from the request body, the
 // conversation history, and the server defaults. Pure — no I/O — so the
 // option mapping (temperature/top_p, model + system overrides, defaults) is
@@ -144,7 +163,7 @@ export async function POST(req: Request) {
     await db.insert(chatConversations).values({
       id: conversationId,
       userId,
-      title: message.slice(0, 60),
+      title: deriveConvTitle(message, body.titleHint),
       model,
     });
   }
@@ -201,15 +220,21 @@ export async function POST(req: Request) {
   let systemContent = hasSystemOverride
     ? (body.system as string)
     : buildSystemPrompt({ lang, now, toolNames: tools.map((t) => t.function.name) });
+  let proactiveSurfaced: ProactiveAlert[] = [];
   if (!hasSystemOverride) {
     try {
       const rows = await loadSessionRows();
-      const { toSurface, newState } = selectNewAlerts(detectAlerts(rows, now), convProactive, now);
-      const notice = formatProactiveNotice(toSurface, lang);
-      if (notice) systemContent = systemContent + "\n\n" + notice;
+      const { toSurface, newState } = selectNewAlerts(
+        detectAlerts(rows, now, PROACTIVE_OPTS),
+        convProactive,
+        now,
+      );
+      // FEAT-2: surface as a distinct card (proactive frame) instead of appending
+      // to the model's reply — keeps it visibly a system alert, not model prose.
+      proactiveSurfaced = toSurface;
       // Persist dedupe state when something surfaced OR pruning changed it (keep proactiveState bounded).
       const prevKeyCount = convProactive ? Object.keys(convProactive.surfaced ?? {}).length : 0;
-      if (notice || Object.keys(newState.surfaced).length !== prevKeyCount) {
+      if (toSurface.length || Object.keys(newState.surfaced).length !== prevKeyCount) {
         await db
           .update(chatConversations)
           .set({ proactiveState: newState })
@@ -278,6 +303,19 @@ export async function POST(req: Request) {
   const trailingFrames: ChatFrame[] = [
     ...toolFrames,
     ...(cites.length ? [{ t: "cite", names: cites } as ChatFrame] : []),
+    ...(proactiveSurfaced.length
+      ? [
+          {
+            t: "proactive",
+            alerts: proactiveSurfaced.map((a) => ({
+              type: a.type,
+              project: a.project ?? a.sessionId,
+              minutesIdle: a.minutesIdle,
+              costUsd: a.costUsd,
+            })),
+          } as ChatFrame,
+        ]
+      : []),
   ];
 
   let ollamaRes: Response;

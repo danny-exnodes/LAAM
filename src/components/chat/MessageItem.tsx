@@ -87,7 +87,8 @@ export function MessageItem({
         )}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
+      {/* UX-7: reveal on hover OR keyboard focus-within (a11y) — was hover-only. */}
+      <div className="flex flex-wrap items-center gap-1 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
         <button
           type="button"
           className={actionBtn}

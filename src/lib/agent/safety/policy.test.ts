@@ -22,8 +22,12 @@ describe("resolveKind", () => {
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
-  test("đúng 1 connector write (trello_create_card); không nằm trong READS", () => {
-    expect([...CONNECTOR_WRITES]).toEqual(["trello_create_card"]);
+  test("demo_create_task → write (FEAT-5 demo fixture)", () => {
+    expect(resolveKind("demo_create_task", internal)).toBe("write");
+  });
+  test("connector writes are trello_create_card + demo_create_task; not in READS", () => {
+    expect([...CONNECTOR_WRITES].sort()).toEqual(["demo_create_task", "trello_create_card"]);
     expect(CONNECTOR_READS.has("trello_create_card")).toBe(false);
+    expect(CONNECTOR_READS.has("demo_create_task")).toBe(false);
   });
 });

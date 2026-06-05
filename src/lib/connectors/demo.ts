@@ -24,12 +24,37 @@ const demo: Connector = {
         parameters: { type: "object", properties: { status: { type: "string", description: "todo | doing | done (tuỳ chọn)" } } },
       },
     },
+    {
+      // WRITE tool — gated by the safety layer (CONNECTOR_WRITES). Lets the
+      // confirm-card → execute write-gate be demonstrated end-to-end OFFLINE,
+      // with no real credentials (FEAT-5). Creates a sample task (not persisted).
+      type: "function",
+      function: {
+        name: "demo_create_task",
+        description: "Tạo một công việc/đầu việc mẫu mới. Dùng để minh hoạ luồng xác nhận trước khi ghi.",
+        parameters: {
+          type: "object",
+          properties: {
+            title: { type: "string", description: "Tên công việc" },
+            status: { type: "string", description: "todo | doing | done (mặc định todo)" },
+          },
+          required: ["title"],
+        },
+      },
+    },
   ],
   handlers: {
     async demo_list_tasks(args) {
       const st = args && typeof args.status === "string" ? args.status : null;
       const tasks = st ? TASKS.filter((t) => t.status === st) : TASKS;
       return { tasks };
+    },
+    async demo_create_task(args) {
+      const title = typeof args.title === "string" ? args.title.trim() : "";
+      if (!title) return { error: "cần tên công việc" };
+      const status = typeof args.status === "string" ? args.status : "todo";
+      const created = { id: `T-${100 + TASKS.length + 1}`, title, status, due: "", assignee: "me" };
+      return { created };
     },
   },
 };

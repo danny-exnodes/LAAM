@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { parseMapConfig, buildGoogleMapsUrl, MapBlock } from "./MapBlock";
 
@@ -100,5 +100,15 @@ describe("MapBlock (component)", () => {
   it("shows an error for an invalid config", () => {
     const { container } = render(<MapBlock raw="{nope" />);
     expect(container.textContent).toMatch(/bản đồ|map|invalid/i);
+  });
+
+  it("resolves a name-based directions spec client-side (shows a loading placeholder)", () => {
+    // A never-settling fetch keeps the resolver pending → the resolution branch
+    // (not the explicit-coords branch) renders its loading placeholder.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => {}) as never);
+    const raw = JSON.stringify({ directions: { from: "Hồ Gươm", to: "Văn Miếu" } });
+    const { container } = render(<MapBlock raw={raw} />);
+    expect(container.textContent).toMatch(/đang dựng bản đồ/i);
+    fetchSpy.mockRestore();
   });
 });

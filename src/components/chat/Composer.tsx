@@ -12,8 +12,8 @@ import { chat } from "@/i18n/dictionaries/chat";
 import type { Attachment } from "./types";
 
 // Slash commands. ASCII names survive IME composition; labels are localized.
-// Only /dung maps to a prop here (onStop); the rest are owned by ChatClient's
-// own controls, so picking them just clears the slash text.
+// Each command maps to a handler ChatClient owns; picking one runs it and
+// clears the slash text. (F1: previously only /dung ran — the rest were inert.)
 const COMMANDS: { name: string; labelKey: string }[] = [
   { name: "moi", labelKey: "chat.cmdNew" },
   { name: "xoa", labelKey: "chat.cmdClear" },
@@ -32,6 +32,12 @@ export function Composer({
   onAddFiles,
   onAddUrl,
   onRemoveAttachment,
+  onNew,
+  onClear,
+  onExport,
+  onToggleSettings,
+  ocrAvailable = true,
+  modelName,
 }: {
   value: string;
   onChange(v: string): void;
@@ -42,10 +48,18 @@ export function Composer({
   onAddFiles(files: FileList): void;
   onAddUrl(url: string): void;
   onRemoveAttachment(id: string): void;
+  onNew(): void;
+  onClear(): void;
+  onExport(): void;
+  onToggleSettings(): void;
+  ocrAvailable?: boolean;
+  modelName?: string;
 }) {
   const t = useT(chat);
   const fileInput = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [urlOpen, setUrlOpen] = useState(false); // UX-2: inline URL input (replaces window.prompt)
+  const [urlDraft, setUrlDraft] = useState("");
 
   const empty = value.trim().length === 0;
   const sendDisabled = streaming || empty;
@@ -60,9 +74,13 @@ export function Composer({
 
   function pickCommand(name: string) {
     onChange("");
-    if (name === "dung") onStop();
-    // moi/xoa/xuat/caidat are driven by ChatClient's own controls — clearing
-    // the slash text is all this presentational component can do.
+    switch (name) {
+      case "moi": return onNew();
+      case "xoa": return onClear();
+      case "dung": return onStop();
+      case "xuat": return onExport();
+      case "caidat": return onToggleSettings();
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -78,9 +96,11 @@ export function Composer({
     }
   }
 
-  function pickUrl() {
-    const url = window.prompt(t("chat.urlPrompt"));
-    if (url && url.trim()) onAddUrl(url.trim());
+  function submitUrl() {
+    const url = urlDraft.trim();
+    if (url) onAddUrl(url);
+    setUrlDraft("");
+    setUrlOpen(false);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -117,6 +137,7 @@ export function Composer({
           {attachments.map((a) => (
             <span
               key={a.id}
+              title={a.text.slice(0, 280)} /* FEAT-4: hover shows an excerpt of the extracted text */
               className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
             >
               {t("chat.attachChars", { name: a.name, n: a.chars })}
@@ -130,6 +151,38 @@ export function Composer({
               </button>
             </span>
           ))}
+        </div>
+      )}
+
+      {/* UX-2: inline URL input — styled, dark-mode aware, non-blocking (was window.prompt) */}
+      {urlOpen && (
+        <div className="flex items-center gap-1.5">
+          <input
+            type="url"
+            autoFocus
+            aria-label={t("chat.urlInputAria")}
+            placeholder={t("chat.urlInputPh")}
+            value={urlDraft}
+            onChange={(e) => setUrlDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitUrl();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                setUrlOpen(false);
+              }
+            }}
+            className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-sm text-neutral-800 outline-none focus:border-blue-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          />
+          <button
+            type="button"
+            onClick={submitUrl}
+            disabled={!urlDraft.trim()}
+            className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {t("chat.urlAdd")}
+          </button>
         </div>
       )}
 
@@ -166,7 +219,7 @@ export function Composer({
 
       <textarea
         aria-label={t("chat.inputAria")}
-        placeholder={t("chat.inputPh")}
+        placeholder={t("chat.inputPh", { model: modelName || t("chat.modelFallback") })}
         value={value}
         rows={2}
         onChange={(e) => onChange(e.target.value)}
@@ -189,7 +242,7 @@ export function Composer({
           <button
             type="button"
             aria-label={t("chat.attachFileAria")}
-            title={t("chat.attachFileTitle")}
+            title={ocrAvailable ? t("chat.attachFileTitle") : `${t("chat.attachFileTitle")} · ${t("chat.ocrOff")}`}
             onClick={() => fileInput.current?.click()}
             className="grid h-9 w-9 place-items-center rounded-full text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
           >
@@ -199,7 +252,8 @@ export function Composer({
             type="button"
             aria-label={t("chat.attachUrlAria")}
             title={t("chat.attachUrlTitle")}
-            onClick={pickUrl}
+            aria-expanded={urlOpen}
+            onClick={() => setUrlOpen((v) => !v)}
             className="grid h-9 w-9 place-items-center rounded-full text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
           >
             <Link2 size={16} aria-hidden />
@@ -207,6 +261,11 @@ export function Composer({
           {value.length > 0 && (
             <span className="font-mono text-[11px] text-neutral-400">
               {t("chat.counter", { chars: value.length, tokens: Math.ceil(value.length / 4) })}
+            </span>
+          )}
+          {!ocrAvailable && value.length === 0 && (
+            <span className="text-[11px] text-amber-600 dark:text-amber-500" title={t("chat.ocrOff")}>
+              {t("chat.ocrOffAttach")}
             </span>
           )}
         </div>

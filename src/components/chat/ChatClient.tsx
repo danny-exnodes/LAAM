@@ -14,6 +14,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
 import { ChatExport } from "./ChatExport";
+import { ProactiveCard, type ProactiveAlertView } from "./ProactiveCard";
 import {
   DEFAULT_SETTINGS,
   type Attachment,
@@ -42,6 +43,7 @@ const SAMPLE_PROMPTS = [
 export function ChatClient() {
   const t = useT(chat);
   const [convs, setConvs] = useState<Conv[]>([]);
+  const [convsLoaded, setConvsLoaded] = useState(false); // U-minor: avoid "no conversations" flash before first load
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
@@ -49,14 +51,18 @@ export function ChatClient() {
   const [settings, setSettings] = useState<ChatSettings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [convOpen, setConvOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false); // F1: /xuat opens the export menu
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [models, setModels] = useState<string[]>([]);
+  const [ocrAvailable, setOcrAvailable] = useState(true); // F3/FEAT-4: degrade if tesseract missing
   const [query, setQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Conv[]>([]); // FEAT-1: content-search hits
   const abortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickRef = useRef(true); // dính đáy: auto-scroll khi user đang ở cuối
   const programmaticRef = useRef(false); // true khi *mình* tự cuộn → onScroll bỏ qua echo
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [proactive, setProactive] = useState<ProactiveAlertView[]>([]); // FEAT-2: system alert banner
 
   useEffect(() => {
     void loadConvs();
@@ -73,12 +79,35 @@ export function ChatClient() {
         if (d.model) setSettings((s) => ({ ...s, model: d.model! }));
       })
       .catch(() => {});
+    // Probe OCR once so the composer can warn up front instead of failing an
+    // image upload after the fact (F3/FEAT-4).
+    fetch("/api/ocr")
+      .then((r) => r.json())
+      .then((d: { available?: boolean }) => setOcrAvailable(d.available !== false))
+      .catch(() => {});
   }, []);
 
   // Auto-scroll xuống tin nhắn cuối khi messages đổi (gửi / streaming) nếu đang dính đáy.
   useEffect(() => {
     if (stickRef.current) scrollToBottom("auto");
   }, [messages]);
+
+  // FEAT-1 content search: debounce the query → /api/conversations?q= (title OR
+  // message content). Empty query clears the hits (sidebar falls back to the list).
+  useEffect(() => {
+    const term = query.trim();
+    if (!term) {
+      setSearchResults([]);
+      return;
+    }
+    const id = setTimeout(() => {
+      fetch(`/api/conversations?q=${encodeURIComponent(term)}`)
+        .then((r) => r.json())
+        .then((d: { conversations?: Conv[] }) => setSearchResults(d.conversations ?? []))
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(id);
+  }, [query]);
 
   function scrollToBottom(behavior: ScrollBehavior = "smooth") {
     const el = scrollRef.current;
@@ -105,13 +134,16 @@ export function ChatClient() {
     if (!el) return;
     const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
     stickRef.current = dist < 80;
-    setShowScrollBtn(dist > 200);
+    // UX-4: show the jump-to-bottom button whenever the user is out of the
+    // auto-stick zone (was 200px → short replies never crossed it).
+    setShowScrollBtn(dist > 80);
   }
 
   async function loadConvs() {
     const r = await fetch("/api/conversations");
     const d = await r.json().catch(() => ({ conversations: [] }));
     setConvs(d.conversations ?? []);
+    setConvsLoaded(true);
   }
 
   async function openConv(id: string) {
@@ -144,9 +176,27 @@ export function ChatClient() {
     setAttachments([]);
   }
 
+  // F1 /xoa — clear the current conversation's content. If it is persisted,
+  // delete it server-side (deleteConv resets the view); otherwise just reset
+  // the local draft. Distinct from /moi, which keeps the old conv in history.
+  function clearConv() {
+    if (activeId) void deleteConv(activeId);
+    else newConv();
+  }
+
   async function deleteConv(id: string) {
     await fetch(`/api/conversations/${id}`, { method: "DELETE" });
     if (activeId === id) newConv();
+    void loadConvs();
+  }
+
+  // FEAT-1: bulk-delete the selected conversations (one DELETE each — no bulk
+  // endpoint needed). Resets the view if the open conversation was removed.
+  async function bulkDelete(ids: string[]) {
+    await Promise.all(
+      ids.map((id) => fetch(`/api/conversations/${id}`, { method: "DELETE" }).catch(() => {})),
+    );
+    if (activeId && ids.includes(activeId)) newConv();
     void loadConvs();
   }
 
@@ -238,6 +288,7 @@ export function ChatClient() {
               else { cur.ok = f.ok; cur.done = true; }
               trace.set(f.c, cur);
             } else if (f.t === "cite") cites = f.names;
+            else if (f.t === "proactive") setProactive(f.alerts); // FEAT-2: surface as a banner card
             else if (f.t === "tokens") tokens = { tokensIn: f.i, tokensOut: f.o };
             else if (f.t === "pending_write")
               pendingWrite = {
@@ -277,10 +328,13 @@ export function ChatClient() {
   );
 
   const streamReply = useCallback(
-    (outgoing: string) =>
+    (outgoing: string, titleHint?: string) =>
       streamFrom({
         conversationId: activeId ?? undefined,
         message: outgoing,
+        // F4: the raw user text titles a new conversation, not the attachment-
+        // prefixed `outgoing` (which can begin with a file's raw bytes).
+        titleHint,
         model: settings.model,
         temperature: settings.temperature,
         topP: settings.topP,
@@ -303,8 +357,10 @@ export function ChatClient() {
     setMessages((p) => setPendingStatus(p, msgId, ok ? (approve ? "done" : "cancelled") : "error"));
   }
 
-  async function send() {
-    const text = input.trim();
+  // UX-1: send arbitrary text (used by both the composer and one-click sample
+  // prompts) so a sample sends immediately instead of just filling the input.
+  async function sendMessage(rawText: string) {
+    const text = rawText.trim();
     if (!text || streaming) return;
     const outgoing = withAttachments(text);
     setInput("");
@@ -315,7 +371,11 @@ export function ChatClient() {
       { id: uid(), role: "user", content: text, createdAt: Date.now() },
       { id: uid(), role: "assistant", content: "", createdAt: Date.now() },
     ]);
-    await streamReply(outgoing);
+    await streamReply(outgoing, text);
+  }
+
+  function send() {
+    void sendMessage(input);
   }
 
   function stop() {
@@ -364,6 +424,11 @@ export function ChatClient() {
       const isImage = file.type.startsWith("image/");
       try {
         if (isImage) {
+          // OCR known-unavailable → attach with a clear note, skip the doomed call.
+          if (!ocrAvailable) {
+            pushAttachment(file.name, "image", `[${t("chat.ocrOffAttach")}]`);
+            continue;
+          }
           const dataUrl = await readAsDataUrl(file);
           const r = await fetch("/api/ocr", {
             method: "POST",
@@ -404,19 +469,29 @@ export function ChatClient() {
   }
 
   const activeTitle = convs.find((c) => c.id === activeId)?.title || "chat";
+  // U2/UX-3: show the real deployed model (from /api/chat/info) instead of a
+  // hardcoded "Gemma"; neutral fallback until it loads.
+  const modelName = settings.model || t("chat.modelFallback");
+  // FEAT-1: while searching, show the server's content-search hits; otherwise the
+  // full list. serverFiltered tells the sidebar not to re-filter by title.
+  const searching = query.trim().length > 0;
+  const sidebarConvs = searching ? searchResults : convs;
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-h,56px))]">
       {/* Static conversation sidebar on tablet/desktop (sm+) */}
       <aside className="hidden w-72 shrink-0 border-r border-neutral-200 sm:block dark:border-neutral-800">
         <ConversationSidebar
-          convs={convs}
+          convs={sidebarConvs}
+          loading={!convsLoaded}
+          serverFiltered={searching}
           activeId={activeId}
           query={query}
           onQuery={setQuery}
           onOpen={openConv}
           onNew={newConv}
           onDelete={deleteConv}
+          onBulkDelete={bulkDelete}
           onRename={renameConv}
         />
       </aside>
@@ -432,7 +507,9 @@ export function ChatClient() {
           />
           <div className="anim-slide-in-left relative z-10 flex h-full w-[84%] max-w-xs flex-col bg-white shadow-xl dark:bg-neutral-950">
             <ConversationSidebar
-              convs={convs}
+              convs={sidebarConvs}
+              loading={!convsLoaded}
+              serverFiltered={searching}
               activeId={activeId}
               query={query}
               onQuery={setQuery}
@@ -445,13 +522,14 @@ export function ChatClient() {
                 setConvOpen(false);
               }}
               onDelete={deleteConv}
+              onBulkDelete={bulkDelete}
               onRename={renameConv}
             />
           </div>
         </div>
       )}
 
-      <section className="flex min-w-0 flex-1 flex-col">
+      <section className="relative flex min-w-0 flex-1 flex-col">
         <div className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
@@ -475,8 +553,14 @@ export function ChatClient() {
               {activeTitle}
             </span>
           </div>
-          <ChatExport messages={messages} title={activeTitle} />
+          <ChatExport messages={messages} title={activeTitle} open={exportOpen} onOpenChange={setExportOpen} />
         </div>
+
+        {proactive.length > 0 && (
+          <div className="px-3 pt-2 sm:px-4">
+            <ProactiveCard alerts={proactive} onDismiss={() => setProactive([])} />
+          </div>
+        )}
 
         {settingsOpen && (
           <div className="anim-slide-down p-4">
@@ -488,13 +572,13 @@ export function ChatClient() {
           {messages.length === 0 ? (
             <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-4 py-8 text-center">
               <h2 className="mb-1 text-lg font-bold tracking-tight">{t("chat.emptyTitle")}</h2>
-              <p className="mb-5 text-sm leading-relaxed text-neutral-500">{t("chat.empty")}</p>
+              <p className="mb-5 text-sm leading-relaxed text-neutral-500">{t("chat.empty", { model: modelName })}</p>
               <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
                 {SAMPLE_PROMPTS.map(({ key, Icon }) => (
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setInput(t(key))}
+                    onClick={() => void sendMessage(t(key))}
                     className="flex items-center gap-2 rounded-xl bg-neutral-100/70 px-3 py-2.5 text-left text-sm text-neutral-700 transition hover:bg-neutral-100 dark:bg-neutral-900/60 dark:text-neutral-200 dark:hover:bg-neutral-800"
                   >
                     <Icon size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden />
@@ -502,6 +586,27 @@ export function ChatClient() {
                   </button>
                 ))}
               </div>
+
+              {/* UX-6: jump back into a recent conversation from the empty state. */}
+              {convs.length > 0 && (
+                <div className="mt-6 w-full text-left">
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                    {t("chat.recentTitle")}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {convs.slice(0, 4).map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => openConv(c.id)}
+                        className="truncate rounded-lg px-3 py-2 text-left text-sm text-neutral-600 transition hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                      >
+                        {c.title?.trim() || t("chat.histUntitled")}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="mx-auto max-w-3xl px-3 pt-5 pb-40 sm:px-4 sm:pt-6 sm:pb-36">
@@ -545,6 +650,12 @@ export function ChatClient() {
                 onAddFiles={onAddFiles}
                 onAddUrl={onAddUrl}
                 onRemoveAttachment={onRemoveAttachment}
+                onNew={newConv}
+                onClear={clearConv}
+                onExport={() => setExportOpen(true)}
+                onToggleSettings={() => setSettingsOpen((v) => !v)}
+                ocrAvailable={ocrAvailable}
+                modelName={modelName}
               />
             </div>
           </div>

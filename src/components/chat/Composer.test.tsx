@@ -17,6 +17,10 @@ function setup(over: Partial<Props> = {}) {
     onAddFiles: vi.fn(),
     onAddUrl: vi.fn(),
     onRemoveAttachment: vi.fn(),
+    onNew: vi.fn(),
+    onClear: vi.fn(),
+    onExport: vi.fn(),
+    onToggleSettings: vi.fn(),
     ...over,
   };
   render(
@@ -87,17 +91,55 @@ test("selecting the stop slash command calls onStop", () => {
   expect(props.onStop).toHaveBeenCalledTimes(1);
 });
 
-test("URL attach button calls onAddUrl with the prompt result", () => {
+test("selecting /moi calls onNew and clears the input", () => {
+  const props = setup({ value: "/moi" });
+  fireEvent.click(screen.getByText("Cuộc trò chuyện mới"));
+  expect(props.onNew).toHaveBeenCalledTimes(1);
+  expect(props.onChange).toHaveBeenCalledWith("");
+});
+
+test("selecting /xoa calls onClear and clears the input", () => {
+  const props = setup({ value: "/xoa" });
+  fireEvent.click(screen.getByText("Xoá nội dung hội thoại"));
+  expect(props.onClear).toHaveBeenCalledTimes(1);
+  expect(props.onChange).toHaveBeenCalledWith("");
+});
+
+test("selecting /xuat calls onExport and clears the input", () => {
+  const props = setup({ value: "/xuat" });
+  fireEvent.click(screen.getByText("Xuất hội thoại"));
+  expect(props.onExport).toHaveBeenCalledTimes(1);
+  expect(props.onChange).toHaveBeenCalledWith("");
+});
+
+test("selecting /caidat calls onToggleSettings and clears the input", () => {
+  const props = setup({ value: "/caidat" });
+  fireEvent.click(screen.getByText("Cài đặt mô hình"));
+  expect(props.onToggleSettings).toHaveBeenCalledTimes(1);
+  expect(props.onChange).toHaveBeenCalledWith("");
+});
+
+test("Enter on a typed /moi runs the command (onNew)", () => {
+  const props = setup({ value: "/moi" });
+  fireEvent.keyDown(screen.getByLabelText("Soạn tin nhắn"), { key: "Enter" });
+  expect(props.onNew).toHaveBeenCalledTimes(1);
+});
+
+test("URL button opens an inline input that submits to onAddUrl on Enter (UX-2)", () => {
   const props = setup();
-  vi.spyOn(window, "prompt").mockReturnValue("https://example.com");
+  // No inline input until the URL button is clicked.
+  expect(screen.queryByLabelText("Nhập URL để đọc")).not.toBeInTheDocument();
   fireEvent.click(screen.getByLabelText("Đọc một URL"));
+  const input = screen.getByLabelText("Nhập URL để đọc");
+  fireEvent.change(input, { target: { value: "https://example.com" } });
+  fireEvent.keyDown(input, { key: "Enter" });
   expect(props.onAddUrl).toHaveBeenCalledWith("https://example.com");
 });
 
-test("URL attach button does nothing when prompt is cancelled", () => {
+test("URL inline input does not submit when empty", () => {
   const props = setup();
-  vi.spyOn(window, "prompt").mockReturnValue(null);
   fireEvent.click(screen.getByLabelText("Đọc một URL"));
+  fireEvent.keyDown(screen.getByLabelText("Nhập URL để đọc"), { key: "Enter" });
   expect(props.onAddUrl).not.toHaveBeenCalled();
 });
 
