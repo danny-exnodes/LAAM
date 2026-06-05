@@ -206,19 +206,21 @@ describe("tickExecute — chạy các run queued", () => {
       if (e.type === "workflow_run") finalized.push({ id: e.runId!, status: e.status! });
     });
     const buildRunNode = () => vi.fn(async () => "done");
-    await tickExecute(db as never, { db: db as never, publish, buildRunNode });
+    const executed = await tickExecute(db as never, { db: db as never, publish, buildRunNode });
+    expect(executed).toBe(2); // trả về số run đã execute
     // cả 2 run đều finalize succeeded.
     expect(finalized.map((f) => f.id).sort()).toEqual(["r1", "r2"]);
     expect(finalized.every((f) => f.status === "succeeded")).toBe(true);
   });
 
-  test("không run queued → no-op", async () => {
+  test("không run queued → no-op (trả 0)", async () => {
     const db = {
       select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
       update: () => ({ set: () => ({ where: async () => {} }) }),
     };
     const publish = vi.fn();
-    await tickExecute(db as never, { db: db as never, publish, buildRunNode: () => vi.fn() });
+    const executed = await tickExecute(db as never, { db: db as never, publish, buildRunNode: () => vi.fn() });
+    expect(executed).toBe(0);
     expect(publish).not.toHaveBeenCalled();
   });
 });

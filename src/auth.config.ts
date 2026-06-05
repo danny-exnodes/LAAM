@@ -20,6 +20,7 @@ export const authConfig = {
         p === "/register" ||
         p === "/api/register" || // signup endpoint must be reachable when logged out
         p === "/api/ingest" || // collector authenticates with a machine token, not a session
+        p === "/api/workflows/tick" || // scheduler poke: localhost/secret auth, not a session
         p.startsWith("/api/auth");
       if (isPublic) return true;
       return isLoggedIn;

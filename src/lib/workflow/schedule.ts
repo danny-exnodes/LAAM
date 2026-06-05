@@ -100,17 +100,20 @@ export async function tickClaim(db: typeof Db, now: Date): Promise<string[]> {
 const MAX_EXECUTE_PER_TICK = 25; // bound công việc 1 tick (Rule: bound everything)
 
 // Nhặt run queued + chạy. trigger luôn 'schedule' (run queued chỉ do tickClaim tạo).
-export async function tickExecute(db: typeof Db, deps: ExecuteRunDeps): Promise<void> {
+// Trả về SỐ run đã execute (cho route báo {executed}).
+export async function tickExecute(db: typeof Db, deps: ExecuteRunDeps): Promise<number> {
   const queued = await db
     .select()
     .from(workflowRuns)
     .where(eq(workflowRuns.status, "queued"))
     .limit(MAX_EXECUTE_PER_TICK);
 
-  for (const r of queued as { id: string; workflowId: string; userId: string; graphSnapshot: WorkflowGraph }[]) {
+  const rows = queued as { id: string; workflowId: string; userId: string; graphSnapshot: WorkflowGraph }[];
+  for (const r of rows) {
     await executeRunRow(
       { id: r.id, workflowId: r.workflowId, userId: r.userId, trigger: "schedule", graphSnapshot: r.graphSnapshot },
       deps,
     );
   }
+  return rows.length;
 }
