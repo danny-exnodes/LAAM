@@ -1,12 +1,16 @@
 // Lớp persistence + SSE quanh engine thuần. Snapshot graph authored vào run
 // (PIN-D4a). Mỗi step → row + publish bus. status cuối + context (capped).
+// G1: persist run_step.input; foreach child gắn parentStepId; finalize FAILED khi
+// engine THROW (budget/validate/foreach-not-array — không để run kẹt "running");
+// onStep DB write fail-soft (insert lỗi tạm thời KHÔNG abort run; node-fail vẫn fail-stop).
 import { eq } from "drizzle-orm";
 import type { db as Db } from "@/db";
 import { workflows, workflowRuns, workflowRunSteps } from "@/db/schema";
 import type { BusEvent } from "@/lib/events-bus";
 import { runWorkflow } from "./engine";
-import { emptyContext } from "./types";
-import type { RunContext, StepRecord, WfNode } from "./types";
+import { evalPredicate } from "./predicate";
+import { emptyContext, DEFAULT_BUDGET } from "./types";
+import type { RunContext, StepRecord, WfNode, Budget } from "./types";
 
 const MAX_OUTPUT_BYTES = 256 * 1024; // PIN-D4b — cap output persist, KHÔNG cắt context RAM
 
@@ -22,6 +26,7 @@ export type ExecuteRunDeps = {
   db: typeof Db;
   publish: (e: BusEvent) => void;
   buildRunNode: (userId: string) => (node: WfNode, ctx: RunContext) => Promise<unknown>;
+  budget?: Budget; // G1: cận chạy (mặc định DEFAULT_BUDGET)
 };
 
 export type ExecuteRunResult =
@@ -49,36 +54,64 @@ export async function executeRun(
   });
 
   const steps: StepRecord[] = [];
-  const stepRowId = new Map<string, string>(); // nodeId → row id (A0: nodeId duy nhất trong 1 run)
+  const stepRowId = new Map<string, string>(); // nodeId → row id (cập nhật tuần tự; foreach: ghi đè mỗi vòng, update bám row hiện tại)
   const onStep = async (s: StepRecord) => {
-    if (s.status === "running") {
-      const id = crypto.randomUUID();
-      stepRowId.set(s.nodeId, id);
-      await deps.db.insert(workflowRunSteps).values({
-        id, runId, nodeId: s.nodeId, seq: s.seq, kind: s.kind, status: "running", startedAt: new Date(),
-      });
-    } else {
-      steps.push(s);
-      // Update ĐÚNG row của node này (theo id) — KHÔNG where(runId) (sẽ clobber mọi step).
-      await deps.db.update(workflowRunSteps)
-        .set({ status: s.status, output: capForPersist(s.output), error: s.error, finishedAt: new Date() })
-        .where(eq(workflowRunSteps.id, stepRowId.get(s.nodeId)!));
+    // DB write fail-soft: lỗi insert/update tạm thời KHÔNG abort cả run (node-fail vẫn
+    // fail-stop qua engine). Vẫn publish SSE để UI thấy tiến trình.
+    try {
+      if (s.status === "running") {
+        const id = crypto.randomUUID();
+        stepRowId.set(s.nodeId, id);
+        // foreach child: parentNodeId → row id của foreach node (đã insert trước, tuần tự).
+        const parentStepId = s.parentNodeId ? (stepRowId.get(s.parentNodeId) ?? null) : null;
+        await deps.db.insert(workflowRunSteps).values({
+          id, runId, nodeId: s.nodeId, parentStepId, seq: s.seq, kind: s.kind,
+          status: "running", input: capForPersist(s.input), startedAt: new Date(),
+        });
+      } else {
+        steps.push(s);
+        // Update ĐÚNG row của node này (theo id) — KHÔNG where(runId) (sẽ clobber mọi step).
+        const rowId = stepRowId.get(s.nodeId);
+        if (rowId) {
+          await deps.db.update(workflowRunSteps)
+            .set({ status: s.status, output: capForPersist(s.output), error: s.error, finishedAt: new Date() })
+            .where(eq(workflowRunSteps.id, rowId));
+        }
+      }
+    } catch (e) {
+      console.error(`[workflow] onStep DB write lỗi (fail-soft) run=${runId} node=${s.nodeId} status=${s.status}:`, e);
     }
     deps.publish({ type: "workflow_run_step", runId, nodeId: s.nodeId, seq: s.seq, status: s.status });
   };
 
   const runNode = deps.buildRunNode(input.userId);
-  const result = await runWorkflow(snapshot, { runNode, onStep }, emptyContext({ source: input.trigger }));
+  const budget = deps.budget ?? DEFAULT_BUDGET;
+
+  // A1 follow-up: engine THROW (budget/validate/foreach-not-array) → finalize FAILED,
+  // KHÔNG để run kẹt "running". Node-fail bình thường trả EngineResult.status="failed".
+  let finalStatus: "succeeded" | "failed";
+  let finalError: string | undefined;
+  let finalContext: unknown;
+  try {
+    const result = await runWorkflow(snapshot, { runNode, onStep, evalPredicate }, emptyContext({ source: input.trigger }), budget);
+    finalStatus = result.status;
+    finalError = result.error;
+    finalContext = result.context;
+  } catch (e) {
+    finalStatus = "failed";
+    finalError = e instanceof Error ? e.message : String(e);
+    finalContext = undefined;
+  }
 
   await deps.db.update(workflowRuns)
     .set({
-      status: result.status,
-      error: result.error,
-      context: capForPersist(result.context),
+      status: finalStatus,
+      error: finalError,
+      context: capForPersist(finalContext),
       finishedAt: new Date(),
     })
     .where(eq(workflowRuns.id, runId));
-  deps.publish({ type: "workflow_run", runId, status: result.status });
+  deps.publish({ type: "workflow_run", runId, status: finalStatus });
 
-  return { ok: true, run: { id: runId, status: result.status }, steps };
+  return { ok: true, run: { id: runId, status: finalStatus }, steps };
 }
