@@ -90,3 +90,12 @@ Static template catalog (`src/lib/workflow/templates.ts`, ≥2 moat-leaning đ�
 
 ## ▶ Next: D EDITOR (last phase)
 `/workflows/[id]/edit` React Flow (reuse @xyflow/react from `/graph`) + palette (agent/connector/condition/foreach) + config forms + edge-draw (condition true/false labels) + save (**add PATCH /api/workflows/[id]** + assertRunnable validate) + blank-create flow. Highest blind-risk → graph↔WorkflowGraph serialization PURE+tested; canvas interactions flagged for QA.
+
+## ✅ D EDITOR — DONE + MERGED (`851c13f`)
+- sonnet impl (5 task) + sonnet review (round-trip TRUE-inverse all 4 kinds+labels+foreach-body; GET/PATCH owner+server-validate; save client+server; blank-create fixes dead link) APPROVED. **tsc 0 · 847 branch / 1436 full green.**
+- `GET+PATCH /api/workflows/[id]`; `graph-serde.ts` (pure round-trip, 19 tests); `NodeConfigPanel`; `WorkflowEditor` (React Flow canvas + palette + connect + save); `/workflows/new` (blank); i18n. ⚠️ canvas drag/connect + visual = LIVE QA. Minor: NodeConfigPanel field labels chưa i18n (low, follow-up).
+
+## 🏁 AUTONOMOUS RUN COMPLETE (A1→E) — ALL ON LOCAL MAIN `851c13f`, **NOT pushed**
+- A0(prior) · G1 engine v2 · G2 scheduler · G3 templates · E mgmt · D editor. tsc 0, full suite green. Migrations 0004(wf)+0006(scheduler) [+0005 eval]. Review-then-push (user+CTO).
+- **HOST STEPS (user):** `db:migrate` (0006) · set `WORKFLOW_TICK_SECRET` · install Windows Task poke (→/api/workflows/tick) · **live UI QA** (editor canvas + mgmt page) · Task 8 E2E.
+- Follow-ups (non-blocking): NodeConfigPanel i18n · token-precise budget (deferred, step/foreach caps suffice) · cron tz/DST · condition reconverge/DAG · manual BLAST_HIGH (PIN-6 suspend-continue) · `package-lock.json` dirty (not mine — left).
