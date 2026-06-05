@@ -15,6 +15,19 @@ export type ChatMsg = {
   tokensOut?: number; // per-turn completion tokens (assistant messages)
   toolTrace?: ToolTraceItem[]; // SP-4: trace tool (ephemeral, không reload)
   cites?: string[];            // SP-4: tên tool nguồn (ephemeral)
+  pendingWrite?: PendingWrite; // SP-2 write-gate: card xác nhận (ephemeral)
+};
+
+// SP-2 write-gate: một hành động write model đề xuất, chờ user xác nhận. title/
+// summary/fields do backend cấp (đã redact, code-built). token mờ (đã mã hoá) —
+// FE chỉ echo lại, không parse. status do FE quản (ephemeral, reload mất card).
+export type PendingWrite = {
+  token: string;
+  tool: string;
+  title: string;
+  summary: string;
+  fields?: { label: string; value: string }[];
+  status: "idle" | "sending" | "done" | "cancelled" | "error";
 };
 
 export type ChatSettings = {

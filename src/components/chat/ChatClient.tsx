@@ -20,6 +20,7 @@ import {
   type ChatMsg,
   type ChatSettings,
   type Conv,
+  type PendingWrite,
 } from "./types";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
 import type { ToolTraceItem } from "./toolLabel";
@@ -127,6 +128,7 @@ export function ChatClient() {
     tokens?: { tokensIn: number; tokensOut: number },
     toolTrace?: ToolTraceItem[],
     cites?: string[],
+    pendingWrite?: PendingWrite,
   ): ChatMsg[] {
     const copy = [...prev];
     for (let i = copy.length - 1; i >= 0; i--) {
@@ -137,11 +139,20 @@ export function ChatClient() {
           ...(tokens ?? {}),
           ...(toolTrace !== undefined ? { toolTrace } : {}),
           ...(cites !== undefined ? { cites } : {}),
+          ...(pendingWrite !== undefined ? { pendingWrite } : {}),
         };
         break;
       }
     }
     return copy;
+  }
+
+  // SP-2 write-gate: update the confirm-card status on a specific message by id
+  // (the card lives on the assistant message that proposed the write).
+  function setPendingStatus(prev: ChatMsg[], msgId: string, status: PendingWrite["status"]): ChatMsg[] {
+    return prev.map((m) =>
+      m.id === msgId && m.pendingWrite ? { ...m, pendingWrite: { ...m.pendingWrite, status } } : m,
+    );
   }
 
   // Prepend attachment text to the outgoing message so the model sees it.
@@ -154,8 +165,11 @@ export function ChatClient() {
     return `${blocks}\n\n${text}`;
   }
 
-  const streamReply = useCallback(
-    async (outgoing: string) => {
+  // Generic POST + stream to /api/chat. body = {message} for a normal turn, or
+  // {confirm:{token,approve}} for the write-gate round-trip. Streams text + frames
+  // into the LAST assistant message; returns whether it completed ok.
+  const streamFrom = useCallback(
+    async (body: Record<string, unknown>): Promise<boolean> => {
       setStreaming(true);
       const ctrl = new AbortController();
       abortRef.current = ctrl;
@@ -163,21 +177,14 @@ export function ChatClient() {
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            conversationId: activeId ?? undefined,
-            message: outgoing,
-            model: settings.model,
-            temperature: settings.temperature,
-            topP: settings.topP,
-            system: settings.system || undefined,
-          }),
+          body: JSON.stringify(body),
           signal: ctrl.signal,
         });
         const convId = res.headers.get("x-conversation-id");
         if (!res.ok || !res.body) {
           const errTxt = await res.text().catch(() => t("chat.errServer"));
           setMessages((p) => setLastAssistant(p, errTxt || t("chat.errServer")));
-          return;
+          return false;
         }
         const reader = res.body.getReader();
         const dec = new TextDecoder();
@@ -185,6 +192,7 @@ export function ChatClient() {
         const trace = new Map<number, ToolTraceItem>();
         let cites: string[] | undefined;
         let tokens: { tokensIn: number; tokensOut: number } | undefined;
+        let pendingWrite: PendingWrite | undefined;
         const applyFrames = (frames: ChatFrame[]) => {
           for (const f of frames) {
             if (f.t === "tool") {
@@ -194,6 +202,11 @@ export function ChatClient() {
               trace.set(f.c, cur);
             } else if (f.t === "cite") cites = f.names;
             else if (f.t === "tokens") tokens = { tokensIn: f.i, tokensOut: f.o };
+            else if (f.t === "pending_write")
+              pendingWrite = {
+                token: f.token, tool: f.tool, title: f.title,
+                summary: f.summary, fields: f.fields, status: "idle",
+              };
           }
         };
         const items = () => [...trace.values()].sort((a, b) => a.c - b.c);
@@ -204,25 +217,54 @@ export function ChatClient() {
           const { text, frames } = splitFrames(raw);
           applyFrames(frames);
           const list = items();
-          setMessages((p) => setLastAssistant(p, text, undefined, list.length ? list : undefined, cites));
+          setMessages((p) => setLastAssistant(p, text, undefined, list.length ? list : undefined, cites, pendingWrite));
         }
         const fin = splitFrames(raw);
         applyFrames(fin.frames);
         const list = items();
-        setMessages((p) => setLastAssistant(p, fin.text, tokens, list.length ? list : undefined, cites));
+        setMessages((p) => setLastAssistant(p, fin.text, tokens, list.length ? list : undefined, cites, pendingWrite));
         if (!activeId && convId) setActiveId(convId);
         void loadConvs();
+        return true;
       } catch (e) {
         if ((e as Error)?.name !== "AbortError") {
           setMessages((p) => setLastAssistant(p, t("chat.errConn")));
         }
+        return false;
       } finally {
         setStreaming(false);
         abortRef.current = null;
       }
     },
-    [activeId, settings, t],
+    [activeId, t],
   );
+
+  const streamReply = useCallback(
+    (outgoing: string) =>
+      streamFrom({
+        conversationId: activeId ?? undefined,
+        message: outgoing,
+        model: settings.model,
+        temperature: settings.temperature,
+        topP: settings.topP,
+        system: settings.system || undefined,
+      }),
+    [streamFrom, activeId, settings],
+  );
+
+  // Write-gate round-trip: confirm/deny a proposed write. Disables the card
+  // (status "sending"), POSTs {confirm} reusing the stream helper into a NEW
+  // assistant message, then resolves the card. The status guard + the backend's
+  // nonce dedupe together prevent double-submit.
+  async function handleConfirm(msgId: string, approve: boolean) {
+    const msg = messages.find((m) => m.id === msgId);
+    if (!msg?.pendingWrite || msg.pendingWrite.status !== "idle" || streaming) return;
+    const token = msg.pendingWrite.token;
+    setMessages((p) => setPendingStatus(p, msgId, "sending"));
+    setMessages((p) => [...p, { id: uid(), role: "assistant", content: "", createdAt: Date.now() }]);
+    const ok = await streamFrom({ conversationId: activeId ?? undefined, confirm: { token, approve } });
+    setMessages((p) => setPendingStatus(p, msgId, ok ? (approve ? "done" : "cancelled") : "error"));
+  }
 
   async function send() {
     const text = input.trim();
@@ -432,6 +474,7 @@ export function ChatClient() {
                 onEdit={onEdit}
                 onRegenerate={onRegenerate}
                 onDelete={onDelete}
+                onConfirm={handleConfirm}
               />
             </div>
           )}

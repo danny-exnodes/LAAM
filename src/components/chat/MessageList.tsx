@@ -14,6 +14,7 @@ export interface MessageListProps {
   onEdit(m: ChatMsg): void;
   onRegenerate(m: ChatMsg): void;
   onDelete(m: ChatMsg): void;
+  onConfirm?(msgId: string, approve: boolean): void;
 }
 
 export function MessageList({
@@ -23,6 +24,7 @@ export function MessageList({
   onEdit,
   onRegenerate,
   onDelete,
+  onConfirm,
 }: MessageListProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -35,6 +37,7 @@ export function MessageList({
           onEdit={onEdit}
           onRegenerate={onRegenerate}
           onDelete={onDelete}
+          onConfirm={onConfirm}
         />
       ))}
       <div data-scroll-anchor />
