@@ -6,7 +6,6 @@ import { chatTools } from "@/lib/connectors";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { runToolRounds, type ChatMessage, type OllamaChatResponse } from "@/lib/agent/orchestrator";
-import type { ToolEvent } from "@/lib/agent/types";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { makeFrameCollector, deriveCitations } from "@/lib/chat/trace";
 
