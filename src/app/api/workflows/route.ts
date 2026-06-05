@@ -2,7 +2,7 @@ import { eq, desc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { workflows } from "@/db/schema";
-import { assertLinear } from "@/lib/workflow/validate";
+import { assertRunnable } from "@/lib/workflow/validate";
 import type { WorkflowGraph } from "@/lib/workflow/types";
 
 export async function POST(req: Request) {
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   const body = ((await req.json().catch(() => null)) ?? {}) as { name?: string; graph?: WorkflowGraph };
   if (!body.name || !body.graph) return new Response(JSON.stringify({ error: "name + graph bắt buộc" }), { status: 400 });
   try {
-    assertLinear(body.graph); // A0: chỉ nhận graph tuyến tính (cổng §5.5)
+    assertRunnable(body.graph); // G1: nhận graph tuyến tính + condition/foreach (cổng §5.5)
   } catch (e) {
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "graph không hợp lệ" }), { status: 400 });
   }
