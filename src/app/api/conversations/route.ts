@@ -86,8 +86,10 @@ export async function POST(req: Request) {
     if (!conv || conv.userId !== userId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-    const msg = await firstUserMessage(body.id);
-    const next = msg ? retitleFromMessage(msg) : null;
+    // Prefer the first user message; if it's gone (messages deleted), clean the
+    // title string itself — retitleFromMessage extracts the filename from it.
+    const source = (await firstUserMessage(body.id)) ?? conv.title ?? "";
+    const next = retitleFromMessage(source);
     if (next && next !== conv.title) {
       await db.update(chatConversations).set({ title: next }).where(eq(chatConversations.id, body.id));
     }
@@ -102,9 +104,10 @@ export async function POST(req: Request) {
     let retitled = 0;
     for (const c of convs) {
       if (!c.title || !c.title.startsWith("--- ")) continue; // only fix polluted titles
-      const msg = await firstUserMessage(c.id);
-      if (!msg) continue;
-      const next = retitleFromMessage(msg);
+      // Prefer the first user message; fall back to the title itself when the
+      // conversation has no messages (deleted) so it still gets cleaned.
+      const source = (await firstUserMessage(c.id)) ?? c.title;
+      const next = retitleFromMessage(source);
       if (next && next !== c.title) {
         await db.update(chatConversations).set({ title: next }).where(eq(chatConversations.id, c.id));
         retitled++;
