@@ -3,7 +3,13 @@
 **Người mở:** lead (phiên review SP-2→SP-3, 2026-06-05) · **Cho:** integrator / owner merge harness.
 **Nguồn:** review code SP-2 (`comms/resolved/sp2-to-reviewer-code-review`) + SP-3 (`comms/active/sp3-to-reviewer-implementation-review`). Cả 2 verdict = APPROVED/YES độc lập; đây là rủi ro **MERGE**, không phải defect.
 
-## Vấn đề
+## ✅ STATUS (2026-06-05, lead) — SP-2 + SP-3 ĐÃ MERGE vào `main`
+- `516719f` docs · `3e6a1de` Merge SP-2 (clean) · `4fa6625` Merge SP-3 (**route.ts reconcile thủ công** theo §"Điểm phải reconcile" dưới — `streamOllama` đã tham số hoá `{toolTurns, assistantMsgId}`; gate `withSafety` + suspend/confirm GIỮ; baseLen/persist/summarize/proactive GIỮ).
+- Verify trên merged main: `tsc` sạch + **471 test pass** (97 file). `npm run db:migrate` (0003) đã chạy host — `chat_tool_call` + 3 cột live (4 migration tracked).
+- **CÒN LẠI cho SP-4:** SP-4 (UX feedback) ĐANG đụng `route.ts` (worktree `agent-harness-sp4`, checkpoint `sp4-task5`) → khi merge SP-4 sẽ là **3-way LẦN 2** với route.ts đã-có-SP-2+SP-3. Imports SP-4 (`@/lib/chat/trace`, `ToolEvent`, `deriveCitations`, `makeFrameCollector`) + dedupe import `encodeFrame`/`ChatFrame` phải reconcile vào bản merged. Cùng pattern: SP-4 extract/inject frame-collector quanh `runToolRounds`/stream → gộp với gate + persist.
+- **Follow-up vẫn mở:** persist tool-turn cho confirm-path (resume gọi `streamOllama` KHÔNG `persist`); repoint `/api/stats`→`_load`.
+
+## Vấn đề (lịch sử — đã xử lý cho SP-2/SP-3)
 SP-2 (`feat/agent-harness-sp2` @ `2b5b3e0`) và SP-3 (`feat/agent-harness-sp3` @ `2215f14`) **cùng nhánh từ base `12a97d7`** và **cùng viết lại vùng chồng nhau** của `src/app/api/chat/route.ts`. Merge cả hai = 3-way merge THỦ CÔNG, không auto.
 
 ## Điểm phải reconcile (file:line theo từng nhánh)

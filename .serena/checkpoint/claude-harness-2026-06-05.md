@@ -27,3 +27,16 @@ Vai trò: technical lead Agent Harness. Nhiệm vụ phiên này: review code SP
 - Merge collision `route.ts` (backlog `agent-harness-route-merge-reconciliation`) = rủi ro lớn nhất.
 - Migration `0003` host-only (drizzle-kit không sandbox); deploy-order bắt buộc.
 - SP-3 thread để **active** (chờ user quyết merge, theo verdict #1).
+
+## Update — ✅ MERGE SP-2 + SP-3 + db:migrate (user uỷ quyền chủ động)
+- `516719f` commit docs/serena pending (review verdicts + backlog + specs/plans SP-2/3/4 + checkpoints).
+- `3e6a1de` **Merge SP-2** (clean, no conflict — main đã ahead bằng docs-only commits). Verify: tsc sạch + 451 test (94 file, exclude worktrees).
+- `4fa6625` **Merge SP-3** — chỉ `route.ts` conflict; **reconcile THỦ CÔNG**: giữ gate `withSafety`+suspend/confirm (SP-2) + summarize/proactive/baseLen/persist (SP-3); **`streamOllama` tham số hoá `{toolTurns, assistantMsgId}`** (SP-2 extract-fn × SP-3 inline-persist → scope bug, đã vá). Verify: tsc sạch + **471 test pass (97 file)**.
+- **`npm run db:migrate` (0003) đã chạy** host (Postgres `laam-v2-postgres` up). Verify SQL: `chat_tool_call` exists + 3 cột (`summary`/`summarizedThroughId`/`proactiveState`) + journal 4 migration.
+- ⚠️ **route.ts working-tree DIRTY (SP-4)**: phiên SP-4 (checkpoint `sp4-task5`) đã thêm import `@/lib/chat/trace` (module CHƯA có ở main) + dedupe `encodeFrame` → working-tree KHÔNG compile. **KHÔNG do tôi, KHÔNG commit** (HEAD 4fa6625 sạch). Để nguyên cho phiên SP-4 hoàn tất (harness báo intentional). Backlog route-merge-reconciliation đã cập nhật cho SP-4.
+- ⚠️ `package-lock.json` dirty (-117 dòng, không rõ nguồn, không phải task) — để nguyên, flag user.
+- Branch/worktree SP-2/SP-3 **chưa xoá** (worktree harness-owned + SP-4 đang active cạnh đó — không đụng, tránh phantom state).
+
+## Next steps
+- User smoke-test runtime (server + Ollama) — route glue chưa có integration test (tôi verify tsc+unit). 
+- SP-4: merge sau, reconcile route.ts lần 2 (backlog). Follow-up: persist confirm-path · integration test route · repoint /api/stats.
