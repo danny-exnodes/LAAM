@@ -6,6 +6,9 @@ import { chatTools } from "@/lib/connectors";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { runToolRounds, type ChatMessage, type OllamaChatResponse } from "@/lib/agent/orchestrator";
+import type { ToolEvent } from "@/lib/agent/types";
+import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
+import { makeFrameCollector, deriveCitations } from "@/lib/chat/trace";
 
 const OLLAMA_URL = (process.env.OLLAMA_URL ?? "http://localhost:11434").replace(/\/$/, "");
 const MODEL = process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
@@ -130,7 +133,10 @@ export async function POST(req: Request) {
   };
 
   // Một lượt chat luôn chạy tool-loop (do internal tools luôn bật).
-  const dispatch = makeDispatch(INTERNAL_TOOLS, { userId, now, lang });
+  // SP-4: nối onEvent → gom tool frames (gán c, redact args) để phát ra stream.
+  const internalNames = new Set(INTERNAL_TOOLS.map((t) => t.name));
+  const { onEvent, frames: toolFrames } = makeFrameCollector(internalNames);
+  const dispatch = makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent);
   const callOllama = async (
     messages: ChatMessage[],
     roundTools: typeof tools,
@@ -149,10 +155,13 @@ export async function POST(req: Request) {
     if (!r.ok) throw new Error(`Ollama ${r.status}`);
     return (await r.json()) as OllamaChatResponse;
   };
+  const baseLen = payload.messages.length;
+  let cites: string[] = [];
   try {
     payload.messages = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
+    cites = deriveCitations(payload.messages, baseLen);
   } catch {
-    // Tool loop lỗi (Ollama/connector) — stream trả lời thường từ payload gốc.
+    // Tool loop lỗi (Ollama/connector) — stream trả lời thường; frames có thể rỗng (fail-soft).
   }
 
   let ollamaRes: Response;
@@ -221,13 +230,15 @@ export async function POST(req: Request) {
             tokensIn,
             tokensOut,
           });
-          // Trailing metadata frame: a U+001E (record separator) the client
-          // strips from the visible text, carrying this turn's token counts so
-          // they show live without a reload.
+          // SP-4: trailing frames (bọc U+001E) — tool trace → citations → token usage.
+          // Client strip khỏi text. Fail-soft: lỗi enqueue (client aborted) → bỏ qua.
           try {
-            controller.enqueue(
-              encoder.encode("" + JSON.stringify({ i: tokensIn, o: tokensOut })),
-            );
+            const frames: ChatFrame[] = [
+              ...toolFrames,
+              ...(cites.length ? [{ t: "cite", names: cites } as ChatFrame] : []),
+              { t: "tokens", i: tokensIn, o: tokensOut },
+            ];
+            for (const f of frames) controller.enqueue(encoder.encode(encodeFrame(f)));
           } catch {
             /* response already cancelled (client aborted) — nothing to send */
           }
