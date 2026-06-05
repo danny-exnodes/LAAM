@@ -309,22 +309,49 @@ export const workflows = pgTable("workflow", {
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
 
-export const workflowRuns = pgTable("workflow_run", {
+// G2 (Phase B): recurring schedules. nextRunAt = mốc kế (cron-derived); claim+advance
+// trong 1 tx (PIN-D1). missedCount = số slot bỏ qua khi tick trễ (skip-realign). TZ
+// lưu để tương lai (v1 nextRunAt tính theo giờ server). catchupPolicy lưu nhưng v1
+// luôn fire-one (no backfill). (spec scheduler.)
+export const workflowSchedules = pgTable("workflow_schedule", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
   workflowId: text("workflowId").notNull().references(() => workflows.id, { onDelete: "cascade" }),
   userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
-  trigger: text("trigger").notNull(), // manual | schedule
-  status: text("status").notNull().default("queued"), // queued|running|succeeded|failed|cancelled
-  graphSnapshot: jsonb("graphSnapshot").$type<WorkflowGraph>().notNull(),
-  context: jsonb("context"),
-  error: text("error"),
-  tokensIn: integer("tokensIn").notNull().default(0),
-  tokensOut: integer("tokensOut").notNull().default(0),
-  costUsd: doublePrecision("costUsd").notNull().default(0),
-  startedAt: timestamp("startedAt", { mode: "date" }),
-  finishedAt: timestamp("finishedAt", { mode: "date" }),
+  cron: text("cron").notNull(), // 5-field (min hour dom month dow)
+  timezone: text("timezone").notNull().default("Asia/Ho_Chi_Minh"),
+  enabled: boolean("enabled").notNull().default(true),
+  catchupPolicy: text("catchupPolicy").notNull().default("skip"), // skip | (backfill hoãn)
+  nextRunAt: timestamp("nextRunAt", { mode: "date" }),
+  lastRunAt: timestamp("lastRunAt", { mode: "date" }),
+  missedCount: integer("missedCount").notNull().default(0),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
+
+export const workflowRuns = pgTable(
+  "workflow_run",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    workflowId: text("workflowId").notNull().references(() => workflows.id, { onDelete: "cascade" }),
+    userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    trigger: text("trigger").notNull(), // manual | schedule
+    status: text("status").notNull().default("queued"), // queued|running|succeeded|failed|cancelled
+    graphSnapshot: jsonb("graphSnapshot").$type<WorkflowGraph>().notNull(),
+    context: jsonb("context"),
+    error: text("error"),
+    // G2: liên kết schedule + slot đã claim. scheduleId set-null khi schedule bị xoá
+    // (giữ lịch sử run). unique(scheduleId, scheduledFor) → dedupe pokes đua cùng slot.
+    scheduleId: text("scheduleId").references(() => workflowSchedules.id, { onDelete: "set null" }),
+    scheduledFor: timestamp("scheduledFor", { mode: "date" }),
+    tokensIn: integer("tokensIn").notNull().default(0),
+    tokensOut: integer("tokensOut").notNull().default(0),
+    costUsd: doublePrecision("costUsd").notNull().default(0),
+    startedAt: timestamp("startedAt", { mode: "date" }),
+    finishedAt: timestamp("finishedAt", { mode: "date" }),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [unique("workflow_run_schedule_slot").on(t.scheduleId, t.scheduledFor)],
+);
 
 export const workflowRunSteps = pgTable("workflow_run_step", {
   id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
@@ -348,3 +375,4 @@ export const workflowRunSteps = pgTable("workflow_run_step", {
 export type Workflow = typeof workflows.$inferSelect;
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
 export type WorkflowRunStep = typeof workflowRunSteps.$inferSelect;
+export type WorkflowSchedule = typeof workflowSchedules.$inferSelect;

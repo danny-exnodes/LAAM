@@ -34,3 +34,17 @@ export function resolveKind(name: string, internal: Tool[]): "read" | "write" {
   console.warn(`[safety] tool chưa phân loại, mặc định GATE (write): ${name}`);
   return "write";
 }
+
+// G2 blast-radius tier (orthogonal to read/write). v1 workflow runs may only
+// perform LOW-blast actions; everything else is HIGH and fail-closed in the
+// workflow connector path (manual AND scheduled). The allowlist is code-defined
+// (NOT user-editable) and fail-closed: anything not listed is HIGH. Reads are
+// gated separately by resolveKind — only WRITEs are blast-classified at the call
+// site. (spec scheduler "blast-radius gate, v1 BLAST_LOW-only".)
+export const BLAST_LOW: ReadonlySet<string> = new Set([
+  "demo_create_task", // credential-free demo write, low impact
+]);
+
+export function resolveBlast(name: string): "low" | "high" {
+  return BLAST_LOW.has(name) ? "low" : "high";
+}
