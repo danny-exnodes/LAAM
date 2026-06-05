@@ -46,3 +46,13 @@
 
 ## Next — HẾT HOLD
 - Chờ user chọn execution mode (subagent-driven khuyến nghị) → isolate worktree → chạy plan A0 task-by-task. Task 1–7 không cần host; Task 2.4 (migrate) + Task 8 (E2E) là host (user).
+
+## ✅ A0 IMPLEMENTED + MERGED (2026-06-05)
+- Subagent-driven trong worktree `worktree-workflow-a0`: 7 task × (implementer sonnet + review; Task 7 review opus). **2 bug caught+fixed** (validate 0-start→cycle; run.ts step-persist `where(runId)` clobber → `stepRowId` map). Final review READY.
+- **GAP-1 đóng:** `drizzle-kit generate` chạy OFFLINE OK trong worktree (note cũ 'no sandbox' chỉ đúng cho `migrate`) → committed `0004_cultured_goliath` → branch self-contained.
+- **Merged vào main (Option 1):** merge `c1184de` (resolve `schema.ts`: giữ cả `eval_run` của PR#2 + 3 bảng workflow) + docs `6ccbd55`. Worktree+branch dọn sạch. **Full suite 1220 pass, tsc 0.**
+- ⚠️ **Cross-session observation:** main có `eval_run` trong schema NHƯNG migration dừng ở 0003 (0004 = workflow) → **eval_run CHƯA có migration trên main**; host `db:migrate` tạo bảng workflow, KHÔNG tạo eval_run. Eval session cần generate (sẽ là 0005). Flag cho user.
+- **Non-blocking follow-up (A1):** (1) SSE phát event generic — chưa typed `workflow_run_step` cho UI; (2) `onStep('running')` ngoài try (run kẹt 'running' nếu insert lỗi); (3) `run_step.input` chưa populate.
+
+## Next = Task 8 E2E host (USER chạy — agent-ops)
+`npm run db:migrate` (áp 0004) → /connectors bật Demo → POST /api/workflows (seed graph 1 connector→1 agent, xem plan Task 8) → POST /api/workflows/[id]/run → verify: run.status=succeeded · 2 step (n1 output, n2 tóm tắt) · SSE.
