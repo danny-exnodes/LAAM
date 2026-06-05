@@ -37,6 +37,17 @@ Vai trò: technical lead Agent Harness. Nhiệm vụ phiên này: review code SP
 - ⚠️ `package-lock.json` dirty (-117 dòng, không rõ nguồn, không phải task) — để nguyên, flag user.
 - Branch/worktree SP-2/SP-3 **chưa xoá** (worktree harness-owned + SP-4 đang active cạnh đó — không đụng, tránh phantom state).
 
-## Next steps
-- User smoke-test runtime (server + Ollama) — route glue chưa có integration test (tôi verify tsc+unit). 
-- SP-4: merge sau, reconcile route.ts lần 2 (backlog). Follow-up: persist confirm-path · integration test route · repoint /api/stats.
+## Update — ✅ MERGE SP-4 (2026-06-05, user uỷ quyền "merge SP-4 work")
+- Đọc message+checkpoint SP-4 (`sp4-2026-06-05`, integration plan `2026-06-05-agent-harness-integration.md`, trace.ts/frames.ts/route.ts của branch).
+- **Rule 13 win:** lead#2/sp4 claim "main committed ĐỎ" — tôi verify `git show HEAD:route.ts` = SẠCH (blob committed không có import SP-4). 5 lỗi tsc là từ **working-tree dirty** (hand-edit SP-4 chưa commit), không phải HEAD. ⇒ `git checkout HEAD -- route.ts` (bỏ bản dở) → merge branch SP-4 đúng cách (KHÔNG cần Task 0 stopgap).
+- **Merge `578f0ae`:** conflict CHỈ `route.ts`+`frames.ts`+`frames.test.ts`. `frames.*`=lấy SP-4 (superset splitFrames). `route.ts` reconcile canonical (integration plan Task 2/3): onEvent collector BÊN TRONG `withSafety(makeDispatch(…,onEvent))` · `deriveCitations` share baseLen · token-frame migrate `{i,o}`→`encodeFrame({t:tokens})` qua `streamOllama({persist,frames})` · suspend flush read-frames trước pending_write · confirm-path phát tool frame. trace/components/i18n/FE = clean adds/auto-merge.
+- **Verify merged main: `tsc` sạch + 490 test (101 file); hợp đồng SP-1 diff RỖNG; 1 frames.ts/1 trace.ts; token-frame migrate xong (producer route + consumer ChatClient splitFrames đổi cùng).** KHÔNG chạy `next build` (prod container :3900 up — agent-ops "không build in-place khi prod chạy"; SP-4 cũng gate).
+
+## Trạng thái cuối — cả 3 SP (SP-2/3/4) ĐÃ tích hợp vào main
+- `3e6a1de` SP-2 · `4fa6625` SP-3 · `578f0ae` SP-4. Backend harness hoàn chỉnh + FE trace/citations. Migration 0003 live.
+
+## Next steps (cho user / follow-up)
+- **Host acceptance (Phase 2):** `npm run build` (worktree/khi prod off) + live `/chat` E2E: tool+trace+cite · write confirm (trello 1 lần) · proactive · summarize. (User chạy — agent-ops.)
+- **Follow-up không chặn:** DRY deriveCitations↔extractToolTurns · persist confirm-path tool-turn · SP-2 FE confirm-card render · repoint /api/stats→_load · integration test route (read/write/confirm).
+- `package-lock.json` vẫn dirty (−117, không rõ nguồn, không phải task) — flag user.
+- Branch/worktree SP-2/3/4 chưa xoá (harness-owned; cleanup khi user OK).
