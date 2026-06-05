@@ -9,6 +9,22 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — AI Workflow G2: Scheduler (Phase B, backend, 2026-06-05)
+- **Lịch định kỳ (`workflow_schedule`)**: cron 5-field tự viết (`min hour dom month dow`; `*`, int, `*/n`, `a-b`, `a,b`), thuần, theo **giờ server-local** (tz/DST hoãn). Migration `0006`.
+- **Claim nguyên tử (PIN-D1)**: `POST /api/workflows/tick` → `tickClaim` (INSERT run `queued` + advance `nextRunAt`/`lastRunAt`/`missedCount` trong **CÙNG MỘT transaction** — không có cửa "đã claim nhưng chưa advance" gây kẹt lịch vĩnh viễn) rồi `tickExecute` (chạy run `queued`). `scheduledFor` = `nextRunAt` đã lưu floored-đến-phút → unique `(scheduleId, scheduledFor)` dedupe các poke đua cùng slot.
+- **Bỏ-lỡ = skip-realign**: tick trễ → fire **một** run, `nextRunAt` nhảy tới mốc cron strictly sau `now` (không dồn loạt run trễ), `missedCount += skippedSlots-1`.
+- **Blast-radius gate (v1 LOW-only)**: `BLAST_LOW = {demo_create_task}`; mọi connector action `write` không thuộc allowlist → **HIGH → fail-closed throw** ở đường connector (cả manual lẫn scheduled). Reads + LOW writes qua.
+- **Auth tick**: localhost HOẶC header `x-workflow-tick-secret === WORKFLOW_TICK_SECRET` — **KHÔNG** session (máy gọi). Đặt `WORKFLOW_TICK_SECRET` ở mọi deploy không-local (xem `.env.example`).
+- **Observability**: `GET /api/workflows/runs` (?workflowId, ?status) + `GET /api/workflows/runs/[id]` (run + steps), đều kiểm tra sở hữu.
+- **Host poke (chưa cài — bước thủ công)**: Windows Task Scheduler chạy mỗi phút gọi `POST http://localhost:3100/api/workflows/tick` (kèm header secret nếu đặt). KHÔNG bật catch-up của OS (app tự realign). Ví dụ tạo task:
+  ```powershell
+  # Chạy MỖI PHÚT; -UseBasicParsing để không cần IE engine. KHÔNG commit secret thật.
+  $action  = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -WindowStyle Hidden -Command "Invoke-RestMethod -Method POST -Uri http://localhost:3100/api/workflows/tick -Headers @{''x-workflow-tick-secret''=$env:WORKFLOW_TICK_SECRET} -UseBasicParsing"'
+  $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
+  Register-ScheduledTask -TaskName 'LAAM-workflow-tick' -Action $action -Trigger $trigger -Description 'Poke LAAM workflow scheduler mỗi phút'
+  ```
+- Verify: `tsc` sạch; toàn bộ test `src/lib/workflow` xanh (A0+G1+G2). Backend-only, không UI. **`db:migrate` (áp 0006) + cài Task là bước host (user).**
+
 ### Đã thêm — Chat: nâng cấp sau E2E (2026-06-05, đợt 2)
 - **Dọn dữ liệu cũ (S1)**: `POST /api/conversations {action:"backfill-titles"}` re-derive tiêu đề conv bị lẫn byte file (nút "Dọn tiêu đề" hiện khi có); badge **"trùng"** cảnh báo conv trùng tên (không tự xoá). Helper thuần `src/lib/chat/title.ts` (`retitleFromMessage`).
 - **Proactive card (S2)**: dismiss **bền qua localStorage** (TTL 24h) + mỗi cảnh báo **click mở `/agents/[id]`** (thêm `key`+`sessionId` vào frame `proactive`).
