@@ -1,7 +1,7 @@
 # Decision: Agent Harness SP-4 — UX feedback (stream tool events + citations)
 
 > Spec đầy đủ: `docs/superpowers/specs/2026-06-04-agent-harness-sp4-ux-feedback-design.md`.
-> Trạng thái: **spec APPROVED (lead) + plan viết xong** — `docs/superpowers/plans/2026-06-04-agent-harness-sp4-ux-feedback.md` (8 task TDD). Chờ user chọn execution. **CHƯA implement.** FE sign-off đang mở (`comms/active/sp4-to-frontend-chat-touchpoints`).
+> Trạng thái: **Tasks 1-7 DONE + reviewed APPROVED — feature COMPLETE** (436 test xanh, tsc sạch, 9 commit) trên `feat/agent-harness-sp4`. FE gate giải quyết bằng kiểm git (không có FE session sống/branch; file chat stable). Merge-gate giải quyết (T7 land cùng route). **CÒN: `npm run build` + live preview (gated, chờ user); merge cần 4-way route reconcile khi SP-2/SP-3 land.** Chi tiết: checkpoint `sp4-2026-06-05`.
 > Liên quan: [[agent-harness-architecture]] · spec SP-1 §2 · comms `lead-to-sp4-frame-protocol`.
 
 ## Tóm tắt

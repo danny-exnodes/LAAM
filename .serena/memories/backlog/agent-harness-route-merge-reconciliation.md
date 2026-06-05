@@ -39,5 +39,16 @@ SP-2 (`feat/agent-harness-sp2` @ `2b5b3e0`) và SP-3 (`feat/agent-harness-sp3` @
 **Fix P0 (≈3 dòng, KHÔNG cần SP-4):** xoá import `@/lib/chat/trace` + gộp 2 import frames → `import { encodeFrame, SEP, type ChatFrame } from "@/lib/chat/frames";` (+ xoá `ToolEvent` nếu unused). Chi tiết + verify: **`docs/superpowers/plans/2026-06-05-agent-harness-integration.md` Task 0**.
 → ⚠️ Mọi session đang branch/build từ main ĐỎ này (docker standalone, FE sẽ fail). Cần áp Task 0 NGAY.
 
+## ✅ SP-4 READY cho merge (2026-06-05, sp4) — branch `feat/agent-harness-sp4` (thay §9 cũ)
+SP-4 (UX feedback) XONG + verified độc lập: **9 commit, 436 test xanh, tsc sạch** trên branch (base `98c18c7`, TRƯỚC SP-2/SP-3 merge). Checkpoint `sp4-2026-06-05`; spec/plan `docs/superpowers/{specs,plans}/2026-06-04-agent-harness-sp4-ux-feedback*`.
+**Clean adds (lấy nguyên, KHÔNG đụng SP-2/SP-3):** `src/lib/chat/frames.ts` (`encodeFrame`/`splitFrames`/`FRAME_SEP`/`ChatFrame` — **chính là module mà import gãy ở main đang thiếu** ⇒ SP-4 merge GIẢI QUYẾT P0 đúng, không cần stopgap xoá import) · `src/lib/chat/trace.ts` (`makeFrameCollector`/`deriveCitations`/`summarizeArgs`) · `src/components/chat/{toolLabel,ToolTrace,Citations}.tsx` · 7 i18n key `chat.*`.
+**Reconcile `route.ts` (3-way lần 2, vào bản đã-SP-2+SP-3):**
+1. **dispatch:** dựng `const {onEvent, frames: toolFrames} = makeFrameCollector(new Set(INTERNAL_TOOLS.map(t=>t.name)))` rồi truyền `onEvent` làm **arg 3** của makeDispatch, BÊN TRONG withSafety: `withSafety(makeDispatch(INTERNAL_TOOLS, ctx, onEvent), {internal})`.
+2. **token-frame — BẮT BUỘC:** thay frame `{i,o}` cũ bằng trailing frames tagged: `[...toolFrames, {t:"cite",names:cites}?, {t:"tokens",i,o}]` qua `encodeFrame`. Lý do: FE (ChatClient Task 7) nay parse bằng `splitFrames`, **KHÔNG đọc `{i,o}` nữa** → nếu giữ `{i,o}` thì token-count live vỡ. Giữ `db.insert(chatToolCalls)` persist của SP-3 trong finally; phát frames SAU persist.
+3. **citations:** `cites = deriveCitations(payload.messages, baseLen)` ở nhánh thành công — dùng CHUNG `baseLen` của SP-3; nên share `extractToolTurns` (DRY — đã đồng bộ ở A2 / `lead-to-sp4-spec-review`).
+**FE (lấy nguyên SP-4 Task 7):** `ChatClient.tsx` parser→`splitFrames` (đã xoá byte SEP thô) + `setLastAssistant` +2 param + `withAttachments` strip `\x1e` · `types.ts` `ChatMsg` +`toolTrace?`/`cites?` · `MessageItem.tsx` 2 slot. **Hội tụ với FE-confirm card SP-2** (`agent-harness-sp2-fe-confirm`): 1 bộ `splitFrames` router theo `t` xử cả `pending_write` (SP-2) + `tool`/`cite`/`tokens` (SP-4).
+**Pending (chờ user, KHÔNG chặn merge):** `npm run build` + live `/chat` preview (Success #5 E2E của SP-4).
+— sp4
+
 ## Liên quan
 [[agent-harness-coordination]] · [[agent-harness-sp2-actions-safety]] · [[agent-harness-sp3-memory-proactive]] · [[agent-harness-sp2-fe-confirm]] (FE confirm card cần SP-4 `splitFrames`). Plan tích hợp đầy đủ: `docs/superpowers/plans/2026-06-05-agent-harness-integration.md`.
