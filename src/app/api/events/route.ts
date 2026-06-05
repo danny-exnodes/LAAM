@@ -12,6 +12,7 @@ import { db } from "@/db";
 import { agentSessions, projects } from "@/db/schema";
 import type { LiveSession } from "@/hooks/useLiveSessions";
 import { subscribe } from "@/lib/events-bus";
+import type { BusEvent } from "@/lib/events-bus";
 
 export const dynamic = "force-dynamic";
 
@@ -125,9 +126,15 @@ export async function GET() {
       // Initial snapshot.
       await pushSessions();
 
-      // Re-push on every bus event. We refetch the snapshot rather than trust
-      // the event payload so all clients converge on the DB ground-truth.
-      const unsubscribe = subscribe(() => {
+      // Re-push sessions on every bus event (so all clients converge on DB
+      // ground-truth). Additionally, workflow_run / workflow_run_step events
+      // are forwarded as their own SSE event types so the UI can update
+      // workflow status without polling.
+      const unsubscribe = subscribe((evt: BusEvent) => {
+        if (evt.type === "workflow_run_step" || evt.type === "workflow_run") {
+          // Forward the raw event payload under its own SSE event name.
+          send(`event: ${evt.type}\ndata: ${JSON.stringify(evt)}\n\n`);
+        }
         void pushSessions();
       });
 
