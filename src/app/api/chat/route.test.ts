@@ -70,6 +70,14 @@ describe("buildOllamaPayload", () => {
     // không truyền numCtx → không set (giữ default của Ollama)
     expect(buildOllamaPayload({}, history, defaults).options).not.toHaveProperty("num_ctx");
   });
+
+  test("presence_penalty: default server-side khi FE vắng; body override (chống lặp Qwen3-Q8)", () => {
+    // luôn set để giảm lặp; default 0.2 khi không gửi
+    expect(buildOllamaPayload({}, history, defaults).options.presence_penalty).toBe(0.2);
+    // body override (kể cả 0)
+    expect(buildOllamaPayload({ presencePenalty: 0 }, history, defaults).options.presence_penalty).toBe(0);
+    expect(buildOllamaPayload({ presencePenalty: 0.3 }, history, defaults).options.presence_penalty).toBe(0.3);
+  });
 });
 
 describe("harness wiring", () => {

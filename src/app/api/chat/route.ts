@@ -38,6 +38,12 @@ const NUM_CTX = Math.max(2048, Number(process.env.CHAT_NUM_CTX) || 16384);
 // Budget (chars) cho summary+replay history: chừa chỗ output + system + tool results TRONG num_ctx
 // (~3.5 char/token; reserve 3072 tok output + 2560 tok system/tools) ⇒ replay không nuốt cả cửa sổ.
 const REPLAY_BUDGET_CHARS = Math.max(8000, Math.floor((NUM_CTX - 3072 - 2560) * 3.5));
+// Sampler (góp ý team): Qwen3-Q8 hay lặp từ khi để mặc định cao → presence_penalty 0.0–0.3 giảm
+// lặp + ổn định JSON/code. Env CHAT_PRESENCE_PENALTY (default 0.2). Áp server-side để có hiệu lực
+// NGAY (kể cả FE chưa gửi); `body.presencePenalty` override nếu có. (temperature default 0.6 ở DEFAULT_SETTINGS.)
+const DEFAULT_PRESENCE_PENALTY = Number.isFinite(Number(process.env.CHAT_PRESENCE_PENALTY))
+  ? Number(process.env.CHAT_PRESENCE_PENALTY)
+  : 0.2;
 
 type ChatBody = {
   conversationId?: string;
@@ -45,6 +51,7 @@ type ChatBody = {
   model?: string;
   temperature?: number;
   topP?: number;
+  presencePenalty?: number;
   system?: string;
 };
 // Build the Ollama /api/chat request payload from the request body, the
@@ -63,12 +70,14 @@ export function buildOllamaPayload(
   const model = str(body.model) ?? defaults.model;
   const system = str(body.system) ?? defaults.system;
 
-  const options: { temperature?: number; top_p?: number; num_ctx?: number } = {};
+  const options: { temperature?: number; top_p?: number; num_ctx?: number; presence_penalty?: number } = {};
   const t = num(body.temperature);
   if (t !== null) options.temperature = t;
   const p = num(body.topP);
   if (p !== null) options.top_p = p;
   if (defaults.numCtx && defaults.numCtx > 0) options.num_ctx = defaults.numCtx;
+  // presence_penalty luôn được set: body override > default server-side (chống lặp Qwen3-Q8).
+  options.presence_penalty = num(body.presencePenalty) ?? DEFAULT_PRESENCE_PENALTY;
 
   return {
     model,
