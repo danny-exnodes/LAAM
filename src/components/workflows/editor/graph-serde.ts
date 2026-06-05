@@ -1,0 +1,83 @@
+/**
+ * graph-serde.ts — PURE (no side effects, no I/O).
+ *
+ * Converts between LAAM WorkflowGraph ↔ React Flow nodes/edges.
+ *
+ * Position strategy (v1 decision):
+ *   - Positions are stored in React Flow only (RFNode.position).
+ *   - WfNode has NO position field — we keep the domain type clean.
+ *   - On first load (no stored positions), we auto-layout by index
+ *     using a simple left-to-right topo arrangement.
+ *   - Positions round-trip through the editor state (nodes array),
+ *     NOT through the saved WorkflowGraph. This is intentional for v1.
+ */
+import type { Node as RFNode, Edge as RFEdge } from "@xyflow/react";
+import type { WfNode, WfEdge, WorkflowGraph } from "@/lib/workflow/types";
+
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const NODE_TYPE = "wf";
+const AUTO_LAYOUT_X = 220;
+const AUTO_LAYOUT_Y = 140;
+
+// ── Public API ─────────────────────────────────────────────────────────────
+
+export type WfRFNode = RFNode<{ node: WfNode }, typeof NODE_TYPE>;
+export type WfRFEdge = RFEdge;
+
+export interface RFGraph {
+  nodes: WfRFNode[];
+  edges: WfRFEdge[];
+}
+
+/**
+ * toReactFlow — WorkflowGraph → React Flow nodes + edges.
+ *
+ * Positions: auto-layout by index (x = col * AUTO_LAYOUT_X,
+ * y = index * AUTO_LAYOUT_Y). The caller may override positions via
+ * `useNodesState` after load; they are not persisted back to the graph.
+ */
+export function toReactFlow(graph: WorkflowGraph): RFGraph {
+  const rfNodes: WfRFNode[] = graph.nodes.map((node, i) => ({
+    id: node.id,
+    type: NODE_TYPE,
+    position: { x: i * AUTO_LAYOUT_X, y: 0 },
+    data: { node },
+  }));
+
+  const rfEdges: WfRFEdge[] = graph.edges.map((edge) => ({
+    id: `${edge.from}->${edge.to}-${edge.label ?? ""}`,
+    source: edge.from,
+    target: edge.to,
+    label: edge.label,
+  }));
+
+  return { nodes: rfNodes, edges: rfEdges };
+}
+
+/**
+ * fromReactFlow — React Flow nodes + edges → WorkflowGraph.
+ *
+ * Only the WfNode payload (data.node) is kept; React Flow presentation
+ * (position, selected, type, …) is dropped. Edge labels are preserved.
+ */
+export function fromReactFlow(
+  rfNodes: RFNode[],
+  rfEdges: RFEdge[],
+): WorkflowGraph {
+  const nodes: WfNode[] = rfNodes.map((rfn) => {
+    // data.node carries the authoritative WfNode
+    const wfNode = (rfn.data as { node: WfNode }).node;
+    return wfNode;
+  });
+
+  const edges: WfEdge[] = rfEdges.map((rfe) => {
+    const edge: WfEdge = { from: rfe.source, to: rfe.target };
+    if (rfe.label !== undefined && rfe.label !== null && rfe.label !== "") {
+      edge.label = rfe.label as string;
+    }
+    return edge;
+  });
+
+  return { nodes, edges };
+}

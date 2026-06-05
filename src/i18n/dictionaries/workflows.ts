@@ -25,6 +25,7 @@ export const workflows: Dict = {
   "wf.newFromTemplate": { vi: "Từ mẫu", en: "From template", zh: "从模板新建" },
   "wf.runNow": { vi: "Chạy ngay", en: "Run now", zh: "立即运行" },
   "wf.view": { vi: "Xem chi tiết", en: "View details", zh: "查看详情" },
+  "wf.edit": { vi: "Chỉnh sửa", en: "Edit", zh: "编辑" },
   "wf.clone": { vi: "Nhân bản", en: "Clone", zh: "克隆" },
   "wf.cancel": { vi: "Đóng", en: "Close", zh: "关闭" },
 
@@ -97,4 +98,27 @@ export const workflows: Dict = {
   "wf.schedule.col.next": { vi: "Lần tiếp theo", en: "Next run", zh: "下次运行" },
   "wf.schedule.col.tz": { vi: "Múi giờ", en: "Timezone", zh: "时区" },
   "wf.schedule.col.enabled": { vi: "Bật", en: "Enabled", zh: "启用" },
+
+  // Editor
+  "wf.editor.title": { vi: "Chỉnh sửa Workflow", en: "Edit Workflow", zh: "编辑工作流" },
+  "wf.editor.palette": { vi: "Thêm bước", en: "Add step", zh: "添加步骤" },
+  "wf.editor.addAgent": { vi: "+ Agent", en: "+ Agent", zh: "+ Agent" },
+  "wf.editor.addConnector": { vi: "+ Connector", en: "+ Connector", zh: "+ 连接器" },
+  "wf.editor.addCondition": { vi: "+ Condition", en: "+ Condition", zh: "+ 条件" },
+  "wf.editor.addForeach": { vi: "+ Foreach", en: "+ Foreach", zh: "+ 循环" },
+  "wf.editor.save": { vi: "Lưu", en: "Save", zh: "保存" },
+  "wf.editor.saving": { vi: "Đang lưu…", en: "Saving…", zh: "保存中…" },
+  "wf.editor.saved": { vi: "Đã lưu", en: "Saved", zh: "已保存" },
+  "wf.editor.saveErr": { vi: "Lưu thất bại", en: "Save failed", zh: "保存失败" },
+  "wf.editor.validationErr": { vi: "Graph không hợp lệ", en: "Invalid graph", zh: "工作流图无效" },
+  "wf.editor.noSelection": { vi: "Chọn một node để cấu hình", en: "Select a node to configure", zh: "选择一个节点进行配置" },
+  "wf.editor.condEdgeLabel": { vi: "Nhãn cạnh (true/false):", en: "Edge label (true/false):", zh: "边标签（true/false）：" },
+  "wf.editor.loading": { vi: "Đang tải workflow…", en: "Loading workflow…", zh: "加载工作流中…" },
+  "wf.editor.loadErr": { vi: "Không tải được workflow.", en: "Could not load workflow.", zh: "无法加载工作流。" },
+  "wf.editor.backToDetail": { vi: "← Chi tiết", en: "← Detail", zh: "← 详情" },
+  "wf.editor.name": { vi: "Tên workflow", en: "Workflow name", zh: "工作流名称" },
+
+  // New blank
+  "wf.new.creating": { vi: "Đang tạo workflow…", en: "Creating workflow…", zh: "正在创建工作流…" },
+  "wf.new.err": { vi: "Không tạo được workflow.", en: "Could not create workflow.", zh: "无法创建工作流。" },
 };

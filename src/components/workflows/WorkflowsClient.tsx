@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { GitBranch, Play, Eye, Copy, AlertTriangle, Loader2 } from "lucide-react";
+import { GitBranch, Play, Eye, Copy, AlertTriangle, Loader2, Pencil } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import { PageHeader } from "@/components/page-header";
@@ -199,9 +199,14 @@ export function WorkflowsClient() {
   );
 
   const topActions = (
-    <button type="button" onClick={() => void openTemplateModal()} className={btn("secondary")}>
-      {t("wf.newFromTemplate")}
-    </button>
+    <div className="flex items-center gap-2">
+      <Link href="/workflows/new" className={btn("primary")}>
+        {t("wf.newBlank")}
+      </Link>
+      <button type="button" onClick={() => void openTemplateModal()} className={btn("secondary")}>
+        {t("wf.newFromTemplate")}
+      </button>
+    </div>
   );
 
   return (
@@ -315,6 +320,14 @@ export function WorkflowsClient() {
                             aria-label={t("wf.view")}
                           >
                             <Eye size={15} aria-hidden />
+                          </Link>
+                          <Link
+                            href={`/workflows/${encodeURIComponent(wf.id)}/edit`}
+                            title={t("wf.edit")}
+                            className={btn("icon")}
+                            aria-label={t("wf.edit")}
+                          >
+                            <Pencil size={15} aria-hidden />
                           </Link>
                           <button
                             type="button"
