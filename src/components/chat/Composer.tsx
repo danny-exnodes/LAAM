@@ -6,7 +6,7 @@
 // state + actions come via props from ChatClient.
 
 import { useRef, useState } from "react";
-import { Paperclip, Link2, ArrowDown, Send } from "lucide-react";
+import { Paperclip, Link2, Send } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { Attachment } from "./types";
@@ -92,7 +92,7 @@ export function Composer({
 
   return (
     <div
-      className="relative flex flex-col gap-2 rounded-2xl border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900"
+      className="relative flex flex-col gap-2 rounded-2xl bg-white p-3 shadow-lg ring-1 ring-black/5 dark:bg-neutral-900 dark:ring-white/10"
       onDragOver={(e) => {
         if (e.dataTransfer?.types?.includes("Files")) {
           e.preventDefault();
@@ -110,17 +110,6 @@ export function Composer({
           <span className="mt-1 text-xs text-neutral-400">{t("chat.dropFormats")}</span>
         </div>
       )}
-
-      {/* scroll-to-bottom button — visual affordance pinned above the dock;
-          ChatClient toggles visibility / wires the click when it composes us. */}
-      <button
-        type="button"
-        aria-label={t("chat.scrollBottomAria")}
-        title={t("chat.scrollBottomAria")}
-        className="absolute -top-12 right-3 z-10 grid h-9 w-9 place-items-center rounded-full border border-neutral-200 bg-white text-neutral-500 shadow hover:text-neutral-800 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:text-neutral-100"
-      >
-        <ArrowDown size={16} aria-hidden />
-      </button>
 
       {/* attachment chips */}
       {attachments.length > 0 && (
@@ -202,7 +191,7 @@ export function Composer({
             aria-label={t("chat.attachFileAria")}
             title={t("chat.attachFileTitle")}
             onClick={() => fileInput.current?.click()}
-            className="rounded-lg border border-neutral-200 px-2 py-1.5 text-neutral-500 hover:text-neutral-800 dark:border-neutral-700 dark:hover:text-neutral-100"
+            className="grid h-9 w-9 place-items-center rounded-full text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
           >
             <Paperclip size={16} aria-hidden />
           </button>
@@ -211,7 +200,7 @@ export function Composer({
             aria-label={t("chat.attachUrlAria")}
             title={t("chat.attachUrlTitle")}
             onClick={pickUrl}
-            className="rounded-lg border border-neutral-200 px-2 py-1.5 text-neutral-500 hover:text-neutral-800 dark:border-neutral-700 dark:hover:text-neutral-100"
+            className="grid h-9 w-9 place-items-center rounded-full text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
           >
             <Link2 size={16} aria-hidden />
           </button>
@@ -228,7 +217,7 @@ export function Composer({
               type="button"
               aria-label={t("chat.stopAria")}
               onClick={onStop}
-              className="rounded-lg bg-neutral-200 px-4 py-1.5 text-sm font-medium text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-100"
+              className="rounded-full bg-neutral-200 px-4 py-1.5 text-sm font-medium text-neutral-800 hover:bg-neutral-300 dark:bg-neutral-700 dark:text-neutral-100"
             >
               {t("chat.stop")}
             </button>
@@ -238,7 +227,7 @@ export function Composer({
             aria-label={t("chat.sendAria")}
             onClick={onSend}
             disabled={sendDisabled}
-            className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Send size={14} aria-hidden />
             {t("chat.send")}

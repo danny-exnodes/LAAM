@@ -6,7 +6,7 @@
 // settings; ingests attachments via /api/fetch-url (URLs) and /api/ocr (images).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PanelLeft, SlidersHorizontal, BarChart3, Navigation, MapPin, CloudSun } from "lucide-react";
+import { PanelLeft, SlidersHorizontal, BarChart3, Navigation, MapPin, CloudSun, ArrowDown } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import { ConversationSidebar } from "./ConversationSidebar";
@@ -52,6 +52,9 @@ export function ChatClient() {
   const [models, setModels] = useState<string[]>([]);
   const [query, setQuery] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const stickRef = useRef(true); // dính đáy: auto-scroll khi user đang ở cuối
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
 
   useEffect(() => {
     void loadConvs();
@@ -69,6 +72,27 @@ export function ChatClient() {
       })
       .catch(() => {});
   }, []);
+
+  // Auto-scroll xuống tin nhắn cuối khi messages đổi (gửi / streaming) nếu đang dính đáy.
+  useEffect(() => {
+    if (stickRef.current) scrollToBottom("auto");
+  }, [messages]);
+
+  function scrollToBottom(behavior: ScrollBehavior = "smooth") {
+    const el = scrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior });
+    stickRef.current = true;
+    setShowScrollBtn(false);
+  }
+
+  // Theo dõi vị trí cuộn: gần đáy thì vẫn dính (auto-scroll), xa đáy thì hiện nút.
+  function onScroll() {
+    const el = scrollRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    stickRef.current = dist < 80;
+    setShowScrollBtn(dist > 200);
+  }
 
   async function loadConvs() {
     const r = await fetch("/api/conversations");
@@ -230,6 +254,7 @@ export function ChatClient() {
     const outgoing = withAttachments(text);
     setInput("");
     setAttachments([]);
+    stickRef.current = true; // gửi → luôn cuộn xuống cuối
     setMessages((p) => [
       ...p,
       { id: uid(), role: "user", content: text, createdAt: Date.now() },
@@ -372,13 +397,13 @@ export function ChatClient() {
       )}
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between gap-2 border-b border-neutral-200 px-3 py-2 sm:px-4 dark:border-neutral-800">
+        <div className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <button
               type="button"
               onClick={() => setConvOpen(true)}
               aria-label={t("chat.histTitle")}
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-neutral-300 text-neutral-600 hover:bg-neutral-50 sm:hidden dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-600 hover:bg-neutral-100 sm:hidden dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               <PanelLeft size={18} aria-hidden />
             </button>
@@ -386,7 +411,7 @@ export function ChatClient() {
               onClick={() => setSettingsOpen((v) => !v)}
               aria-label={t("chat.setTitle")}
               title={t("chat.setTitle")}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-50 sm:px-3 dark:border-neutral-700 dark:text-neutral-200 dark:hover:bg-neutral-800"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100 sm:px-3 dark:text-neutral-200 dark:hover:bg-neutral-800"
             >
               <SlidersHorizontal size={16} className="sm:hidden" aria-hidden />
               <span className="hidden sm:inline">{t("chat.setTitle")}</span>
@@ -399,12 +424,12 @@ export function ChatClient() {
         </div>
 
         {settingsOpen && (
-          <div className="anim-slide-down border-b border-neutral-200 p-4 dark:border-neutral-800">
+          <div className="anim-slide-down p-4">
             <SettingsPanel settings={settings} models={models} onChange={setSettings} />
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
           {messages.length === 0 ? (
             <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-4 py-8 text-center">
               <h2 className="mb-1 text-lg font-bold tracking-tight">{t("chat.emptyTitle")}</h2>
@@ -415,7 +440,7 @@ export function ChatClient() {
                     key={key}
                     type="button"
                     onClick={() => setInput(t(key))}
-                    className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white/60 px-3 py-2.5 text-left text-sm text-neutral-700 transition hover:border-[var(--color-accent)] hover:bg-white dark:border-neutral-800 dark:bg-neutral-900/60 dark:text-neutral-200 dark:hover:bg-neutral-900"
+                    className="flex items-center gap-2 rounded-xl bg-neutral-100/70 px-3 py-2.5 text-left text-sm text-neutral-700 transition hover:bg-neutral-100 dark:bg-neutral-900/60 dark:text-neutral-200 dark:hover:bg-neutral-800"
                   >
                     <Icon size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden />
                     <span className="line-clamp-2">{t(key)}</span>
@@ -424,7 +449,7 @@ export function ChatClient() {
               </div>
             </div>
           ) : (
-            <div className="mx-auto max-w-3xl px-3 py-5 sm:px-4 sm:py-6">
+            <div className="mx-auto max-w-3xl px-3 pt-5 pb-40 sm:px-4 sm:pt-6 sm:pb-36">
               <MessageList
                 messages={messages}
                 streaming={streaming}
@@ -437,19 +462,35 @@ export function ChatClient() {
           )}
         </div>
 
-        <div className="border-t border-neutral-200 px-3 pt-3 pb-[calc(0.75rem+4.75rem+env(safe-area-inset-bottom))] sm:px-4 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] dark:border-neutral-800">
-          <div className="mx-auto max-w-3xl">
-            <Composer
-              value={input}
-              onChange={setInput}
-              onSend={send}
-              onStop={stop}
-              streaming={streaming}
-              attachments={attachments}
-              onAddFiles={onAddFiles}
-              onAddUrl={onAddUrl}
-              onRemoveAttachment={onRemoveAttachment}
-            />
+        {/* Floating composer (item 4 — không gian mở): overlay đáy vùng cuộn full-height;
+            gradient cho tin nhắn tan dần vào composer; KHÔNG viền cứng — card có shadow. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10">
+          <div className="h-16 bg-gradient-to-t from-white to-transparent dark:from-neutral-900" />
+          <div className="bg-white px-3 pb-[calc(0.75rem+4.75rem+env(safe-area-inset-bottom))] sm:px-4 md:pb-[calc(0.75rem+env(safe-area-inset-bottom))] dark:bg-neutral-900">
+            <div className="pointer-events-auto relative mx-auto max-w-3xl">
+              {showScrollBtn && messages.length > 0 && (
+                <button
+                  type="button"
+                  aria-label={t("chat.scrollBottomAria")}
+                  title={t("chat.scrollBottomAria")}
+                  onClick={() => scrollToBottom("smooth")}
+                  className="absolute -top-12 left-1/2 z-10 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full bg-white text-neutral-500 shadow-md ring-1 ring-neutral-200 hover:text-neutral-800 dark:bg-neutral-800 dark:text-neutral-300 dark:ring-neutral-700 dark:hover:text-neutral-100"
+                >
+                  <ArrowDown size={16} aria-hidden />
+                </button>
+              )}
+              <Composer
+                value={input}
+                onChange={setInput}
+                onSend={send}
+                onStop={stop}
+                streaming={streaming}
+                attachments={attachments}
+                onAddFiles={onAddFiles}
+                onAddUrl={onAddUrl}
+                onRemoveAttachment={onRemoveAttachment}
+              />
+            </div>
           </div>
         </div>
       </section>

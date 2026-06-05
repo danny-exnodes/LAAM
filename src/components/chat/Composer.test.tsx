@@ -113,11 +113,6 @@ test("char counter renders for a non-empty value", () => {
   expect(screen.getByText(/5 ký tự/)).toBeInTheDocument();
 });
 
-test("renders a scroll-to-bottom button (visual element)", () => {
-  setup();
-  expect(screen.getByLabelText("Cuộn xuống cuối")).toBeInTheDocument();
-});
-
 test("dropping files calls onAddFiles", () => {
   const props = setup();
   const file = new File(["data"], "drop.txt", { type: "text/plain" });

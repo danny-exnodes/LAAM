@@ -36,16 +36,25 @@ beforeEach(() => {
   toMarkdown.mockClear();
 });
 
-test("MD button downloads toMarkdown(messages) under <title>.md", () => {
+test("download options are hidden until the dropdown is opened", () => {
   wrap();
+  expect(screen.queryByText("Tải .md")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText("Xuất hội thoại"));
+  expect(screen.getByText("Tải .md")).toBeInTheDocument();
+});
+
+test("MD item (via dropdown) downloads toMarkdown(messages) under <title>.md", () => {
+  wrap();
+  fireEvent.click(screen.getByLabelText("Xuất hội thoại"));
   fireEvent.click(screen.getByText("Tải .md"));
   expect(toMarkdown).toHaveBeenCalledWith(msgs);
   expect(downloadMarkdown).toHaveBeenCalledTimes(1);
   expect(downloadMarkdown).toHaveBeenCalledWith("my-chat.md", "MD-OUTPUT");
 });
 
-test("JSON button downloads the messages array under <title>.json", () => {
+test("JSON item (via dropdown) downloads the messages array under <title>.json", () => {
   wrap();
+  fireEvent.click(screen.getByLabelText("Xuất hội thoại"));
   fireEvent.click(screen.getByText("Tải .json"));
   expect(downloadJson).toHaveBeenCalledTimes(1);
   expect(downloadJson).toHaveBeenCalledWith("my-chat.json", msgs);
