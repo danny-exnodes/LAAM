@@ -8,9 +8,10 @@ export type HistoryPlan = {
   toReplay: HistoryMsg[]; // lượt gần nhất giữ nguyên văn
 };
 
-const DEFAULT_BUDGET = 16000; // ~4k token
-const DEFAULT_KEEP = 6; // 3 cặp hỏi-đáp
-const MIN_KEEP = 2; // luôn giữ ≥ lượt user hiện tại + 1
+const DEFAULT_BUDGET = 36000; // chars (~10k token) cho summary+replay — fallback; route truyền
+// budget thực dẫn xuất từ num_ctx, ĐÃ chừa chỗ cho output + system + tool results (vá lỗi tràn
+// context: prompt lấp đầy num_ctx ⇒ tokensIn+tokensOut==num_ctx ⇒ câu trả lời bị cắt giữa chừng).
+const MIN_KEEP = 2; // SÀN: luôn giữ nguyên văn lượt user hiện tại + lượt liền trước.
 
 export function planHistory(
   messages: HistoryMsg[],
@@ -19,7 +20,7 @@ export function planHistory(
   opts: { budgetChars?: number; keepLast?: number } = {},
 ): HistoryPlan {
   const budget = opts.budgetChars ?? DEFAULT_BUDGET;
-  const keepLast = opts.keepLast ?? DEFAULT_KEEP;
+  const minKeep = Math.max(1, opts.keepLast ?? MIN_KEEP);
 
   // chỉ xét message SAU watermark (phần đã summarize không replay).
   let live = messages;
@@ -34,12 +35,26 @@ export function planHistory(
     return { needsSummary: false, toSummarize: [], toReplay: live };
   }
 
-  const keep = Math.max(MIN_KEEP, keepLast);
-  if (live.length <= keep) {
-    // không gập thêm được mà vẫn giữ lượt hiện tại → replay nguyên (model tự cắt). Rule 12: caller log.
+  // Vượt budget → giữ các lượt MỚI NHẤT vừa khít (budget − summary), gập phần cũ vào summary.
+  // BOUND theo KÍCH THƯỚC (không phải số lượng cố định): một lượt tool khổng lồ (vd liệt kê 10
+  // agent) KHÔNG còn được replay nguyên văn chiếm trọn cửa sổ — đây chính là gốc lỗi cắt câu.
+  const room = Math.max(0, budget - summaryLen);
+  let acc = 0;
+  let cut = live.length; // các lượt [cut..] replay nguyên văn
+  for (let i = live.length - 1; i >= 0; i--) {
+    acc += live[i].content?.length ?? 0;
+    const kept = live.length - i;
+    if (acc > room && kept > minKeep) {
+      cut = i + 1;
+      break;
+    }
+    cut = i;
+  }
+  if (cut <= 0) {
+    // ngay cả sàn minKeep lượt gần nhất đã vượt budget → không gập thêm được; replay nguyên
+    // (num_ctx lớn hấp thụ; caller log — Rule 12).
     return { needsSummary: false, toSummarize: [], toReplay: live };
   }
-  const cut = live.length - keep;
   return {
     needsSummary: true,
     toSummarize: live.slice(0, cut),

@@ -63,6 +63,13 @@ describe("buildOllamaPayload", () => {
     expect(p.options).not.toHaveProperty("temperature");
     expect(p.options).not.toHaveProperty("top_p");
   });
+
+  test("sets options.num_ctx from defaults.numCtx (vá tràn context — Ollama mặc định 4096)", () => {
+    const p = buildOllamaPayload({}, history, { ...defaults, numCtx: 16384 });
+    expect(p.options.num_ctx).toBe(16384);
+    // không truyền numCtx → không set (giữ default của Ollama)
+    expect(buildOllamaPayload({}, history, defaults).options).not.toHaveProperty("num_ctx");
+  });
 });
 
 describe("harness wiring", () => {

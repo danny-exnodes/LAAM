@@ -35,6 +35,22 @@ describe("planHistory", () => {
     expect(p.needsSummary).toBe(false);
     expect(p.toReplay).toHaveLength(1);
   });
+
+  test("lượt gần-nhì KHỔNG LỒ → bound theo KÍCH THƯỚC, gập vào summary (vá tràn num_ctx)", () => {
+    // 10 lượt nhỏ, RIÊNG lượt id=7 khổng lồ. Cách cũ 'giữ N lượt cuối cố định' (keepLast=6) sẽ
+    // replay NGUYÊN lượt 7 ⇒ prompt nuốt trọn cửa sổ → câu trả lời bị cắt. Bound theo budget thì
+    // chỉ giữ các lượt mới nhất VỪA KHÍT, lượt 7 bị gập vào summary.
+    const msgs = Array.from({ length: 10 }, (_, i) =>
+      mk(String(i), i % 2 ? "assistant" : "user", "x".repeat(100)),
+    );
+    msgs[7] = mk("7", "assistant", "B".repeat(10000));
+    const p = planHistory(msgs, null, null, { budgetChars: 1000 }); // minKeep mặc định = 2
+    expect(p.needsSummary).toBe(true);
+    expect(p.toReplay.map((m) => m.id)).toEqual(["8", "9"]); // chỉ 2 lượt mới nhất (nhỏ)
+    expect(p.toSummarize.some((m) => m.id === "7")).toBe(true); // lượt khổng lồ bị gập
+    const replayLen = p.toReplay.reduce((n, m) => n + m.content.length, 0);
+    expect(replayLen).toBeLessThanOrEqual(1000); // replay nằm trong budget ⇒ chừa chỗ cho output
+  });
 });
 
 describe("summarizeMessages", () => {

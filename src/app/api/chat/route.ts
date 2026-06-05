@@ -31,6 +31,13 @@ const SYSTEM =
 const PENDING_TTL_MS = 5 * 60_000; // §5: pending-write token expiry
 // SP-4: tên internal tool — redact args theo set-membership (D-SP4-3) khi gom tool frames.
 const INTERNAL_NAMES = new Set(INTERNAL_TOOLS.map((t) => t.name));
+// Cửa sổ ngữ cảnh model phục vụ. Ollama mặc định num_ctx=4096 BẤT KỂ model hỗ trợ tới ~128k+ →
+// hội thoại dài / tool results làm prompt lấp đầy 4096, KHÔNG còn chỗ sinh ⇒ câu trả lời bị CẮT
+// giữa chừng (tokensIn+tokensOut==num_ctx). Đặt rõ num_ctx (env CHAT_NUM_CTX); 16384 vừa 16GB.
+const NUM_CTX = Math.max(2048, Number(process.env.CHAT_NUM_CTX) || 16384);
+// Budget (chars) cho summary+replay history: chừa chỗ output + system + tool results TRONG num_ctx
+// (~3.5 char/token; reserve 3072 tok output + 2560 tok system/tools) ⇒ replay không nuốt cả cửa sổ.
+const REPLAY_BUDGET_CHARS = Math.max(8000, Math.floor((NUM_CTX - 3072 - 2560) * 3.5));
 
 type ChatBody = {
   conversationId?: string;
@@ -48,7 +55,7 @@ type ChatBody = {
 export function buildOllamaPayload(
   body: ChatBody,
   historyMessages: ChatMessage[],
-  defaults: { model: string; system: string },
+  defaults: { model: string; system: string; numCtx?: number },
 ) {
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v : null);
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -56,11 +63,12 @@ export function buildOllamaPayload(
   const model = str(body.model) ?? defaults.model;
   const system = str(body.system) ?? defaults.system;
 
-  const options: { temperature?: number; top_p?: number } = {};
+  const options: { temperature?: number; top_p?: number; num_ctx?: number } = {};
   const t = num(body.temperature);
   if (t !== null) options.temperature = t;
   const p = num(body.topP);
   if (p !== null) options.top_p = p;
+  if (defaults.numCtx && defaults.numCtx > 0) options.num_ctx = defaults.numCtx;
 
   return {
     model,
@@ -144,8 +152,10 @@ export async function POST(req: Request) {
   const now = Date.now();
   const lang = readLang(req);
 
-  // --- Summarize (SP-3): bound lịch sử replay theo char-budget. ---
-  const plan = planHistory(history as HistoryMsg[], convSummary, convWatermark);
+  // --- Summarize (SP-3): bound lịch sử replay theo char-budget dẫn xuất từ num_ctx. ---
+  const plan = planHistory(history as HistoryMsg[], convSummary, convWatermark, {
+    budgetChars: REPLAY_BUDGET_CHARS,
+  });
   let effectiveSummary = convSummary;
   if (plan.needsSummary) {
     try {
@@ -165,7 +175,7 @@ export async function POST(req: Request) {
   const payload = buildOllamaPayload(
     body,
     plan.toReplay.map((m) => ({ role: m.role, content: m.content })),
-    { model: MODEL, system: SYSTEM },
+    { model: MODEL, system: SYSTEM, numCtx: NUM_CTX },
   );
 
   // Internal tools (LAAM) LUÔN có; connector tools nếu user đã kết nối.
@@ -510,7 +520,7 @@ async function handleConfirm(
     ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(buildResumeRequest(MODEL, outcome.messages, {})),
+      body: JSON.stringify(buildResumeRequest(MODEL, outcome.messages, { num_ctx: NUM_CTX })),
     });
   } catch {
     return new Response("Đã thực hiện hành động nhưng không tạo được phản hồi (Ollama).", {
@@ -533,7 +543,7 @@ async function callModelText(prompt: string, model: string): Promise<string> {
   const r = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], stream: false }),
+    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], options: { num_ctx: NUM_CTX }, stream: false }),
   });
   if (!r.ok) throw new Error(`Ollama ${r.status}`);
   const j = (await r.json()) as OllamaChatResponse;
