@@ -73,3 +73,12 @@
 
 ## ▶ Next: G3 TEMPLATES (C)
 Static template catalog (`src/lib/workflow/templates.ts`, ≥2 moat-leaning đọc LAAM agent_sessions/stats qua SP-1 internal tools) + instantiate/clone (deep-copy graph → user workflow, credential-free) + list endpoint. Rồi G4 editor (React Flow) · G5 mgmt page. (G4/G5 = UI: build + RTL + tsc, KHÔNG live-verify.)
+
+## ✅ G3 TEMPLATES (C) — DONE + MERGED (`832029f`)
+- sonnet impl + sonnet review (templates valid, clone/instantiate ownership-safe, no cross-user hole). **tsc 0 · 156 workflow+route · 766 full repo.**
+- `templates.ts` catalog (3: `digest-overnight-agents`+`flag-stuck-agents` = moat qua SP-1 tools; `summarize-demo-tasks` demo) + `GET /api/workflows/templates` + `POST .../templates/[id]/instantiate` + `POST /api/workflows/[id]/clone` (credential-free, ownership-checked). No schema/dep.
+
+## ▶ Next: UI (reorder E trước D — risk/value: E=goal-page + lower blind-risk; D editor=highest blind-risk → last)
+⚠️ **UI build BLIND** (no dev/preview per agent-ops) → component + RTL + tsc + i18n vi/en/zh; **LIVE QA = user review.**
+- **E mgmt page** `/workflows`: list + detail (runs/steps = log #5 + schedule #4) + SSE realtime (#7, forward workflow_* events qua /api/events) + needs-attention.
+- **D editor** `/workflows/[id]/edit`: React Flow (reuse @xyflow/react from /graph) + node palette (agent/connector/condition/foreach) + config forms + save/validate.
