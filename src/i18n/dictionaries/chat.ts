@@ -201,4 +201,12 @@ export const chat: Dict = {
   'chat.toolQueryStats': { vi: 'Thống kê hệ thống', en: 'System stats', zh: '系统统计' },
   'chat.toolListMachines': { vi: 'Liệt kê máy', en: 'List machines', zh: '列出机器' },
   'chat.toolFindStuck': { vi: 'Tìm agent kẹt', en: 'Find stuck agents', zh: '查找卡住的 agent' },
+  // --- SP-2: write-gate confirm card (chrome only; title/summary/fields do backend cấp) ---
+  'chat.confirmAction': { vi: 'Cần xác nhận hành động', en: 'Action needs confirmation', zh: '操作需确认' },
+  'chat.confirm': { vi: 'Xác nhận', en: 'Confirm', zh: '确认' },
+  'chat.cancel': { vi: 'Huỷ', en: 'Cancel', zh: '取消' },
+  'chat.confirmSending': { vi: 'Đang thực hiện…', en: 'Running…', zh: '执行中…' },
+  'chat.confirmDone': { vi: 'Đã thực hiện', en: 'Done', zh: '已执行' },
+  'chat.confirmCancelled': { vi: 'Đã huỷ', en: 'Cancelled', zh: '已取消' },
+  'chat.confirmError': { vi: 'Lỗi thực hiện', en: 'Action failed', zh: '执行出错' },
 };

@@ -17,6 +17,7 @@ import { chat } from "@/i18n/dictionaries/chat";
 import type { ChatMsg } from "./types";
 import { ToolTrace } from "./ToolTrace";
 import { Citations } from "./Citations";
+import { ConfirmCard } from "./ConfirmCard";
 
 // Relative-time line from an epoch-ms timestamp. Local + dependency-free: the
 // shared format.ago() takes a Date and is Vietnamese-only, while createdAt here
@@ -36,6 +37,7 @@ export interface MessageItemProps {
   onEdit(m: ChatMsg): void;
   onRegenerate(m: ChatMsg): void;
   onDelete(m: ChatMsg): void;
+  onConfirm?(msgId: string, approve: boolean): void;
 }
 
 const actionBtn =
@@ -50,6 +52,7 @@ export function MessageItem({
   onEdit,
   onRegenerate,
   onDelete,
+  onConfirm,
 }: MessageItemProps) {
   const t = useT(chat);
   const isUser = msg.role === "user";
@@ -72,6 +75,12 @@ export function MessageItem({
             <ToolTrace items={msg.toolTrace} />
             <MarkdownView source={msg.content} />
             <Citations names={msg.cites} />
+            {msg.pendingWrite && onConfirm && (
+              <ConfirmCard
+                pending={msg.pendingWrite}
+                onConfirm={(approve) => onConfirm(msg.id, approve)}
+              />
+            )}
           </>
         ) : (
           msg.content
