@@ -27,3 +27,9 @@ SP-2 gate hành động **write** (vd `trello_create_card`): khi model đề xu�
 
 ## Không thuộc phạm vi FE
 Ký/giải token, execute, redact, audit, dedupe — **backend** lo hết. FE chỉ render + round-trip `token`.
+
+## Update (2026-06-05, lead) — đã có SPEC + PLAN + comms pick-up
+- Spec đầy đủ: `docs/superpowers/specs/2026-06-05-fe-confirm-card-design.md` (state model, applyFrames nhánh `pending_write`, ConfirmCard, round-trip, edge cases, i18n, tests).
+- Plan TDD 7 task: `docs/superpowers/plans/2026-06-05-fe-confirm-card.md`.
+- Pickup prompt cho session FE: `comms/active/lead-to-frontend-confirm-card.md`.
+- Lưu ý: SP-4 đã land frame-router (`splitFrames`/`applyFrames` xử lý tokens/tool/cite) → việc còn lại chỉ là **THÊM** nhánh `pending_write` + card + round-trip (additive). Wire contract §22-26 trên vẫn cố định.
