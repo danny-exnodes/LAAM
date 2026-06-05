@@ -2,6 +2,8 @@
 // components (message list, composer, settings, sidebar) and the ChatClient
 // orchestrator compose without drift.
 
+import type { ToolTraceItem } from "./toolLabel";
+
 export type ChatRole = "user" | "assistant";
 
 export type ChatMsg = {
@@ -11,6 +13,8 @@ export type ChatMsg = {
   createdAt?: number; // epoch ms
   tokensIn?: number; // per-turn prompt tokens (assistant messages)
   tokensOut?: number; // per-turn completion tokens (assistant messages)
+  toolTrace?: ToolTraceItem[]; // SP-4: trace tool (ephemeral, không reload)
+  cites?: string[];            // SP-4: tên tool nguồn (ephemeral)
 };
 
 export type ChatSettings = {

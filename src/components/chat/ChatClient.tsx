@@ -21,6 +21,8 @@ import {
   type ChatSettings,
   type Conv,
 } from "./types";
+import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
+import type { ToolTraceItem } from "./toolLabel";
 
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
@@ -123,11 +125,19 @@ export function ChatClient() {
     prev: ChatMsg[],
     content: string,
     tokens?: { tokensIn: number; tokensOut: number },
+    toolTrace?: ToolTraceItem[],
+    cites?: string[],
   ): ChatMsg[] {
     const copy = [...prev];
     for (let i = copy.length - 1; i >= 0; i--) {
       if (copy[i].role === "assistant") {
-        copy[i] = { ...copy[i], content, ...(tokens ?? {}) };
+        copy[i] = {
+          ...copy[i],
+          content,
+          ...(tokens ?? {}),
+          ...(toolTrace !== undefined ? { toolTrace } : {}),
+          ...(cites !== undefined ? { cites } : {}),
+        };
         break;
       }
     }
@@ -137,8 +147,9 @@ export function ChatClient() {
   // Prepend attachment text to the outgoing message so the model sees it.
   function withAttachments(text: string): string {
     if (!attachments.length) return text;
+    const clean = (s: string) => s.replace(/\x1e/g, ""); // strip SEP (defense-in-depth D-SP4-2)
     const blocks = attachments
-      .map((a) => `--- ${a.kind === "url" ? "URL" : "Tệp"}: ${a.name} ---\n${a.text}`)
+      .map((a) => `--- ${a.kind === "url" ? "URL" : "Tệp"}: ${a.name} ---\n${clean(a.text)}`)
       .join("\n\n");
     return `${blocks}\n\n${text}`;
   }
@@ -170,34 +181,35 @@ export function ChatClient() {
         }
         const reader = res.body.getReader();
         const dec = new TextDecoder();
-        const SEP = ""; // record separator before the trailing token-count frame
         let raw = "";
+        const trace = new Map<number, ToolTraceItem>();
+        let cites: string[] | undefined;
+        let tokens: { tokensIn: number; tokensOut: number } | undefined;
+        const applyFrames = (frames: ChatFrame[]) => {
+          for (const f of frames) {
+            if (f.t === "tool") {
+              const cur = trace.get(f.c) ?? { c: f.c, name: f.name, done: false };
+              if (f.phase === "call") { cur.name = f.name; cur.args = f.args; }
+              else { cur.ok = f.ok; cur.done = true; }
+              trace.set(f.c, cur);
+            } else if (f.t === "cite") cites = f.names;
+            else if (f.t === "tokens") tokens = { tokensIn: f.i, tokensOut: f.o };
+          }
+        };
+        const items = () => [...trace.values()].sort((a, b) => a.c - b.c);
         for (;;) {
           const { done, value } = await reader.read();
           if (done) break;
           raw += dec.decode(value, { stream: true });
-          const sep = raw.indexOf(SEP);
-          setMessages((p) => setLastAssistant(p, sep >= 0 ? raw.slice(0, sep) : raw));
+          const { text, frames } = splitFrames(raw);
+          applyFrames(frames);
+          const list = items();
+          setMessages((p) => setLastAssistant(p, text, undefined, list.length ? list : undefined, cites));
         }
-        // Split off the trailing {i,o} token-count frame and attach it so usage
-        // shows live (also persisted server-side, so reloads keep it).
-        const sepIdx = raw.indexOf(SEP);
-        const text = sepIdx >= 0 ? raw.slice(0, sepIdx) : raw;
-        let meta: { i?: number; o?: number } | null = null;
-        if (sepIdx >= 0) {
-          try {
-            meta = JSON.parse(raw.slice(sepIdx + 1));
-          } catch {
-            meta = null;
-          }
-        }
-        setMessages((p) =>
-          setLastAssistant(
-            p,
-            text,
-            meta ? { tokensIn: meta.i ?? 0, tokensOut: meta.o ?? 0 } : undefined,
-          ),
-        );
+        const fin = splitFrames(raw);
+        applyFrames(fin.frames);
+        const list = items();
+        setMessages((p) => setLastAssistant(p, fin.text, tokens, list.length ? list : undefined, cites));
         if (!activeId && convId) setActiveId(convId);
         void loadConvs();
       } catch (e) {
