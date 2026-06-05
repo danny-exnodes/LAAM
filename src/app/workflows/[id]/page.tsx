@@ -1,0 +1,24 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { AppHeader } from "@/components/app-header";
+import { WorkflowDetailClient } from "@/components/workflows/WorkflowDetailClient";
+
+export const dynamic = "force-dynamic";
+
+export default async function WorkflowDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  const { id } = await params;
+
+  return (
+    <div>
+      <AppHeader current="/workflows" role={session.user.role} />
+      <WorkflowDetailClient workflowId={id} />
+    </div>
+  );
+}
