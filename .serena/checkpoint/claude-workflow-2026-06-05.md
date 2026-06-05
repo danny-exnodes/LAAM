@@ -82,3 +82,11 @@ Static template catalog (`src/lib/workflow/templates.ts`, ≥2 moat-leaning đ�
 ⚠️ **UI build BLIND** (no dev/preview per agent-ops) → component + RTL + tsc + i18n vi/en/zh; **LIVE QA = user review.**
 - **E mgmt page** `/workflows`: list + detail (runs/steps = log #5 + schedule #4) + SSE realtime (#7, forward workflow_* events qua /api/events) + needs-attention.
 - **D editor** `/workflows/[id]/edit`: React Flow (reuse @xyflow/react from /graph) + node palette (agent/connector/condition/foreach) + config forms + save/validate.
+
+## ✅ E MGMT PAGE — DONE + MERGED (`9c454b8`)
+- sonnet impl + sonnet review (**SSE no-regression CONFIRMED** additive, auth-gated, i18n complete) → 2 issues found (dead `/workflows/new` link; bottom-nav over-reach dropping eval/settings) → sonnet fix (removed link; bottom-nav reverted — `diff main` empty; workflows = desktop-nav only) → consultant fixed flaky test (duplicate `vi.mock("@/db")` in instantiate test, order-dependent fail). Merge clean. **tsc 0 · 788 branch / 1377 full green.**
+- `/workflows` list + `/workflows/[id]` detail (runs→steps = log #5; schedule form #4; run-now); `useWorkflowEvents` + `/api/events` forwards `workflow_*` (realtime #7, sessions intact); needs-attention; i18n vi/en/zh; desktop nav link.
+- ⚠️ **UI BLIND — needs user live QA.** Concern: no `GET /api/workflows/[id]` (detail fetches list+filter).
+
+## ▶ Next: D EDITOR (last phase)
+`/workflows/[id]/edit` React Flow (reuse @xyflow/react from `/graph`) + palette (agent/connector/condition/foreach) + config forms + edge-draw (condition true/false labels) + save (**add PATCH /api/workflows/[id]** + assertRunnable validate) + blank-create flow. Highest blind-risk → graph↔WorkflowGraph serialization PURE+tested; canvas interactions flagged for QA.
