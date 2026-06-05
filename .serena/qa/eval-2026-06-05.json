@@ -28,7 +28,7 @@
         }
       },
       "fails": [],
-      "avgMs": 4634
+      "avgMs": 3501
     },
     {
       "id": "tokens-today",
@@ -53,7 +53,7 @@
         }
       },
       "fails": [],
-      "avgMs": 1849
+      "avgMs": 1919
     },
     {
       "id": "agent-detail",
@@ -78,7 +78,7 @@
         }
       },
       "fails": [],
-      "avgMs": 3222
+      "avgMs": 3333
     },
     {
       "id": "machines-online",
@@ -103,7 +103,7 @@
         }
       },
       "fails": [],
-      "avgMs": 1707
+      "avgMs": 1684
     },
     {
       "id": "greeting-restraint",
@@ -120,7 +120,7 @@
         }
       },
       "fails": [],
-      "avgMs": 1145
+      "avgMs": 961
     },
     {
       "id": "chitchat-restraint",
@@ -137,30 +137,20 @@
         }
       },
       "fails": [],
-      "avgMs": 4425
+      "avgMs": 4332
     },
     {
       "id": "geo-directions",
-      "capability": "tool-selection",
+      "capability": "rich-block",
       "runs": 5,
       "perDim": {
-        "tool-selection": {
-          "passed": 0,
-          "total": 5
-        },
-        "termination": {
+        "rich-block": {
           "passed": 5,
           "total": 5
         }
       },
-      "fails": [
-        "[geo-directions#1] tool-selection: thiếu gọi: geo_directions (đã gọi: —)",
-        "[geo-directions#2] tool-selection: thiếu gọi: geo_directions (đã gọi: —)",
-        "[geo-directions#3] tool-selection: thiếu gọi: geo_directions (đã gọi: —)",
-        "[geo-directions#4] tool-selection: thiếu gọi: geo_directions (đã gọi: —)",
-        "[geo-directions#5] tool-selection: thiếu gọi: geo_directions (đã gọi: —)"
-      ],
-      "avgMs": 1177
+      "fails": [],
+      "avgMs": 1139
     },
     {
       "id": "chart-render",
@@ -173,7 +163,7 @@
         }
       },
       "fails": [],
-      "avgMs": 3283
+      "avgMs": 3581
     },
     {
       "id": "write-intent-trello",
@@ -209,7 +199,7 @@
         "[write-intent-trello#5] grounding: bịa/không nên có: đã tạo",
         "[write-intent-trello#5] write-intent: bịa đã-hoàn tất khi chưa confirm"
       ],
-      "avgMs": 1740
+      "avgMs": 2182
     },
     {
       "id": "loop-guard",
@@ -230,7 +220,7 @@
         }
       },
       "fails": [],
-      "avgMs": 1453
+      "avgMs": 1612
     }
   ]
 }
