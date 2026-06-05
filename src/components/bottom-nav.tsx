@@ -3,7 +3,7 @@
 // Desktop keeps the top nav instead. Fixed; pages add bottom padding to clear it.
 
 import Link from "next/link";
-import { LayoutDashboard, Bot, MessageSquare, Plug, Settings } from "lucide-react";
+import { LayoutDashboard, Bot, MessageSquare, Plug, Settings, Gauge } from "lucide-react";
 
 const ITEMS: {
   href: string;
@@ -13,6 +13,7 @@ const ITEMS: {
 }[] = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/agents", label: "Agents", Icon: Bot },
+  { href: "/eval", label: "Reliability", Icon: Gauge },
   { href: "/chat", label: "Chat", Icon: MessageSquare, center: true },
   { href: "/connectors", label: "Connectors", Icon: Plug },
   { href: "/settings", label: "Settings", Icon: Settings },
