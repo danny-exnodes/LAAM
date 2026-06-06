@@ -166,6 +166,9 @@ describe("WorkflowsClient — button actions", () => {
   test("Clone button POSTs to /api/workflows/[id]/clone", async () => {
     mockFetch([mkWorkflow()], []);
     ui();
+    await waitFor(() => screen.getByText("Demo Workflow"));
+    // Open the row actions dropdown
+    fireEvent.click(screen.getByLabelText("Thao tác"));
     await waitFor(() => expect(screen.getByLabelText("Nhân bản")).toBeTruthy());
     fireEvent.click(screen.getByLabelText("Nhân bản"));
     await waitFor(() => {
@@ -206,6 +209,9 @@ describe("WorkflowsClient — button actions", () => {
   test("View button links to /workflows/[id]", async () => {
     mockFetch([mkWorkflow({ id: "w42" })], []);
     ui();
+    await waitFor(() => screen.getByText("Demo Workflow"));
+    // Open the row actions dropdown
+    fireEvent.click(screen.getByLabelText("Thao tác"));
     await waitFor(() => expect(screen.getByLabelText("Xem chi tiết")).toBeTruthy());
     const link = screen.getByLabelText("Xem chi tiết") as HTMLAnchorElement;
     expect(link.href).toContain("/workflows/w42");

@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Play,
+  Pencil,
   Trash2,
   Power,
   ChevronDown,
@@ -25,6 +26,7 @@ import {
   XCircle,
   Loader2,
   Calendar,
+  AlertTriangle,
 } from "lucide-react";
 import { useLang, useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
@@ -90,6 +92,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
   // Delete state
   const [deleting, setDeleting] = useState(false);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
+  const [deleteConfirming, setDeleteConfirming] = useState(false);
 
   // Schedule action states
   const [cronEditId, setCronEditId] = useState<string | null>(null);
@@ -196,8 +199,8 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
 
   const handleDelete = useCallback(async () => {
     if (!workflow) return;
-    if (!window.confirm(`${t("wf.deleteConfirm")}\n\n"${workflow.name}"`)) return;
     setDeleting(true);
+    setDeleteConfirming(false);
     try {
       const res = await fetch(`/api/workflows/${encodeURIComponent(workflowId)}`, { method: "DELETE" });
       if (!res.ok) {
@@ -369,6 +372,13 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Link
+            href={`/workflows/${encodeURIComponent(workflowId)}/edit`}
+            className={btn("secondary") + " flex items-center gap-1.5"}
+          >
+            <Pencil size={14} aria-hidden />
+            {t("wf.edit")}
+          </Link>
           <button
             type="button"
             onClick={() => void handleRunNow()}
@@ -381,20 +391,6 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
               <Play size={14} aria-hidden />
             )}
             {t("wf.detail.runNow")}
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleDelete()}
-            disabled={deleting}
-            title={t("wf.delete")}
-            aria-label={t("wf.delete")}
-            className="rounded-lg p-2 text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20 transition disabled:opacity-50"
-          >
-            {deleting ? (
-              <Loader2 size={15} className="animate-spin" aria-hidden />
-            ) : (
-              <Trash2 size={15} aria-hidden />
-            )}
           </button>
         </div>
       </div>
@@ -412,13 +408,6 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
           </button>
         </div>
       )}
-      {deleteErr && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
-          <span>{deleteErr}</span>
-          <button type="button" onClick={() => setDeleteErr(null)} className="flex-none text-xs text-red-400 underline hover:text-red-600">✕</button>
-        </div>
-      )}
-
       {/* ---- Run history ---- */}
       <section className="mb-8">
         <h2 className="mb-3 text-base font-bold">{t("wf.detail.runs")}</h2>
@@ -495,7 +484,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
       </section>
 
       {/* ---- Schedule section ---- */}
-      <section>
+      <section aria-label="schedule-section">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-bold">{t("wf.detail.schedule")}</h2>
           <button
@@ -634,6 +623,64 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
             </table>
           </div>
         )}
+      </section>
+      {/* ---- Danger zone ---- */}
+      <section className="mt-10">
+        <h2 className="mb-3 text-base font-bold text-red-600 dark:text-red-400">
+          {t("wf.detail.dangerZone")}
+        </h2>
+        <div className="rounded-2xl border border-red-200 bg-red-50/50 p-5 dark:border-red-900/40 dark:bg-red-950/10">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
+                {t("wf.detail.deleteTitle")}
+              </p>
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                {t("wf.detail.deleteDesc")}
+              </p>
+            </div>
+            {!deleteConfirming ? (
+              <button
+                type="button"
+                onClick={() => setDeleteConfirming(true)}
+                className="shrink-0 rounded-lg border border-red-200 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-600 hover:text-white dark:border-red-800 dark:bg-transparent dark:text-red-400 dark:hover:bg-red-600 dark:hover:text-white"
+              >
+                {t("wf.delete")}
+              </button>
+            ) : (
+              <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-red-700 dark:text-red-400">
+                  <AlertTriangle size={14} aria-hidden />
+                  {t("wf.deleteConfirm").split("?")[0]}?
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirming(false)}
+                    className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800 transition"
+                  >
+                    {t("wf.detail.deleteCancel")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleDelete()}
+                    disabled={deleting}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition"
+                  >
+                    {deleting ? (
+                      <Loader2 size={14} className="animate-spin" aria-hidden />
+                    ) : (
+                      t("wf.detail.deleteConfirmBtn")
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+          {deleteErr && (
+            <p className="mt-3 text-xs text-red-600 dark:text-red-400">{deleteErr}</p>
+          )}
+        </div>
       </section>
     </main>
   );

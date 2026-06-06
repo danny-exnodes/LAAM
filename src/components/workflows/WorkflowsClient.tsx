@@ -11,9 +11,9 @@
 // Realtime: useWorkflowEvents streams SSE workflow_run events and updates
 // the run-status badge live without polling.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { GitBranch, Play, Eye, Copy, AlertTriangle, Loader2, Pencil, Trash2 } from "lucide-react";
+import { GitBranch, Play, Eye, Copy, AlertTriangle, Loader2, Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import { useLang, useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import { PageHeader } from "@/components/page-header";
@@ -85,6 +85,22 @@ export function WorkflowsClient() {
   const [cloningId, setCloningId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Row actions dropdown — only one open at a time
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!openMenuId) return;
+    function handleOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, [openMenuId]);
 
   // Realtime: SSE workflow events
   const { runStatus, activeRunId } = useWorkflowEvents();
@@ -366,6 +382,7 @@ export function WorkflowsClient() {
                       <td className="px-4 py-3 text-neutral-500">{fmtDate(wf.createdAt, lang)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
+                          {/* Run — always visible (most frequent action) */}
                           <button
                             type="button"
                             onClick={() => void handleRunNow(wf.id)}
@@ -380,50 +397,74 @@ export function WorkflowsClient() {
                               <Play size={15} aria-hidden />
                             )}
                           </button>
-                          <Link
-                            href={`/workflows/${encodeURIComponent(wf.id)}`}
-                            title={t("wf.view")}
-                            className={btn("icon")}
-                            aria-label={t("wf.view")}
-                          >
-                            <Eye size={15} aria-hidden />
-                          </Link>
-                          <Link
-                            href={`/workflows/${encodeURIComponent(wf.id)}/edit`}
-                            title={t("wf.edit")}
-                            className={btn("icon")}
-                            aria-label={t("wf.edit")}
-                          >
-                            <Pencil size={15} aria-hidden />
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => void handleClone(wf.id)}
-                            disabled={isCloning}
-                            title={t("wf.clone")}
-                            className={btn("icon")}
-                            aria-label={t("wf.clone")}
-                          >
-                            {isCloning ? (
-                              <Loader2 size={15} className="animate-spin" aria-hidden />
-                            ) : (
-                              <Copy size={15} aria-hidden />
+
+                          {/* ⋯ dropdown for the rest */}
+                          <div className="relative" ref={openMenuId === wf.id ? menuRef : undefined}>
+                            <button
+                              type="button"
+                              title={t("wf.col.actions")}
+                              aria-label={t("wf.col.actions")}
+                              className={btn("icon")}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuId(openMenuId === wf.id ? null : wf.id);
+                              }}
+                            >
+                              <MoreHorizontal size={15} aria-hidden />
+                            </button>
+
+                            {openMenuId === wf.id && (
+                              <div className="absolute right-0 top-full z-20 mt-1 min-w-[140px] rounded-xl border border-neutral-200 bg-white py-1 shadow-lg dark:border-neutral-700 dark:bg-neutral-900">
+                                <Link
+                                  href={`/workflows/${encodeURIComponent(wf.id)}`}
+                                  aria-label={t("wf.view")}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                                  onClick={() => setOpenMenuId(null)}
+                                >
+                                  <Eye size={14} aria-hidden />
+                                  {t("wf.view")}
+                                </Link>
+                                <Link
+                                  href={`/workflows/${encodeURIComponent(wf.id)}/edit`}
+                                  aria-label={t("wf.edit")}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                                  onClick={() => setOpenMenuId(null)}
+                                >
+                                  <Pencil size={14} aria-hidden />
+                                  {t("wf.edit")}
+                                </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => { setOpenMenuId(null); void handleClone(wf.id); }}
+                                  disabled={isCloning}
+                                  aria-label={t("wf.clone")}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                                >
+                                  {isCloning ? (
+                                    <Loader2 size={14} className="animate-spin" aria-hidden />
+                                  ) : (
+                                    <Copy size={14} aria-hidden />
+                                  )}
+                                  {t("wf.clone")}
+                                </button>
+                                <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
+                                <button
+                                  type="button"
+                                  onClick={() => { setOpenMenuId(null); void handleDelete(wf.id, wf.name); }}
+                                  disabled={isDeleting}
+                                  aria-label={t("wf.delete")}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/20"
+                                >
+                                  {isDeleting ? (
+                                    <Loader2 size={14} className="animate-spin" aria-hidden />
+                                  ) : (
+                                    <Trash2 size={14} aria-hidden />
+                                  )}
+                                  {t("wf.delete")}
+                                </button>
+                              </div>
                             )}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void handleDelete(wf.id, wf.name)}
-                            disabled={isDeleting}
-                            title={t("wf.delete")}
-                            className={btn("icon") + " hover:text-red-500"}
-                            aria-label={t("wf.delete")}
-                          >
-                            {isDeleting ? (
-                              <Loader2 size={15} className="animate-spin" aria-hidden />
-                            ) : (
-                              <Trash2 size={15} aria-hidden />
-                            )}
-                          </button>
+                          </div>
                         </div>
                       </td>
                     </tr>

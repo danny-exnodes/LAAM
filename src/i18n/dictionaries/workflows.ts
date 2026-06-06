@@ -229,4 +229,25 @@ export const workflows: Dict = {
     en: "Each item is passed via {{item}} context when the body runs.",
     zh: "每个 item 在执行 body 时通过 {{item}} 上下文传入。",
   },
+
+  // Condition form — structured fields
+  "wf.node.condition.leftLabel": { vi: "Vế trái", en: "Left operand", zh: "左操作数" },
+  "wf.node.condition.opLabel": { vi: "Toán tử", en: "Operator", zh: "运算符" },
+  "wf.node.condition.rightLabel": { vi: "Vế phải", en: "Right operand", zh: "右操作数" },
+  "wf.node.condition.jsonMode": { vi: "JSON", en: "JSON", zh: "JSON" },
+  "wf.node.condition.formMode": { vi: "Form", en: "Form", zh: "Form" },
+
+  // Detail page — danger zone / delete flow
+  "wf.detail.dangerZone": { vi: "Vùng nguy hiểm", en: "Danger zone", zh: "危险区域" },
+  "wf.detail.deleteTitle": { vi: "Xoá workflow này", en: "Delete this workflow", zh: "删除此工作流" },
+  "wf.detail.deleteDesc": {
+    vi: "Toàn bộ lịch sử chạy và lịch tự động sẽ bị xoá theo. Thao tác không thể hoàn tác.",
+    en: "All run history and schedules will also be deleted. This cannot be undone.",
+    zh: "所有运行历史和定时计划也将一并删除，此操作不可撤销。",
+  },
+  "wf.detail.deleteConfirmBtn": { vi: "Xoá vĩnh viễn", en: "Delete permanently", zh: "永久删除" },
+  "wf.detail.deleteCancel": { vi: "Huỷ", en: "Cancel", zh: "取消" },
+
+  // Editor — mobile config panel title
+  "wf.editor.configTitle": { vi: "Cấu hình node", en: "Configure node", zh: "配置节点" },
 };

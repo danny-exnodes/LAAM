@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Trash2 } from "lucide-react";
-import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode, Predicate, WorkflowGraph } from "@/lib/workflow/types";
+import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode, Predicate, WorkflowGraph, Op, Comparator } from "@/lib/workflow/types";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { Translator } from "@/i18n/types";
@@ -232,6 +232,24 @@ function ConnectorForm({
 
 // ── Condition form ──────────────────────────────────────────────────────────
 
+// All comparison operators supported by the engine
+const OPS: { value: Op; label: string }[] = [
+  { value: "eq", label: "= (eq)" },
+  { value: "ne", label: "≠ (ne)" },
+  { value: "gt", label: "> (gt)" },
+  { value: "lt", label: "< (lt)" },
+  { value: "gte", label: "≥ (gte)" },
+  { value: "lte", label: "≤ (lte)" },
+  { value: "contains", label: "contains" },
+  { value: "not_contains", label: "not_contains" },
+  { value: "exists", label: "exists" },
+  { value: "not_exists", label: "not_exists" },
+];
+
+function isSimpleComparator(p: Predicate): p is Comparator {
+  return "op" in p;
+}
+
 function ConditionForm({
   node,
   onChange,
@@ -241,11 +259,62 @@ function ConditionForm({
   onChange: (n: WfNode) => void;
   t: Translator;
 }) {
-  const [text, setText] = useState(JSON.stringify(node.when, null, 2));
+  const simple = isSimpleComparator(node.when);
+  const [mode, setMode] = useState<"form" | "json">(simple ? "form" : "json");
+
+  // Structured-form local state
+  const [left, setLeft] = useState(simple ? (node.when as Comparator).left : "");
+  const [op, setOp] = useState<Op>(simple ? (node.when as Comparator).op : "eq");
+  const [right, setRight] = useState(simple ? String((node.when as Comparator).right ?? "") : "");
+
+  // JSON-mode local state
+  const [jsonText, setJsonText] = useState(JSON.stringify(node.when, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
 
-  function handleChange(raw: string) {
-    setText(raw);
+  // Sync local state when a different node is selected (node.id changes)
+  useEffect(() => {
+    const s = isSimpleComparator(node.when);
+    if (s) {
+      const c = node.when as Comparator;
+      setLeft(c.left);
+      setOp(c.op);
+      setRight(String(c.right ?? ""));
+    }
+    setJsonText(JSON.stringify(node.when, null, 2));
+    setParseError(null);
+    setMode(s ? "form" : "json");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id]);
+
+  function handleFormField(field: "left" | "op" | "right", value: string) {
+    const newLeft = field === "left" ? value : left;
+    const newOp = (field === "op" ? value : op) as Op;
+    const newRight = field === "right" ? value : right;
+    if (field === "left") setLeft(value);
+    else if (field === "op") setOp(value as Op);
+    else setRight(value);
+    const predicate: Comparator = { left: newLeft, op: newOp, right: newRight };
+    onChange({ ...node, when: predicate });
+  }
+
+  function switchToJson() {
+    setJsonText(JSON.stringify(node.when, null, 2));
+    setParseError(null);
+    setMode("json");
+  }
+
+  function switchToForm() {
+    if (isSimpleComparator(node.when)) {
+      const c = node.when as Comparator;
+      setLeft(c.left);
+      setOp(c.op);
+      setRight(String(c.right ?? ""));
+      setMode("form");
+    }
+  }
+
+  function handleJsonChange(raw: string) {
+    setJsonText(raw);
     try {
       const parsed = JSON.parse(raw) as Predicate;
       setParseError(null);
@@ -255,22 +324,103 @@ function ConditionForm({
     }
   }
 
+  const modeSwitcher = (
+    <div className="mb-3 flex justify-end">
+      {mode === "form" ? (
+        <button
+          type="button"
+          onClick={switchToJson}
+          className="text-xs text-neutral-400 transition hover:text-neutral-600 dark:hover:text-neutral-200"
+        >
+          {t("wf.node.condition.jsonMode")} ↗
+        </button>
+      ) : isSimpleComparator(node.when) ? (
+        <button
+          type="button"
+          onClick={switchToForm}
+          className="text-xs text-neutral-400 transition hover:text-neutral-600 dark:hover:text-neutral-200"
+        >
+          {t("wf.node.condition.formMode")} ↗
+        </button>
+      ) : null}
+    </div>
+  );
+
+  if (mode === "form") {
+    return (
+      <>
+        {modeSwitcher}
+        {field(
+          <>
+            <label className="block text-xs font-semibold text-neutral-500 mb-1" htmlFor={`cond-left-${node.id}`}>
+              {t("wf.node.condition.leftLabel")}
+            </label>
+            <input
+              id={`cond-left-${node.id}`}
+              type="text"
+              className={inputCls()}
+              value={left}
+              placeholder="{{steps.n1.output.count}}"
+              aria-label={t("wf.node.condition.leftLabel")}
+              onChange={(e) => handleFormField("left", e.target.value)}
+            />
+          </>,
+        )}
+        {field(
+          <>
+            <label className="block text-xs font-semibold text-neutral-500 mb-1" htmlFor={`cond-op-${node.id}`}>
+              {t("wf.node.condition.opLabel")}
+            </label>
+            <select
+              id={`cond-op-${node.id}`}
+              className={inputCls()}
+              value={op}
+              aria-label={t("wf.node.condition.opLabel")}
+              onChange={(e) => handleFormField("op", e.target.value)}
+            >
+              {OPS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </>,
+        )}
+        {field(
+          <>
+            <label className="block text-xs font-semibold text-neutral-500 mb-1" htmlFor={`cond-right-${node.id}`}>
+              {t("wf.node.condition.rightLabel")}
+            </label>
+            <input
+              id={`cond-right-${node.id}`}
+              type="text"
+              className={inputCls()}
+              value={right}
+              placeholder="0"
+              aria-label={t("wf.node.condition.rightLabel")}
+              onChange={(e) => handleFormField("right", e.target.value)}
+            />
+            <p className="mt-1 text-xs text-neutral-400">{t("wf.node.condition.hint")}</p>
+          </>,
+        )}
+      </>
+    );
+  }
+
+  // JSON mode
   return (
     <>
+      {modeSwitcher}
       {field(
         <>
           {label(t("wf.node.condition.label"))}
           <textarea
             className={inputCls(!!parseError)}
             rows={6}
-            value={text}
+            value={jsonText}
             placeholder={'{\n  "left": "{{steps.n1.output.count}}",\n  "op": "gt",\n  "right": 0\n}'}
-            onChange={(e) => handleChange(e.target.value)}
+            onChange={(e) => handleJsonChange(e.target.value)}
           />
           {parseError && errorMsg(parseError)}
-          <p className="mt-1 text-xs text-neutral-400">
-            {t("wf.node.condition.hint")}
-          </p>
+          <p className="mt-1 text-xs text-neutral-400">{t("wf.node.condition.hint")}</p>
         </>,
       )}
     </>

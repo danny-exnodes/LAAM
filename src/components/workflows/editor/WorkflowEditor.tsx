@@ -54,11 +54,16 @@ const KIND_COLORS: Record<WfNodeKind, string> = {
 // component) to avoid re-allocating the Set on every render.
 const DATA_CHANGE_TYPES = new Set(["position", "remove", "add", "replace"] as const);
 
-// Default options for every edge: arrow marker + consistent stroke.
+// Default options for every edge: arrow marker + consistent stroke + label bg so
+// "true"/"false" condition labels don't overlap the line (fixes visual overlap on canvas).
 // Defined at module level so the object reference is stable (no re-render on <ReactFlow>).
 const DEFAULT_EDGE_OPTIONS = {
   style: { strokeWidth: 2, stroke: "var(--wf-edge-stroke)" },
   markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8", width: 18, height: 18 },
+  labelStyle: { fontSize: 11, fill: "var(--wf-node-text)" },
+  labelBgStyle: { fill: "var(--wf-node-bg)", fillOpacity: 0.92 },
+  labelBgPadding: [4, 2] as [number, number],
+  labelBgBorderRadius: 4,
 };
 
 // Actions passed to every node card via a stable ref — avoids re-render churn
@@ -591,61 +596,61 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
 
   return (
     <div className="flex h-full flex-col">
-      {/* Top bar */}
-      <div className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-700 dark:bg-neutral-900">
-        <button
-          type="button"
-          onClick={() => {
-            if (isDirty && !window.confirm(t("wf.editor.unsavedConfirm"))) return;
-            router.push(`/workflows/${encodeURIComponent(workflowId)}`);
-          }}
-          className="text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
-        >
-          {t("wf.editor.backToDetail")}
-        </button>
-        <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
-        <input
-          type="text"
-          value={wfName}
-          onChange={(e) => { setWfName(e.target.value); setIsDirty(true); }}
-          aria-label={t("wf.editor.name")}
-          className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-        />
-        <div className="flex items-center gap-2">
-          {/* Palette */}
-          <span className="text-xs text-neutral-400">{t("wf.editor.palette")}</span>
+      {/* Top bar — two rows: (1) back+name+save, (2) palette scrollable on mobile */}
+      <div className="border-b border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900">
+        {/* Row 1 */}
+        <div className="flex items-center gap-2 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (isDirty && !window.confirm(t("wf.editor.unsavedConfirm"))) return;
+              router.push(`/workflows/${encodeURIComponent(workflowId)}`);
+            }}
+            className="shrink-0 text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
+          >
+            {t("wf.editor.backToDetail")}
+          </button>
+          <div className="h-4 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700" />
+          <input
+            type="text"
+            value={wfName}
+            onChange={(e) => { setWfName(e.target.value); setIsDirty(true); }}
+            aria-label={t("wf.editor.name")}
+            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+          />
+          <button
+            type="button"
+            onClick={() => void handleSave()}
+            disabled={saveStatus === "saving"}
+            className="shrink-0 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {saveStatus === "saving"
+              ? t("wf.editor.saving")
+              : isDirty
+                ? `● ${t("wf.editor.save")}`
+                : t("wf.editor.save")}
+          </button>
+          {saveStatus === "saved" && (
+            <span className="hidden shrink-0 text-xs font-semibold text-green-600 sm:inline">
+              {t("wf.editor.saved")}
+            </span>
+          )}
+        </div>
+        {/* Row 2: palette — horizontally scrollable on small screens */}
+        <div className="flex items-center gap-2 overflow-x-auto border-t border-neutral-100 px-3 pb-2 pt-1.5 dark:border-neutral-800">
+          <span className="shrink-0 text-xs text-neutral-400">{t("wf.editor.palette")}</span>
           <PaletteBtn label={t("wf.editor.addAgent")} onClick={() => addNode("agent")} />
           <PaletteBtn label={t("wf.editor.addConnector")} onClick={() => addNode("connector")} />
           <PaletteBtn label={t("wf.editor.addCondition")} onClick={() => addNode("condition")} />
           <PaletteBtn label={t("wf.editor.addForeach")} onClick={() => addNode("foreach")} />
         </div>
-        <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
-        <button
-          type="button"
-          onClick={() => void handleSave()}
-          disabled={saveStatus === "saving"}
-          className="rounded-lg bg-[var(--color-accent)] px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition"
-        >
-          {saveStatus === "saving"
-            ? t("wf.editor.saving")
-            : isDirty
-              ? `● ${t("wf.editor.save")}`
-              : t("wf.editor.save")}
-        </button>
-        {saveStatus === "saved" && (
-          <span className="text-xs font-semibold text-green-600">{t("wf.editor.saved")}</span>
-        )}
-        {saveStatus === "error" && (
-          <span className="text-xs text-red-500" title={saveError ?? undefined}>
-            {t("wf.editor.saveErr")}
-          </span>
-        )}
       </div>
 
-      {/* Validation error (client preflight) */}
+      {/* Save / validation error banner */}
       {saveError && saveStatus === "error" && (
         <div className="border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-600 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
-          {saveError}
+          <span className="font-semibold">{t("wf.editor.saveErr")}</span>
+          {saveError !== t("wf.editor.saveErr") ? `: ${saveError}` : ""}
         </div>
       )}
 
@@ -668,7 +673,16 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
           >
             <Background />
             <Controls />
-            <MiniMap pannable zoomable />
+            <MiniMap
+              pannable
+              zoomable
+              nodeColor={(node) => {
+                const data = node.data as WfNodeData | undefined;
+                return data?.node ? (KIND_COLORS[data.node.kind] ?? "#64748b") : "#64748b";
+              }}
+              nodeStrokeColor="transparent"
+              style={{ background: "var(--wf-node-bg)", border: "1px solid var(--wf-node-border)" }}
+            />
           </ReactFlow>
 
           {/* Condition edge-label picker (inline overlay) */}
@@ -703,8 +717,8 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
           )}
         </div>
 
-        {/* Config panel */}
-        <div className="w-72 shrink-0 border-l border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900">
+        {/* Desktop config panel — hidden on mobile */}
+        <div className="hidden w-72 shrink-0 border-l border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900 md:block">
           {selectedWfNode ? (
             <NodeConfigPanel
               node={selectedWfNode}
@@ -718,6 +732,35 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
           )}
         </div>
       </div>
+
+      {/* Mobile config panel — bottom sheet, shown when a node is selected */}
+      {selectedWfNode && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl border-t border-neutral-200 bg-white shadow-2xl md:hidden dark:border-neutral-700 dark:bg-neutral-900"
+          style={{ maxHeight: "65dvh" }}
+        >
+          <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
+            <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+              {t("wf.editor.configTitle")}
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedId(null)}
+              className="rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            <NodeConfigPanel
+              node={selectedWfNode}
+              onChange={onNodeConfigChange}
+              onDelete={() => handleDeleteNode(selectedWfNode.id)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

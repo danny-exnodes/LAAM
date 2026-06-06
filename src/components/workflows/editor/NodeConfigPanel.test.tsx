@@ -160,7 +160,7 @@ describe("ConnectorForm", () => {
 
 // ─── Condition form ───────────────────────────────────────────────────────
 
-describe("ConditionForm", () => {
+describe("ConditionForm — structured mode (default for simple predicate)", () => {
   const condNode: WfConditionNode = {
     id: "cond-1",
     kind: "condition",
@@ -172,22 +172,76 @@ describe("ConditionForm", () => {
     expect(screen.getByText("Condition")).toBeInTheDocument();
   });
 
-  test("invalid predicate JSON shows parse error", () => {
+  test("shows structured fields with initial values in form mode", () => {
     renderPanel(<NodeConfigPanel node={condNode} onChange={vi.fn()} />);
+    // Left operand input
+    const leftInput = screen.getByLabelText(/vế trái/i) as HTMLInputElement;
+    expect(leftInput.value).toBe("{{x}}");
+    // Op select
+    const opSelect = screen.getByLabelText(/toán tử/i) as HTMLSelectElement;
+    expect(opSelect.value).toBe("gt");
+    // Right operand input
+    const rightInput = screen.getByLabelText(/vế phải/i) as HTMLInputElement;
+    expect(rightInput.value).toBe("0");
+  });
+
+  test("changing left field calls onChange with updated predicate", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={condNode} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText(/vế trái/i), { target: { value: "{{y}}" } });
+    const updated = onChange.mock.calls[0][0] as WfConditionNode;
+    expect(updated.when).toMatchObject({ left: "{{y}}", op: "gt" });
+  });
+
+  test("changing op select calls onChange with updated op", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={condNode} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText(/toán tử/i), { target: { value: "eq" } });
+    const updated = onChange.mock.calls[0][0] as WfConditionNode;
+    expect(updated.when).toMatchObject({ op: "eq" });
+  });
+
+  test("JSON mode toggle switches to textarea", () => {
+    renderPanel(<NodeConfigPanel node={condNode} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /json/i }));
+    // JSON textarea with placeholder containing 'left' should appear
+    expect(screen.getByPlaceholderText(/left/)).toBeInTheDocument();
+  });
+
+  test("invalid predicate JSON shows parse error in JSON mode", () => {
+    renderPanel(<NodeConfigPanel node={condNode} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /json/i }));
     const area = screen.getByPlaceholderText(/left/);
     fireEvent.change(area, { target: { value: "not json" } });
     expect(screen.getByText(/JSON không hợp lệ/)).toBeInTheDocument();
   });
 
-  test("valid predicate JSON calls onChange", () => {
+  test("valid predicate JSON in JSON mode calls onChange", () => {
     const onChange = vi.fn();
     renderPanel(<NodeConfigPanel node={condNode} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /json/i }));
     const area = screen.getByPlaceholderText(/left/);
     const newPredicate = JSON.stringify({ left: "{{y}}", op: "eq", right: "ok" });
     fireEvent.change(area, { target: { value: newPredicate } });
     expect(screen.queryByText(/JSON không hợp lệ/)).not.toBeInTheDocument();
     const updated = onChange.mock.calls[0][0] as WfConditionNode;
     expect(updated.when).toEqual({ left: "{{y}}", op: "eq", right: "ok" });
+  });
+});
+
+describe("ConditionForm — JSON mode for nested predicate", () => {
+  const nestedNode: WfConditionNode = {
+    id: "cond-2",
+    kind: "condition",
+    when: { all: [{ left: "{{x}}", op: "gt", right: 0 }, { left: "{{y}}", op: "eq", right: "ok" }] },
+  };
+
+  test("starts in JSON mode when predicate is nested (all/any)", () => {
+    renderPanel(<NodeConfigPanel node={nestedNode} onChange={vi.fn()} />);
+    // JSON textarea (with 'left' in placeholder) should be visible
+    expect(screen.getByPlaceholderText(/left/)).toBeInTheDocument();
+    // No 'Form' toggle because predicate is not a simple comparator
+    expect(screen.queryByRole("button", { name: /^form$/i })).not.toBeInTheDocument();
   });
 });
 

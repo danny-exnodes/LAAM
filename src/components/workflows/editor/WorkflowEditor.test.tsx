@@ -334,7 +334,8 @@ describe("WorkflowEditor — node delete", () => {
     // Click first node to select it
     fireEvent.click(screen.getByTestId("node-n1"));
     // Click delete button in config panel (Vietnamese aria-label "Xoá node")
-    const deleteBtn = screen.getByRole("button", { name: /xoá node/i });
+    // getAllByRole: both desktop (hidden md:block) and mobile (md:hidden) panels render in jsdom
+    const deleteBtn = screen.getAllByRole("button", { name: /xoá node/i })[0];
     fireEvent.click(deleteBtn);
     // Node and config panel should be gone
     expect(screen.queryByTestId("node-n1")).not.toBeInTheDocument();
