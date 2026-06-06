@@ -27,7 +27,17 @@ export const workflows: Dict = {
   "wf.view": { vi: "Xem chi tiết", en: "View details", zh: "查看详情" },
   "wf.edit": { vi: "Chỉnh sửa", en: "Edit", zh: "编辑" },
   "wf.clone": { vi: "Nhân bản", en: "Clone", zh: "克隆" },
+  "wf.delete": { vi: "Xoá", en: "Delete", zh: "删除" },
   "wf.cancel": { vi: "Đóng", en: "Close", zh: "关闭" },
+  "wf.deleteConfirm": {
+    vi: "Xoá workflow này? Toàn bộ lịch sử chạy và lịch tự động sẽ bị xoá theo.",
+    en: "Delete this workflow? All run history and schedules will also be deleted.",
+    zh: "删除此工作流？所有运行历史和定时计划也将一并删除。",
+  },
+  "wf.deleteFailed": { vi: "Xoá thất bại.", en: "Delete failed.", zh: "删除失败。" },
+  "wf.runFailed": { vi: "Chạy thất bại", en: "Run failed", zh: "运行失败" },
+  "wf.cloneFailed": { vi: "Nhân bản thất bại.", en: "Clone failed.", zh: "克隆失败。" },
+  "wf.actionErr": { vi: "Thao tác thất bại.", en: "Action failed.", zh: "操作失败。" },
 
   // Workflow status badges
   "wf.wfStatus.active": { vi: "Đang hoạt động", en: "Active", zh: "活跃" },
@@ -98,6 +108,18 @@ export const workflows: Dict = {
   "wf.schedule.col.next": { vi: "Lần tiếp theo", en: "Next run", zh: "下次运行" },
   "wf.schedule.col.tz": { vi: "Múi giờ", en: "Timezone", zh: "时区" },
   "wf.schedule.col.enabled": { vi: "Bật", en: "Enabled", zh: "启用" },
+  "wf.schedule.enabled": { vi: "Đang bật", en: "Enabled", zh: "已启用" },
+  "wf.schedule.disabled": { vi: "Đã tắt", en: "Disabled", zh: "已停用" },
+  "wf.schedule.delete": { vi: "Xoá lịch", en: "Delete schedule", zh: "删除计划" },
+  "wf.schedule.deleteConfirm": {
+    vi: "Xoá lịch chạy này?",
+    en: "Delete this schedule?",
+    zh: "删除此定时计划？",
+  },
+  "wf.schedule.deleteFailed": { vi: "Xoá lịch thất bại.", en: "Delete schedule failed.", zh: "删除计划失败。" },
+  "wf.schedule.toggleFailed": { vi: "Đổi trạng thái thất bại.", en: "Toggle failed.", zh: "切换状态失败。" },
+  "wf.schedule.cronSaveErr": { vi: "Lưu cron thất bại.", en: "Save cron failed.", zh: "保存 Cron 失败。" },
+  "wf.schedule.editCron": { vi: "Nhấn Enter để lưu", en: "Press Enter to save", zh: "按 Enter 保存" },
 
   // Editor
   "wf.editor.title": { vi: "Chỉnh sửa Workflow", en: "Edit Workflow", zh: "编辑工作流" },
@@ -121,4 +143,62 @@ export const workflows: Dict = {
   // New blank
   "wf.new.creating": { vi: "Đang tạo workflow…", en: "Creating workflow…", zh: "正在创建工作流…" },
   "wf.new.err": { vi: "Không tạo được workflow.", en: "Could not create workflow.", zh: "无法创建工作流。" },
+
+  // Node config panel — shared
+  "wf.node.jsonInvalid": { vi: "JSON không hợp lệ", en: "Invalid JSON", zh: "JSON 格式无效" },
+
+  // Node config panel — agent
+  "wf.node.agent.systemLabel": { vi: "System prompt", en: "System prompt", zh: "System prompt" },
+  "wf.node.agent.systemPlaceholder": {
+    vi: "(dùng mặc định harness)",
+    en: "(use harness default)",
+    zh: "（使用 harness 默认值）",
+  },
+  "wf.node.agent.promptLabel": { vi: "Prompt *", en: "Prompt *", zh: "Prompt *" },
+  "wf.node.agent.promptPlaceholder": {
+    vi: "Nhập prompt — {{var}} để nội suy",
+    en: "Enter prompt — {{var}} for interpolation",
+    zh: "输入 prompt — {{var}} 用于插值",
+  },
+
+  // Node config panel — connector
+  "wf.node.connector.idLabel": { vi: "Connector ID *", en: "Connector ID *", zh: "Connector ID *" },
+  "wf.node.connector.idPlaceholder": {
+    vi: "vd: trello, github, slack",
+    en: "e.g. trello, github, slack",
+    zh: "如：trello、github、slack",
+  },
+  "wf.node.connector.actionLabel": { vi: "Action *", en: "Action *", zh: "Action *" },
+  "wf.node.connector.actionPlaceholder": {
+    vi: "vd: demo_list_tasks",
+    en: "e.g. demo_list_tasks",
+    zh: "如：demo_list_tasks",
+  },
+  "wf.node.connector.argsLabel": { vi: "Args (JSON)", en: "Args (JSON)", zh: "Args (JSON)" },
+
+  // Node config panel — condition
+  "wf.node.condition.label": {
+    vi: "Điều kiện (Predicate JSON)",
+    en: "Condition (Predicate JSON)",
+    zh: "条件（Predicate JSON）",
+  },
+  "wf.node.condition.hint": {
+    vi: "op: eq|ne|gt|lt|gte|lte|contains|not_contains|exists|not_exists · all/any cho nhóm",
+    en: "op: eq|ne|gt|lt|gte|lte|contains|not_contains|exists|not_exists · all/any for groups",
+    zh: "op: eq|ne|gt|lt|gte|lte|contains|not_contains|exists|not_exists · all/any 用于组合",
+  },
+
+  // Node config panel — foreach
+  "wf.node.foreach.itemsLabel": { vi: "Items (template)", en: "Items (template)", zh: "Items（模板）" },
+  "wf.node.foreach.itemsHint": {
+    vi: "Phải resolve thành array lúc chạy",
+    en: "Must resolve to an array at runtime",
+    zh: "运行时必须解析为数组",
+  },
+  "wf.node.foreach.bodyLabel": { vi: "Body graph (JSON)", en: "Body graph (JSON)", zh: "Body graph (JSON)" },
+  "wf.node.foreach.bodyHint": {
+    vi: "Mỗi item được truyền qua context {{item}} khi chạy body.",
+    en: "Each item is passed via {{item}} context when the body runs.",
+    zh: "每个 item 在执行 body 时通过 {{item}} 上下文传入。",
+  },
 };

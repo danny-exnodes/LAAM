@@ -10,11 +10,14 @@
 //
 // Realtime: useWorkflowEvents for live step updates on running runs.
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Play,
+  Trash2,
+  Power,
   ChevronDown,
   ChevronRight,
   Clock,
@@ -23,7 +26,7 @@ import {
   Loader2,
   Calendar,
 } from "lucide-react";
-import { useT } from "@/i18n/provider";
+import { useLang, useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import { useWorkflowEvents } from "@/hooks/useWorkflowEvents";
 import type { Workflow, WorkflowRun, WorkflowRunStep, WorkflowSchedule } from "@/db/schema";
@@ -32,9 +35,9 @@ import type { Workflow, WorkflowRun, WorkflowRunStep, WorkflowSchedule } from "@
 type RunDetail = { run: WorkflowRun; steps: WorkflowRunStep[] };
 
 // ----- Helpers -----
-function fmtDate(d: Date | string | null): string {
+function fmtDate(d: Date | string | null, lang: string): string {
   if (!d) return "—";
-  return new Date(typeof d === "string" ? d : d.toISOString()).toLocaleString("vi-VN");
+  return new Date(typeof d === "string" ? d : d.toISOString()).toLocaleString(lang);
 }
 
 function fmtDuration(start: Date | string | null, end: Date | string | null): string {
@@ -70,6 +73,8 @@ function btn(kind: "primary" | "secondary") {
 
 export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
   const t = useT(dict);
+  const { lang } = useLang();
+  const router = useRouter();
 
   const [workflow, setWorkflow] = useState<Workflow | null>(null);
   const [runs, setRuns] = useState<WorkflowRun[]>([]);
@@ -78,8 +83,19 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
   const [loadErr, setLoadErr] = useState(false);
   const [notFound, setNotFound] = useState(false);
 
-  // Run-now state
+  // Run-now state + inline error feedback
   const [running, setRunning] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+
+  // Delete state
+  const [deleting, setDeleting] = useState(false);
+
+  // Schedule action states
+  const [cronEditId, setCronEditId] = useState<string | null>(null);
+  const [cronDraft, setCronDraft] = useState("");
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [deletingSchedId, setDeletingSchedId] = useState<string | null>(null);
+  const [scheduleActionErr, setScheduleActionErr] = useState<string | null>(null);
 
   // Expanded run → steps
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
@@ -157,13 +173,111 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
 
   const handleRunNow = useCallback(async () => {
     setRunning(true);
+    setRunError(null);
     try {
-      await fetch(`/api/workflows/${encodeURIComponent(workflowId)}/run`, { method: "POST" });
+      const res = await fetch(`/api/workflows/${encodeURIComponent(workflowId)}/run`, { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setRunError(body.error ?? t("wf.runFailed"));
+        return;
+      }
+      const data = (await res.json()) as { run?: { status?: string; error?: string } };
+      if (data?.run?.status === "failed") {
+        setRunError(`${t("wf.runFailed")}: ${data.run.error ?? "—"}`);
+      }
       await load();
+    } catch {
+      setRunError(t("wf.runFailed"));
     } finally {
       setRunning(false);
     }
-  }, [workflowId, load]);
+  }, [workflowId, load, t]);
+
+  const handleDelete = useCallback(async () => {
+    if (!workflow) return;
+    if (!window.confirm(`${t("wf.deleteConfirm")}\n\n"${workflow.name}"`)) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/workflows/${encodeURIComponent(workflowId)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setRunError(body.error ?? t("wf.deleteFailed"));
+        return;
+      }
+      router.push("/workflows");
+    } catch {
+      setRunError(t("wf.deleteFailed"));
+    } finally {
+      setDeleting(false);
+    }
+  }, [workflow, workflowId, router, t]);
+
+  const handleToggleSchedule = useCallback(async (schedId: string, currentEnabled: boolean) => {
+    setTogglingId(schedId);
+    setScheduleActionErr(null);
+    try {
+      const res = await fetch(`/api/workflows/schedules/${encodeURIComponent(schedId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled: !currentEnabled }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setScheduleActionErr(body.error ?? t("wf.schedule.toggleFailed"));
+        return;
+      }
+      const updated = await res.json() as WorkflowSchedule;
+      setSchedules(prev => prev.map(s => s.id === schedId ? updated : s));
+    } catch {
+      setScheduleActionErr(t("wf.schedule.toggleFailed"));
+    } finally {
+      setTogglingId(null);
+    }
+  }, [t]);
+
+  const handleDeleteSchedule = useCallback(async (schedId: string) => {
+    if (!window.confirm(t("wf.schedule.deleteConfirm"))) return;
+    setDeletingSchedId(schedId);
+    setScheduleActionErr(null);
+    try {
+      const res = await fetch(`/api/workflows/schedules/${encodeURIComponent(schedId)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setScheduleActionErr(body.error ?? t("wf.schedule.deleteFailed"));
+        return;
+      }
+      setSchedules(prev => prev.filter(s => s.id !== schedId));
+    } catch {
+      setScheduleActionErr(t("wf.schedule.deleteFailed"));
+    } finally {
+      setDeletingSchedId(null);
+    }
+  }, [t]);
+
+  const handleSaveCron = useCallback(async (schedId: string) => {
+    const cron = cronDraft.trim();
+    if (!cron) { setCronEditId(null); return; }
+    setScheduleActionErr(null);
+    try {
+      const res = await fetch(`/api/workflows/schedules/${encodeURIComponent(schedId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cron }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setScheduleActionErr(body.error ?? t("wf.schedule.cronSaveErr"));
+        return;
+      }
+      const updated = await res.json() as WorkflowSchedule;
+      setSchedules(prev => prev.map(s => s.id === schedId ? updated : s));
+      setCronEditId(null);
+    } catch {
+      setScheduleActionErr(t("wf.schedule.cronSaveErr"));
+    }
+  }, [cronDraft, t]);
 
   const toggleRun = useCallback(async (runId: string) => {
     if (expandedRunId === runId) {
@@ -251,20 +365,50 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
             <p className="mt-1 text-sm text-neutral-500">{workflow!.description}</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => void handleRunNow()}
-          disabled={running}
-          className={btn("primary")}
-        >
-          {running ? (
-            <Loader2 size={14} className="animate-spin" aria-hidden />
-          ) : (
-            <Play size={14} aria-hidden />
-          )}
-          {t("wf.detail.runNow")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void handleRunNow()}
+            disabled={running}
+            className={btn("primary")}
+          >
+            {running ? (
+              <Loader2 size={14} className="animate-spin" aria-hidden />
+            ) : (
+              <Play size={14} aria-hidden />
+            )}
+            {t("wf.detail.runNow")}
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleDelete()}
+            disabled={deleting}
+            title={t("wf.delete")}
+            aria-label={t("wf.delete")}
+            className="rounded-lg p-2 text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20 transition disabled:opacity-50"
+          >
+            {deleting ? (
+              <Loader2 size={15} className="animate-spin" aria-hidden />
+            ) : (
+              <Trash2 size={15} aria-hidden />
+            )}
+          </button>
+        </div>
       </div>
+
+      {/* Run error feedback */}
+      {runError && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
+          <span>{runError}</span>
+          <button
+            type="button"
+            onClick={() => setRunError(null)}
+            className="flex-none text-xs text-red-400 underline hover:text-red-600"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ---- Run history ---- */}
       <section className="mb-8">
@@ -287,9 +431,8 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {runs.map((run) => (
-                  <>
+                  <Fragment key={run.id}>
                     <tr
-                      key={run.id}
                       className="cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800/50"
                       onClick={() => void toggleRun(run.id)}
                       aria-expanded={expandedRunId === run.id}
@@ -309,7 +452,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
                           {t(`wf.runStatus.${run.status}` as Parameters<typeof t>[0]) || run.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-neutral-500">{fmtDate(run.startedAt)}</td>
+                      <td className="px-4 py-3 text-neutral-500">{fmtDate(run.startedAt, lang)}</td>
                       <td className="px-4 py-3 text-neutral-500">
                         {fmtDuration(run.startedAt, run.finishedAt)}
                       </td>
@@ -334,7 +477,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -393,6 +536,12 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
           </div>
         ) : (
           <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+            {scheduleActionErr && (
+              <div className="flex items-center justify-between gap-3 border-b border-red-200 bg-red-50 px-4 py-2 text-xs text-red-600 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
+                <span>{scheduleActionErr}</span>
+                <button type="button" onClick={() => setScheduleActionErr(null)} className="underline">✕</button>
+              </div>
+            )}
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-100 text-xs font-semibold text-neutral-500 dark:border-neutral-800">
@@ -400,18 +549,72 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
                   <th className="px-4 py-3 text-left">{t("wf.schedule.col.tz")}</th>
                   <th className="px-4 py-3 text-left">{t("wf.schedule.col.next")}</th>
                   <th className="px-4 py-3 text-left">{t("wf.schedule.col.enabled")}</th>
+                  <th className="px-4 py-3 text-right">{t("wf.col.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {schedules.map((s) => (
-                  <tr key={s.id}>
-                    <td className="px-4 py-3 font-mono text-xs">{s.cron}</td>
+                  <tr key={s.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
+                    <td className="px-4 py-3 font-mono text-xs">
+                      {cronEditId === s.id ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={cronDraft}
+                          onChange={(e) => setCronDraft(e.target.value)}
+                          onBlur={() => void handleSaveCron(s.id)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") void handleSaveCron(s.id);
+                            if (e.key === "Escape") setCronEditId(null);
+                          }}
+                          title={t("wf.schedule.editCron")}
+                          className="w-32 rounded border border-[var(--color-accent)] bg-transparent px-1 py-0.5 font-mono text-xs focus:outline-none"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          title="Click để sửa"
+                          onClick={() => { setCronDraft(s.cron); setCronEditId(s.id); }}
+                          className="hover:text-[var(--color-accent)] transition"
+                        >
+                          {s.cron}
+                        </button>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-neutral-500">{s.timezone}</td>
-                    <td className="px-4 py-3 text-neutral-500">{fmtDate(s.nextRunAt)}</td>
+                    <td className="px-4 py-3 text-neutral-500">{fmtDate(s.nextRunAt, lang)}</td>
                     <td className="px-4 py-3">
                       <span className={"rounded-full px-2 py-0.5 text-xs font-bold " + (s.enabled ? "bg-green-500/15 text-green-600 dark:text-green-400" : "bg-neutral-100 text-neutral-400 dark:bg-neutral-800")}>
-                        {s.enabled ? "✓" : "✗"}
+                        {s.enabled ? t("wf.schedule.enabled") : t("wf.schedule.disabled")}
                       </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleSchedule(s.id, s.enabled)}
+                          disabled={togglingId === s.id}
+                          title={s.enabled ? t("wf.schedule.disabled") : t("wf.schedule.enabled")}
+                          className="rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 transition disabled:opacity-50"
+                          aria-label={s.enabled ? t("wf.schedule.disabled") : t("wf.schedule.enabled")}
+                        >
+                          {togglingId === s.id
+                            ? <Loader2 size={14} className="animate-spin" aria-hidden />
+                            : <Power size={14} aria-hidden />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDeleteSchedule(s.id)}
+                          disabled={deletingSchedId === s.id}
+                          title={t("wf.schedule.delete")}
+                          className="rounded-lg p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20 transition disabled:opacity-50"
+                          aria-label={t("wf.schedule.delete")}
+                        >
+                          {deletingSchedId === s.id
+                            ? <Loader2 size={14} className="animate-spin" aria-hidden />
+                            : <Trash2 size={14} aria-hidden />}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
