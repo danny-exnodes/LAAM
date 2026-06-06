@@ -181,6 +181,21 @@ export const workflows: Dict = {
     zh: "如：demo_list_tasks",
   },
   "wf.node.connector.argsLabel": { vi: "Args (JSON)", en: "Args (JSON)", zh: "Args (JSON)" },
+  "wf.node.connector.selectConnector": {
+    vi: "— chọn connector —",
+    en: "— select connector —",
+    zh: "— 选择连接器 —",
+  },
+  "wf.node.connector.selectAction": {
+    vi: "— chọn action —",
+    en: "— select action —",
+    zh: "— 选择操作 —",
+  },
+  "wf.node.connector.notConnected": {
+    vi: "⚠ Connector chưa kết nối — workflow sẽ fail khi chạy",
+    en: "⚠ Connector not connected — workflow will fail at runtime",
+    zh: "⚠ 连接器未连接 — 运行时工作流将失败",
+  },
 
   // Node config panel — condition
   "wf.node.condition.label": {

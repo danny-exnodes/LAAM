@@ -18,6 +18,7 @@ import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNo
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { Translator } from "@/i18n/types";
+import type { ConnectorListItem } from "@/lib/connectors/types";
 
 // ── Shared style helpers ────────────────────────────────────────────────────
 
@@ -94,10 +95,12 @@ function ConnectorForm({
   node,
   onChange,
   t,
+  connectors,
 }: {
   node: WfConnectorNode;
   onChange: (n: WfNode) => void;
   t: Translator;
+  connectors: ConnectorListItem[];
 }) {
   const [argsText, setArgsText] = useState(
     Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "",
@@ -126,30 +129,71 @@ function ConnectorForm({
     }
   }
 
+  const selectedConnector = connectors.find((c) => c.id === node.connectorId) ?? null;
+  const availableActions = selectedConnector?.tools ?? [];
+  const useSelects = connectors.length > 0;
+
   return (
     <>
       {field(
         <>
           {label(t("wf.node.connector.idLabel"))}
-          <input
-            type="text"
-            className={inputCls()}
-            value={node.connectorId}
-            placeholder={t("wf.node.connector.idPlaceholder")}
-            onChange={(e) => onChange({ ...node, connectorId: e.target.value })}
-          />
+          {useSelects ? (
+            <select
+              className={inputCls()}
+              value={node.connectorId}
+              onChange={(e) => onChange({ ...node, connectorId: e.target.value, action: "" })}
+            >
+              <option value="">{t("wf.node.connector.selectConnector")}</option>
+              {connectors.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} {c.connected ? "🟢" : "⚫"}
+                </option>
+              ))}
+              {node.connectorId && !connectors.find((c) => c.id === node.connectorId) && (
+                <option value={node.connectorId}>{node.connectorId}</option>
+              )}
+            </select>
+          ) : (
+            <input
+              type="text"
+              className={inputCls()}
+              value={node.connectorId}
+              placeholder={t("wf.node.connector.idPlaceholder")}
+              onChange={(e) => onChange({ ...node, connectorId: e.target.value })}
+            />
+          )}
+          {selectedConnector && !selectedConnector.connected && (
+            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+              {t("wf.node.connector.notConnected")}
+            </p>
+          )}
         </>,
       )}
       {field(
         <>
           {label(t("wf.node.connector.actionLabel"))}
-          <input
-            type="text"
-            className={inputCls()}
-            value={node.action}
-            placeholder={t("wf.node.connector.actionPlaceholder")}
-            onChange={(e) => onChange({ ...node, action: e.target.value })}
-          />
+          {useSelects && availableActions.length > 0 ? (
+            <select
+              className={inputCls()}
+              value={node.action}
+              disabled={!node.connectorId}
+              onChange={(e) => onChange({ ...node, action: e.target.value })}
+            >
+              <option value="">{t("wf.node.connector.selectAction")}</option>
+              {availableActions.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          ) : (
+            <input
+              type="text"
+              className={inputCls()}
+              value={node.action}
+              placeholder={t("wf.node.connector.actionPlaceholder")}
+              onChange={(e) => onChange({ ...node, action: e.target.value })}
+            />
+          )}
         </>,
       )}
       {field(
@@ -291,14 +335,28 @@ export function NodeConfigPanel({
   node,
   onChange,
   onDelete,
+  connectors: connectorsProp,
 }: {
   node: WfNode;
   onChange: (updated: WfNode) => void;
   onDelete?: () => void;
+  /** Injected for tests; if omitted, fetched from /api/connectors on mount */
+  connectors?: ConnectorListItem[];
 }) {
   // t is called here (top-level component) and passed to sub-forms as a prop,
   // since sub-forms are local functions and cannot call hooks directly.
   const t = useT(dict);
+  const [connectors, setConnectors] = useState<ConnectorListItem[]>(connectorsProp ?? []);
+
+  useEffect(() => {
+    if (connectorsProp !== undefined) return; // test injection — skip fetch
+    void fetch("/api/connectors")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { connectors?: ConnectorListItem[] } | null) => {
+        if (data?.connectors) setConnectors(data.connectors);
+      })
+      .catch(() => { /* keep empty — fallback to text inputs */ });
+  }, [connectorsProp]);
 
   return (
     <div className="flex h-full flex-col">
@@ -326,7 +384,7 @@ export function NodeConfigPanel({
           <AgentForm node={node} onChange={onChange} t={t} />
         )}
         {node.kind === "connector" && (
-          <ConnectorForm node={node} onChange={onChange} t={t} />
+          <ConnectorForm node={node} onChange={onChange} t={t} connectors={connectors} />
         )}
         {node.kind === "condition" && (
           <ConditionForm node={node} onChange={onChange} t={t} />

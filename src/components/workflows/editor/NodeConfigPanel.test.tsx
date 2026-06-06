@@ -249,3 +249,62 @@ describe("NodeConfigPanel — delete button", () => {
     expect(onDelete).toHaveBeenCalledOnce();
   });
 });
+
+// ─── Connector picker (item D) ────────────────────────────────────────────────
+
+describe("ConnectorForm — connector/action picker", () => {
+  const connNode: WfConnectorNode = {
+    id: "c1", kind: "connector", connectorId: "demo", action: "demo_list_tasks", args: {},
+  };
+
+  const mockConnectors = [
+    {
+      id: "demo", name: "Demo", icon: "🔌", blurb: "",
+      connected: true, tools: ["demo_list_tasks", "demo_create_task"],
+      auth: { type: "none", help: "", setup: "", fields: [] }, connectedAt: null,
+    },
+    {
+      id: "github", name: "GitHub", icon: "🐙", blurb: "",
+      connected: false, tools: ["github_list_repos"],
+      auth: { type: "token", help: "", setup: "", fields: [] }, connectedAt: null,
+    },
+  ];
+
+  test("renders connector select when connectors provided", () => {
+    renderPanel(<NodeConfigPanel node={connNode} onChange={vi.fn()} connectors={mockConnectors} />);
+    const selects = screen.getAllByRole("combobox");
+    expect(selects.length).toBeGreaterThanOrEqual(1);
+    // /^Demo\b/i matches "Demo 🟢" but not "demo_list_tasks" / "demo_create_task"
+    expect(screen.getByRole("option", { name: /^Demo\b/i })).toBeInTheDocument();
+  });
+
+  test("action select shows tools of selected connector", () => {
+    renderPanel(<NodeConfigPanel node={connNode} onChange={vi.fn()} connectors={mockConnectors} />);
+    expect(screen.getByRole("option", { name: "demo_list_tasks" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "demo_create_task" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "github_list_repos" })).not.toBeInTheDocument();
+  });
+
+  test("changing connector clears action and updates", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={connNode} onChange={onChange} connectors={mockConnectors} />);
+    const connSelect = screen.getAllByRole("combobox")[0];
+    fireEvent.change(connSelect, { target: { value: "github" } });
+    expect(onChange).toHaveBeenCalledWith(
+      expect.objectContaining({ connectorId: "github", action: "" }),
+    );
+  });
+
+  test("shows not-connected warning when selected connector is disconnected", () => {
+    const disconnectedNode: WfConnectorNode = { ...connNode, connectorId: "github" };
+    renderPanel(<NodeConfigPanel node={disconnectedNode} onChange={vi.fn()} connectors={mockConnectors} />);
+    expect(screen.getByText(/chưa kết nối|not connected/i)).toBeInTheDocument();
+  });
+
+  test("falls back to text inputs when connectors is empty array", () => {
+    renderPanel(<NodeConfigPanel node={connNode} onChange={vi.fn()} connectors={[]} />);
+    const inputs = screen.getAllByRole("textbox");
+    const connectorInput = inputs.find((i) => (i as HTMLInputElement).value === "demo");
+    expect(connectorInput).toBeInTheDocument();
+  });
+});
