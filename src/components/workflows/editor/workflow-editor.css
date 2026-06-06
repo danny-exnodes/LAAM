@@ -1,0 +1,66 @@
+/* ── Workflow editor theme vars ──────────────────────────────────────────── */
+
+:root {
+  --wf-node-bg: #ffffff;
+  --wf-node-text: #1a1d21;
+  --wf-node-border: #e2e8f0;
+  --wf-node-id-text: #94a3b8;
+  --wf-edge-stroke: #94a3b8;
+}
+
+/* Tailwind v4 dark mode uses .dark class on <html> */
+.dark {
+  --wf-node-bg: #1e2432;
+  --wf-node-text: #e2e8f0;
+  --wf-node-border: #334155;
+  --wf-node-id-text: #64748b;
+  --wf-edge-stroke: #475569;
+}
+
+/* ── Handle size override ────────────────────────────────────────────────── */
+/* Default RF handle is 8×8px — too small to grab. Override to 16×16px.     */
+
+.react-flow__handle {
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 50%;
+  border: 2.5px solid var(--wf-edge-stroke) !important;
+  background: var(--wf-node-bg) !important;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.react-flow__handle:hover {
+  border-color: var(--color-accent, #2563eb) !important;
+  background: color-mix(in srgb, var(--color-accent, #2563eb) 12%, var(--wf-node-bg)) !important;
+}
+
+/* ── Node toolbar buttons ────────────────────────────────────────────────── */
+
+.wf-toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--wf-node-border);
+  background: var(--wf-node-bg);
+  color: var(--wf-node-id-text);
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.wf-toolbar-btn:hover {
+  background: color-mix(in srgb, var(--color-accent, #2563eb) 10%, var(--wf-node-bg));
+  color: var(--color-accent, #2563eb);
+}
+
+.wf-toolbar-btn.danger:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+.dark .wf-toolbar-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
