@@ -15,6 +15,7 @@ export type Expect = {
   finalNotContains?: string[];                            // chiều 3
   maxRounds?: number;                                     // chiều 5 (số tool-round tối đa)
   emitsBlock?: "chart" | "map";                           // chiều 7
+  citesRealUrl?: string[];                                // chiều 3 (Rule 13 cho URL): tập URL hợp lệ model được trích
 };
 
 export type Scenario = {
@@ -45,4 +46,5 @@ export type ScenarioScore = {
   perDim: Record<string, { passed: number; total: number }>; // pass-rate từng chiều
   fails: string[];                                        // detail các lần trượt
   avgMs: number;
+  noCall?: number;                                        // số run KHÔNG gọi tool nào (tách no-call vs wrong-call — Nit 1)
 };

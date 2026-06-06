@@ -35,9 +35,11 @@ export async function runScenario(s: Scenario, deps: RunnerDeps, k: number): Pro
   const perDim: Record<string, { passed: number; total: number }> = {};
   const fails: string[] = [];
   let totalMs = 0;
+  let noCall = 0; // Nit 1: số run model KHÔNG gọi tool nào (tách no-call khỏi wrong-call).
   for (let i = 0; i < k; i++) {
     const trace = await runOnce(s, deps);
     totalMs += trace.ms;
+    if (trace.calls.length === 0) noCall++;
     for (const g of runGraders(trace, s)) {
       const cell = (perDim[g.dim] ??= { passed: 0, total: 0 });
       cell.total++;
@@ -45,5 +47,5 @@ export async function runScenario(s: Scenario, deps: RunnerDeps, k: number): Pro
       else fails.push(`[${s.id}#${i + 1}] ${g.dim}: ${g.detail ?? "fail"}`);
     }
   }
-  return { id: s.id, capability: s.capability, runs: k, perDim, fails, avgMs: Math.round(totalMs / Math.max(1, k)) };
+  return { id: s.id, capability: s.capability, runs: k, perDim, fails, avgMs: Math.round(totalMs / Math.max(1, k)), noCall };
 }
