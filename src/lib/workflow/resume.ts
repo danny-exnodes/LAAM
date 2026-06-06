@@ -71,13 +71,20 @@ export async function resumeRunRow(
       status: workflowRunSteps.status,
       output: workflowRunSteps.output,
       seq: workflowRunSteps.seq,
+      parentStepId: workflowRunSteps.parentStepId,
     })
     .from(workflowRunSteps)
     .where(and(eq(workflowRunSteps.runId, runId), eq(workflowRunSteps.status, "succeeded")));
 
+  // TOP-LEVEL rows only. foreach BODY rows (parentStepId set) must NOT seed seen/journaled/ctx:
+  // a completed foreach is always re-walked on resume, and seeding body nodeIds would make
+  // iteration 0 replay the LAST iteration's journaled value (Map-dedup by nodeId). Excluding
+  // them → body re-runs at every index (the documented foreach-resume limitation), consistent.
+  const topLevel = stepRows.filter((r) => r.parentStepId == null);
+
   // Attach each connector node's action (from the snapshot) for read/write classification.
   const nodeById = new Map(run.graphSnapshot.nodes.map((n) => [n.id, n]));
-  const journalSteps: JournalStep[] = [...stepRows]
+  const journalSteps: JournalStep[] = [...topLevel]
     .sort((a, b) => a.seq - b.seq)
     .map((r) => {
       const n = nodeById.get(r.nodeId);

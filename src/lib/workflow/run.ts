@@ -101,7 +101,7 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
   };
 
   // F1 WAL: wrap so writes are recorded in workflow_node_idempotency on the INITIAL run too
-  // (not just resume) → a post-sleep wake or crash-resume replays instead of re-sending.
+  // (not just resume) → a crash-resume replays instead of re-sending.
   const baseRunNode = deps.buildRunNode(runRow.userId, { dryRun: runRow.dryRun ?? false });
   const runNode = withWriteIdempotency(baseRunNode, { db: deps.db, runId });
   const budget = deps.budget ?? DEFAULT_BUDGET;

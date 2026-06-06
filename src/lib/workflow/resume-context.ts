@@ -2,8 +2,7 @@
 // producer outputs (PIN-D4b) and classifies them: READ → re-run (leave out of ctx so the
 // walker re-executes the node and repopulates it); WRITE → fail-loud hazard (a committed
 // write cannot be safely re-run, and its truncated journal lacks the real fields downstream
-// interpolation needs). The exact-suspend (sleep) path does NOT use this — its suspendedContext
-// is uncapped, so it has no truncation hazard.
+// interpolation needs).
 import { isTruncatedMarker } from "./run";
 import { resolveKind } from "@/lib/agent/safety/policy";
 import { INTERNAL_TOOLS } from "@/lib/agent/registry";
@@ -11,7 +10,7 @@ import type { RunContext } from "./types";
 
 export type JournalStep = {
   nodeId: string;
-  kind: "agent" | "connector" | "condition" | "foreach" | "delay";
+  kind: "agent" | "connector" | "condition" | "foreach";
   action?: string; // connector action (for read/write classification)
   status: string; // only 'succeeded' rows are replayed into ctx
   output: unknown;
@@ -25,7 +24,7 @@ export type ResumeHazard = {
   resolution: "rerun" | "fail";
 };
 
-// agent/condition/foreach/delay have no external side-effect → 'read'. connector → policy.
+// agent/condition/foreach have no external side-effect → 'read'. connector → policy.
 function classifyNode(s: JournalStep): "read" | "write" {
   if (s.kind === "connector" && s.action) return resolveKind(s.action, INTERNAL_TOOLS) === "write" ? "write" : "read";
   return "read";

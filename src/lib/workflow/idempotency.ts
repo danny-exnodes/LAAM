@@ -2,7 +2,7 @@
 // DO NOTHING RETURNING — a returned row means "I claimed it (execute the write)"; no row
 // means "already claimed" → read stored status/output (replay or fail-loud). Deterministic
 // key (runId,nodeId,iterIndex). NOT the harness nonce (audit_log has a 10-min window + no
-// unique index — breaks multi-day sleep + TOCTOU). `withWriteIdempotency` is the WAL wrapper
+// unique index — breaks long-lived durable resume + TOCTOU). `withWriteIdempotency` is the WAL wrapper
 // applied to EVERY write execution — initial run AND resume — so the table is the single
 // source of truth for writes from run 1.
 import { and, eq } from "drizzle-orm";

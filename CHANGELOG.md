@@ -16,6 +16,7 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 - **`tickResume`**: claim `resumable` **bounded + atomic** trong UPDATE (`id IN (SELECT … LIMIT 25 FOR UPDATE SKIP LOCKED)`) → không double-claim, không strand run thừa. Wire vào `POST /api/workflows/tick`.
 - Engine A0 **bất biến** (toàn bộ resume ở run-layer). Migration `0008` (additive). Verify: **1085 test xanh**, `tsc` sạch. Plan: `docs/superpowers/plans/2026-06-06-workflow-p0a-resume-spine.md`.
 - **Bước host (USER chạy — agent-ops):** `npm run db:migrate` áp **0008** (bảng `workflow_node_idempotency`); không backfill. Resume cưỡi tick poke có sẵn — KHÔNG service mới.
+- **⚠️ Deploy precondition (1 lần):** **drain các run đang `running` TRƯỚC lần deploy P0a đầu tiên.** Run mồ côi có-từ-trước-WAL không có idempotency row → boot-sweep đánh `resumable` → resume có thể **re-send write đã commit**. Mọi run tạo sau P0a đều mang WAL → steady-state an toàn. (Review #2.)
 
 ### Đã thêm — Harness: World-Tools Layer (web/util tools, 2026-06-06)
 - **`web_search`** (SearXNG self-host, **$0**, không SaaS) + **`web_read`** (promote `fetch-url` thành tool model gọi được): agent giờ **tự tìm & đọc web** trong tool-loop. Lõi fetch (`isBlockedHost` SSRF + html→text) tách `src/lib/web/readable.ts` dùng chung route + tool; tool cap text 6000 ký tự (vừa bound guard 8192).
