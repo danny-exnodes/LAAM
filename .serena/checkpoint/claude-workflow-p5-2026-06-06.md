@@ -46,3 +46,11 @@ UX findings:
 - **All 8/8 buildable items complete.** FF-merged to main + pushed to origin/main per user.
 - Remaining nice-to-haves: chips on agent `system` field; model selector + args-schema (deferred); dry-run run-history badge.
 - INDEX.md entry for the spec still NOT added (file holds concurrent agent's uncommitted change).
+
+## Nice-to-haves pass (2026-06-06)
+- DONE (3df7049): variable-autocomplete chips extended to the agent `system` field — completes A's coverage of all interpolated text fields (system + prompt + condition left/right + foreach items). 1059 tests, tsc clean. Merged to main + pushed.
+- NOT done (deliberate, with rationale):
+  - **Dry-run run-history badge** — low value + needs a reliable dedicated `dryRun` column. Context-based is unreliable (capForPersist truncates context >256KB; multi-agent dry-runs exceed that). A column = migration; drizzle-kit is flaky in the agent sandbox and the DB is live → risky here. Proper follow-up for a DB-access session.
+  - **Agent model selector + connector-args schema form** — would be dead/misleading config (engine A0 ignores `model`; no per-tool arg schema exists). Skip until engine support lands.
+  - **H mobile bottom-sheet live visual** — the Claude-in-Chrome resize tool doesn't change the capture viewport (not a code issue). Implemented + unit-tested.
+  - **INDEX.md spec entry** — still blocked by the concurrent agent's uncommitted INDEX.md change.
