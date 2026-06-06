@@ -336,6 +336,7 @@ export const workflowRuns = pgTable(
     userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
     trigger: text("trigger").notNull(), // manual | schedule
     status: text("status").notNull().default("queued"), // queued|running|succeeded|failed|cancelled
+    dryRun: boolean("dryRun").notNull().default(false), // Test run: connector writes mocked, no real side-effects
     graphSnapshot: jsonb("graphSnapshot").$type<WorkflowGraph>().notNull(),
     context: jsonb("context"),
     error: text("error"),

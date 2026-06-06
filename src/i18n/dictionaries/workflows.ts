@@ -266,4 +266,6 @@ export const workflows: Dict = {
   "wf.editor.panelDock": { vi: "Gắn panel bên phải", en: "Dock panel right", zh: "停靠到右侧" },
   // Node config — variable insert chips
   "wf.node.insertVar": { vi: "Chèn:", en: "Insert:", zh: "插入:" },
+  // Run history — dry-run (Test) badge
+  "wf.run.dryRun": { vi: "Thử", en: "Dry-run", zh: "试运行" },
 };

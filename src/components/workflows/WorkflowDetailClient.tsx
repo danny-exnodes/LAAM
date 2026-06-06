@@ -444,6 +444,11 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
                       </td>
                       <td className="px-4 py-3 text-neutral-600 dark:text-neutral-300">
                         {run.trigger === "manual" ? t("wf.run.trigger.manual") : t("wf.run.trigger.schedule")}
+                        {run.dryRun && (
+                          <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                            {t("wf.run.dryRun")}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         <span className={"rounded-full px-2 py-0.5 text-xs font-bold " + runStatusClass(run.status)}>

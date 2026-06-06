@@ -141,6 +141,7 @@ export async function executeRun(
     userId: input.userId,
     trigger: input.trigger,
     status: "running",
+    dryRun: input.dryRun ?? false,
     graphSnapshot: snapshot,
     startedAt: new Date(),
   });

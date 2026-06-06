@@ -178,8 +178,8 @@ describe("executeRun", () => {
     if (r.ok) expect(r.run.status).toBe("succeeded"); // node KHÔNG lỗi → run vẫn succeeded dù 1 insert step fail
   });
 
-  test("dryRun=true xuyên executeRun → buildRunNode(userId, {dryRun:true})", async () => {
-    const { db } = fakeDb({ id: "w1", userId: "u1", graph });
+  test("dryRun=true xuyên executeRun → buildRunNode + persist dryRun trên run row", async () => {
+    const { db, inserted } = fakeDb({ id: "w1", userId: "u1", graph });
     const inner = vi.fn(async (node: { id: string }) => (node.id === "n1" ? { count: 1 } : "ok"));
     const buildRunNode = vi.fn(() => inner);
     await executeRun(
@@ -188,5 +188,8 @@ describe("executeRun", () => {
     );
     // Wiring: cờ dry-run phải tới buildRunNode (nơi mock write thật sự diễn ra).
     expect(buildRunNode).toHaveBeenCalledWith("u1", { dryRun: true });
+    // + persist trên run row để run-history hiện badge "Thử".
+    const runRow = (inserted["workflow_run"] ?? [])[0] as { dryRun?: boolean };
+    expect(runRow?.dryRun).toBe(true);
   });
 });

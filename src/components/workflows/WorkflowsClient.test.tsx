@@ -64,6 +64,7 @@ function mkRun(over: Partial<WorkflowRun> = {}): WorkflowRun {
     userId: "u1",
     trigger: "manual",
     status: "succeeded",
+    dryRun: false,
     graphSnapshot: { nodes: [], edges: [] },
     context: null,
     error: null,

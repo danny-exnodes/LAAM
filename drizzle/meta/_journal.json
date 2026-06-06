@@ -50,6 +50,13 @@
       "when": 1780666740699,
       "tag": "0006_gigantic_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780746031735,
+      "tag": "0007_redundant_wild_pack",
+      "breakpoints": true
     }
   ]
 }

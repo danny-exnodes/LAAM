@@ -42,7 +42,7 @@ function mkWorkflow(over: Partial<Workflow> = {}): Workflow {
 function mkRun(over: Partial<WorkflowRun> = {}): WorkflowRun {
   return {
     id: "run1", workflowId: "wf1", userId: "u1", trigger: "manual",
-    status: "succeeded", graphSnapshot: { nodes: [], edges: [] },
+    status: "succeeded", dryRun: false, graphSnapshot: { nodes: [], edges: [] },
     context: null, error: null, scheduleId: null, scheduledFor: null,
     tokensIn: 0, tokensOut: 0, costUsd: 0,
     startedAt: new Date("2026-01-01T09:00:00Z"),
