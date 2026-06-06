@@ -5,9 +5,12 @@ import { execute } from "@/lib/connectors";
 import type { Tool, ToolContext, ToolEvent } from "./types";
 import { guard } from "./guardrails";
 import { LAAM_TOOLS } from "./tools/laam";
+import { WEB_TOOLS } from "./tools/web";
+import { UTIL_TOOLS } from "./tools/util";
 
-// Guard 1 lần khi load module → dispatch luôn đi qua validate + bound.
-export const INTERNAL_TOOLS: Tool[] = LAAM_TOOLS.map(guard);
+// Guard 1 lần khi load module → dispatch luôn đi qua validate + bound. Ba họ tool nội bộ:
+// laam_* (dữ liệu LAAM) · web_* (đọc/tìm web, self-host $0) · util_* (deterministic).
+export const INTERNAL_TOOLS: Tool[] = [...LAAM_TOOLS, ...WEB_TOOLS, ...UTIL_TOOLS].map(guard);
 
 export function modelToolSchemas(internal: Tool[], connectorTools: ConnectorTool[]): ConnectorTool[] {
   const internalSchemas: ConnectorTool[] = internal.map((t) => ({
