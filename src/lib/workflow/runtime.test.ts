@@ -35,3 +35,31 @@ describe("buildRunNode — blast gate wired into connector path", () => {
     expect(execSpy).toHaveBeenCalledWith("u1", "demo_list_tasks", {});
   });
 });
+
+describe("buildRunNode — dry-run mocks connector writes", () => {
+  test("dryRun + LOW write → output giả, KHÔNG gọi connectorExecute", async () => {
+    execSpy.mockClear();
+    const run = buildRunNode("u1", { dryRun: true });
+    // demo_create_task = WRITE + BLAST_LOW (qua gate). Dry-run phải mock, không execute thật.
+    const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "demo", action: "demo_create_task", args: { title: "x" } };
+    const out = await run(node, emptyContext({ source: "manual" }));
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ dryRun: true, wouldHaveCalled: "demo_create_task", args: { title: "x" } });
+  });
+
+  test("dryRun + READ → vẫn execute THẬT (read chạy bình thường)", async () => {
+    execSpy.mockClear();
+    const run = buildRunNode("u1", { dryRun: true });
+    const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "demo", action: "demo_list_tasks", args: {} };
+    await run(node, emptyContext({ source: "manual" }));
+    expect(execSpy).toHaveBeenCalledWith("u1", "demo_list_tasks", {});
+  });
+
+  test("dryRun + HIGH write → vẫn THROW blast (gate KHÔNG bị bỏ qua)", async () => {
+    execSpy.mockClear();
+    const run = buildRunNode("u1", { dryRun: true });
+    const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "trello", action: "trello_create_card", args: {} };
+    await expect(Promise.resolve().then(() => run(node, emptyContext({ source: "manual" })))).rejects.toThrow(/blast/i);
+    expect(execSpy).not.toHaveBeenCalled();
+  });
+});

@@ -27,7 +27,7 @@ function capForPersist(v: unknown): unknown {
 export type ExecuteRunDeps = {
   db: typeof Db;
   publish: (e: BusEvent) => void;
-  buildRunNode: (userId: string) => (node: WfNode, ctx: RunContext) => Promise<unknown>;
+  buildRunNode: (userId: string, opts?: { dryRun?: boolean }) => (node: WfNode, ctx: RunContext) => Promise<unknown>;
   budget?: Budget; // G1: cận chạy (mặc định DEFAULT_BUDGET)
 };
 
@@ -43,6 +43,8 @@ export type RunRow = {
   userId: string;
   trigger: "manual" | "schedule";
   graphSnapshot: WorkflowGraph;
+  /** Test/dry-run: connector WRITE actions are mocked (no real side-effects). */
+  dryRun?: boolean;
 };
 
 export type ExecuteRunRowResult = { status: "succeeded" | "failed"; steps: StepRecord[] };
@@ -90,7 +92,7 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
     deps.publish({ type: "workflow_run_step", runId, nodeId: s.nodeId, seq: s.seq, status: s.status });
   };
 
-  const runNode = deps.buildRunNode(runRow.userId);
+  const runNode = deps.buildRunNode(runRow.userId, { dryRun: runRow.dryRun ?? false });
   const budget = deps.budget ?? DEFAULT_BUDGET;
 
   // A1 follow-up: engine THROW (budget/validate/foreach-not-array) → finalize FAILED,
@@ -124,7 +126,7 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
 
 // Manual trigger: load workflow (ownership) + insert run row 'running' + executeRunRow.
 export async function executeRun(
-  input: { workflowId: string; userId: string; trigger: "manual" | "schedule" },
+  input: { workflowId: string; userId: string; trigger: "manual" | "schedule"; dryRun?: boolean },
   deps: ExecuteRunDeps,
 ): Promise<ExecuteRunResult> {
   const rows = await deps.db.select().from(workflows).where(eq(workflows.id, input.workflowId)).limit(1);
@@ -144,7 +146,7 @@ export async function executeRun(
   });
 
   const { status, steps } = await executeRunRow(
-    { id: runId, workflowId: wf.id, userId: input.userId, trigger: input.trigger, graphSnapshot: snapshot },
+    { id: runId, workflowId: wf.id, userId: input.userId, trigger: input.trigger, graphSnapshot: snapshot, dryRun: input.dryRun },
     deps,
   );
   return { ok: true, run: { id: runId, status }, steps };

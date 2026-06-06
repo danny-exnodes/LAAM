@@ -177,4 +177,16 @@ describe("executeRun", () => {
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.run.status).toBe("succeeded"); // node KHÔNG lỗi → run vẫn succeeded dù 1 insert step fail
   });
+
+  test("dryRun=true xuyên executeRun → buildRunNode(userId, {dryRun:true})", async () => {
+    const { db } = fakeDb({ id: "w1", userId: "u1", graph });
+    const inner = vi.fn(async (node: { id: string }) => (node.id === "n1" ? { count: 1 } : "ok"));
+    const buildRunNode = vi.fn(() => inner);
+    await executeRun(
+      { workflowId: "w1", userId: "u1", trigger: "manual", dryRun: true },
+      { db: db as never, publish: vi.fn(), buildRunNode },
+    );
+    // Wiring: cờ dry-run phải tới buildRunNode (nơi mock write thật sự diễn ra).
+    expect(buildRunNode).toHaveBeenCalledWith("u1", { dryRun: true });
+  });
 });
