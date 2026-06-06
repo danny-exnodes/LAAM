@@ -25,6 +25,7 @@ import {
   addEdge,
   Handle,
   Position,
+  MarkerType,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -50,6 +51,13 @@ const KIND_COLORS: Record<WfNodeKind, string> = {
 // and must NOT mark the graph dirty. Defined at module level (not inside the
 // component) to avoid re-allocating the Set on every render.
 const DATA_CHANGE_TYPES = new Set(["position", "remove", "add", "replace"] as const);
+
+// Default options for every edge: arrow marker + consistent stroke.
+// Defined at module level so the object reference is stable (no re-render on <ReactFlow>).
+const DEFAULT_EDGE_OPTIONS = {
+  style: { strokeWidth: 2, stroke: "var(--wf-edge-stroke)" },
+  markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8", width: 18, height: 18 },
+};
 
 // RF NodeProps data is Record<string, unknown>; we cast to extract our payload.
 function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selected?: boolean }) {
@@ -228,7 +236,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
         setWfName(wf.name);
         const rf = toReactFlow(wf.graph);
         setNodes(rf.nodes.map((n) => ({ ...n, sourcePosition: Position.Right, targetPosition: Position.Left })));
-        setEdges(rf.edges);
+        setEdges(rf.edges.map((e) => ({ ...DEFAULT_EDGE_OPTIONS, ...e })));
         setLoadState("loaded");
       } catch {
         setLoadState("error");
@@ -305,6 +313,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
           source: connection.source ?? "",
           target: connection.target ?? "",
           label: edgeLabelInput,
+          ...DEFAULT_EDGE_OPTIONS,
         };
         setPendingEdge(tentativeEdge);
         // Store resolve callback
@@ -320,11 +329,17 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
           },
         };
       } else {
-        setEdges((prev) => addEdge({
-          id: `${connection.source}->${connection.target}`,
-          source: connection.source ?? "",
-          target: connection.target ?? "",
-        }, prev));
+        setEdges((prev) =>
+          addEdge(
+            {
+              id: `${connection.source}->${connection.target}`,
+              source: connection.source ?? "",
+              target: connection.target ?? "",
+              ...DEFAULT_EDGE_OPTIONS,
+            },
+            prev,
+          ),
+        );
         setIsDirty(true);
       }
     },
@@ -521,6 +536,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
             nodes={nodes}
             edges={edges}
             nodeTypes={NODE_TYPES}
+            defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
             onNodesChange={wrappedOnNodesChange}
             onEdgesChange={wrappedOnEdgesChange}
             onConnect={onConnect}

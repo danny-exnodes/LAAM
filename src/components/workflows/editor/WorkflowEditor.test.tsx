@@ -81,6 +81,7 @@ vi.mock("@xyflow/react", () => {
     },
     addEdge: (edge: unknown, edges: unknown[]) => [...edges, edge],
     Handle: () => null,
+    MarkerType: { ArrowClosed: "arrowclosed" },
     useReactFlow: () => ({
       // screenToFlowPosition: return coordinates mirroring the input so
       // addNode tests can assert a position was set without caring about
