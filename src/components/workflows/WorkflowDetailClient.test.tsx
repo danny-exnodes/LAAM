@@ -21,6 +21,11 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+const mockRouterPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockRouterPush }),
+}));
+
 import { WorkflowDetailClient } from "./WorkflowDetailClient";
 
 // ---- Factories ----
@@ -74,6 +79,9 @@ type FetchSetup = {
   runs?: WorkflowRun[];
   schedules?: WorkflowSchedule[];
   runDetail?: { run: WorkflowRun; steps: WorkflowRunStep[] };
+  schedPatchOk?: boolean;
+  schedPatchBody?: Partial<WorkflowSchedule>;
+  schedDeleteOk?: boolean;
 };
 
 function mockFetch(setup: FetchSetup) {
@@ -85,6 +93,19 @@ function mockFetch(setup: FetchSetup) {
     }
     if (u.includes("/api/workflows/runs")) {
       return { ok: true, json: async () => runs } as Response;
+    }
+    // PATCH schedules/[id]
+    if (u.match(/\/api\/workflows\/schedules\/\w/) && opts?.method === "PATCH") {
+      const ok = setup.schedPatchOk ?? true;
+      return {
+        ok,
+        json: async () => ok ? { ...mkSchedule(), ...(setup.schedPatchBody ?? {}) } : {},
+      } as Response;
+    }
+    // DELETE schedules/[id]
+    if (u.match(/\/api\/workflows\/schedules\/\w/) && opts?.method === "DELETE") {
+      const ok = setup.schedDeleteOk ?? true;
+      return { ok, json: async () => ({}) } as Response;
     }
     if (u.includes("/api/workflows/schedules") && opts?.method === "POST") {
       return { ok: true, json: async () => ({ id: "sch-new", nextRunAt: new Date() }) } as Response;
@@ -222,6 +243,172 @@ describe("WorkflowDetailClient — schedule section", () => {
       expect(schCall).toBeTruthy();
       const body = JSON.parse(schCall![1].body as string) as { workflowId: string; cron: string };
       expect(body.cron).toBe("0 9 * * 1-5");
+    });
+  });
+});
+
+describe("WorkflowDetailClient — schedule actions", () => {
+  test("toggle success: enabled → disabled", async () => {
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [],
+      schedules: [mkSchedule({ enabled: true })],
+      schedPatchBody: { enabled: false },
+    });
+    ui();
+    await waitFor(() => screen.getByText("My WF"));
+
+    // When enabled=true, toggle button aria-label is "Đã tắt" (click to disable)
+    fireEvent.click(screen.getByRole("button", { name: "Đã tắt" }));
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+      const patchCall = calls.find(([u, o]) =>
+        String(u).match(/\/api\/workflows\/schedules\/\w/) && o?.method === "PATCH",
+      );
+      expect(patchCall).toBeTruthy();
+      const body = JSON.parse(patchCall![1].body as string) as { enabled: boolean };
+      expect(body.enabled).toBe(false);
+    });
+
+    // After successful PATCH, badge in enabled column must reflect new state
+    await waitFor(() =>
+      expect(screen.getByText("Đã tắt")).toBeTruthy(),
+    );
+  });
+
+  test("toggle failure: shows error banner", async () => {
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [],
+      schedules: [mkSchedule({ enabled: true })],
+      schedPatchOk: false,
+    });
+    ui();
+    await waitFor(() => screen.getByText("My WF"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Đã tắt" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Đổi trạng thái thất bại.")).toBeTruthy();
+    });
+  });
+
+  test("delete confirmed → success: row removed from DOM", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [],
+      schedules: [mkSchedule()],
+    });
+    ui();
+    await waitFor(() => screen.getByText("0 9 * * 1-5"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Xoá lịch" }));
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+      const delCall = calls.find(([u, o]) =>
+        String(u).match(/\/api\/workflows\/schedules\/\w/) && o?.method === "DELETE",
+      );
+      expect(delCall).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.queryByText("0 9 * * 1-5")).toBeNull();
+    });
+  });
+
+  test("delete cancelled: no DELETE call, row stays in DOM", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [],
+      schedules: [mkSchedule()],
+    });
+    ui();
+    await waitFor(() => screen.getByText("0 9 * * 1-5"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Xoá lịch" }));
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+      const delCall = calls.find(
+        ([u, o]) => String(u).match(/\/api\/workflows\/schedules\/\w/) && (o as RequestInit)?.method === "DELETE",
+      );
+      expect(delCall).toBeUndefined();
+      expect(screen.getByText("0 9 * * 1-5")).toBeTruthy();
+    });
+  });
+
+  test("delete failure: shows error banner", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [],
+      schedules: [mkSchedule()],
+      schedDeleteOk: false,
+    });
+    ui();
+    await waitFor(() => screen.getByText("0 9 * * 1-5"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Xoá lịch" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Xoá lịch thất bại.")).toBeTruthy();
+    });
+  });
+
+  test("cron inline edit success: PATCH called, row shows new cron", async () => {
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [],
+      schedules: [mkSchedule({ cron: "0 9 * * 1-5" })],
+      schedPatchBody: { cron: "0 12 * * *" },
+    });
+    ui();
+    await waitFor(() => screen.getByText("0 9 * * 1-5"));
+
+    // Click cron cell button to open inline editor
+    fireEvent.click(screen.getByTitle("Click để sửa"));
+
+    // Input should appear
+    await waitFor(() => screen.getByRole("textbox"));
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "0 12 * * *" } });
+    fireEvent.blur(screen.getByRole("textbox"));
+
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+      const patchCall = calls.find(([u, o]) =>
+        String(u).match(/\/api\/workflows\/schedules\/\w/) && o?.method === "PATCH",
+      );
+      expect(patchCall).toBeTruthy();
+      const body = JSON.parse(patchCall![1].body as string) as { cron: string };
+      expect(body.cron).toBe("0 12 * * *");
+    });
+    await waitFor(() => {
+      expect(screen.getByText("0 12 * * *")).toBeTruthy();
+    });
+  });
+
+  test("cron inline edit failure: shows error banner", async () => {
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [],
+      schedules: [mkSchedule({ cron: "0 9 * * 1-5" })],
+      schedPatchOk: false,
+    });
+    ui();
+    await waitFor(() => screen.getByText("0 9 * * 1-5"));
+
+    fireEvent.click(screen.getByTitle("Click để sửa"));
+    await waitFor(() => screen.getByRole("textbox"));
+
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "0 12 * * *" } });
+    fireEvent.blur(screen.getByRole("textbox"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Lưu cron thất bại.")).toBeTruthy();
     });
   });
 });

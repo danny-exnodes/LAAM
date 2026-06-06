@@ -45,6 +45,11 @@ const KIND_COLORS: Record<WfNodeKind, string> = {
   foreach: "#16a34a",
 };
 
+// Data-mutating RF change types — 'select' and 'dimensions' are view-only
+// and must NOT mark the graph dirty. Defined at module level (not inside the
+// component) to avoid re-allocating the Set on every render.
+const DATA_CHANGE_TYPES = new Set(["position", "remove", "add", "replace"] as const);
+
 // RF NodeProps data is Record<string, unknown>; we cast to extract our payload.
 function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selected?: boolean }) {
   const wf = (data as { node: WfNode }).node;
@@ -262,10 +267,6 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
     },
     [nodes.length, setNodes, rfInstance],
   );
-
-  // Data-mutating change types — 'select' and 'dimensions' are view-only,
-  // should NOT mark the graph dirty.
-  const DATA_CHANGE_TYPES = new Set(["position", "remove", "add", "replace"] as const);
 
   // Wrapped change handlers — mark dirty on user-driven changes (post-load)
   const wrappedOnNodesChange = useCallback(
