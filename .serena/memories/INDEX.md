@@ -52,6 +52,12 @@
 - [chat-qa-feature-upgrades](backlog/chat-qa-feature-upgrades.md) — quản lý conv (bulk/pin/group/dedupe/search nội dung) · proactive thành card · export PDF + token/cost · panel đính kèm · demo connector write-gate.
 - [chat-qa-ux-improvements](backlog/chat-qa-ux-improvements.md) — sample-prompt auto-send · URL input inline (bỏ `window.prompt`) · tên model động · nút cuộn-đáy · trạng thái gọi tool · a11y message actions.
 
+### QA E2E Workflow (2026-06-05) — QA/QC lead chạy **9/9 kịch bản live** trên dev :8443 (Demo connector bật, Ollama). Checkpoint: `checkpoint/qa-e2e-workflow-2026-06-05.md`. **Bản bàn giao dev:** `docs/workflow-qa-report-2026-06-05.md`. Engine/scheduler/templates/clone/blast-gate **PASS**; **editor có 1 bug chí mạng F1**.
+- [workflow-qa-functional-bugs](backlog/workflow-qa-functional-bugs.md) — **F1🔴** editor thiếu `<Handle>` (không nối node / edge vô hình → không dựng workflow nhiều-node qua canvas) · F2🟠 không xoá được workflow (no DELETE) · F3🟠 `/workflows/new` insert trên GET (draft mồ côi) · F4🟠 run fail im lặng (UI bỏ qua res.ok + run trả 200).
+- [workflow-qa-ui-bugs](backlog/workflow-qa-ui-bugs.md) — U1🟠 React key console (`WorkflowDetailClient` `<>` thiếu key) · U2🟠 `NodeConfigPanel` hardcode ngoài i18n · U3🟠 node mới rơi ngoài màn hình · U4/U5 nhỏ (ngày vi-VN, ✓/✗ schedule).
+- [workflow-qa-feature-upgrades](backlog/workflow-qa-feature-upgrades.md) — xoá workflow · quản lý schedule (xoá/tắt/sửa) · editor: xoá node/cảnh báo chưa lưu/form condition-foreach/picker connector · huỷ run.
+- [workflow-qa-ux-improvements](backlog/workflow-qa-ux-improvements.md) — toast run · markdown step output · nhãn step thân thiện · detail load chậm · validate message · Rule 13 digest LLM-reproduced.
+
 ## Trạng thái hiện tại (2026-06-03)
 - v2: P1 auth/RBAC ✅ · P2 monitoring ✅ · P3 collector đa máy (đơn giản) ✅ · P4 Chat Gemma 4 đã build, **chờ test runtime**. Verified live P1+P2+P3.
 - App cũ (vanilla, Docker :4317) vẫn chạy; Phase 0 fixes (gemma4 default + toolbar) chưa deploy.

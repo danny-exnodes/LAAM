@@ -2,23 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "laam-v2",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "cd v2 && npm run dev"],
-      "port": 3000
-    },
-    {
       "name": "laam",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["start"],
-      "port": 4317,
-      "autoPort": true
-    },
-    {
-      "name": "laam-dev",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": ["-c", "LAAM_CHAT_MODEL=qwen3-vl:8b node bin/laam.js --port 4318"],
-      "port": 4318
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "-p", "3100"],
+      "port": 3100,
+      "autoPort": false
     }
   ]
 }
