@@ -12,6 +12,9 @@ next-env.d.ts
 .env.*
 !.env.example
 
+# SearXNG config holds a secret_key — keep the .example template, ignore the live file
+searxng/settings.yml
+
 # user-entered connector credentials / local data — NEVER commit
 connectors.json
 .laam/

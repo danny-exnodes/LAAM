@@ -1,4 +1,6 @@
 # LAAM SearXNG — minimal config for the web_search harness tool.
+# Copy to searxng/settings.yml and set a real secret_key (this template is the
+# committed one; the live settings.yml is gitignored because it holds the secret).
 # `use_default_settings: true` merges these overrides on top of SearXNG's shipped
 # defaults, so we only declare what differs.
 #
@@ -7,8 +9,9 @@
 #     web_search calls /search?format=json, so without this every search returns 403.
 #   - server.limiter: false — the bot-detection limiter blocks programmatic queries;
 #     fine to disable on a localhost-only single-user instance.
-#   - server.secret_key — REQUIRED. Change it to a random string before use
-#     (`openssl rand -hex 32`). The default ("ultrasecretkey") is rejected.
+#   - server.secret_key — REQUIRED. Set it to a random string before use
+#     (`openssl rand -hex 32`, or `node -e "console.log(crypto.randomBytes(32).toString('hex'))"`).
+#     The default ("ultrasecretkey") is rejected.
 use_default_settings: true
 
 general:
