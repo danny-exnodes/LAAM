@@ -10,6 +10,15 @@
 - **Write-ready contract (P4a):** `ConnectorTool.kind` is **self-declared**; `policy.ts` derives the read/write map from the `CONNECTORS` registry (replaced central `CONNECTOR_WRITES/READS` sets); fail-closed preserved (unknown → write). Adding a tool now touches ONE connector file → P4b read-expansion is parallel-safe.
 - **email display:** request `openid email` scopes; parse `id_token` (no extra request) → `google_email` for "connected as X" (user has multiple personal Gmail accounts).
 
-## Status
-- Built + verified (tsc clean, 890 tests). **Live Google round-trip = operator handoff** (Console app + env + run server).
-- **Deferred:** P2 i18n connector-supplied content; P4b read-tool expansion; P5 write actions (needs user write perms; `gmail.send` needs OAuth write scope + re-consent). SP-2 write-gate already gates writes (confirm-card).
+## Status — ALL of P1–P5 built + verified (2026-06-06)
+- **Merged to `main`** (OAuth tranche). P2/P4b/P5 on branch `feat/connectors-p2-p5`, commit **798e160** (ready to merge).
+- **P4b/P5 — +21 tools across 6 connectors** (kind-classified; via 6 parallel subagents, conflict-free thanks to self-declared kind):
+  - github: get_repo/list_commits/list_pull_requests (r) + create_issue/comment_issue (w)
+  - trello: list_lists/get_card (r) + update_card/comment_card (w)
+  - jira: get_issue/list_projects (r) + add_comment/create_issue (w)
+  - google-calendar: list_calendars/search_events (r) + create_event (w, +calendar.events)
+  - google-drive: get_file/export_text (r) + create_folder (w, +drive.file)
+  - gmail: get_message (r) + send (w, +gmail.send)
+- **Write surface = 11 tools**, ALL gated by withSafety (confirm-card) and HIGH-blast (NOT in BLAST_LOW) → fail-closed in workflows (interactive confirmed chat only). Google write scopes need **user re-consent** (reconnect flow).
+- **P2** — connector blurb/help/setup i18n vi/en/zh (14 keys, `conn.svc.<id>.*`, UI fallback).
+- Verified: **tsc clean, 922 tests pass**. **Live Google round-trip still = operator handoff** (Console app + env + run server); write tools need write-scope re-consent to actually fire.
