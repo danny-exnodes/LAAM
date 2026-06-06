@@ -15,7 +15,8 @@
     "db:studio": "drizzle-kit studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "eval": "vitest run -c vitest.eval.config.ts"
+    "eval": "vitest run -c vitest.eval.config.ts scripts/eval/suite.eval.ts",
+    "eval:scale": "vitest run -c vitest.eval.config.ts scripts/eval/suite.scale.eval.ts"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "1.11.2",

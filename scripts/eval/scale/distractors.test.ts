@@ -3,7 +3,7 @@ vi.mock("@/db", () => ({ db: {} })); // registry → connectors có thể chạm
 import { allConnectorSchemas, padToN } from "./distractors";
 import type { ConnectorTool } from "@/lib/connectors/types";
 
-const t = (name: string): ConnectorTool => ({ type: "function", function: { name, description: "", parameters: {} } });
+const t = (name: string): ConnectorTool => ({ type: "function", kind: "read", function: { name, description: "", parameters: {} } });
 
 describe("allConnectorSchemas", () => {
   test("lấy schema connector THẬT (>5, mọi cái có tên)", () => {
