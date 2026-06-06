@@ -11,6 +11,8 @@ import { sealPendingWrite, openPendingWrite } from "@/lib/agent/safety/token";
 import { buildPreview } from "@/lib/agent/safety/preview";
 import { runResume, buildResumeRequest } from "@/lib/agent/safety/resume";
 import { recordWrite, isNonceUsed } from "@/lib/agent/safety/audit";
+import { resolveKind } from "@/lib/agent/safety/policy";
+import { looksLikeWriteIntent, guardWriteClaim } from "@/lib/agent/safety/write-claim-guard";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
@@ -251,7 +253,11 @@ export async function POST(req: Request) {
   // S3 realtime: stream the WHOLE turn in one response — tool-call frames go out
   // LIVE as the loop dispatches them, then the completion streams, then trailing
   // cite/proactive/token frames. (handleConfirm still uses streamOllama.)
-  return streamMainTurn({ convId, userId, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow });
+  // Write-intent detection uses the user's TYPED text (titleHint), not `message`,
+  // which on attachment turns is prefixed with the extracted file content — avoids
+  // buffering a summarize-turn just because an uploaded doc contains "tạo/create".
+  const intentText = (typeof body.titleHint === "string" && body.titleHint.trim()) ? body.titleHint : message;
+  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow });
 }
 
 // S3 — the main chat turn as a single live stream. Replaces the old "await the
@@ -262,6 +268,7 @@ export async function POST(req: Request) {
 function streamMainTurn(opts: {
   convId: string;
   userId: string;
+  userText: string;
   now: number;
   lang: string;
   payload: ReturnType<typeof buildOllamaPayload>;
@@ -270,7 +277,7 @@ function streamMainTurn(opts: {
   proactive: ProactiveAlert[];
   readAllow: ReadonlySet<string>;
 }): Response {
-  const { convId, userId, now, lang, payload, tools, baseLen, proactive, readAllow } = opts;
+  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow } = opts;
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -355,6 +362,15 @@ function streamMainTurn(opts: {
         // Real tool-loop error → fail-soft: complete from the original messages.
       }
 
+      // F1 (Rule 13): a write never executes in the main turn — it suspends above
+      // (PendingWriteSignal). So any "đã tạo/gửi thành công" in this completion is
+      // unbacked. Buffer write-intent turns (withhold live tokens) and replace an
+      // unbacked success claim with an honest message before it reaches the user.
+      const guardWrites = looksLikeWriteIntent(userText);
+      const writeBacked = toolTurns.some(
+        (tt) => tt.ok && resolveKind(tt.name, INTERNAL_TOOLS, readAllow) === "write",
+      );
+
       let ollamaRes: Response;
       try {
         ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
@@ -402,7 +418,9 @@ function streamMainTurn(opts: {
               const tok = j?.message?.content ?? "";
               if (tok) {
                 full += tok;
-                controller.enqueue(enc.encode(tok));
+                // Withhold live tokens on write-intent turns; the vetted text is
+                // emitted once below so an unbacked success claim never displays.
+                if (!guardWrites) controller.enqueue(enc.encode(tok));
               }
               if (j?.done) {
                 if (typeof j.prompt_eval_count === "number") tokensIn = j.prompt_eval_count;
@@ -415,13 +433,26 @@ function streamMainTurn(opts: {
         }
       } finally {
         const assistantMsgId = crypto.randomUUID();
+        // F1: vet a buffered write-intent completion before persisting/emitting it.
+        // Non-guarded turns already streamed live (outText === full, not re-emitted).
+        let outText = full;
+        if (guardWrites && full) {
+          const g = guardWriteClaim(full, { writeBacked, lang });
+          outText = g.text;
+          if (g.blocked) console.warn("[chat] F1 guard: blocked unbacked write-success claim");
+          try {
+            controller.enqueue(enc.encode(outText));
+          } catch {
+            /* aborted */
+          }
+        }
         if (full) {
           try {
             await db.insert(chatMessages).values({
               id: assistantMsgId,
               conversationId: convId,
               role: "assistant",
-              content: full,
+              content: outText,
               tokensIn,
               tokensOut,
             });
