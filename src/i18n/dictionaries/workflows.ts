@@ -197,6 +197,7 @@ export const workflows: Dict = {
     zh: "运行时必须解析为数组",
   },
   "wf.node.foreach.bodyLabel": { vi: "Body graph (JSON)", en: "Body graph (JSON)", zh: "Body graph (JSON)" },
+  "wf.node.deleteNodeLabel": { vi: "Xoá node", en: "Delete node", zh: "删除节点" },
   "wf.node.foreach.bodyHint": {
     vi: "Mỗi item được truyền qua context {{item}} khi chạy body.",
     en: "Each item is passed via {{item}} context when the body runs.",

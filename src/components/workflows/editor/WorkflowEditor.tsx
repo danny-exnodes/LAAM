@@ -326,6 +326,21 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
     [setNodes, setEdges],
   );
 
+  // ── Keyboard: Delete selected node ───────────────────────────────────────────
+  useEffect(() => {
+    if (!selectedId) return;
+    function onKeyDown(e: KeyboardEvent) {
+      // Ignore when focus is inside an editable field
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedId) {
+        handleDeleteNode(selectedId);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [selectedId, handleDeleteNode]);
+
   // ── Selected node (for config panel) ────────────────────────────────────
 
   const selectedRfNode = useMemo(

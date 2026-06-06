@@ -313,8 +313,8 @@ export function NodeConfigPanel({
           <button
             type="button"
             onClick={onDelete}
-            aria-label="Xoá node"
-            title="Xoá node"
+            aria-label={t("wf.node.deleteNodeLabel")}
+            title={t("wf.node.deleteNodeLabel")}
             className="rounded-lg p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20 transition"
           >
             <Trash2 size={14} aria-hidden />
