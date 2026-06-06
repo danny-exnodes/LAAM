@@ -26,13 +26,27 @@ describe("resolveKind", () => {
   test("demo_create_task → write (FEAT-5 demo fixture)", () => {
     expect(resolveKind("demo_create_task", internal)).toBe("write");
   });
-  test("đúng 2 connector write toàn cục (derived từ registry): trello_create_card + demo_create_task", () => {
-    // Invariant: the only self-declared writes are these two. Adding any write
-    // tool fails this test on purpose — forces a conscious blast/gate review.
+  test("registry write surface (P5) — full audit list, derived from kind", () => {
+    // The COMPLETE set of self-declared writes. Adding/removing a write tool fails
+    // this on purpose → forces a conscious gate/blast review. All are gated by
+    // withSafety (confirm-card) and are HIGH blast (not in BLAST_LOW), so they are
+    // fail-closed in workflow runs — only interactive, confirmed chat.
     const writes = CONNECTORS.flatMap((c) =>
       c.tools.filter((t) => t.kind === "write").map((t) => t.function.name),
     ).sort();
-    expect(writes).toEqual(["demo_create_task", "trello_create_card"]);
+    expect(writes).toEqual([
+      "demo_create_task",
+      "gcal_create_event",
+      "gdrive_create_folder",
+      "github_comment_issue",
+      "github_create_issue",
+      "gmail_send",
+      "jira_add_comment",
+      "jira_create_issue",
+      "trello_comment_card",
+      "trello_create_card",
+      "trello_update_card",
+    ]);
   });
 });
 

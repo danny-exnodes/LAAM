@@ -5,7 +5,11 @@ import type { Connector } from "./types";
 
 const API = "https://api.github.com";
 
-async function gh(pathname: string, creds: Record<string, string>): Promise<unknown> {
+async function gh(
+  pathname: string,
+  creds: Record<string, string>,
+  init: RequestInit = {},
+): Promise<unknown> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "User-Agent": "LAAM-connector/0.1",
@@ -14,7 +18,11 @@ async function gh(pathname: string, creds: Record<string, string>): Promise<unkn
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 12000);
   try {
-    const r = await fetch(API + pathname, { headers, signal: ctrl.signal });
+    const r = await fetch(API + pathname, {
+      ...init,
+      headers: { ...headers, ...(init.headers as Record<string, string> | undefined) },
+      signal: ctrl.signal,
+    });
     const body = (await r.json().catch(() => null)) as Record<string, unknown> | null;
     if (!r.ok) throw new Error((body && (body.message as string)) || "HTTP " + r.status);
     return body;
@@ -96,6 +104,89 @@ const github: Connector = {
         parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
       },
     },
+    {
+      type: "function",
+      kind: "read",
+      function: {
+        name: "github_get_repo",
+        description: "Lấy thông tin chi tiết của một repository GitHub.",
+        parameters: {
+          type: "object",
+          properties: { owner: { type: "string" }, repo: { type: "string" } },
+          required: ["owner", "repo"],
+        },
+      },
+    },
+    {
+      type: "function",
+      kind: "read",
+      function: {
+        name: "github_list_commits",
+        description: "Liệt kê các commit gần đây của một repository GitHub.",
+        parameters: {
+          type: "object",
+          properties: {
+            owner: { type: "string" },
+            repo: { type: "string" },
+            limit: { type: "number", description: "số lượng tối đa, mặc định 10" },
+          },
+          required: ["owner", "repo"],
+        },
+      },
+    },
+    {
+      type: "function",
+      kind: "read",
+      function: {
+        name: "github_list_pull_requests",
+        description: "Liệt kê pull request của một repository GitHub.",
+        parameters: {
+          type: "object",
+          properties: {
+            owner: { type: "string" },
+            repo: { type: "string" },
+            state: { type: "string", description: "open | closed | all" },
+          },
+          required: ["owner", "repo"],
+        },
+      },
+    },
+    {
+      type: "function",
+      kind: "write",
+      function: {
+        name: "github_create_issue",
+        description: "Tạo một issue mới trong một repository GitHub.",
+        parameters: {
+          type: "object",
+          properties: {
+            owner: { type: "string" },
+            repo: { type: "string" },
+            title: { type: "string", description: "tiêu đề issue" },
+            body: { type: "string", description: "nội dung issue (tuỳ chọn)" },
+          },
+          required: ["owner", "repo", "title"],
+        },
+      },
+    },
+    {
+      type: "function",
+      kind: "write",
+      function: {
+        name: "github_comment_issue",
+        description: "Bình luận vào một issue (hoặc pull request) trên GitHub.",
+        parameters: {
+          type: "object",
+          properties: {
+            owner: { type: "string" },
+            repo: { type: "string" },
+            number: { type: "number", description: "số hiệu issue/PR" },
+            body: { type: "string", description: "nội dung bình luận" },
+          },
+          required: ["owner", "repo", "number", "body"],
+        },
+      },
+    },
   ],
   handlers: {
     async github_list_repos(args, creds) {
@@ -122,6 +213,70 @@ const github: Connector = {
         creds,
       )) as { total_count?: number; items?: Record<string, unknown>[] };
       return { total: data.total_count, issues: (data.items || []).map(issue) };
+    },
+    async github_get_repo(args, creds) {
+      const data = (await gh(
+        `/repos/${encodeURIComponent(String(args.owner))}/${encodeURIComponent(String(args.repo))}`,
+        creds,
+      )) as Record<string, unknown>;
+      return { repo: repo(data) };
+    },
+    async github_list_commits(args, creds) {
+      const limit = Math.min(Number(args.limit) || 10, 30);
+      const data = await gh(
+        `/repos/${encodeURIComponent(String(args.owner))}/${encodeURIComponent(String(args.repo))}/commits?per_page=${limit}`,
+        creds,
+      );
+      return {
+        commits: (Array.isArray(data) ? data : []).map((c) => ({
+          sha: c.sha?.slice(0, 7),
+          message: (c.commit?.message || "").split("\n")[0],
+          author: c.commit?.author?.name,
+          date: c.commit?.author?.date,
+          url: c.html_url,
+        })),
+      };
+    },
+    async github_list_pull_requests(args, creds) {
+      const state = ["open", "closed", "all"].includes(String(args.state)) ? String(args.state) : "open";
+      const data = await gh(
+        `/repos/${encodeURIComponent(String(args.owner))}/${encodeURIComponent(String(args.repo))}/pulls?state=${state}&per_page=15`,
+        creds,
+      );
+      return {
+        pulls: (Array.isArray(data) ? data : []).map((p) => ({
+          number: p.number,
+          title: p.title,
+          state: p.state,
+          author: p.user?.login,
+          url: p.html_url,
+          updated: p.updated_at,
+        })),
+      };
+    },
+    async github_create_issue(args, creds) {
+      const data = (await gh(
+        `/repos/${encodeURIComponent(String(args.owner))}/${encodeURIComponent(String(args.repo))}/issues`,
+        creds,
+        {
+          method: "POST",
+          body: JSON.stringify({ title: args.title, body: args.body || "" }),
+          headers: { "Content-Type": "application/json" },
+        },
+      )) as Record<string, unknown>;
+      return { issue: { number: data.number, url: data.html_url, title: data.title } };
+    },
+    async github_comment_issue(args, creds) {
+      const data = (await gh(
+        `/repos/${encodeURIComponent(String(args.owner))}/${encodeURIComponent(String(args.repo))}/issues/${encodeURIComponent(String(args.number))}/comments`,
+        creds,
+        {
+          method: "POST",
+          body: JSON.stringify({ body: args.body }),
+          headers: { "Content-Type": "application/json" },
+        },
+      )) as Record<string, unknown>;
+      return { ok: true, url: data.html_url };
     },
   },
   async test(creds) {

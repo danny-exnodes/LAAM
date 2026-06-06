@@ -68,7 +68,8 @@ test("renders connectors from the list endpoint", async () => {
 
   expect(await screen.findByText("GitHub")).toBeTruthy();
   expect(screen.getByText("Demo")).toBeTruthy();
-  expect(screen.getByText("Repos, issues, PRs")).toBeTruthy();
+  // blurb is now i18n'd by connector id: github resolves conn.svc.github.blurb (vi).
+  expect(screen.getByText("Repos, issues, pull requests")).toBeTruthy();
   // tool names rendered
   expect(screen.getByText(/github_list_repos/)).toBeTruthy();
   // not-connected badge (vi)

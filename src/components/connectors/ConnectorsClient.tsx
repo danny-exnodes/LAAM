@@ -110,6 +110,16 @@ export function ConnectorsClient() {
   );
 }
 
+// Resolve a connector-supplied string (blurb / token help / oauth setup) via the
+// i18n dict, keyed by connector id, falling back to the connector-provided string
+// when no key exists. `t` returns the key itself on a miss (see i18n/index.ts), so
+// the `v === k` guard detects an absent key.
+function svc(t: T, id: string, field: string, fallback: string): string {
+  const k = `conn.svc.${id}.${field}`;
+  const v = t(k);
+  return v === k ? fallback : v;
+}
+
 function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: () => Promise<void> }) {
   const auth = c.auth;
   const fieldsRef = useRef<Record<string, string>>({});
@@ -210,7 +220,7 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold">{c.name}</div>
-          {c.blurb && <div className="mt-0.5 text-xs text-neutral-500">{c.blurb}</div>}
+          {c.blurb && <div className="mt-0.5 text-xs text-neutral-500">{svc(t, c.id, "blurb", c.blurb)}</div>}
           {c.status === "connected" && c.account && (
             <div className="mt-0.5 truncate text-xs text-neutral-400">
               {t("conn.account")}: {c.account}
@@ -246,13 +256,15 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
             </label>
           ))}
         {auth.type === "token" && auth.help && (
-          <div className="text-[11px] leading-relaxed text-neutral-400">{auth.help}</div>
+          <div className="text-[11px] leading-relaxed text-neutral-400">{svc(t, c.id, "help", auth.help)}</div>
         )}
         {isOauth && auth.setup && (
-          <div className="text-[11px] leading-relaxed text-neutral-500">{auth.setup}</div>
+          <div className="text-[11px] leading-relaxed text-neutral-500">
+            {svc(t, c.id, "setup", auth.setup || t("conn.oauthNeeded"))}
+          </div>
         )}
         {auth.type === "none" && auth.help && (
-          <div className="text-[11px] leading-relaxed text-neutral-400">{auth.help}</div>
+          <div className="text-[11px] leading-relaxed text-neutral-400">{svc(t, c.id, "help", auth.help)}</div>
         )}
       </div>
 

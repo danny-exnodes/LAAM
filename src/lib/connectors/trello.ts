@@ -119,6 +119,70 @@ const trelloConnector: Connector = {
         },
       },
     },
+    {
+      type: "function",
+      kind: "read",
+      function: {
+        name: "trello_list_lists",
+        description: "Liệt kê các danh sách (list) trong một bảng (board) Trello.",
+        parameters: {
+          type: "object",
+          properties: {
+            boardId: { type: "string", description: "ID của board" },
+          },
+          required: ["boardId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      kind: "read",
+      function: {
+        name: "trello_get_card",
+        description: "Lấy chi tiết một thẻ (card) Trello theo ID.",
+        parameters: {
+          type: "object",
+          properties: {
+            cardId: { type: "string", description: "ID của card" },
+          },
+          required: ["cardId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      kind: "write",
+      function: {
+        name: "trello_update_card",
+        description: "Cập nhật một thẻ (card) Trello: đổi tên, mô tả, hoặc chuyển sang list khác.",
+        parameters: {
+          type: "object",
+          properties: {
+            cardId: { type: "string", description: "ID của card" },
+            name: { type: "string", description: "tiêu đề mới (tuỳ chọn)" },
+            desc: { type: "string", description: "mô tả mới (tuỳ chọn)" },
+            idList: { type: "string", description: "ID của list để chuyển card sang (tuỳ chọn)" },
+          },
+          required: ["cardId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      kind: "write",
+      function: {
+        name: "trello_comment_card",
+        description: "Thêm một bình luận (comment) vào một thẻ (card) Trello.",
+        parameters: {
+          type: "object",
+          properties: {
+            cardId: { type: "string", description: "ID của card" },
+            text: { type: "string", description: "nội dung bình luận" },
+          },
+          required: ["cardId", "text"],
+        },
+      },
+    },
   ],
   handlers: {
     async trello_list_boards(args, creds) {
@@ -144,6 +208,48 @@ const trelloConnector: Connector = {
         { method: "POST" },
       );
       return { card: card((data as Record<string, unknown>) || {}) };
+    },
+    async trello_list_lists(args, creds) {
+      const data = await trello(
+        `/boards/${encodeURIComponent(String(args.boardId))}/lists`,
+        creds,
+        { fields: "name,closed" },
+      );
+      return {
+        lists: (Array.isArray(data) ? data : []).map((l: Record<string, unknown>) => ({
+          id: l.id,
+          name: l.name,
+          closed: l.closed,
+        })),
+      };
+    },
+    async trello_get_card(args, creds) {
+      const data = await trello(`/cards/${encodeURIComponent(String(args.cardId))}`, creds, {
+        fields: "name,idList,closed,due,labels,shortUrl",
+      });
+      return { card: card((data as Record<string, unknown>) || {}) };
+    },
+    async trello_update_card(args, creds) {
+      const params: Record<string, unknown> = {};
+      if (args.name != null) params.name = args.name;
+      if (args.desc != null) params.desc = args.desc;
+      if (args.idList != null) params.idList = args.idList;
+      const data = await trello(
+        `/cards/${encodeURIComponent(String(args.cardId))}`,
+        creds,
+        params,
+        { method: "PUT" },
+      );
+      return { card: card((data as Record<string, unknown>) || {}) };
+    },
+    async trello_comment_card(args, creds) {
+      const data = await trello(
+        `/cards/${encodeURIComponent(String(args.cardId))}/actions/comments`,
+        creds,
+        { text: args.text },
+        { method: "POST" },
+      );
+      return { ok: true, id: (data as Record<string, unknown>)?.id };
     },
   },
   async test(creds) {
