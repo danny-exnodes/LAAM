@@ -373,7 +373,26 @@ export const workflowRunSteps = pgTable("workflow_run_step", {
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
 
+// P0a: per-node idempotency for durable resume. Deterministic key (runId,nodeId,iterIndex)
+// — NOT the harness nonce (audit_log: 10-min window + no unique index, breaks multi-day sleep).
+// status 'claimed' = a write was attempted (claim-before-send); 'done' = output recorded.
+// iterIndex disambiguates foreach body iterations (engine.ts walkGraph).
+export const workflowNodeIdempotency = pgTable(
+  "workflow_node_idempotency",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    runId: text("runId").notNull().references(() => workflowRuns.id, { onDelete: "cascade" }),
+    nodeId: text("nodeId").notNull(),
+    iterIndex: integer("iterIndex").notNull().default(0),
+    status: text("status").notNull().default("claimed"), // claimed | done
+    output: jsonb("output"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [unique("workflow_node_idem_key").on(t.runId, t.nodeId, t.iterIndex)],
+);
+
 export type Workflow = typeof workflows.$inferSelect;
 export type WorkflowRun = typeof workflowRuns.$inferSelect;
 export type WorkflowRunStep = typeof workflowRunSteps.$inferSelect;
 export type WorkflowSchedule = typeof workflowSchedules.$inferSelect;
+export type WorkflowNodeIdempotency = typeof workflowNodeIdempotency.$inferSelect;
