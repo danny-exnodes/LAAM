@@ -1,0 +1,27 @@
+# LAAM SearXNG — minimal config for the web_search harness tool.
+# `use_default_settings: true` merges these overrides on top of SearXNG's shipped
+# defaults, so we only declare what differs.
+#
+# Critical bits:
+#   - search.formats includes `json` — SearXNG DISABLES the JSON API by default, and
+#     web_search calls /search?format=json, so without this every search returns 403.
+#   - server.limiter: false — the bot-detection limiter blocks programmatic queries;
+#     fine to disable on a localhost-only single-user instance.
+#   - server.secret_key — REQUIRED. Change it to a random string before use
+#     (`openssl rand -hex 32`). The default ("ultrasecretkey") is rejected.
+use_default_settings: true
+
+general:
+  instance_name: "LAAM Search"
+  donation_url: false
+
+server:
+  secret_key: "CHANGE_ME_run_openssl_rand_hex_32"
+  limiter: false
+  image_proxy: false
+
+search:
+  safe_search: 0
+  formats:
+    - html
+    - json
