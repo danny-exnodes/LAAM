@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
-import { resolveKind, resolveBlast, BLAST_LOW, CONNECTOR_WRITES, CONNECTOR_READS } from "./policy";
+import { resolveKind, resolveBlast, BLAST_LOW } from "./policy";
+import { CONNECTORS } from "@/lib/connectors/registry";
 import type { Tool } from "../types";
 
 const internal: Tool[] = [
@@ -25,10 +26,13 @@ describe("resolveKind", () => {
   test("demo_create_task → write (FEAT-5 demo fixture)", () => {
     expect(resolveKind("demo_create_task", internal)).toBe("write");
   });
-  test("connector writes are trello_create_card + demo_create_task; not in READS", () => {
-    expect([...CONNECTOR_WRITES].sort()).toEqual(["demo_create_task", "trello_create_card"]);
-    expect(CONNECTOR_READS.has("trello_create_card")).toBe(false);
-    expect(CONNECTOR_READS.has("demo_create_task")).toBe(false);
+  test("đúng 2 connector write toàn cục (derived từ registry): trello_create_card + demo_create_task", () => {
+    // Invariant: the only self-declared writes are these two. Adding any write
+    // tool fails this test on purpose — forces a conscious blast/gate review.
+    const writes = CONNECTORS.flatMap((c) =>
+      c.tools.filter((t) => t.kind === "write").map((t) => t.function.name),
+    ).sort();
+    expect(writes).toEqual(["demo_create_task", "trello_create_card"]);
   });
 });
 

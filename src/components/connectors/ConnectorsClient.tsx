@@ -1,20 +1,58 @@
 "use client";
 
-// Connectors page — list external services, paste credentials (stored server-side,
-// encrypted at rest, per-user), connect / disconnect / test. Port of v1
-// public/connectors.js. Consumes GET /api/connectors and POST
-// /api/connectors/:id/{connect,disconnect,test} (owned by the API package).
+// Connectors page — list external services, connect / disconnect / test.
+// Token connectors take pasted credentials (stored server-side, encrypted, per-user);
+// OAuth connectors (Google) use the in-app redirect flow via
+// GET /api/connectors/:id/authorize → /api/connectors/google/callback.
+// Consumes GET /api/connectors and POST /api/connectors/:id/{connect,disconnect,test}.
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Database,
+  GitBranch,
+  ClipboardList,
+  List,
+  Folder,
+  Clock,
+  MessageSquare,
+  Plug,
+  type LucideIcon,
+} from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { connectors as dict } from "@/i18n/dictionaries/connectors";
 import { PageHeader } from "@/components/page-header";
 import type { ConnectorListItem } from "@/lib/connectors/types";
 
+// Connector icon name (kebab-case) → Lucide component. Static map (no dynamic
+// import): matches the codebase's named-import convention and avoids a load flash.
+const ICONS: Record<string, LucideIcon> = {
+  database: Database,
+  "git-branch": GitBranch,
+  "clipboard-list": ClipboardList,
+  list: List,
+  folder: Folder,
+  clock: Clock,
+  "message-square": MessageSquare,
+  plug: Plug,
+};
+
+// OAuth callback ?error= codes → i18n keys.
+const ERR_KEY: Record<string, string> = {
+  oauth_not_configured: "conn.errNotConfigured",
+  oauth_denied: "conn.errDenied",
+  oauth_state: "conn.errState",
+  oauth_expired: "conn.errExpired",
+  oauth_exchange: "conn.errExchange",
+};
+
+type Note = { ok: boolean; msg: string } | null;
+type T = ReturnType<typeof useT>;
+
 export function ConnectorsClient() {
   const t = useT(dict);
   const [list, setList] = useState<ConnectorListItem[]>([]);
   const [loadErr, setLoadErr] = useState(false);
+  const [banner, setBanner] = useState<Note>(null);
 
   const load = useCallback(async () => {
     try {
@@ -27,13 +65,35 @@ export function ConnectorsClient() {
     }
   }, []);
 
+  // Read the OAuth callback result (?connected= / ?error=) once on mount, show a
+  // banner, then strip the query so a refresh doesn't repeat it.
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("error");
+    if (connected) setBanner({ ok: true, msg: t("conn.connectedOk") });
+    else if (error) setBanner({ ok: false, msg: t(ERR_KEY[error] ?? "conn.errState") });
+    if (connected || error) window.history.replaceState(null, "", "/connectors");
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   return (
     <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
       <PageHeader title={t("conn.heading")} subtitle={t("conn.sub")} />
+
+      {banner && (
+        <div
+          className={
+            "mb-4 rounded-xl border px-4 py-2.5 text-sm " +
+            (banner.ok
+              ? "border-green-500/40 bg-green-500/10 text-green-700 dark:text-green-400"
+              : "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400")
+          }
+        >
+          {banner.msg}
+        </div>
+      )}
 
       {loadErr ? (
         <div className="rounded-2xl border border-dashed border-neutral-300 p-12 text-center text-neutral-500 dark:border-neutral-700">
@@ -50,13 +110,11 @@ export function ConnectorsClient() {
   );
 }
 
-type T = ReturnType<typeof useT>;
-type Note = { ok: boolean; msg: string } | null;
-
 function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: () => Promise<void> }) {
   const auth = c.auth;
   const fieldsRef = useRef<Record<string, string>>({});
   const [note, setNote] = useState<Note>(null);
+  const [busy, setBusy] = useState(false);
 
   const post = useCallback(
     async (action: string) => {
@@ -76,13 +134,10 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
       setNote({ ok: true, msg: t("conn.testing") });
       try {
         const { ok, j } = await post("test");
-        if (ok) {
-          setNote({ ok: true, msg: j.info || t("conn.testOk") });
-          if (reloadAfter) setTimeout(() => void reload(), 600);
-        } else {
-          setNote({ ok: false, msg: j.error || t("conn.testErr") });
-          if (reloadAfter) setTimeout(() => void reload(), 900);
-        }
+        setNote(
+          ok ? { ok: true, msg: j.info || t("conn.testOk") } : { ok: false, msg: j.error || t("conn.testErr") },
+        );
+        if (reloadAfter) setTimeout(() => void reload(), ok ? 600 : 900);
       } catch {
         setNote({ ok: false, msg: t("conn.testErr") });
       }
@@ -91,57 +146,79 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
   );
 
   const connect = useCallback(async () => {
+    setBusy(true);
     setNote({ ok: true, msg: t("conn.saving") });
     try {
       const { ok, j } = await post("connect");
-      if (ok) {
-        void runTest(true);
-      } else {
-        setNote({ ok: false, msg: j.error || t("conn.saveErr") });
-      }
+      if (ok) await runTest(true);
+      else setNote({ ok: false, msg: j.error || t("conn.saveErr") });
     } catch {
       setNote({ ok: false, msg: t("conn.saveErr") });
+    } finally {
+      setBusy(false);
     }
   }, [post, runTest, t]);
 
-  const disconnect = useCallback(async () => {
+  const test = useCallback(async () => {
+    setBusy(true);
     try {
-      await post("disconnect");
+      await runTest();
+    } finally {
+      setBusy(false);
+    }
+  }, [runTest]);
+
+  const disconnect = useCallback(async () => {
+    setBusy(true);
+    try {
+      const { ok, j } = await post("disconnect");
+      if (ok) setNote(null);
+      else setNote({ ok: false, msg: j.error || t("conn.saveErr") });
       await reload();
     } catch {
       setNote({ ok: false, msg: t("conn.saveErr") });
+    } finally {
+      setBusy(false);
     }
   }, [post, reload, t]);
 
-  const connectLabel =
-    auth.type === "token" ? t("conn.connect") : auth.type === "oauth" ? t("conn.oauthNeeded") : t("conn.enable");
+  const Icon = ICONS[c.icon] ?? Plug;
+  const isOauth = auth.type === "oauth";
+  const authorizeHref = `/api/connectors/${encodeURIComponent(c.id)}/authorize`;
+
+  const border =
+    c.status === "connected"
+      ? "border-green-500/60"
+      : c.status === "needs_reconnect"
+        ? "border-amber-500/60"
+        : "border-neutral-200 dark:border-neutral-800";
+
+  const badge =
+    c.status === "connected"
+      ? { cls: "bg-green-500/15 text-green-600 dark:text-green-400", label: t("conn.connected") }
+      : c.status === "needs_reconnect"
+        ? { cls: "bg-amber-500/15 text-amber-600 dark:text-amber-400", label: t("conn.needsReconnect") }
+        : { cls: "bg-neutral-100 text-neutral-500 dark:bg-neutral-800", label: t("conn.notConnected") };
 
   return (
     <div
-      className={
-        "flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm dark:bg-neutral-900 " +
-        (c.connected
-          ? "border-green-500/60"
-          : "border-neutral-200 dark:border-neutral-800")
-      }
+      className={"flex flex-col gap-3 rounded-2xl border bg-white p-4 shadow-sm dark:bg-neutral-900 " + border}
     >
       <div className="flex items-start gap-3">
-        <span className="grid h-9 w-9 flex-none place-items-center rounded-lg bg-[var(--color-accent)]/15 text-sm font-bold uppercase text-[var(--color-accent)]">
-          {(c.icon || c.name || "?").slice(0, 1)}
+        <span className="grid h-9 w-9 flex-none place-items-center rounded-lg bg-[var(--color-accent)]/15 text-[var(--color-accent)]">
+          <Icon className="h-5 w-5" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold">{c.name}</div>
           {c.blurb && <div className="mt-0.5 text-xs text-neutral-500">{c.blurb}</div>}
+          {c.status === "connected" && c.account && (
+            <div className="mt-0.5 truncate text-xs text-neutral-400">
+              {t("conn.account")}: {c.account}
+            </div>
+          )}
         </div>
-        <span
-          className={
-            "flex-none rounded-full px-2.5 py-0.5 text-xs font-bold " +
-            (c.connected
-              ? "bg-green-500/15 text-green-600 dark:text-green-400"
-              : "bg-neutral-100 text-neutral-500 dark:bg-neutral-800")
-          }
-        >
-          {c.connected ? t("conn.connected") : t("conn.notConnected")}
+        <span className={"flex-none rounded-full px-2.5 py-0.5 text-xs font-bold " + badge.cls}>
+          {badge.label}
         </span>
       </div>
 
@@ -171,10 +248,8 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
         {auth.type === "token" && auth.help && (
           <div className="text-[11px] leading-relaxed text-neutral-400">{auth.help}</div>
         )}
-        {auth.type === "oauth" && (
-          <div className="text-[11px] leading-relaxed text-amber-600 dark:text-amber-500">
-            {auth.setup || t("conn.oauthNeeded")}
-          </div>
+        {isOauth && auth.setup && (
+          <div className="text-[11px] leading-relaxed text-neutral-500">{auth.setup}</div>
         )}
         {auth.type === "none" && auth.help && (
           <div className="text-[11px] leading-relaxed text-neutral-400">{auth.help}</div>
@@ -188,23 +263,42 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
       )}
 
       <div className="flex flex-wrap gap-2">
-        {c.connected ? (
+        {isOauth ? (
+          c.status === "connected" ? (
+            <>
+              <button type="button" disabled={busy} onClick={() => void test()} className={btn("secondary")}>
+                {t("conn.test")}
+              </button>
+              <button type="button" disabled={busy} onClick={() => void disconnect()} className={btn("danger")}>
+                {t("conn.disconnect")}
+              </button>
+            </>
+          ) : c.status === "needs_reconnect" ? (
+            <>
+              <a href={authorizeHref} className={btn("primary")}>
+                {t("conn.reconnect")}
+              </a>
+              <button type="button" disabled={busy} onClick={() => void disconnect()} className={btn("danger")}>
+                {t("conn.disconnect")}
+              </button>
+            </>
+          ) : (
+            <a href={authorizeHref} className={btn("primary")}>
+              {t("conn.connectGoogle")}
+            </a>
+          )
+        ) : c.status === "connected" ? (
           <>
-            <button type="button" onClick={() => void runTest()} className={btn("secondary")}>
+            <button type="button" disabled={busy} onClick={() => void test()} className={btn("secondary")}>
               {t("conn.test")}
             </button>
-            <button type="button" onClick={() => void disconnect()} className={btn("danger")}>
+            <button type="button" disabled={busy} onClick={() => void disconnect()} className={btn("danger")}>
               {t("conn.disconnect")}
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            disabled={auth.type === "oauth"}
-            onClick={() => void connect()}
-            className={btn(auth.type === "oauth" ? "disabled" : "primary")}
-          >
-            {connectLabel}
+          <button type="button" disabled={busy} onClick={() => void connect()} className={btn("primary")}>
+            {auth.type === "token" ? t("conn.connect") : t("conn.enable")}
           </button>
         )}
       </div>
@@ -212,18 +306,15 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
   );
 }
 
-function btn(kind: "primary" | "secondary" | "danger" | "disabled") {
+function btn(kind: "primary" | "secondary" | "danger") {
   const base =
-    "rounded-lg px-3.5 py-1.5 text-sm font-semibold transition disabled:cursor-default disabled:opacity-50";
-  if (kind === "primary")
-    return base + " bg-[var(--color-accent)] text-white hover:opacity-90";
+    "inline-block rounded-lg px-3.5 py-1.5 text-sm font-semibold transition disabled:cursor-default disabled:opacity-50";
+  if (kind === "primary") return base + " bg-[var(--color-accent)] text-white hover:opacity-90";
   if (kind === "danger")
     return (
       base +
       " border border-neutral-200 text-neutral-600 hover:border-red-500 hover:bg-red-500 hover:text-white dark:border-neutral-700 dark:text-neutral-300"
     );
-  if (kind === "disabled")
-    return base + " bg-[var(--color-accent)] text-white";
   return (
     base +
     " border border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"

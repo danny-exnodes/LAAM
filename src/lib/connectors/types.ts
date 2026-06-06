@@ -15,6 +15,11 @@ export type ConnectorField = {
 
 export type ConnectorAuth = {
   type: "token" | "oauth" | "none";
+  // OAuth (in-app redirect flow). `provider` selects the OAuth implementation;
+  // `scopes` are requested at consent time for THIS connector (least-privilege:
+  // each connector grants only what it needs).
+  provider?: "google";
+  scopes?: string[];
   help?: string;
   setup?: string;
   fields?: ConnectorField[];
@@ -22,6 +27,10 @@ export type ConnectorAuth = {
 
 export type ConnectorTool = {
   type: "function";
+  // Self-declared read/write. The safety policy (resolveKind) derives a tool's
+  // classification from THIS — single source of truth, so adding a tool touches
+  // one connector file and can never drift out of sync with a central name-list.
+  kind: "read" | "write";
   function: { name: string; description: string; parameters: object };
 };
 
@@ -39,6 +48,11 @@ export type Connector = {
   test?: (creds: Record<string, string>) => Promise<{ ok: boolean; info?: string; error?: string }>;
 };
 
+// Tri-state connection status. `needs_reconnect` only applies to OAuth: the grant
+// existed but its refresh token was revoked / expired (Google "Testing" apps drop
+// refresh tokens after ~7 days) — the UI shows a one-click "Reconnect".
+export type ConnectorStatus = "connected" | "needs_reconnect" | "disconnected";
+
 // Browser-safe projection of a connector (NO raw secrets — masked hints only).
 export type ConnectorListItem = {
   id: string;
@@ -47,6 +61,8 @@ export type ConnectorListItem = {
   blurb: string;
   auth: {
     type: string;
+    provider: string;
+    scopes: string[];
     help: string;
     setup: string;
     fields: {
@@ -59,6 +75,10 @@ export type ConnectorListItem = {
     }[];
   };
   tools: string[];
+  status: ConnectorStatus;
+  // Back-compat convenience: connected === (status === "connected").
   connected: boolean;
+  // Display-only account hint for OAuth connectors (e.g. the linked Google email).
+  account: string | null;
   connectedAt: string | null;
 };

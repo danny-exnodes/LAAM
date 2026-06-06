@@ -1,6 +1,7 @@
-// Google Drive connector — pragmatic OAuth scaffold.
-// The user pastes a Google OAuth2 access token (a real in-app OAuth flow is coming).
-// Token comes ONLY from creds.access_token; nothing is hard-coded.
+// Google Drive connector — in-app OAuth (see google-oauth.ts). The user clicks
+// "Kết nối với Google"; LAAM stores the refresh token (encrypted) and refreshes the
+// access token automatically. The gapi() wrapper reads creds.access_token, which
+// execute() keeps fresh before each call.
 import type { Connector } from "./types";
 
 const API = "https://www.googleapis.com";
@@ -39,13 +40,16 @@ const googleDrive: Connector = {
   icon: "folder",
   blurb: "Tệp và thư mục trên Google Drive",
   auth: {
-    type: "token",
-    help: 'Cần một Google OAuth access token (KHÔNG phải mật khẩu). Lấy nhanh tại OAuth 2.0 Playground: developers.google.com/oauthplayground — chọn scope "https://www.googleapis.com/auth/drive.readonly", bấm "Authorize APIs", rồi "Exchange authorization code for tokens" và sao chép Access token. Dán vào đây (token sẽ hết hạn sau ~1 giờ). LAAM sẽ KHÔNG đăng nhập thay bạn; luồng OAuth tích hợp trong ứng dụng sẽ có sau.',
-    fields: [{ key: "access_token", label: "Google OAuth access token", placeholder: "ya29.…", secret: true }],
+    type: "oauth",
+    provider: "google",
+    scopes: ["openid", "email", "https://www.googleapis.com/auth/drive.readonly"],
+    setup:
+      'Bấm "Kết nối với Google" để cấp quyền đọc Google Drive (chỉ đọc). LAAM lưu token phía máy chủ, mã hoá tại chỗ; phiên có thể cần kết nối lại sau ~7 ngày (giới hạn của Google ở chế độ thử nghiệm).',
   },
   tools: [
     {
       type: "function",
+      kind: "read",
       function: {
         name: "gdrive_list_files",
         description: "Liệt kê các tệp gần đây trên Google Drive của người dùng.",
@@ -54,6 +58,7 @@ const googleDrive: Connector = {
     },
     {
       type: "function",
+      kind: "read",
       function: {
         name: "gdrive_search",
         description: "Tìm tệp trên Google Drive theo tên.",

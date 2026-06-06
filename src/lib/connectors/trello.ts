@@ -76,6 +76,7 @@ const trelloConnector: Connector = {
   tools: [
     {
       type: "function",
+      kind: "read",
       function: {
         name: "trello_list_boards",
         description: "Liệt kê các bảng (board) Trello của người dùng.",
@@ -87,6 +88,7 @@ const trelloConnector: Connector = {
     },
     {
       type: "function",
+      kind: "read",
       function: {
         name: "trello_list_cards",
         description:
@@ -102,6 +104,7 @@ const trelloConnector: Connector = {
     },
     {
       type: "function",
+      kind: "write",
       function: {
         name: "trello_create_card",
         description: "Tạo một thẻ (card) Trello mới trong một danh sách (list).",

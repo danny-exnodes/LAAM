@@ -75,6 +75,7 @@ const jiraConnector: Connector = {
   tools: [
     {
       type: "function",
+      kind: "read",
       function: {
         name: "jira_search_issues",
         description:
@@ -88,6 +89,7 @@ const jiraConnector: Connector = {
     },
     {
       type: "function",
+      kind: "read",
       function: {
         name: "jira_my_issues",
         description: "Liệt kê các issue Jira đang được giao cho chính người dùng, sắp xếp theo lần cập nhật gần nhất.",

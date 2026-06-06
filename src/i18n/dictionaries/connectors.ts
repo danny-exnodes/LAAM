@@ -27,4 +27,22 @@ export const connectors: Dict = {
   'conn.saveErr': { vi: 'Không lưu được credential', en: 'Could not save credentials', zh: '无法保存凭据' },
   'conn.loadErr': { vi: 'Không tải được danh sách kết nối.', en: 'Could not load connectors.', zh: '无法加载连接器。' },
   'conn.oauthNeeded': { vi: 'Cần OAuth — sắp có', en: 'OAuth needed — coming soon', zh: '需要 OAuth — 即将推出' },
+  'conn.connectGoogle': { vi: 'Kết nối với Google', en: 'Connect with Google', zh: '使用 Google 连接' },
+  'conn.reconnect': { vi: 'Kết nối lại', en: 'Reconnect', zh: '重新连接' },
+  'conn.needsReconnect': { vi: 'Phiên hết hạn', en: 'Session expired', zh: '会话已过期' },
+  'conn.account': { vi: 'Tài khoản', en: 'Account', zh: '账户' },
+  'conn.connectedOk': { vi: 'Đã kết nối thành công.', en: 'Connected successfully.', zh: '连接成功。' },
+  'conn.errNotConfigured': {
+    vi: 'OAuth Google chưa được cấu hình trên máy chủ.',
+    en: 'Google OAuth is not configured on the server.',
+    zh: '服务器未配置 Google OAuth。',
+  },
+  'conn.errDenied': { vi: 'Bạn đã từ chối cấp quyền.', en: 'You declined the permission.', zh: '你拒绝了授权。' },
+  'conn.errState': { vi: 'Phiên kết nối không hợp lệ, thử lại.', en: 'Invalid session, please retry.', zh: '会话无效，请重试。' },
+  'conn.errExpired': { vi: 'Liên kết đã hết hạn, thử lại.', en: 'The link expired, please retry.', zh: '链接已过期，请重试。' },
+  'conn.errExchange': {
+    vi: 'Không đổi được mã với Google, thử lại.',
+    en: 'Could not exchange the code with Google, please retry.',
+    zh: '无法与 Google 交换代码，请重试。',
+  },
 };

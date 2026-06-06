@@ -18,6 +18,7 @@ const demo: Connector = {
   tools: [
     {
       type: "function",
+      kind: "read",
       function: {
         name: "demo_list_tasks",
         description: "Liệt kê công việc/đầu việc mẫu của người dùng. Lọc theo trạng thái nếu cần.",
@@ -29,6 +30,7 @@ const demo: Connector = {
       // confirm-card → execute write-gate be demonstrated end-to-end OFFLINE,
       // with no real credentials (FEAT-5). Creates a sample task (not persisted).
       type: "function",
+      kind: "write",
       function: {
         name: "demo_create_task",
         description: "Tạo một công việc/đầu việc mẫu mới. Dùng để minh hoạ luồng xác nhận trước khi ghi.",

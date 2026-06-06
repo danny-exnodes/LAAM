@@ -6,7 +6,7 @@ import { runToolRounds } from "./orchestrator";
 import type { ChatMessage } from "./orchestrator";
 
 const tools = [
-  { type: "function" as const, function: { name: "github_list_repos", description: "list repos", parameters: {} } },
+  { type: "function" as const, kind: "read" as const, function: { name: "github_list_repos", description: "list repos", parameters: {} } },
 ];
 const baseMessages: ChatMessage[] = [
   { role: "system", content: "SYS" },

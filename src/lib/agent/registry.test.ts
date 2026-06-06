@@ -16,7 +16,7 @@ const internal: Tool[] = [
     handler: async () => ({ from: "internal" }),
   },
 ];
-const connTool = { type: "function" as const, function: { name: "github_list_repos", description: "", parameters: {} } };
+const connTool = { type: "function" as const, kind: "read" as const, function: { name: "github_list_repos", description: "", parameters: {} } };
 
 describe("modelToolSchemas", () => {
   test("ghép internal (đã map) + connector", () => {

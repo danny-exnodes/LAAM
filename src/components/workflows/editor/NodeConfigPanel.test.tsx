@@ -260,13 +260,13 @@ describe("ConnectorForm — connector/action picker", () => {
   const mockConnectors = [
     {
       id: "demo", name: "Demo", icon: "🔌", blurb: "",
-      connected: true, tools: ["demo_list_tasks", "demo_create_task"],
-      auth: { type: "none", help: "", setup: "", fields: [] }, connectedAt: null,
+      connected: true, status: "connected" as const, account: null, tools: ["demo_list_tasks", "demo_create_task"],
+      auth: { type: "none", provider: "", scopes: [], help: "", setup: "", fields: [] }, connectedAt: null,
     },
     {
       id: "github", name: "GitHub", icon: "🐙", blurb: "",
-      connected: false, tools: ["github_list_repos"],
-      auth: { type: "token", help: "", setup: "", fields: [] }, connectedAt: null,
+      connected: false, status: "disconnected" as const, account: null, tools: ["github_list_repos"],
+      auth: { type: "token", provider: "", scopes: [], help: "", setup: "", fields: [] }, connectedAt: null,
     },
   ];
 

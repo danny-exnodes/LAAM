@@ -56,6 +56,7 @@ const github: Connector = {
   tools: [
     {
       type: "function",
+      kind: "read",
       function: {
         name: "github_list_repos",
         description:
@@ -71,6 +72,7 @@ const github: Connector = {
     },
     {
       type: "function",
+      kind: "read",
       function: {
         name: "github_list_issues",
         description: "Liệt kê issue của một repository GitHub.",
@@ -87,6 +89,7 @@ const github: Connector = {
     },
     {
       type: "function",
+      kind: "read",
       function: {
         name: "github_search_issues",
         description: "Tìm issue/PR trên GitHub theo cú pháp tìm kiếm của GitHub.",

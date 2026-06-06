@@ -6,23 +6,28 @@ import { ConnectorsClient } from "./ConnectorsClient";
 import type { ConnectorListItem } from "@/lib/connectors/types";
 
 function item(over: Partial<ConnectorListItem> = {}): ConnectorListItem {
+  const { auth: authOver, ...rest } = over;
+  const connected = rest.connected ?? false;
   return {
     id: "github",
     name: "GitHub",
     icon: "github",
     blurb: "Repos, issues, PRs",
+    tools: ["github_list_repos", "github_search"],
+    account: null,
+    connectedAt: null,
+    ...rest,
+    connected,
+    status: rest.status ?? (connected ? "connected" : "disconnected"),
     auth: {
       type: "token",
+      provider: "",
+      scopes: [],
       help: "Paste a PAT",
       setup: "",
-      fields: [
-        { key: "token", label: "Token", placeholder: "ghp_…", secret: true, set: false, masked: "" },
-      ],
+      fields: [{ key: "token", label: "Token", placeholder: "ghp_…", secret: true, set: false, masked: "" }],
+      ...authOver,
     },
-    tools: ["github_list_repos", "github_search"],
-    connected: false,
-    connectedAt: null,
-    ...over,
   };
 }
 
@@ -55,7 +60,7 @@ afterEach(() => {
 
 test("renders connectors from the list endpoint", async () => {
   const fetchMock = mockFetch({
-    "/api/connectors": { connectors: [item(), item({ id: "demo", name: "Demo", blurb: "Sample tasks", auth: { type: "none", help: "No auth", setup: "", fields: [] }, tools: ["demo_list_tasks"] })] },
+    "/api/connectors": { connectors: [item(), item({ id: "demo", name: "Demo", blurb: "Sample tasks", auth: { type: "none", provider: "", scopes: [], help: "No auth", setup: "", fields: [] }, tools: ["demo_list_tasks"] })] },
   });
   vi.stubGlobal("fetch", fetchMock);
 

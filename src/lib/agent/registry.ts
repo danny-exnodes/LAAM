@@ -12,6 +12,7 @@ export const INTERNAL_TOOLS: Tool[] = LAAM_TOOLS.map(guard);
 export function modelToolSchemas(internal: Tool[], connectorTools: ConnectorTool[]): ConnectorTool[] {
   const internalSchemas: ConnectorTool[] = internal.map((t) => ({
     type: "function",
+    kind: t.kind,
     function: { name: t.name, description: t.description, parameters: t.parameters },
   }));
   return [...internalSchemas, ...connectorTools];

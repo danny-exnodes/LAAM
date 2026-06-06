@@ -2,9 +2,9 @@ import { expect, test } from 'vitest';
 import { connectors } from './connectors';
 import { resolve } from '../index';
 
-test('connectors ports every v1 leaf key (17) across 3 langs', () => {
+test('connectors has every key (17 v1 + 10 OAuth = 27) across 3 langs', () => {
   const keys = Object.keys(connectors);
-  expect(keys.length).toBe(17);
+  expect(keys.length).toBe(27);
   for (const k of keys) {
     expect(typeof connectors[k].vi).toBe('string');
     expect(typeof connectors[k].en).toBe('string');

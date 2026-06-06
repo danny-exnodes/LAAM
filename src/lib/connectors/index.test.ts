@@ -27,7 +27,7 @@ const { github, demo } = vi.hoisted(() => {
     icon: "github",
     blurb: "Repos",
     auth: { type: "token", help: "h", setup: "", fields: [{ key: "token", label: "Token", secret: true }] },
-    tools: [{ type: "function", function: { name: "github_list_repos", description: "d", parameters: {} } }],
+    tools: [{ type: "function", kind: "read", function: { name: "github_list_repos", description: "d", parameters: {} } }],
     handlers: { github_list_repos: vi.fn(async () => ({ repos: ["a"] })) },
     test: vi.fn(async () => ({ ok: true, info: "ok" })),
   };
@@ -37,7 +37,7 @@ const { github, demo } = vi.hoisted(() => {
     icon: "play",
     blurb: "Demo",
     auth: { type: "none" },
-    tools: [{ type: "function", function: { name: "demo_list_tasks", description: "d", parameters: {} } }],
+    tools: [{ type: "function", kind: "read", function: { name: "demo_list_tasks", description: "d", parameters: {} } }],
     handlers: { demo_list_tasks: vi.fn(async () => ({ tasks: [] })) },
   };
   return { github, demo };
