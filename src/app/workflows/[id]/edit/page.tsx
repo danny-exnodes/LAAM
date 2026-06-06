@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { AppHeader } from "@/components/app-header";
-import { WorkflowEditor } from "@/components/workflows/editor/WorkflowEditor";
+import { WorkflowEditorLive } from "@/components/workflows/editor/WorkflowEditorLive";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export default async function WorkflowEditPage({
     <div className="flex h-dvh flex-col">
       <AppHeader current="/workflows" role={session.user.role} />
       <div className="min-h-0 flex-1">
-        <WorkflowEditor workflowId={id} />
+        <WorkflowEditorLive workflowId={id} />
       </div>
     </div>
   );

@@ -5,7 +5,7 @@
 // step events keyed by runId, plus run-level status changes. The hook piggybacks
 // on the existing /api/events stream; it DOES NOT open a second connection.
 //
-// Usage: const { steps, runStatus } = useWorkflowEvents(workflowId?);
+// Usage: const { steps, runStatus } = useWorkflowEvents(expectedRunId?);
 //   steps     — latest StepEvent[] for the active/most-recent run of this workflow
 //   runStatus — latest run status string ("running"|"succeeded"|"failed"|null)
 
@@ -36,18 +36,21 @@ export type UseWorkflowEventsResult = {
 
 /**
  * Subscribe to workflow_run / workflow_run_step SSE events.
- * If `workflowId` is undefined the hook still works but tracks any run.
- * Internally opens ONE EventSource to /api/events (reuses browser's connection
- * if the browser de-dupes same-origin SSE — but in practice creates one per
- * hook instance; keep at the page level, not per-row).
+ * If `expectedRunId` is set, ONLY that run's events are processed (others ignored)
+ * — use it to lock the editor onto a specific Test run and avoid cross-run paint.
+ * If omitted, the hook tracks whatever run is most recently seen.
+ * Internally opens ONE EventSource to /api/events; keep at the page level, not per-row.
  */
-export function useWorkflowEvents(): UseWorkflowEventsResult {
+export function useWorkflowEvents(expectedRunId?: string): UseWorkflowEventsResult {
   const [steps, setSteps] = useState<WorkflowStepEvent[]>([]);
   const [runStatus, setRunStatus] = useState<string | null>(null);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
 
   // Use a ref to avoid stale closure over activeRunId inside the event handlers.
   const activeRunIdRef = useRef<string | null>(null);
+  // Keep the latest expectedRunId visible to the once-bound SSE handlers.
+  const expectedRunIdRef = useRef<string | undefined>(expectedRunId);
+  expectedRunIdRef.current = expectedRunId;
 
   useEffect(() => {
     const es = new EventSource("/api/events");
@@ -59,6 +62,8 @@ export function useWorkflowEvents(): UseWorkflowEventsResult {
       } catch {
         return;
       }
+      // Filter to the expected run (when set) — ignore foreign/concurrent runs.
+      if (expectedRunIdRef.current && evt.runId !== expectedRunIdRef.current) return;
       // Track the most recently seen runId.
       if (activeRunIdRef.current !== evt.runId) {
         activeRunIdRef.current = evt.runId;
@@ -85,6 +90,7 @@ export function useWorkflowEvents(): UseWorkflowEventsResult {
       } catch {
         return;
       }
+      if (expectedRunIdRef.current && evt.runId !== expectedRunIdRef.current) return;
       setRunStatus(evt.status);
       if (activeRunIdRef.current !== evt.runId) {
         activeRunIdRef.current = evt.runId;

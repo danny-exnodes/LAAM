@@ -447,3 +447,43 @@ describe("WorkflowEditor — mobile config sheet (H)", () => {
     expect(screen.getByText(/chọn một node|select a node/i)).toBeInTheDocument();
   });
 });
+
+describe("WorkflowEditor — Test (dry-run) button", () => {
+  test("saves dirty graph then POSTs a dry-run and reports the runId", async () => {
+    const fetchImpl = vi.fn<FetchLike>(async (url, opts) => {
+      const u = String(url);
+      if (u.endsWith("/run")) {
+        return { ok: true, json: async () => ({ run: { id: "run-xyz" }, steps: [] }) } as Response;
+      }
+      if (opts?.method === "PATCH") {
+        return { ok: true, json: async () => ({ id: "wf1" }) } as Response;
+      }
+      return { ok: true, json: async () => ({ name: "My WF", graph: starterGraph }) } as Response;
+    });
+    const onTestRun = vi.fn();
+    render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor workflowId="wf1" fetchImpl={fetchImpl} onSaved={vi.fn()} onTestRun={onTestRun} />
+      </I18nProvider>,
+    );
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    // Make dirty so persistGraph runs (save-before-test path)
+    fireEvent.change(screen.getByRole("textbox", { name: /tên workflow|workflow name/i }), {
+      target: { value: "Edited" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /chạy thử/i }));
+    });
+    await waitFor(() => {
+      const calls = fetchImpl.mock.calls as [string, RequestInit][];
+      // 1) dirty graph was saved (PATCH) before running
+      expect(calls.some(([, o]) => o?.method === "PATCH")).toBe(true);
+      // 2) dry-run POST sent with { dryRun: true }
+      const runCall = calls.find(([u]) => String(u).endsWith("/run"));
+      expect(runCall).toBeDefined();
+      expect(JSON.parse((runCall![1] as RequestInit).body as string)).toEqual({ dryRun: true });
+    });
+    // 3) runId handed to the parent for SSE tracking
+    expect(onTestRun).toHaveBeenCalledWith("run-xyz");
+  });
+});

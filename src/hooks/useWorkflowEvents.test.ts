@@ -116,3 +116,26 @@ describe("useWorkflowEvents", () => {
     expect(result.current.steps[1].nodeId).toBe("n2");
   });
 });
+
+describe("useWorkflowEvents — expectedRunId filter", () => {
+  test("ignores step + run events from a FOREIGN runId", () => {
+    const { result } = renderHook(() => useWorkflowEvents("run-A"));
+    act(() => {
+      fire("workflow_run_step", { type: "workflow_run_step", runId: "run-B", nodeId: "x", seq: 0, status: "running" });
+    });
+    expect(result.current.steps).toHaveLength(0); // foreign step filtered out
+    act(() => {
+      fire("workflow_run", { type: "workflow_run", runId: "run-B", status: "succeeded" });
+    });
+    expect(result.current.runStatus).toBeNull(); // foreign run-level filtered too
+  });
+
+  test("processes events matching the expected runId", () => {
+    const { result } = renderHook(() => useWorkflowEvents("run-A"));
+    act(() => {
+      fire("workflow_run_step", { type: "workflow_run_step", runId: "run-A", nodeId: "x", seq: 0, status: "running" });
+    });
+    expect(result.current.steps).toHaveLength(1);
+    expect(result.current.steps[0].nodeId).toBe("x");
+  });
+});

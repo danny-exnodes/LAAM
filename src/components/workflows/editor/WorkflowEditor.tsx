@@ -39,6 +39,7 @@ import { assertRunnable } from "@/lib/workflow/validate";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { WfNode, WfNodeKind } from "@/lib/workflow/types";
+import { edgeRunDecoration } from "./nodeStatus";
 
 // ── Custom node renderer ────────────────────────────────────────────────────
 
@@ -250,6 +251,10 @@ export interface WorkflowEditorProps {
    * Key = node id. Used to show status badges on nodes (P5-C run-in-editor).
    */
   nodeStatuses?: Record<string, "idle" | "running" | "success" | "error">;
+  /** Called with the runId after a Test (dry-run) is triggered — parent tracks it via SSE. */
+  onTestRun?: (runId: string) => void;
+  /** Overall run status from the parent's useWorkflowEvents — drives edge flow animation. */
+  runStatus?: string | null;
 }
 
 /**
@@ -265,7 +270,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
   );
 }
 
-function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: WorkflowEditorProps) {
+function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onTestRun, runStatus }: WorkflowEditorProps) {
   const t = useT(dict);
   const router = useRouter();
   const rfInstance = useReactFlow();
@@ -291,6 +296,8 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
   // Save status
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Test (dry-run) in progress
+  const [testing, setTesting] = useState(false);
 
   // Condition edge label prompt: when user connects FROM a condition node
   // we need to assign a true/false label.
@@ -326,6 +333,27 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [nodes, nodeStatuses],
+  );
+
+  // Decorate edges with run status: animate flow while running, redden on source error.
+  // Pure derivation (edgeRunDecoration) is unit-tested; the visuals are verified via E2E.
+  const edgesWithStatus = useMemo(
+    () =>
+      edges.map((e) => {
+        const { animated, errored } = edgeRunDecoration(nodeStatuses?.[e.source] ?? "idle", runStatus);
+        if (!animated && !errored) return e; // unchanged → keep stable reference
+        return {
+          ...e,
+          animated,
+          style: {
+            ...(e.style ?? {}),
+            strokeWidth: errored ? 2.5 : 2,
+            stroke: errored ? "#ef4444" : "var(--wf-edge-stroke)",
+          },
+          ...(errored ? { markerEnd: { type: MarkerType.ArrowClosed, color: "#ef4444", width: 18, height: 18 } } : {}),
+        };
+      }),
+    [edges, nodeStatuses, runStatus],
   );
 
   // Load on mount
@@ -567,23 +595,27 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
 
   // ── Save ─────────────────────────────────────────────────────────────────
 
+  // Persist the CURRENT editor graph (preflight + PATCH). Shared by Save and Test.
+  // Throws on invalid graph or non-ok PATCH; no navigation / status side-effects.
+  const persistGraph = useCallback(async () => {
+    const graph = fromReactFlow(nodes, edges);
+    assertRunnable(graph); // client preflight — throws on invalid
+    const res = await f(`/api/workflows/${encodeURIComponent(workflowId)}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: wfName, graph }),
+    });
+    if (!res.ok) {
+      const body = await res.json() as { error?: string };
+      throw new Error(body.error ?? "save failed");
+    }
+  }, [nodes, edges, workflowId, wfName, f]);
+
   const handleSave = useCallback(async () => {
     setSaveStatus("saving");
     setSaveError(null);
     try {
-      const graph = fromReactFlow(nodes, edges);
-      // Client-side preflight
-      assertRunnable(graph);
-      // PATCH
-      const res = await f(`/api/workflows/${encodeURIComponent(workflowId)}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name: wfName, graph }),
-      });
-      if (!res.ok) {
-        const body = await res.json() as { error?: string };
-        throw new Error(body.error ?? "save failed");
-      }
+      await persistGraph();
       setSaveStatus("saved");
       setIsDirty(false);
       if (onSaved) {
@@ -595,7 +627,36 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
       setSaveStatus("error");
       setSaveError(e instanceof Error ? e.message : t("wf.editor.saveErr"));
     }
-  }, [nodes, edges, workflowId, wfName, f, onSaved, router, t]);
+  }, [persistGraph, onSaved, router, t, workflowId]);
+
+  // Test (dry-run): persist current graph if dirty, then POST a dry-run; hand the
+  // runId to the parent (WorkflowEditorLive) which tracks it via SSE → nodeStatuses.
+  const handleTest = useCallback(async () => {
+    setTesting(true);
+    setSaveError(null);
+    try {
+      if (isDirty) {
+        await persistGraph();
+        setIsDirty(false);
+      }
+      const res = await f(`/api/workflows/${encodeURIComponent(workflowId)}/run`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dryRun: true }),
+      });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        throw new Error(body.error ?? "run failed");
+      }
+      const body = await res.json() as { run?: { id?: string } };
+      if (body.run?.id) onTestRun?.(body.run.id);
+    } catch (e) {
+      setSaveStatus("error");
+      setSaveError(e instanceof Error ? e.message : t("wf.editor.saveErr"));
+    } finally {
+      setTesting(false);
+    }
+  }, [persistGraph, isDirty, f, workflowId, onTestRun, t]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -641,6 +702,15 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
           />
           <button
             type="button"
+            onClick={() => void handleTest()}
+            disabled={testing || saveStatus === "saving"}
+            title={t("wf.editor.testHint")}
+            className="shrink-0 rounded-lg border border-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--color-accent)] transition hover:bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)] disabled:opacity-50"
+          >
+            {testing ? t("wf.editor.testing") : `▶ ${t("wf.editor.test")}`}
+          </button>
+          <button
+            type="button"
             onClick={() => void handleSave()}
             disabled={saveStatus === "saving"}
             className="shrink-0 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
@@ -681,7 +751,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
         <div className="relative min-h-0 flex-1">
           <ReactFlow
             nodes={nodesWithStatus}
-            edges={edges}
+            edges={edgesWithStatus}
             nodeTypes={NODE_TYPES}
             defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
             onNodesChange={wrappedOnNodesChange}

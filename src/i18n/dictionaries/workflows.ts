@@ -251,4 +251,12 @@ export const workflows: Dict = {
   // Editor — mobile config panel title
   "wf.editor.configTitle": { vi: "Cấu hình node", en: "Configure node", zh: "配置节点" },
   "wf.editor.closePanel": { vi: "Đóng", en: "Close", zh: "关闭" },
+  // Editor — Test (dry-run) button
+  "wf.editor.test": { vi: "Chạy thử", en: "Test", zh: "测试" },
+  "wf.editor.testing": { vi: "Đang chạy thử…", en: "Testing…", zh: "测试中…" },
+  "wf.editor.testHint": {
+    vi: "Chạy thử (dry-run): node ghi connector được giả lập, không gây tác động thật",
+    en: "Test run (dry-run): connector writes are mocked — no real side-effects",
+    zh: "测试运行（dry-run）：连接器写操作被模拟，无真实副作用",
+  },
 };
