@@ -67,3 +67,24 @@ export async function PATCH(
     headers: { "content-type": "application/json" },
   });
 }
+
+export async function DELETE(
+  _req: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session?.user?.id)
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+
+  const { id } = await params;
+
+  const rows = await db.select().from(workflows).where(eq(workflows.id, id)).limit(1);
+  const wf = rows[0];
+  if (!wf || wf.userId !== session.user.id)
+    return new Response(JSON.stringify({ error: "Workflow không tồn tại" }), { status: 404 });
+
+  // DB CASCADE: workflow_schedule, workflow_run, workflow_run_step are deleted automatically.
+  await db.delete(workflows).where(eq(workflows.id, id));
+
+  return new Response(null, { status: 204 });
+}

@@ -1,37 +1,70 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { db } from "@/db";
-import { workflows } from "@/db/schema";
-import type { WorkflowGraph } from "@/lib/workflow/types";
-
-export const dynamic = "force-dynamic";
+"use client";
 
 /**
- * /workflows/new — creates a minimal starter workflow and redirects to
- * /workflows/[id]/edit. Resolves the "dead link" from the list page.
+ * /workflows/new — Client Component that POSTs to create a workflow then redirects.
  *
- * Starter graph: one agent node (empty prompt) — valid for assertRunnable
- * (single node, 0 edges — no start-node violation because the rule only
- * applies when nodes.length > 0 and we need exactly 1 start; a single
- * node with no edges trivially satisfies that).
+ * Previously this was a Server Component that ran db.insert() on GET — a side-effect
+ * on a non-idempotent request (bots, prefetch, retry all created orphan drafts).
+ * Now the insert only happens when the user explicitly clicks "Tạo workflow mới",
+ * satisfying the rule: mutations go through explicit user action, not page render.
  */
-export default async function NewWorkflowPage() {
-  const session = await auth();
-  if (!session?.user?.id) redirect("/login");
 
-  const starterGraph: WorkflowGraph = {
-    nodes: [{ id: "n1", kind: "agent", prompt: "" }],
-    edges: [],
-  };
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { useT } from "@/i18n/provider";
+import { workflows as dict } from "@/i18n/dictionaries/workflows";
+import type { WorkflowGraph } from "@/lib/workflow/types";
 
-  const id = crypto.randomUUID();
-  await db.insert(workflows).values({
-    id,
-    userId: session.user.id,
-    name: "Workflow mới",
-    graph: starterGraph,
-    status: "draft",
-  });
+const STARTER_GRAPH: WorkflowGraph = {
+  nodes: [{ id: "n1", kind: "agent", prompt: "" }],
+  edges: [],
+};
 
-  redirect(`/workflows/${encodeURIComponent(id)}/edit`);
+export default function NewWorkflowPage() {
+  const t = useT(dict);
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleCreate() {
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/workflows", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Workflow mới", graph: STARTER_GRAPH }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? t("wf.new.err"));
+      }
+      const { id } = (await res.json()) as { id: string };
+      router.push(`/workflows/${encodeURIComponent(id)}/edit`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t("wf.new.err"));
+      setCreating(false);
+    }
+  }
+
+  return (
+    <div className="flex min-h-[40vh] flex-col items-center justify-center gap-4">
+      {error && (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => void handleCreate()}
+        disabled={creating}
+        className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow hover:opacity-90 disabled:opacity-50 transition"
+        autoFocus
+      >
+        {creating && <Loader2 size={14} className="animate-spin" aria-hidden />}
+        {creating ? t("wf.new.creating") : t("wf.newBlank")}
+      </button>
+    </div>
+  );
 }
