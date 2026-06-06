@@ -315,6 +315,17 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
     [setNodes],
   );
 
+  // ── Delete node ──────────────────────────────────────────────────────────
+
+  const handleDeleteNode = useCallback(
+    (nodeId: string) => {
+      setNodes((prev) => prev.filter((n) => n.id !== nodeId));
+      setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      setSelectedId(null);
+    },
+    [setNodes, setEdges],
+  );
+
   // ── Selected node (for config panel) ────────────────────────────────────
 
   const selectedRfNode = useMemo(
@@ -482,7 +493,11 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
         {/* Config panel */}
         <div className="w-72 shrink-0 border-l border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900">
           {selectedWfNode ? (
-            <NodeConfigPanel node={selectedWfNode} onChange={onNodeConfigChange} />
+            <NodeConfigPanel
+              node={selectedWfNode}
+              onChange={onNodeConfigChange}
+              onDelete={() => handleDeleteNode(selectedWfNode.id)}
+            />
           ) : (
             <div className="flex h-full items-center justify-center p-4 text-sm text-neutral-400">
               {t("wf.editor.noSelection")}

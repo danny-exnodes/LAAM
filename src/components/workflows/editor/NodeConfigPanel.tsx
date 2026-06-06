@@ -13,7 +13,11 @@
  */
 
 import { useState, useEffect } from "react";
+import { Trash2 } from "lucide-react";
 import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode, Predicate, WorkflowGraph } from "@/lib/workflow/types";
+import { useT } from "@/i18n/provider";
+import { workflows as dict } from "@/i18n/dictionaries/workflows";
+import type { Translator } from "@/i18n/types";
 
 // ── Shared style helpers ────────────────────────────────────────────────────
 
@@ -48,32 +52,34 @@ function field(children: React.ReactNode) {
 function AgentForm({
   node,
   onChange,
+  t,
 }: {
   node: WfAgentNode;
   onChange: (n: WfNode) => void;
+  t: Translator;
 }) {
   return (
     <>
       {field(
         <>
-          {label("System prompt")}
+          {label(t("wf.node.agent.systemLabel"))}
           <textarea
             className={inputCls()}
             rows={3}
             value={node.system ?? ""}
-            placeholder="(dùng mặc định harness)"
+            placeholder={t("wf.node.agent.systemPlaceholder")}
             onChange={(e) => onChange({ ...node, system: e.target.value || undefined })}
           />
         </>,
       )}
       {field(
         <>
-          {label("Prompt *")}
+          {label(t("wf.node.agent.promptLabel"))}
           <textarea
             className={inputCls()}
             rows={4}
             value={node.prompt}
-            placeholder="Nhập prompt — {{var}} để nội suy"
+            placeholder={t("wf.node.agent.promptPlaceholder")}
             onChange={(e) => onChange({ ...node, prompt: e.target.value })}
           />
         </>,
@@ -87,9 +93,11 @@ function AgentForm({
 function ConnectorForm({
   node,
   onChange,
+  t,
 }: {
   node: WfConnectorNode;
   onChange: (n: WfNode) => void;
+  t: Translator;
 }) {
   const [argsText, setArgsText] = useState(
     Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "",
@@ -114,7 +122,7 @@ function ConnectorForm({
       setArgsError(null);
       onChange({ ...node, args: parsed });
     } catch {
-      setArgsError("JSON không hợp lệ");
+      setArgsError(t("wf.node.jsonInvalid"));
     }
   }
 
@@ -122,31 +130,31 @@ function ConnectorForm({
     <>
       {field(
         <>
-          {label("Connector ID *")}
+          {label(t("wf.node.connector.idLabel"))}
           <input
             type="text"
             className={inputCls()}
             value={node.connectorId}
-            placeholder="vd: trello, github, slack"
+            placeholder={t("wf.node.connector.idPlaceholder")}
             onChange={(e) => onChange({ ...node, connectorId: e.target.value })}
           />
         </>,
       )}
       {field(
         <>
-          {label("Action *")}
+          {label(t("wf.node.connector.actionLabel"))}
           <input
             type="text"
             className={inputCls()}
             value={node.action}
-            placeholder="vd: demo_list_tasks"
+            placeholder={t("wf.node.connector.actionPlaceholder")}
             onChange={(e) => onChange({ ...node, action: e.target.value })}
           />
         </>,
       )}
       {field(
         <>
-          {label("Args (JSON)")}
+          {label(t("wf.node.connector.argsLabel"))}
           <textarea
             className={inputCls(!!argsError)}
             rows={5}
@@ -166,9 +174,11 @@ function ConnectorForm({
 function ConditionForm({
   node,
   onChange,
+  t,
 }: {
   node: WfConditionNode;
   onChange: (n: WfNode) => void;
+  t: Translator;
 }) {
   const [text, setText] = useState(JSON.stringify(node.when, null, 2));
   const [parseError, setParseError] = useState<string | null>(null);
@@ -180,7 +190,7 @@ function ConditionForm({
       setParseError(null);
       onChange({ ...node, when: parsed });
     } catch {
-      setParseError("JSON không hợp lệ");
+      setParseError(t("wf.node.jsonInvalid"));
     }
   }
 
@@ -188,7 +198,7 @@ function ConditionForm({
     <>
       {field(
         <>
-          {label("Điều kiện (Predicate JSON)")}
+          {label(t("wf.node.condition.label"))}
           <textarea
             className={inputCls(!!parseError)}
             rows={6}
@@ -198,7 +208,7 @@ function ConditionForm({
           />
           {parseError && errorMsg(parseError)}
           <p className="mt-1 text-xs text-neutral-400">
-            op: eq|ne|gt|lt|gte|lte|contains|not_contains|exists|not_exists · all/any cho nhóm
+            {t("wf.node.condition.hint")}
           </p>
         </>,
       )}
@@ -211,9 +221,11 @@ function ConditionForm({
 function ForeachForm({
   node,
   onChange,
+  t,
 }: {
   node: WfForeachNode;
   onChange: (n: WfNode) => void;
+  t: Translator;
 }) {
   const [bodyText, setBodyText] = useState(JSON.stringify(node.body, null, 2));
   const [bodyError, setBodyError] = useState<string | null>(null);
@@ -225,7 +237,7 @@ function ForeachForm({
       setBodyError(null);
       onChange({ ...node, body: parsed });
     } catch {
-      setBodyError("JSON không hợp lệ");
+      setBodyError(t("wf.node.jsonInvalid"));
     }
   }
 
@@ -233,7 +245,7 @@ function ForeachForm({
     <>
       {field(
         <>
-          {label("Items (template)")}
+          {label(t("wf.node.foreach.itemsLabel"))}
           <input
             type="text"
             className={inputCls()}
@@ -242,13 +254,13 @@ function ForeachForm({
             onChange={(e) => onChange({ ...node, items: e.target.value })}
           />
           <p className="mt-1 text-xs text-neutral-400">
-            Phải resolve thành array lúc chạy
+            {t("wf.node.foreach.itemsHint")}
           </p>
         </>,
       )}
       {field(
         <>
-          {label("Body graph (JSON)")}
+          {label(t("wf.node.foreach.bodyLabel"))}
           <textarea
             className={inputCls(!!bodyError)}
             rows={8}
@@ -258,7 +270,7 @@ function ForeachForm({
           />
           {bodyError && errorMsg(bodyError)}
           <p className="mt-1 text-xs text-neutral-400">
-            Mỗi item được truyền qua context {"{{item}}"} khi chạy body.
+            {t("wf.node.foreach.bodyHint")}
           </p>
         </>,
       )}
@@ -278,10 +290,16 @@ const KIND_LABELS: Record<string, string> = {
 export function NodeConfigPanel({
   node,
   onChange,
+  onDelete,
 }: {
   node: WfNode;
   onChange: (updated: WfNode) => void;
+  onDelete?: () => void;
 }) {
+  // t is called here (top-level component) and passed to sub-forms as a prop,
+  // since sub-forms are local functions and cannot call hooks directly.
+  const t = useT(dict);
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
@@ -289,21 +307,32 @@ export function NodeConfigPanel({
           <span className="text-xs font-bold uppercase tracking-wide text-[var(--color-accent)]">
             {KIND_LABELS[node.kind] ?? node.kind}
           </span>
-          <p className="mt-0.5 text-xs text-neutral-400 font-mono">{node.id}</p>
+          <p className="mt-0.5 font-mono text-[9px] text-neutral-300">{node.id} · ⌫ Del</p>
         </div>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label="Xoá node"
+            title="Xoá node"
+            className="rounded-lg p-1.5 text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20 transition"
+          >
+            <Trash2 size={14} aria-hidden />
+          </button>
+        )}
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {node.kind === "agent" && (
-          <AgentForm node={node} onChange={onChange} />
+          <AgentForm node={node} onChange={onChange} t={t} />
         )}
         {node.kind === "connector" && (
-          <ConnectorForm node={node} onChange={onChange} />
+          <ConnectorForm node={node} onChange={onChange} t={t} />
         )}
         {node.kind === "condition" && (
-          <ConditionForm node={node} onChange={onChange} />
+          <ConditionForm node={node} onChange={onChange} t={t} />
         )}
         {node.kind === "foreach" && (
-          <ForeachForm node={node} onChange={onChange} />
+          <ForeachForm node={node} onChange={onChange} t={t} />
         )}
       </div>
     </div>

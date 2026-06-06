@@ -41,6 +41,20 @@ vi.mock("@xyflow/react", () => {
       <div data-testid="react-flow">
         {/* Render node count so tests can verify palette add */}
         <span data-testid="node-count">{nodes?.length ?? 0}</span>
+        {/* Render node labels so tests can click nodes to select them */}
+        {nodes?.map((n) => {
+          const wf = (n.data as { node: { kind: string; prompt?: string; connectorId?: string; action?: string; items?: string } }).node;
+          const label = wf.kind === "agent" ? wf.prompt ?? "" : wf.kind === "connector" ? `${wf.connectorId}.${wf.action}` : wf.items ?? wf.kind;
+          return (
+            <button
+              key={n.id}
+              data-testid={`node-${n.id}`}
+              onClick={(e) => onNodeClick?.(e, n)}
+            >
+              {label}
+            </button>
+          );
+        })}
         {children}
       </div>
     );
@@ -273,5 +287,42 @@ describe("WorkflowEditor", () => {
     await waitFor(() =>
       expect(screen.getByText(/Không tải được workflow/)).toBeInTheDocument(),
     );
+  });
+});
+
+describe("WorkflowEditor — node delete", () => {
+  const fetch2: FetchLike = async (_url) => {
+    return {
+      ok: true,
+      json: async () => ({
+        name: "WF",
+        graph: {
+          nodes: [
+            { id: "n1", kind: "agent", prompt: "first" },
+            { id: "n2", kind: "agent", prompt: "second" },
+          ],
+          edges: [{ id: "n1->n2", source: "n1", target: "n2", label: undefined }],
+        },
+      }),
+    } as Response;
+  };
+
+  test("clicking delete in config panel removes node and its edges", async () => {
+    render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor workflowId="wf1" fetchImpl={fetch2} />
+      </I18nProvider>,
+    );
+    // Wait for load
+    await screen.findByText("first");
+    // Click first node to select it
+    fireEvent.click(screen.getByText("first"));
+    // Click delete button in config panel
+    const deleteBtn = screen.getByRole("button", { name: /xoá node|delete node/i });
+    fireEvent.click(deleteBtn);
+    // Node and config panel should be gone
+    expect(screen.queryByText("first")).not.toBeInTheDocument();
+    // Config panel should show "no selection" text
+    expect(screen.getByText(/chọn một node|chọn node|select a node/i)).toBeInTheDocument();
   });
 });
