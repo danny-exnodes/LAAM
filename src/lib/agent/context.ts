@@ -36,7 +36,11 @@ export function buildSystemPrompt(input: {
   const langHint = LANG_HINT[input.lang] ?? "";
   const tools = input.toolNames.length
     ? `Bạn có thể gọi các công cụ sau khi cần dữ liệu thực: ${input.toolNames.join(", ")}. ` +
-      "Chỉ gọi công cụ khi câu hỏi cần dữ liệu thật; nếu không, trả lời trực tiếp."
+      "Chỉ gọi công cụ khi câu hỏi cần dữ liệu thật; nếu không, trả lời trực tiếp. " +
+      // F1: write-intent MUST go through a tool call; the model must never narrate a
+      // write as done without a real tool result (Rule 13 — code blocks unbacked claims).
+      "Khi người dùng yêu cầu tạo/gửi/sửa/xoá/cập nhật, BẮT BUỘC gọi công cụ tương ứng. " +
+      "TUYỆT ĐỐI KHÔNG nói đã tạo/gửi/xoá/cập nhật thành công nếu bạn chưa thực sự gọi công cụ và nhận được kết quả."
     : "";
   return [base, `Hôm nay là ${date}.`, langHint, tools, RENDER_GUIDE].filter(Boolean).join(" ");
 }

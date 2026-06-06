@@ -7,6 +7,8 @@
 ---
 
 ## F1 🔴 HIGH — Model confabulates WRITE success without calling the tool
+**✅ RESOLVED (code) 2026-06-06** — branch `fix/f1-write-confabulation-guard` (not committed/merged), checkpoint `checkpoint/claude-chat-f1-2026-06-06.md`. Deterministic hard-block guard: in the main turn a write always suspends, so any unbacked "đã tạo/gửi thành công" claim is replaced with an honest message (`safety/write-claim-guard.ts`, vi/en/zh, TDD 15 cases) + system-prompt tool-forcing (`context.ts`). Reviewed (0 Critical; 2 Important + 2 Minor fixed). `npm test` 1075/1075, tsc clean. **Still needs user live-E2E** (real Ollama+Google) to confirm end-to-end. Good path (confirm-card) + reads + `gmail_send` confirm→execute untouched.
+
 **Repro:** chat → "Tạo sự kiện Google Calendar tên 'LAAM QA test', bắt đầu 2026-06-07 15:00, kết thúc 15:30".
 **Observed:** assistant replied *"Sự kiện 'LAAM QA test' đã được tạo thành công…"* but **no confirm-card appeared and NO event was created** (verified: Google Calendar search "LAAM QA test" → *No results*).
 **Root cause:** the local model (qwen3-vl:8b) did **not emit a `gcal_create_event` tool_call** — it fabricated a success message. The write-gate (`withSafety`) only fires on an actual tool call, so there was nothing to gate. (Contrast: `gmail_send` in the SAME session DID emit the tool_call → confirm-card fired correctly. Tool-calling for writes is inconsistent.)
