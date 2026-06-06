@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { publish } from "@/lib/events-bus";
-import { tickClaim, tickExecute } from "@/lib/workflow/schedule";
+import { tickClaim, tickExecute, tickResume } from "@/lib/workflow/schedule";
 import { buildRunNode } from "@/lib/workflow/runtime";
 import { isTickAuthorized } from "@/lib/workflow/tick-auth";
 
@@ -16,5 +16,7 @@ export async function POST(req: Request) {
   const claimed = await tickClaim(db, now);
   // Execute SAU claim (pha tách rời, PIN-D1): chạy run queued (gồm vừa claim).
   const executed = await tickExecute(db, { db, publish, buildRunNode });
-  return NextResponse.json({ ok: true, claimed: claimed.length, executed });
+  // Resume any runs orphaned by a crash (boot sweep marked them 'resumable').
+  const resumed = await tickResume(db, { publish, buildRunNode });
+  return NextResponse.json({ ok: true, claimed: claimed.length, executed, resumed });
 }
