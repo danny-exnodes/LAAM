@@ -89,6 +89,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
 
   // Delete state
   const [deleting, setDeleting] = useState(false);
+  const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   // Schedule action states
   const [cronEditId, setCronEditId] = useState<string | null>(null);
@@ -201,12 +202,12 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
       const res = await fetch(`/api/workflows/${encodeURIComponent(workflowId)}`, { method: "DELETE" });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setRunError(body.error ?? t("wf.deleteFailed"));
+        setDeleteErr(body.error ?? t("wf.deleteFailed"));
         return;
       }
       router.push("/workflows");
     } catch {
-      setRunError(t("wf.deleteFailed"));
+      setDeleteErr(t("wf.deleteFailed"));
     } finally {
       setDeleting(false);
     }
@@ -269,6 +270,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
         setScheduleActionErr(body.error ?? t("wf.schedule.cronSaveErr"));
+        setCronEditId(null);
         return;
       }
       const updated = await res.json() as WorkflowSchedule;
@@ -276,6 +278,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
       setCronEditId(null);
     } catch {
       setScheduleActionErr(t("wf.schedule.cronSaveErr"));
+      setCronEditId(null);
     }
   }, [cronDraft, t]);
 
@@ -407,6 +410,12 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
           >
             ✕
           </button>
+        </div>
+      )}
+      {deleteErr && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-400">
+          <span>{deleteErr}</span>
+          <button type="button" onClick={() => setDeleteErr(null)} className="flex-none text-xs text-red-400 underline hover:text-red-600">✕</button>
         </div>
       )}
 
@@ -564,7 +573,10 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
                           onChange={(e) => setCronDraft(e.target.value)}
                           onBlur={() => void handleSaveCron(s.id)}
                           onKeyDown={(e) => {
-                            if (e.key === "Enter") void handleSaveCron(s.id);
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              void handleSaveCron(s.id);
+                            }
                             if (e.key === "Escape") setCronEditId(null);
                           }}
                           title={t("wf.schedule.editCron")}
@@ -573,7 +585,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
                       ) : (
                         <button
                           type="button"
-                          title="Click để sửa"
+                          title={t("wf.schedule.clickToEdit")}
                           onClick={() => { setCronDraft(s.cron); setCronEditId(s.id); }}
                           className="hover:text-[var(--color-accent)] transition"
                         >

@@ -120,6 +120,7 @@ export const workflows: Dict = {
   "wf.schedule.toggleFailed": { vi: "Đổi trạng thái thất bại.", en: "Toggle failed.", zh: "切换状态失败。" },
   "wf.schedule.cronSaveErr": { vi: "Lưu cron thất bại.", en: "Save cron failed.", zh: "保存 Cron 失败。" },
   "wf.schedule.editCron": { vi: "Nhấn Enter để lưu", en: "Press Enter to save", zh: "按 Enter 保存" },
+  "wf.schedule.clickToEdit": { vi: "Click để sửa", en: "Click to edit", zh: "点击编辑" },
 
   // Editor
   "wf.editor.title": { vi: "Chỉnh sửa Workflow", en: "Edit Workflow", zh: "编辑工作流" },

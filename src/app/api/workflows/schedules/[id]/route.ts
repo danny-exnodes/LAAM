@@ -58,7 +58,7 @@ export async function PATCH(
     } catch (e) {
       return new Response(
         JSON.stringify({ error: e instanceof Error ? e.message : "cron không hợp lệ" }),
-        { status: 400 },
+        { status: 400, headers: { "content-type": "application/json" } },
       );
     }
     let nextRun: Date;
