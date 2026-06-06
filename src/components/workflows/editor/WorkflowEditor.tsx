@@ -29,7 +29,7 @@ import {
   NodeToolbar,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
-import { Copy, Trash2 } from "lucide-react";
+import { Copy, Trash2, Undo2, Redo2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
@@ -40,6 +40,8 @@ import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { WfNode, WfNodeKind } from "@/lib/workflow/types";
 import { edgeRunDecoration } from "./nodeStatus";
+import { emptyHistory, pushSnapshot, undo, redo, canUndo, canRedo } from "./historyStack";
+import type { HistoryState, Snapshot } from "./historyStack";
 
 // ── Custom node renderer ────────────────────────────────────────────────────
 
@@ -66,6 +68,20 @@ const DEFAULT_EDGE_OPTIONS = {
   labelBgPadding: [4, 2] as [number, number],
   labelBgBorderRadius: 4,
 };
+
+// Data signature for undo/redo dedup — only persistent fields (ignores selection,
+// dimensions, sub-pixel drag jitter) so view-only changes don't create snapshots.
+function dataSig(nodes: RFNode[], edges: RFEdge[]): string {
+  return JSON.stringify({
+    n: nodes.map((n) => ({
+      id: n.id,
+      x: Math.round(n.position.x),
+      y: Math.round(n.position.y),
+      d: (n.data as { node: WfNode }).node,
+    })),
+    e: edges.map((e) => ({ id: e.id, s: e.source, t: e.target, l: e.label })),
+  });
+}
 
 // Actions passed to every node card via a stable ref — avoids re-render churn
 // that would occur if callbacks were placed directly in `data`.
@@ -311,6 +327,12 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   // Dirty tracking — only active after initial load
   const [isDirty, setIsDirty] = useState(false);
   const loadedRef = useRef(false);
+
+  // Undo/redo (F): pure stack in a ref; flags in state drive the toolbar buttons.
+  // restoringRef suppresses the snapshot effect while we apply an undo/redo.
+  const historyRef = useRef<HistoryState>(emptyHistory());
+  const restoringRef = useRef(false);
+  const [histFlags, setHistFlags] = useState({ undo: false, redo: false });
 
   // Stable ref holding the latest delete/copy callbacks.
   // Using a ref instead of putting callbacks in node data prevents full-tree
@@ -658,6 +680,65 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     }
   }, [persistGraph, isDirty, f, workflowId, onTestRun, t]);
 
+  // ── Undo/redo (F) ─────────────────────────────────────────────────────────
+  // Debounced snapshot on data changes: 400ms coalesces drag/typing bursts; the
+  // sig dedup skips selection/dimension-only changes; restoringRef skips our own
+  // restores. Seeds the baseline on the first run after load.
+  useEffect(() => {
+    if (loadState !== "loaded") return;
+    if (restoringRef.current) {
+      restoringRef.current = false;
+      return;
+    }
+    const id = setTimeout(() => {
+      const next = pushSnapshot(historyRef.current, { nodes, edges, sig: dataSig(nodes, edges) });
+      if (next === historyRef.current) return; // deduped → nothing changed
+      historyRef.current = next;
+      setHistFlags({ undo: canUndo(next), redo: canRedo(next) });
+    }, 400);
+    return () => clearTimeout(id);
+  }, [nodes, edges, loadState]);
+
+  const applySnapshot = useCallback(
+    (snap: Snapshot | null) => {
+      if (!snap) return;
+      restoringRef.current = true; // suppress the snapshot effect for this restore
+      setNodes(snap.nodes as RFNode<{ node: WfNode }>[]);
+      setEdges(snap.edges as RFEdge[]);
+      setSelectedId(null);
+      setIsDirty(true);
+    },
+    [setNodes, setEdges],
+  );
+
+  const undoEdit = useCallback(() => {
+    const { history, snapshot } = undo(historyRef.current);
+    historyRef.current = history;
+    setHistFlags({ undo: canUndo(history), redo: canRedo(history) });
+    applySnapshot(snapshot);
+  }, [applySnapshot]);
+
+  const redoEdit = useCallback(() => {
+    const { history, snapshot } = redo(historyRef.current);
+    historyRef.current = history;
+    setHistFlags({ undo: canUndo(history), redo: canRedo(history) });
+    applySnapshot(snapshot);
+  }, [applySnapshot]);
+
+  // Keyboard: Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z redo (ignored inside form fields).
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "z") return;
+      e.preventDefault();
+      if (e.shiftKey) redoEdit();
+      else undoEdit();
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [undoEdit, redoEdit]);
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (loadState === "loading") {
@@ -691,6 +772,27 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             className="shrink-0 text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
           >
             {t("wf.editor.backToDetail")}
+          </button>
+          <div className="h-4 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700" />
+          <button
+            type="button"
+            onClick={undoEdit}
+            disabled={!histFlags.undo}
+            aria-label={t("wf.editor.undo")}
+            title={t("wf.editor.undo")}
+            className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-30 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            <Undo2 size={16} aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={redoEdit}
+            disabled={!histFlags.redo}
+            aria-label={t("wf.editor.redo")}
+            title={t("wf.editor.redo")}
+            className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-30 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            <Redo2 size={16} aria-hidden />
           </button>
           <div className="h-4 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700" />
           <input

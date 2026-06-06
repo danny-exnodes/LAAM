@@ -487,3 +487,15 @@ describe("WorkflowEditor — Test (dry-run) button", () => {
     expect(onTestRun).toHaveBeenCalledWith("run-xyz");
   });
 });
+
+describe("WorkflowEditor — undo/redo toolbar", () => {
+  test("undo and redo buttons render disabled at start (no history yet)", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    const undoBtn = screen.getByRole("button", { name: /hoàn tác|undo/i });
+    const redoBtn = screen.getByRole("button", { name: /làm lại|redo/i });
+    // Baseline is only seeded after the debounce; before any edit both are disabled.
+    expect(undoBtn).toBeDisabled();
+    expect(redoBtn).toBeDisabled();
+  });
+});

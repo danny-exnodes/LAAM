@@ -259,4 +259,7 @@ export const workflows: Dict = {
     en: "Test run (dry-run): connector writes are mocked — no real side-effects",
     zh: "测试运行（dry-run）：连接器写操作被模拟，无真实副作用",
   },
+  // Editor — undo/redo
+  "wf.editor.undo": { vi: "Hoàn tác", en: "Undo", zh: "撤销" },
+  "wf.editor.redo": { vi: "Làm lại", en: "Redo", zh: "重做" },
 };
