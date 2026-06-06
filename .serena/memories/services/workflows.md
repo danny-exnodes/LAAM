@@ -1,4 +1,13 @@
 
+## P5 Review Pass (2026-06-06) — branch `feat/workflow-p5-review`, 7/8 items done
+
+Spec: `docs/superpowers/specs/2026-06-06-workflow-p5-review.md`. From a mobile review of the editor; 3 phases, commit-per-phase. **1053 tests pass, tsc clean. NOT merged.**
+- **Đợt 1** (a4372cd): G theme RF Controls/MiniMap (`--xy-*`→`--wf-*` override; xyflow gates dark on `.react-flow.dark` but app `.dark` is on <html>). H mobile sheet slide anim (2-flag + onTransitionEnd + scrim).
+- **Đợt 2** (725151c, 176e85c): **dry-run engine** — `buildRunNode(userId,{dryRun})` mocks connector WRITES (resolveKind), reads+agents real, blast gate kept; route `/run` accepts `{dryRun}`. `useWorkflowEvents(expectedRunId?)` run filter. `nodeStatus.ts` mapStepStatus/stepsToNodeStatuses (succeeded→success, Rule 13) + edgeRunDecoration. `WorkflowEditorLive` owns SSE; editor "▶ Test" + flow-anim + red error edges.
+- **Đợt 3** (61afd08, dd0d091): F undo/redo (`historyStack.ts` pure: dedup/truncate/cap50; 400ms debounce; Ctrl+Z/Shift+Z; ↶↷). B panel Right+Float (localStorage, draggable float, desktop-only).
+- **REMAINING:** A (variable autocomplete `{{steps.<id>.output}}` from siblings) — see checkpoint `claude-workflow-p5-2026-06-06.md`. I (E2E) blocked on dev server.
+- Fixed stale memory `v2-dark-mode-theming` (app IS class-based `.dark`).
+
 ## P5 Roadmap (2026-06-06) — Approved, Implementation Started
 
 Full spec: `docs/superpowers/specs/2026-06-06-workflow-p5-roadmap.md`
