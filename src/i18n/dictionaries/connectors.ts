@@ -120,4 +120,28 @@ export const connectors: Dict = {
     en: 'Click "Connect with Google" to grant read access to Gmail (read-only). LAAM stores the token server-side, encrypted at rest; the session may need reconnecting after ~7 days (a Google limit in Testing mode).',
     zh: '点击 "使用 Google 连接" 以授予读取 Gmail 的权限（只读）。LAAM 将令牌保存在服务器端并加密存储；会话可能在约 7 天后需要重新连接（Google 测试模式的限制）。',
   },
+
+  // MCP servers section — personal Model Context Protocol servers the user adds.
+  'conn.mcp.heading': { vi: 'Máy chủ MCP', en: 'MCP servers', zh: 'MCP 服务器' },
+  'conn.mcp.sub': {
+    vi: 'Thêm các máy chủ MCP cá nhân để trợ lý dùng được công cụ của chúng. Cấu hình chỉ lưu trên máy chủ của bạn.',
+    en: 'Add your personal MCP servers so the assistant can use their tools. Configuration is stored only on your server.',
+    zh: '添加你的个人 MCP 服务器，让助手可以使用它们的工具。配置仅保存在你的服务器上。',
+  },
+  'conn.mcp.add': { vi: 'Thêm máy chủ MCP', en: 'Add MCP server', zh: '添加 MCP 服务器' },
+  'conn.mcp.name': { vi: 'Tên', en: 'Name', zh: '名称' },
+  'conn.mcp.url': { vi: 'URL', en: 'URL', zh: 'URL' },
+  'conn.mcp.token': { vi: 'Token xác thực (tuỳ chọn)', en: 'Auth token (optional)', zh: '认证令牌（可选）' },
+  'conn.mcp.trustReads': { vi: 'Tin tưởng gợi ý chỉ-đọc', en: 'Trust read hints', zh: '信任只读提示' },
+  'conn.mcp.trustReadsHint': {
+    vi: 'Tin tưởng gợi ý chỉ-đọc của máy chủ này → bỏ qua xác nhận cho công cụ chỉ đọc.',
+    en: "Trust this server's read hints → skip confirm for read-only tools.",
+    zh: '信任此服务器的只读提示 → 对只读工具跳过确认。',
+  },
+  'conn.mcp.remove': { vi: 'Gỡ', en: 'Remove', zh: '移除' },
+  'conn.mcp.none': { vi: 'Chưa có máy chủ MCP nào.', en: 'No MCP servers yet.', zh: '尚无 MCP 服务器。' },
+  'conn.mcp.toolsLabel': { vi: 'Công cụ', en: 'Tools', zh: '工具' },
+  'conn.mcp.noTools': { vi: 'Chưa phát hiện công cụ nào', en: 'No tools discovered', zh: '未发现工具' },
+  'conn.mcp.addErr': { vi: 'Không thêm được máy chủ MCP', en: 'Could not add MCP server', zh: '无法添加 MCP 服务器' },
+  'conn.mcp.adding': { vi: 'Đang thêm…', en: 'Adding…', zh: '添加中…' },
 };

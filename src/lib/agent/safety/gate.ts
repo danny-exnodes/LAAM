@@ -37,6 +37,10 @@ export type SafetyOptions = {
   // one-shot allowance used only by resume; matched by NAME (resume supplies the
   // exact signed args, so name-match is sufficient and avoids deep-equality risk).
   confirmedAction?: { name: string; args: Record<string, unknown> };
+  // Per-user opt-in: MCP tool names trusted as read (skip the write gate). Computed
+  // by the chat route from the user's MCP servers; absent everywhere else → MCP
+  // tools fail-closed to write (gated).
+  readAllow?: ReadonlySet<string>;
 };
 
 export function withSafety(
@@ -44,7 +48,7 @@ export function withSafety(
   opts: SafetyOptions,
 ): (name: string, args: unknown) => Promise<unknown> {
   return async (name, args) => {
-    const kind = resolveKind(name, opts.internal);
+    const kind = resolveKind(name, opts.internal, opts.readAllow);
     const confirmed = opts.confirmedAction?.name === name;
     if (kind === "write" && !confirmed) {
       throw new PendingWriteSignal(name, parseArgs(args));

@@ -13,11 +13,19 @@ const CONNECTOR_KIND: ReadonlyMap<string, "read" | "write"> = new Map(
   CONNECTORS.flatMap((c) => c.tools.map((t) => [t.function.name, t.kind] as const)),
 );
 
-export function resolveKind(name: string, internal: Tool[]): "read" | "write" {
+export function resolveKind(
+  name: string,
+  internal: Tool[],
+  readAllow?: ReadonlySet<string>,
+): "read" | "write" {
   const tool = internal.find((t) => t.name === name);
   if (tool) return tool.kind;
   const k = CONNECTOR_KIND.get(name);
   if (k) return k;
+  // MCP tools are NOT in the static registry → fail-closed to write, UNLESS the user
+  // opted into trusting this server's read hints (readAllow is computed per-user from
+  // each MCP server's trustReadHints × the tool's readOnlyHint annotation).
+  if (readAllow?.has(name)) return "read";
   console.warn(`[safety] tool chưa phân loại, mặc định GATE (write): ${name}`);
   return "write";
 }

@@ -21,6 +21,7 @@ import {
 import { useT } from "@/i18n/provider";
 import { connectors as dict } from "@/i18n/dictionaries/connectors";
 import { PageHeader } from "@/components/page-header";
+import { McpServersSection } from "@/components/connectors/McpServersSection";
 import type { ConnectorListItem } from "@/lib/connectors/types";
 
 // Connector icon name (kebab-case) → Lucide component. Static map (no dynamic
@@ -106,6 +107,8 @@ export function ConnectorsClient() {
           ))}
         </div>
       )}
+
+      <McpServersSection />
     </main>
   );
 }

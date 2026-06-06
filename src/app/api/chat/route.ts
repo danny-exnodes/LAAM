@@ -2,7 +2,7 @@ import { eq, asc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages, chatToolCalls } from "@/db/schema";
-import { chatTools } from "@/lib/connectors";
+import { chatTools, mcpReadAllow } from "@/lib/connectors";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { runToolRounds, type ChatMessage, type OllamaChatResponse } from "@/lib/agent/orchestrator";
@@ -203,6 +203,9 @@ export async function POST(req: Request) {
     connectorTools = [];
   }
   const tools = modelToolSchemas(INTERNAL_TOOLS, connectorTools);
+  // MCP tools the user trusts as read (opt-in) → safety gate skips confirm for them; all
+  // other MCP tools fail-closed to write.
+  const readAllow = await mcpReadAllow(userId);
 
   // --- System prompt động + proactive notice COMPOSE-AROUND buildSystemPrompt (SP-3). ---
   const hasSystemOverride = typeof body.system === "string" && body.system.trim().length > 0;
@@ -248,7 +251,7 @@ export async function POST(req: Request) {
   // S3 realtime: stream the WHOLE turn in one response — tool-call frames go out
   // LIVE as the loop dispatches them, then the completion streams, then trailing
   // cite/proactive/token frames. (handleConfirm still uses streamOllama.)
-  return streamMainTurn({ convId, userId, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced });
+  return streamMainTurn({ convId, userId, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow });
 }
 
 // S3 — the main chat turn as a single live stream. Replaces the old "await the
@@ -265,8 +268,9 @@ function streamMainTurn(opts: {
   tools: ReturnType<typeof modelToolSchemas>;
   baseLen: number;
   proactive: ProactiveAlert[];
+  readAllow: ReadonlySet<string>;
 }): Response {
-  const { convId, userId, now, lang, payload, tools, baseLen, proactive } = opts;
+  const { convId, userId, now, lang, payload, tools, baseLen, proactive, readAllow } = opts;
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -290,6 +294,7 @@ function streamMainTurn(opts: {
       };
       const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
         internal: INTERNAL_TOOLS,
+        readAllow,
       });
       const callOllama = async (
         messages: ChatMessage[],
@@ -644,9 +649,11 @@ async function handleConfirm(
   const system = buildSystemPrompt({ lang, now, toolNames: [] });
 
   const { onEvent, frames: confirmFrames } = makeFrameCollector(INTERNAL_NAMES);
+  const readAllow = await mcpReadAllow(userId);
   const gated = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
     internal: INTERNAL_TOOLS,
     confirmedAction: { name: signed.name, args: signed.args },
+    readAllow,
   });
   const outcome = await runResume(
     signed,

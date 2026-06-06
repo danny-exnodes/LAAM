@@ -17,6 +17,9 @@ import type { Connector, ConnectorListItem, ConnectorTool, ConnectorStatus } fro
 import { CONNECTORS } from "./registry";
 import { getCreds, setCreds, delCreds } from "./store";
 import { refreshAccessToken, GoogleAuthError, type GoogleTokens } from "./google-oauth";
+import { discoverForUser } from "./mcp/discovery";
+import { getServer as getMcpServer } from "./mcp/store";
+import { callTool as mcpCallTool } from "./mcp/client";
 
 const BY_ID: Record<string, Connector> = Object.fromEntries(CONNECTORS.map((c) => [c.id, c]));
 const TOOL_OWNER: Record<string, string> = (() => {
@@ -186,11 +189,56 @@ export async function chatTools(userId: string): Promise<ConnectorTool[]> {
   for (const def of CONNECTORS) {
     if (await isConnected(userId, def.id)) out.push(...def.tools);
   }
+  // MCP servers (per-user, dynamic). Best-effort: a down server yields no tools.
+  try {
+    const { tools } = await discoverForUser(userId);
+    out.push(...tools);
+  } catch {
+    /* MCP discovery failure must not break chat tool listing */
+  }
   return out;
+}
+
+// Names of MCP tools the user opted to trust as read (fed to the safety gate's
+// readAllow so they skip the write confirm-card). Everything else stays fail-closed.
+export async function mcpReadAllow(userId: string): Promise<ReadonlySet<string>> {
+  try {
+    return (await discoverForUser(userId)).readAllow;
+  } catch {
+    return new Set();
+  }
+}
+
+// Route an MCP tool call (mcp__<slug>__<tool>) to the user's configured MCP server.
+async function executeMcp(userId: string, toolName: string, args: unknown): Promise<unknown> {
+  let route: Map<string, { slug: string; realName: string }>;
+  try {
+    route = (await discoverForUser(userId)).route;
+  } catch {
+    return { error: "không khám phá được MCP server" };
+  }
+  const r = route.get(toolName);
+  if (!r) return { error: "tool MCP không tồn tại: " + toolName };
+  const cfg = await getMcpServer(userId, r.slug);
+  if (!cfg) return { error: 'MCP server "' + r.slug + '" chưa cấu hình' };
+  let a: unknown = args;
+  if (typeof a === "string") {
+    try {
+      a = JSON.parse(a);
+    } catch {
+      a = {};
+    }
+  }
+  try {
+    return await mcpCallTool(cfg, r.realName, (a as Record<string, unknown>) ?? {});
+  } catch (e) {
+    return { error: "lỗi gọi MCP " + toolName + ": " + (e instanceof Error ? e.message : String(e)) };
+  }
 }
 
 // Run a tool the model asked for. `args` may be an object or a JSON string.
 export async function execute(userId: string, toolName: string, args: unknown): Promise<unknown> {
+  if (toolName.startsWith("mcp__")) return executeMcp(userId, toolName, args);
   const id = TOOL_OWNER[toolName];
   const def = id ? BY_ID[id] : undefined;
   if (!def || typeof def.handlers[toolName] !== "function") {

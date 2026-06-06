@@ -17,6 +17,15 @@ describe("resolveKind", () => {
   test("connector read → read", () => {
     expect(resolveKind("github_list_repos", internal)).toBe("read");
   });
+  test("MCP tool: fail-closed write by default, read only when in readAllow (opt-in)", () => {
+    // MCP tools aren't in the static registry. Without opt-in they must gate (write);
+    // a per-user readAllow set (built from trustReadHints × readOnlyHint) flips a
+    // specific tool to read. This is the whole trust model — keep it honest.
+    expect(resolveKind("mcp__slack__post_message", internal)).toBe("write");
+    expect(resolveKind("mcp__notion__search", internal, new Set(["mcp__notion__search"]))).toBe("read");
+    // readAllow only whitelists the exact name — a different MCP tool still gates.
+    expect(resolveKind("mcp__notion__delete_page", internal, new Set(["mcp__notion__search"]))).toBe("write");
+  });
   test("tool lạ → write (FAIL-CLOSED) + cảnh báo loud", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     expect(resolveKind("evil_unknown_tool", internal)).toBe("write");
