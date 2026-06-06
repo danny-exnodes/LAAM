@@ -37,6 +37,12 @@ Ran on workflow "QA — condition branch" (5 nodes: agent→condition→agent→
 - **D-error red edge / write-mock** — not exercised live (no failing/write node in this workflow); unit-tested.
 
 UX findings:
-1. **Condition operator hint overflows** the 288px config panel (text "op: eq|ne|…not_e…" clipped at right edge, in both docked + float). Minor — wrap/shorten.
+1. **Condition operator hint overflows** the 288px config panel — FIXED (`break-words`) in 77b9e37.
 2. Dry-run creates a normal-looking run-history entry (no "dry-run" badge — we chose not to persist a flag). Follow-up if it clutters history.
-3. **A (variable autocomplete) still pending** — would directly serve the "smart input" goal for the `{{steps.a.output}}`-style fields seen in the condition form.
+3. **A (variable autocomplete)** — DONE in 77b9e37.
+
+## UPDATE — A done, 8/8, merged + pushed (2026-06-06)
+- A (variable autocomplete) on branch `feat/workflow-p5a-autocomplete` (77b9e37): `variableHints.ts` pure (`variableSuggestions`) + `VariableHints` chips inserting `{{trigger}}`/`{{steps.<sibling>.output}}` at cursor; wired into agent prompt, condition left/right, foreach items (connector args=JSON skipped); `allNodes` threaded through all 3 panel instances. Hint-overflow fix bundled. 1059 tests, tsc clean.
+- **All 8/8 buildable items complete.** FF-merged to main + pushed to origin/main per user.
+- Remaining nice-to-haves: chips on agent `system` field; model selector + args-schema (deferred); dry-run run-history badge.
+- INDEX.md entry for the spec still NOT added (file holds concurrent agent's uncommitted change).

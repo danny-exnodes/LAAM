@@ -1,5 +1,10 @@
 # Decision/Discovery: Auth.js origin = localhost khi truy cập qua hostname khác; tách env dev
 
+> **⚠️ ACCESS URL — bắt buộc (user xác nhận 2026-06-06):** truy cập dev server qua
+> **`https://danny-gaming-pc.tail41dda4.ts.net:8443`** (Tailscale Serve HTTPS, tailnet-only).
+> **KHÔNG dùng `localhost:3100`/`:3000`** — **Tailscale chặn** (và `AUTH_URL` pin ts.net:8443
+> nên localhost cũng lệch origin → login đá về). Dùng URL này cho E2E / mở trình duyệt.
+
 Ngày: 2026-06-04. Phát hiện khi user không login được qua `danny-gaming-pc.tail41dda4.ts.net:3100` (dev), trong khi `localhost` ổn.
 
 ## Triệu chứng & root cause (đã reproduce bằng curl trên tailnet)
