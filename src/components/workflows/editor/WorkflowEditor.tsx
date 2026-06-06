@@ -28,6 +28,7 @@ import {
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import "./workflow-editor.css";
 
 import { toReactFlow, fromReactFlow } from "./graph-serde";
 import { NodeConfigPanel } from "./NodeConfigPanel";
@@ -66,7 +67,7 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
   return (
     <div
       style={{
-        background: "#fff",
+        background: "var(--wf-node-bg)",
         // Per-side longhand only (no `border` shorthand) so the accent left border
         // doesn't conflict with the shorthand on rerender — React 19 warns when
         // mixing `border` + `borderLeft` while a value updates (selected toggle).
@@ -75,9 +76,9 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
         borderRightWidth: 2,
         borderBottomWidth: 2,
         borderLeftWidth: 4,
-        borderTopColor: selected ? color : "#e2e8f0",
-        borderRightColor: selected ? color : "#e2e8f0",
-        borderBottomColor: selected ? color : "#e2e8f0",
+        borderTopColor: selected ? color : "var(--wf-node-border)",
+        borderRightColor: selected ? color : "var(--wf-node-border)",
+        borderBottomColor: selected ? color : "var(--wf-node-border)",
         borderLeftColor: color,
         borderRadius: 10,
         padding: "8px 12px",
@@ -85,7 +86,7 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
         maxWidth: 220,
         boxShadow: selected ? `0 0 0 2px ${color}33` : "0 1px 3px rgba(0,0,0,.08)",
         fontSize: 12,
-        color: "#1a1d21",
+        color: "var(--wf-node-text)",
         position: "relative",
       }}
     >
@@ -107,7 +108,7 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
       <div style={{ fontFamily: "monospace", fontSize: 11, wordBreak: "break-all" }}>
         {label}
       </div>
-      <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 2 }}>{wf.id}</div>
+      <div style={{ fontSize: 9, color: "var(--wf-node-id-text)", marginTop: 2 }}>{wf.id}</div>
 
       {/* Source handles — condition has two (true/false); all others have one */}
       {wf.kind === "condition" ? (
