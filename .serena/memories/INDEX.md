@@ -31,6 +31,8 @@
 
 - [connectors-oauth](decisions/connectors-oauth.md) — **Google OAuth in-app (06-06, commit 1a721d7, branch `feat/connectors-oauth-expansion`, chưa merge):** 1 app External+Testing, **per-connector grant**, không đổi schema; 7-day reconnect tri-state (né CASA); flow authorize→shared callback, PKCE+state cookie mã hoá; refresh trong `execute()` (chokepoint chat+workflow). **`ConnectorTool.kind` tự khai → policy suy từ registry** (bỏ CONNECTOR_WRITES/READS, write-ready). **Đã build TRỌN P1–P5** (OAuth merged vào main; P2/P4b/P5 commit 798e160 branch `feat/connectors-p2-p5`): +21 tool/6 connector, **write surface 11 tool** (gated confirm-card + HIGH-blast fail-closed workflow), nội dung connector i18n vi/en/zh. tsc sạch, **922 test xanh**. Còn lại = operator setup Google Console + env để live; write tool cần re-consent write-scope.
 
+- [world-tools-layer](decisions/world-tools-layer.md) — **World-Tools Layer (IMPLEMENTED 06-06):** họ tool `web_*` (web_search SearXNG self-host $0 + web_read promote fetch-url) · `util_*` (util_calc) · mở rộng `laam_*` (search_sessions/get_timeline/query_audit). Gộp vào `INTERNAL_TOOLS`, **0 migration, 0 đổi hợp đồng SP-1**, read-only qua gate SP-2. TDD đầy đủ, tsc sạch. Spec `docs/superpowers/specs/2026-06-06-world-tools-layer-design.md`. Followups: [[world-tools-followups]].
+
 ## Rules (vận hành agent)
 - [agent-ops-rules](decisions/agent-ops-rules.md) — ⛔ **KHÔNG tự ý chạy ngầm service nào** (dev/start/docker/ollama/preview) nếu user chưa cho phép; user tự host dev. Không `build` in-place khi prod đang chạy.
 

@@ -9,6 +9,14 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Harness: World-Tools Layer (web/util tools, 2026-06-06)
+- **`web_search`** (SearXNG self-host, **$0**, không SaaS) + **`web_read`** (promote `fetch-url` thành tool model gọi được): agent giờ **tự tìm & đọc web** trong tool-loop. Lõi fetch (`isBlockedHost` SSRF + html→text) tách `src/lib/web/readable.ts` dùng chung route + tool; tool cap text 6000 ký tự (vừa bound guard 8192).
+- **`laam_search_sessions`** (tìm phiên theo từ khoá việc-đang-làm) · **`laam_get_timeline`** (timeline 1 phiên, host-only) · **`laam_query_audit`** (audit log gần nhất).
+- **`util_calc`**: số học deterministic (shunting-yard parser, KHÔNG `eval`).
+- Wiring: `INTERNAL_TOOLS = [...LAAM_TOOLS, ...WEB_TOOLS, ...UTIL_TOOLS]` — SP-2 gate / SP-4 trace tự áp (tool read-only nên qua gate tự do). **0 migration, 0 đổi hợp đồng SP-1.**
+- Hạ tầng: service `searxng` trong `docker-compose` (localhost-only `:8888`) + `searxng/settings.yml` (bật JSON API) + `SEARXNG_URL` trong `.env.example`. **Chạy SearXNG = bước host (user)**; thiếu nó → `web_search` fail-soft.
+- Verify: toàn bộ **897 test xanh**, `tsc` sạch. Spec: `docs/superpowers/specs/2026-06-06-world-tools-layer-design.md`.
+
 ### Đã thêm — AI Workflow G2: Scheduler (Phase B, backend, 2026-06-05)
 - **Lịch định kỳ (`workflow_schedule`)**: cron 5-field tự viết (`min hour dom month dow`; `*`, int, `*/n`, `a-b`, `a,b`), thuần, theo **giờ server-local** (tz/DST hoãn). Migration `0006`.
 - **Claim nguyên tử (PIN-D1)**: `POST /api/workflows/tick` → `tickClaim` (INSERT run `queued` + advance `nextRunAt`/`lastRunAt`/`missedCount` trong **CÙNG MỘT transaction** — không có cửa "đã claim nhưng chưa advance" gây kẹt lịch vĩnh viễn) rồi `tickExecute` (chạy run `queued`). `scheduledFor` = `nextRunAt` đã lưu floored-đến-phút → unique `(scheduleId, scheduledFor)` dedupe các poke đua cùng slot.

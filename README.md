@@ -100,4 +100,5 @@ v2/
 
 - Port **3000** (this app) does not clash with the old app (**4317**).
 - Ollama stays native on the host; primary chat model is **`gemma4:e4b`** (`DEFAULT_CHAT_MODEL`).
+- The chat assistant can **search & read the web** (`web_search` + `web_read` tools). `web_search` uses a self-hosted **SearXNG** (`docker compose up -d searxng`, localhost `:8888`, **$0**) — set `SEARXNG_URL`; without it `web_search` fails soft. It can also `util_calc` exact arithmetic and search/inspect its own LAAM sessions (`laam_search_sessions` / `laam_get_timeline` / `laam_query_audit`).
 - Never commit `.env` (real secrets) — only `.env.example`.
