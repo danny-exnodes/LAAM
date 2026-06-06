@@ -30,29 +30,42 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 // @xyflow/react — mock the entire module; we test behavior not visuals
 vi.mock("@xyflow/react", () => {
   const { useState, useCallback } = require("react") as typeof import("react");
-  function ReactFlow({ children, onNodeClick, onPaneClick, nodes, onConnect }: {
+  function ReactFlow({ children, onNodeClick, onPaneClick, nodes, nodeTypes, onConnect }: {
     children?: React.ReactNode;
     onNodeClick?: (e: React.MouseEvent, node: { id: string; data: unknown }) => void;
     onPaneClick?: () => void;
     nodes?: { id: string; data: unknown }[];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    nodeTypes?: Record<string, React.ComponentType<any>>;
     onConnect?: (c: { source: string; target: string }) => void;
   }) {
+    const [mockSelectedId, setMockSelectedId] = useState<string | null>(null);
     return (
       <div data-testid="react-flow">
         {/* Render node count so tests can verify palette add */}
         <span data-testid="node-count">{nodes?.length ?? 0}</span>
-        {/* Render node labels so tests can click nodes to select them */}
+        {/* Render node labels so tests can click nodes to select them.
+            Also render the actual nodeType component (e.g. WfNodeCard) so that
+            NodeToolbar and other inner UI are testable. */}
         {nodes?.map((n) => {
           const wf = (n.data as { node: { kind: string; prompt?: string; connectorId?: string; action?: string; items?: string } }).node;
           const label = wf.kind === "agent" ? wf.prompt ?? "" : wf.kind === "connector" ? `${wf.connectorId}.${wf.action}` : wf.items ?? wf.kind;
+          const NodeComp = nodeTypes?.wf;
           return (
-            <button
-              key={n.id}
-              data-testid={`node-${n.id}`}
-              onClick={(e) => onNodeClick?.(e, n)}
-            >
-              {label}
-            </button>
+            <div key={n.id}>
+              <button
+                data-testid={`node-${n.id}`}
+                onClick={(e) => {
+                  setMockSelectedId(n.id);
+                  onNodeClick?.(e, n);
+                }}
+              >
+                {label}
+              </button>
+              {NodeComp && (
+                <NodeComp data={n.data} selected={mockSelectedId === n.id} id={n.id} />
+              )}
+            </div>
           );
         })}
         {children}
@@ -81,6 +94,8 @@ vi.mock("@xyflow/react", () => {
     },
     addEdge: (edge: unknown, edges: unknown[]) => [...edges, edge],
     Handle: () => null,
+    NodeToolbar: ({ children, isVisible }: { children: React.ReactNode; isVisible?: boolean }) =>
+      isVisible ? <>{children}</> : null,
     MarkerType: { ArrowClosed: "arrowclosed" },
     useReactFlow: () => ({
       // screenToFlowPosition: return coordinates mirroring the input so
@@ -315,14 +330,14 @@ describe("WorkflowEditor — node delete", () => {
       </I18nProvider>,
     );
     // Wait for load
-    await screen.findByText("first");
+    await screen.findByTestId("node-n1");
     // Click first node to select it
-    fireEvent.click(screen.getByText("first"));
-    // Click delete button in config panel
-    const deleteBtn = screen.getByRole("button", { name: /xoá node|delete node/i });
+    fireEvent.click(screen.getByTestId("node-n1"));
+    // Click delete button in config panel (Vietnamese aria-label "Xoá node")
+    const deleteBtn = screen.getByRole("button", { name: /xoá node/i });
     fireEvent.click(deleteBtn);
     // Node and config panel should be gone
-    expect(screen.queryByText("first")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("node-n1")).not.toBeInTheDocument();
     // Config panel should show "no selection" text
     expect(screen.getByText(/chọn một node|chọn node|select a node/i)).toBeInTheDocument();
   });
@@ -372,5 +387,40 @@ describe("WorkflowEditor — dirty / unsaved guard", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     // After save: dot gone
     expect(screen.getByRole("button", { name: /lưu|save/i }).textContent).not.toContain("●");
+  });
+});
+
+describe("WorkflowEditor — node toolbar", () => {
+  test("copy button on selected node appends a new node of the same kind", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+
+    const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
+
+    // Click the node to select it (mock fires onNodeClick → sets selectedId)
+    fireEvent.click(screen.getByTestId("node-n1"));
+
+    // NodeToolbar is now visible (isVisible={selected=true} in mock renders children)
+    // The toolbar has a "Copy node" button
+    const copyBtn = screen.getByRole("button", { name: /copy node/i });
+    fireEvent.click(copyBtn);
+
+    const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
+    expect(after).toBe(before + 1);
+  });
+
+  test("delete button on toolbar removes the selected node", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+
+    const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
+
+    fireEvent.click(screen.getByTestId("node-n1"));
+    // getAllByRole: toolbar "Delete node" + config panel delete button both match aria-label
+    const deleteBtn = screen.getAllByRole("button", { name: /delete node/i })[0]!;
+    fireEvent.click(deleteBtn);
+
+    const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
+    expect(after).toBe(before - 1);
   });
 });
