@@ -19,6 +19,7 @@ import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { Translator } from "@/i18n/types";
 import type { ConnectorListItem } from "@/lib/connectors/types";
+import { variableSuggestions } from "./variableHints";
 
 // ── Shared style helpers ────────────────────────────────────────────────────
 
@@ -48,17 +49,67 @@ function field(children: React.ReactNode) {
   return <div className="mb-4">{children}</div>;
 }
 
+// Clickable chips that insert a {{variable}} token at the cursor of a text field.
+// Sibling-derived suggestions come from variableSuggestions(); cursor position is
+// read from the linked input/textarea ref so insertion lands where the user is typing.
+function VariableHints({
+  tokens,
+  inputRef,
+  value,
+  onChange,
+  hintLabel,
+}: {
+  tokens: string[];
+  inputRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
+  value: string;
+  onChange: (next: string) => void;
+  hintLabel: string;
+}) {
+  if (tokens.length === 0) return null;
+  function insert(tok: string) {
+    const el = inputRef.current;
+    const start = el?.selectionStart ?? value.length;
+    const end = el?.selectionEnd ?? value.length;
+    const next = value.slice(0, start) + tok + value.slice(end);
+    onChange(next);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      const pos = start + tok.length;
+      try { el.setSelectionRange(pos, pos); } catch { /* some input types disallow */ }
+    });
+  }
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+      <span className="text-[10px] text-neutral-400">{hintLabel}</span>
+      {tokens.map((tok) => (
+        <button
+          key={tok}
+          type="button"
+          onClick={() => insert(tok)}
+          className="rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 font-mono text-[10px] text-neutral-600 transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
+        >
+          {tok}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Agent form ──────────────────────────────────────────────────────────────
 
 function AgentForm({
   node,
   onChange,
   t,
+  suggestions,
 }: {
   node: WfAgentNode;
   onChange: (n: WfNode) => void;
   t: Translator;
+  suggestions: string[];
 }) {
+  const promptRef = useRef<HTMLTextAreaElement>(null);
   return (
     <>
       {field(
@@ -77,11 +128,19 @@ function AgentForm({
         <>
           {label(t("wf.node.agent.promptLabel"))}
           <textarea
+            ref={promptRef}
             className={inputCls()}
             rows={4}
             value={node.prompt}
             placeholder={t("wf.node.agent.promptPlaceholder")}
             onChange={(e) => onChange({ ...node, prompt: e.target.value })}
+          />
+          <VariableHints
+            tokens={suggestions}
+            inputRef={promptRef}
+            value={node.prompt}
+            onChange={(v) => onChange({ ...node, prompt: v })}
+            hintLabel={t("wf.node.insertVar")}
           />
         </>,
       )}
@@ -254,11 +313,15 @@ function ConditionForm({
   node,
   onChange,
   t,
+  suggestions,
 }: {
   node: WfConditionNode;
   onChange: (n: WfNode) => void;
   t: Translator;
+  suggestions: string[];
 }) {
+  const leftRef = useRef<HTMLInputElement>(null);
+  const rightRef = useRef<HTMLInputElement>(null);
   const simple = isSimpleComparator(node.when);
   const [mode, setMode] = useState<"form" | "json">(simple ? "form" : "json");
 
@@ -356,6 +419,7 @@ function ConditionForm({
               {t("wf.node.condition.leftLabel")}
             </label>
             <input
+              ref={leftRef}
               id={`cond-left-${node.id}`}
               type="text"
               className={inputCls()}
@@ -363,6 +427,13 @@ function ConditionForm({
               placeholder="{{steps.n1.output.count}}"
               aria-label={t("wf.node.condition.leftLabel")}
               onChange={(e) => handleFormField("left", e.target.value)}
+            />
+            <VariableHints
+              tokens={suggestions}
+              inputRef={leftRef}
+              value={left}
+              onChange={(v) => handleFormField("left", v)}
+              hintLabel={t("wf.node.insertVar")}
             />
           </>,
         )}
@@ -390,6 +461,7 @@ function ConditionForm({
               {t("wf.node.condition.rightLabel")}
             </label>
             <input
+              ref={rightRef}
               id={`cond-right-${node.id}`}
               type="text"
               className={inputCls()}
@@ -398,7 +470,14 @@ function ConditionForm({
               aria-label={t("wf.node.condition.rightLabel")}
               onChange={(e) => handleFormField("right", e.target.value)}
             />
-            <p className="mt-1 text-xs text-neutral-400">{t("wf.node.condition.hint")}</p>
+            <VariableHints
+              tokens={suggestions}
+              inputRef={rightRef}
+              value={right}
+              onChange={(v) => handleFormField("right", v)}
+              hintLabel={t("wf.node.insertVar")}
+            />
+            <p className="mt-1 text-xs text-neutral-400 break-words">{t("wf.node.condition.hint")}</p>
           </>,
         )}
       </>
@@ -420,7 +499,7 @@ function ConditionForm({
             onChange={(e) => handleJsonChange(e.target.value)}
           />
           {parseError && errorMsg(parseError)}
-          <p className="mt-1 text-xs text-neutral-400">{t("wf.node.condition.hint")}</p>
+          <p className="mt-1 text-xs text-neutral-400 break-words">{t("wf.node.condition.hint")}</p>
         </>,
       )}
     </>
@@ -433,11 +512,14 @@ function ForeachForm({
   node,
   onChange,
   t,
+  suggestions,
 }: {
   node: WfForeachNode;
   onChange: (n: WfNode) => void;
   t: Translator;
+  suggestions: string[];
 }) {
+  const itemsRef = useRef<HTMLInputElement>(null);
   const [bodyText, setBodyText] = useState(JSON.stringify(node.body, null, 2));
   const [bodyError, setBodyError] = useState<string | null>(null);
 
@@ -458,11 +540,19 @@ function ForeachForm({
         <>
           {label(t("wf.node.foreach.itemsLabel"))}
           <input
+            ref={itemsRef}
             type="text"
             className={inputCls()}
             value={node.items}
             placeholder="{{steps.n1.output.items}}"
             onChange={(e) => onChange({ ...node, items: e.target.value })}
+          />
+          <VariableHints
+            tokens={suggestions}
+            inputRef={itemsRef}
+            value={node.items}
+            onChange={(v) => onChange({ ...node, items: v })}
+            hintLabel={t("wf.node.insertVar")}
           />
           <p className="mt-1 text-xs text-neutral-400">
             {t("wf.node.foreach.itemsHint")}
@@ -503,16 +593,20 @@ export function NodeConfigPanel({
   onChange,
   onDelete,
   connectors: connectorsProp,
+  allNodes,
 }: {
   node: WfNode;
   onChange: (updated: WfNode) => void;
   onDelete?: () => void;
   /** Injected for tests; if omitted, fetched from /api/connectors on mount */
   connectors?: ConnectorListItem[];
+  /** All graph nodes — used to suggest {{steps.<sibling>.output}} variables. */
+  allNodes?: WfNode[];
 }) {
   // t is called here (top-level component) and passed to sub-forms as a prop,
   // since sub-forms are local functions and cannot call hooks directly.
   const t = useT(dict);
+  const suggestions = variableSuggestions(allNodes ?? [], node.id);
   const [connectors, setConnectors] = useState<ConnectorListItem[]>(connectorsProp ?? []);
 
   // Capture at mount time — avoids re-firing when a caller passes a new array literal
@@ -550,16 +644,16 @@ export function NodeConfigPanel({
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {node.kind === "agent" && (
-          <AgentForm node={node} onChange={onChange} t={t} />
+          <AgentForm node={node} onChange={onChange} t={t} suggestions={suggestions} />
         )}
         {node.kind === "connector" && (
           <ConnectorForm node={node} onChange={onChange} t={t} connectors={connectors} />
         )}
         {node.kind === "condition" && (
-          <ConditionForm node={node} onChange={onChange} t={t} />
+          <ConditionForm node={node} onChange={onChange} t={t} suggestions={suggestions} />
         )}
         {node.kind === "foreach" && (
-          <ForeachForm node={node} onChange={onChange} t={t} />
+          <ForeachForm node={node} onChange={onChange} t={t} suggestions={suggestions} />
         )}
       </div>
     </div>

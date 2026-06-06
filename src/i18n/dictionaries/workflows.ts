@@ -264,4 +264,6 @@ export const workflows: Dict = {
   "wf.editor.redo": { vi: "Làm lại", en: "Redo", zh: "重做" },
   "wf.editor.panelFloat": { vi: "Tách panel (kéo thả)", en: "Float panel", zh: "浮动面板" },
   "wf.editor.panelDock": { vi: "Gắn panel bên phải", en: "Dock panel right", zh: "停靠到右侧" },
+  // Node config — variable insert chips
+  "wf.node.insertVar": { vi: "Chèn:", en: "Insert:", zh: "插入:" },
 };

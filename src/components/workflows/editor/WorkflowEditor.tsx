@@ -605,6 +605,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     ? (selectedRfNode.data as { node: WfNode }).node
     : null;
 
+  // All graph nodes (WfNode shape) — passed to NodeConfigPanel for {{variable}} hints.
+  const allWfNodes = useMemo(() => nodes.map((n) => (n.data as { node: WfNode }).node), [nodes]);
+
   // ── Mobile sheet open/close animation (H) ────────────────────────────────
   // Mount immediately on select, then flip `open` next frame so the closed
   // (translate-y-full) state paints first and the slide-up transitions. On
@@ -981,6 +984,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
                   node={selectedWfNode}
                   onChange={onNodeConfigChange}
                   onDelete={() => handleDeleteNode(selectedWfNode.id)}
+                  allNodes={allWfNodes}
                 />
               </div>
             </div>
@@ -996,6 +1000,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
                 node={selectedWfNode}
                 onChange={onNodeConfigChange}
                 onDelete={() => handleDeleteNode(selectedWfNode.id)}
+                allNodes={allWfNodes}
               />
             ) : (
               <div className="flex h-full items-center justify-center p-4 text-sm text-neutral-400">
@@ -1043,6 +1048,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
                 node={sheetNode}
                 onChange={onNodeConfigChange}
                 onDelete={() => sheetNode && handleDeleteNode(sheetNode.id)}
+                allNodes={allWfNodes}
               />
             </div>
           </div>

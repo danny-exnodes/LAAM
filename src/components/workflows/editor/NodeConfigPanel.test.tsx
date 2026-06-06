@@ -10,7 +10,7 @@ import { describe, expect, test, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import { NodeConfigPanel } from "./NodeConfigPanel";
-import type { WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode } from "@/lib/workflow/types";
+import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode } from "@/lib/workflow/types";
 
 // NodeConfigPanel now uses useT → must be wrapped in I18nProvider.
 // Default lang "vi" matches the hardcoded Vietnamese placeholder strings
@@ -360,5 +360,38 @@ describe("ConnectorForm — connector/action picker", () => {
     const inputs = screen.getAllByRole("textbox");
     const connectorInput = inputs.find((i) => (i as HTMLInputElement).value === "demo");
     expect(connectorInput).toBeInTheDocument();
+  });
+});
+
+// ─── Variable autocomplete (A) ────────────────────────────────────────────────
+
+describe("VariableHints — variable autocomplete (A)", () => {
+  const agentNode: WfAgentNode = { id: "a1", kind: "agent", prompt: "Hi" };
+  const allNodes: WfNode[] = [
+    agentNode,
+    { id: "n2", kind: "connector", connectorId: "demo", action: "x", args: {} },
+  ];
+
+  test("renders trigger + sibling chips under the agent prompt, excludes self", () => {
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={allNodes} />);
+    expect(screen.getByRole("button", { name: "{{trigger}}" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "{{steps.n2.output}}" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "{{steps.a1.output}}" })).not.toBeInTheDocument();
+  });
+
+  test("clicking a chip inserts the token into the prompt and keeps existing text", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} allNodes={allNodes} />);
+    fireEvent.click(screen.getByRole("button", { name: "{{steps.n2.output}}" }));
+    expect(onChange).toHaveBeenCalled();
+    const updated = onChange.mock.calls[0][0] as WfAgentNode;
+    expect(updated.prompt).toContain("{{steps.n2.output}}");
+    expect(updated.prompt).toContain("Hi");
+  });
+
+  test("only the trigger chip when there are no sibling nodes", () => {
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={[agentNode]} />);
+    expect(screen.getByRole("button", { name: "{{trigger}}" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "{{steps.n2.output}}" })).not.toBeInTheDocument();
   });
 });
