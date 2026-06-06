@@ -171,4 +171,30 @@ describe("PATCH /api/workflows/schedules/[id]", () => {
     const body = await res.json() as { error: string };
     expect(body.error).toContain("invalid cron");
   });
+
+  test("400 khi body rỗng (không có trường nào)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    const { db } = fakeDb({ ...baseSchedule });
+    _db = db as never;
+    const res = await PATCH(
+      new Request("http://x", { method: "PATCH", body: JSON.stringify({}) }),
+      { params: Promise.resolve({ id: "s1" }) },
+    );
+    expect(res.status).toBe(400);
+  });
+
+  test("cron hợp lệ cú pháp nhưng cronNext ném → 400", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockParseCron.mockReturnValue(undefined as never); // parseCron passes
+    mockCronNext.mockImplementation(() => { throw new Error("cannot find next run"); });
+    const { db } = fakeDb({ ...baseSchedule });
+    _db = db as never;
+    const res = await PATCH(
+      new Request("http://x", { method: "PATCH", body: JSON.stringify({ cron: "0 0 29 2 *" }) }),
+      { params: Promise.resolve({ id: "s1" }) },
+    );
+    expect(res.status).toBe(400);
+    const body = await res.json() as { error: string };
+    expect(body.error).toContain("cannot find next run");
+  });
 });

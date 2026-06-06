@@ -41,6 +41,13 @@ export async function PATCH(
     cron?: string;
   };
 
+  // Guard: at least one field must be provided
+  if (body.enabled === undefined && body.cron === undefined)
+    return new Response(
+      JSON.stringify({ error: "Không có trường nào để cập nhật" }),
+      { status: 400, headers: { "content-type": "application/json" } },
+    );
+
   const patch: Record<string, unknown> = { updatedAt: new Date() };
 
   if (body.enabled !== undefined) patch.enabled = body.enabled;
@@ -54,8 +61,17 @@ export async function PATCH(
         { status: 400 },
       );
     }
+    let nextRun: Date;
+    try {
+      nextRun = cronNext(body.cron, new Date());
+    } catch (e) {
+      return new Response(
+        JSON.stringify({ error: e instanceof Error ? e.message : "cron không tính được mốc kế" }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
     patch.cron = body.cron;
-    patch.nextRunAt = cronNext(body.cron, new Date());
+    patch.nextRunAt = nextRun;
   }
 
   await db.update(workflowSchedules).set(patch).where(eq(workflowSchedules.id, id));
