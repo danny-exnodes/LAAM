@@ -223,6 +223,7 @@ export const workflows: Dict = {
   },
   "wf.node.foreach.bodyLabel": { vi: "Body graph (JSON)", en: "Body graph (JSON)", zh: "Body graph (JSON)" },
   "wf.node.deleteNodeLabel": { vi: "Xoá node", en: "Delete node", zh: "删除节点" },
+  "wf.node.copyNodeLabel": { vi: "Sao chép node", en: "Copy node", zh: "复制节点" },
   "wf.node.foreach.bodyHint": {
     vi: "Mỗi item được truyền qua context {{item}} khi chạy body.",
     en: "Each item is passed via {{item}} context when the body runs.",

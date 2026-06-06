@@ -26,8 +26,10 @@ import {
   Handle,
   Position,
   MarkerType,
+  NodeToolbar,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
+import { Copy, Trash2 } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
@@ -75,7 +77,7 @@ type WfNodeData = {
 
 // RF NodeProps data is Record<string, unknown>; we cast to extract our payload.
 function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selected?: boolean }) {
-  const { node: wf, status } = data as WfNodeData;
+  const { node: wf, status, actionsRef } = data as WfNodeData;
   const color = KIND_COLORS[wf.kind] ?? "#64748b";
   const label =
     wf.kind === "agent"
@@ -112,6 +114,29 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
         position: "relative",
       }}
     >
+      {/* Node toolbar — visible when selected, shows copy + delete */}
+      <NodeToolbar isVisible={selected ?? false} position={Position.Top} style={{ display: "flex", gap: 4 }}>
+        <button
+          type="button"
+          title="Copy node"
+          aria-label="Copy node"
+          className="wf-toolbar-btn"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); actionsRef?.current.copy(wf.id); }}
+        >
+          <Copy size={12} />
+        </button>
+        <button
+          type="button"
+          title="Delete node"
+          aria-label="Delete node"
+          className="wf-toolbar-btn danger"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); actionsRef?.current.delete(wf.id); }}
+        >
+          <Trash2 size={12} />
+        </button>
+      </NodeToolbar>
       {/* Target handle — all nodes accept one incoming edge */}
       <Handle type="target" position={Position.Left} />
 
@@ -451,6 +476,33 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
     },
     [setNodes, setEdges],
   );
+
+  // ── Copy node ────────────────────────────────────────────────────────────
+
+  const handleCopyNode = useCallback(
+    (nodeId: string) => {
+      const source = nodes.find((n) => n.id === nodeId);
+      if (!source) return;
+      const sourceWf = (source.data as { node: WfNode }).node;
+      const newId = `${sourceWf.kind}-${crypto.randomUUID().slice(0, 8)}`;
+      const newWf: WfNode = { ...sourceWf, id: newId };
+      const newRfNode: RFNode<{ node: WfNode }> = {
+        id: newId,
+        type: "wf",
+        position: { x: source.position.x + 32, y: source.position.y + 32 },
+        data: { node: newWf },
+        sourcePosition: Position.Right,
+        targetPosition: Position.Left,
+      };
+      setNodes((prev) => [...prev, newRfNode]);
+      setIsDirty(true);
+    },
+    [nodes, setNodes],
+  );
+
+  // Keep nodeActionsRef current — WfNodeCard reads these on click.
+  nodeActionsRef.current.delete = handleDeleteNode;
+  nodeActionsRef.current.copy = handleCopyNode;
 
   // ── Keyboard: Delete selected node ───────────────────────────────────────────
   useEffect(() => {
