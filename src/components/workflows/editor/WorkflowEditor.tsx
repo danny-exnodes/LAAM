@@ -263,11 +263,17 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
     [nodes.length, setNodes, rfInstance],
   );
 
+  // Data-mutating change types — 'select' and 'dimensions' are view-only,
+  // should NOT mark the graph dirty.
+  const DATA_CHANGE_TYPES = new Set(["position", "remove", "add", "replace"] as const);
+
   // Wrapped change handlers — mark dirty on user-driven changes (post-load)
   const wrappedOnNodesChange = useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {
       onNodesChange(changes);
-      if (loadedRef.current) setIsDirty(true);
+      if (loadedRef.current && changes.some((c) => DATA_CHANGE_TYPES.has(c.type as never))) {
+        setIsDirty(true);
+      }
     },
     [onNodesChange],
   );
@@ -275,7 +281,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
   const wrappedOnEdgesChange = useCallback(
     (changes: Parameters<typeof onEdgesChange>[0]) => {
       onEdgesChange(changes);
-      if (loadedRef.current) setIsDirty(true);
+      if (loadedRef.current && changes.some((c) => DATA_CHANGE_TYPES.has(c.type as never))) {
+        setIsDirty(true);
+      }
     },
     [onEdgesChange],
   );
@@ -450,7 +458,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
         <button
           type="button"
           onClick={() => {
-            if (isDirty && !window.confirm("Bạn có thay đổi chưa lưu. Rời trang?")) return;
+            if (isDirty && !window.confirm(t("wf.editor.unsavedConfirm"))) return;
             router.push(`/workflows/${encodeURIComponent(workflowId)}`);
           }}
           className="text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"

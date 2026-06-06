@@ -140,6 +140,11 @@ export const workflows: Dict = {
   "wf.editor.loadErr": { vi: "Không tải được workflow.", en: "Could not load workflow.", zh: "无法加载工作流。" },
   "wf.editor.backToDetail": { vi: "← Chi tiết", en: "← Detail", zh: "← 详情" },
   "wf.editor.name": { vi: "Tên workflow", en: "Workflow name", zh: "工作流名称" },
+  "wf.editor.unsavedConfirm": {
+    vi: "Bạn có thay đổi chưa lưu. Rời trang?",
+    en: "You have unsaved changes. Leave page?",
+    zh: "您有未保存的更改。是否离开？",
+  },
 
   // New blank
   "wf.new.creating": { vi: "Đang tạo workflow…", en: "Creating workflow…", zh: "正在创建工作流…" },
