@@ -205,6 +205,10 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
   // Load state
   const [loadState, setLoadState] = useState<"loading" | "loaded" | "error">("loading");
 
+  // Dirty tracking — only active after initial load
+  const [isDirty, setIsDirty] = useState(false);
+  const loadedRef = useRef(false);
+
   // Load on mount
   useEffect(() => {
     void (async () => {
@@ -227,6 +231,13 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workflowId]);
 
+  // Activate dirty tracking once workflow is loaded
+  useEffect(() => {
+    if (loadState === "loaded") {
+      loadedRef.current = true;
+    }
+  }, [loadState]);
+
   // ── Palette: add node ────────────────────────────────────────────────────
 
   const addNode = useCallback(
@@ -247,8 +258,26 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
         targetPosition: Position.Left,
       };
       setNodes((prev) => [...prev, rfNode]);
+      setIsDirty(true);
     },
     [nodes.length, setNodes, rfInstance],
+  );
+
+  // Wrapped change handlers — mark dirty on user-driven changes (post-load)
+  const wrappedOnNodesChange = useCallback(
+    (changes: Parameters<typeof onNodesChange>[0]) => {
+      onNodesChange(changes);
+      if (loadedRef.current) setIsDirty(true);
+    },
+    [onNodesChange],
+  );
+
+  const wrappedOnEdgesChange = useCallback(
+    (changes: Parameters<typeof onEdgesChange>[0]) => {
+      onEdgesChange(changes);
+      if (loadedRef.current) setIsDirty(true);
+    },
+    [onEdgesChange],
   );
 
   // ── Connect: add edge, handle condition label ────────────────────────────
@@ -275,6 +304,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
             if (label) {
               const finalEdge = { ...tentativeEdge, id: `${connection.source}->${connection.target}-${label}`, label };
               setEdges((prev) => addEdge(finalEdge, prev));
+              setIsDirty(true);
             }
             setPendingEdge(null);
           },
@@ -285,6 +315,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
           source: connection.source ?? "",
           target: connection.target ?? "",
         }, prev));
+        setIsDirty(true);
       }
     },
     [nodes, edgeLabelInput, setEdges],
@@ -311,6 +342,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
             : n,
         ),
       );
+      setIsDirty(true);
     },
     [setNodes],
   );
@@ -322,6 +354,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
       setNodes((prev) => prev.filter((n) => n.id !== nodeId));
       setEdges((prev) => prev.filter((e) => e.source !== nodeId && e.target !== nodeId));
       setSelectedId(null);
+      setIsDirty(true);
     },
     [setNodes, setEdges],
   );
@@ -340,6 +373,15 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [selectedId, handleDeleteNode]);
+
+  // ── Beforeunload: warn on unsaved changes ───────────────────────────────
+
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   // ── Selected node (for config panel) ────────────────────────────────────
 
@@ -371,6 +413,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
         throw new Error(body.error ?? "save failed");
       }
       setSaveStatus("saved");
+      setIsDirty(false);
       if (onSaved) {
         onSaved();
       } else {
@@ -404,17 +447,21 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
     <div className="flex h-full flex-col">
       {/* Top bar */}
       <div className="flex items-center gap-3 border-b border-neutral-200 bg-white px-4 py-2 dark:border-neutral-700 dark:bg-neutral-900">
-        <a
-          href={`/workflows/${encodeURIComponent(workflowId)}`}
+        <button
+          type="button"
+          onClick={() => {
+            if (isDirty && !window.confirm("Bạn có thay đổi chưa lưu. Rời trang?")) return;
+            router.push(`/workflows/${encodeURIComponent(workflowId)}`);
+          }}
           className="text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200"
         >
           {t("wf.editor.backToDetail")}
-        </a>
+        </button>
         <div className="h-4 w-px bg-neutral-200 dark:bg-neutral-700" />
         <input
           type="text"
           value={wfName}
-          onChange={(e) => setWfName(e.target.value)}
+          onChange={(e) => { setWfName(e.target.value); setIsDirty(true); }}
           aria-label={t("wf.editor.name")}
           className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
         />
@@ -433,7 +480,11 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
           disabled={saveStatus === "saving"}
           className="rounded-lg bg-[var(--color-accent)] px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50 transition"
         >
-          {saveStatus === "saving" ? t("wf.editor.saving") : t("wf.editor.save")}
+          {saveStatus === "saving"
+            ? t("wf.editor.saving")
+            : isDirty
+              ? `● ${t("wf.editor.save")}`
+              : t("wf.editor.save")}
         </button>
         {saveStatus === "saved" && (
           <span className="text-xs font-semibold text-green-600">{t("wf.editor.saved")}</span>
@@ -460,8 +511,8 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
             nodes={nodes}
             edges={edges}
             nodeTypes={NODE_TYPES}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
+            onNodesChange={wrappedOnNodesChange}
+            onEdgesChange={wrappedOnEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}

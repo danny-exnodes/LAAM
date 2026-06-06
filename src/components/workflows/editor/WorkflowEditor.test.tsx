@@ -326,3 +326,50 @@ describe("WorkflowEditor — node delete", () => {
     expect(screen.getByText(/chọn một node|chọn node|select a node/i)).toBeInTheDocument();
   });
 });
+
+describe("WorkflowEditor — dirty / unsaved guard", () => {
+  // fetchReadOnly: only serves GET, no PATCH
+  const fetchReadOnly: FetchLike = async () =>
+    ({ ok: true, json: async () => ({ name: "WF", graph: { nodes: [], edges: [] } }) }) as Response;
+
+  test("save button shows ● dot indicator when name changes", async () => {
+    render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor workflowId="wf1" fetchImpl={fetchReadOnly} onSaved={vi.fn()} />
+      </I18nProvider>,
+    );
+    await screen.findByDisplayValue("WF");
+    const saveBtn = screen.getByRole("button", { name: /lưu|save/i });
+    // Before any edit: no dot
+    expect(saveBtn.textContent).not.toContain("●");
+    // After name edit: dot appears
+    fireEvent.change(screen.getByRole("textbox", { name: /tên workflow|workflow name/i }), {
+      target: { value: "New Name" },
+    });
+    expect(screen.getByRole("button", { name: /lưu|save/i }).textContent).toContain("●");
+  });
+
+  test("● dot cleared after successful save", async () => {
+    const patchFetch: FetchLike = async (_url, opts) => {
+      if (opts?.method === "PATCH") return { ok: true, json: async () => ({}) } as Response;
+      return { ok: true, json: async () => ({ name: "WF", graph: { nodes: [], edges: [] } }) } as Response;
+    };
+    const onSaved = vi.fn();
+    render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor workflowId="wf1" fetchImpl={patchFetch} onSaved={onSaved} />
+      </I18nProvider>,
+    );
+    await screen.findByDisplayValue("WF");
+    // Make dirty by editing name
+    fireEvent.change(screen.getByRole("textbox", { name: /tên workflow|workflow name/i }), {
+      target: { value: "X" },
+    });
+    expect(screen.getByRole("button", { name: /lưu|save/i }).textContent).toContain("●");
+    // Save
+    fireEvent.click(screen.getByRole("button", { name: /lưu|save/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    // After save: dot gone
+    expect(screen.getByRole("button", { name: /lưu|save/i }).textContent).not.toContain("●");
+  });
+});
