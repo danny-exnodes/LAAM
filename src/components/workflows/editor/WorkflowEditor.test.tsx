@@ -45,8 +45,12 @@ vi.mock("@xyflow/react", () => {
       </div>
     );
   }
+  function ReactFlowProvider({ children }: { children: React.ReactNode }) {
+    return <>{children}</>;
+  }
   return {
     ReactFlow,
+    ReactFlowProvider,
     Background: () => null,
     Controls: () => null,
     MiniMap: () => null,
@@ -62,6 +66,13 @@ vi.mock("@xyflow/react", () => {
       return [edges, setEdges, onEdgesChange];
     },
     addEdge: (edge: unknown, edges: unknown[]) => [...edges, edge],
+    Handle: () => null,
+    useReactFlow: () => ({
+      // screenToFlowPosition: return coordinates mirroring the input so
+      // addNode tests can assert a position was set without caring about
+      // viewport-transform math (which is jsdom-irrelevant anyway).
+      screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+    }),
   };
 });
 

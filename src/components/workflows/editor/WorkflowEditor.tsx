@@ -15,12 +15,15 @@ import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
   addEdge,
+  Handle,
   Position,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
@@ -78,8 +81,12 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
         boxShadow: selected ? `0 0 0 2px ${color}33` : "0 1px 3px rgba(0,0,0,.08)",
         fontSize: 12,
         color: "#1a1d21",
+        position: "relative",
       }}
     >
+      {/* Target handle — all nodes accept one incoming edge */}
+      <Handle type="target" position={Position.Left} />
+
       <div
         style={{
           fontSize: 10,
@@ -96,6 +103,16 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
         {label}
       </div>
       <div style={{ fontSize: 9, color: "#94a3b8", marginTop: 2 }}>{wf.id}</div>
+
+      {/* Source handles — condition has two (true/false); all others have one */}
+      {wf.kind === "condition" ? (
+        <>
+          <Handle type="source" id="true" position={Position.Right} />
+          <Handle type="source" id="false" position={Position.Bottom} />
+        </>
+      ) : (
+        <Handle type="source" position={Position.Right} />
+      )}
     </div>
   );
 }
@@ -145,9 +162,23 @@ export interface WorkflowEditorProps {
   onSaved?: () => void;
 }
 
-export function WorkflowEditor({ workflowId, fetchImpl, onSaved }: WorkflowEditorProps) {
+/**
+ * ReactFlowProvider must wrap the component that calls useReactFlow().
+ * WorkflowEditorInner holds all the state and hooks; WorkflowEditor is the
+ * exported shell that provides the RF context.
+ */
+export function WorkflowEditor(props: WorkflowEditorProps) {
+  return (
+    <ReactFlowProvider>
+      <WorkflowEditorInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorProps) {
   const t = useT(dict);
   const router = useRouter();
+  const rfInstance = useReactFlow();
   // fetchImpl allows test injection; default is native fetch (cast to FetchLike)
   const f: FetchLike = fetchImpl ?? ((url, opts) => fetch(url, opts));
 
@@ -201,17 +232,23 @@ export function WorkflowEditor({ workflowId, fetchImpl, onSaved }: WorkflowEdito
   const addNode = useCallback(
     (kind: WfNodeKind) => {
       const wfNode = defaultNode(kind);
+      // Place new node at the current viewport center so it's always visible,
+      // with a small stagger offset per existing node count to avoid exact overlap.
+      const center = rfInstance.screenToFlowPosition({
+        x: window.innerWidth / 2 + nodes.length * 10,
+        y: window.innerHeight / 2,
+      });
       const rfNode: RFNode<{ node: WfNode }> = {
         id: wfNode.id,
         type: "wf",
-        position: { x: nodes.length * 220, y: 80 },
+        position: center,
         data: { node: wfNode },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
       };
       setNodes((prev) => [...prev, rfNode]);
     },
-    [nodes.length, setNodes],
+    [nodes.length, setNodes, rfInstance],
   );
 
   // ── Connect: add edge, handle condition label ────────────────────────────
