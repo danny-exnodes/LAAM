@@ -7,7 +7,7 @@
  *   3. The connector form calls onChange when connectorId/action changes.
  */
 import { describe, expect, test, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, within } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode } from "@/lib/workflow/types";
@@ -372,17 +372,21 @@ describe("VariableHints — variable autocomplete (A)", () => {
     { id: "n2", kind: "connector", connectorId: "demo", action: "x", args: {} },
   ];
 
-  test("renders trigger + sibling chips under the agent prompt, excludes self", () => {
+  test("renders trigger + sibling chips under both agent fields, excludes self", () => {
     renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={allNodes} />);
-    expect(screen.getByRole("button", { name: "{{trigger}}" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "{{steps.n2.output}}" })).toBeInTheDocument();
+    // chips render under BOTH the system and prompt fields → 2 of each token
+    expect(screen.getAllByRole("button", { name: "{{trigger}}" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "{{steps.n2.output}}" })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "{{steps.a1.output}}" })).not.toBeInTheDocument();
   });
 
-  test("clicking a chip inserts the token into the prompt and keeps existing text", () => {
+  test("clicking the prompt's chip inserts the token into the prompt, keeps existing text", () => {
     const onChange = vi.fn();
     renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} allNodes={allNodes} />);
-    fireEvent.click(screen.getByRole("button", { name: "{{steps.n2.output}}" }));
+    // Scope to the prompt field's container so we click ITS chip (not the system field's)
+    const promptArea = screen.getByPlaceholderText(/Nhập prompt/);
+    const promptField = promptArea.parentElement as HTMLElement;
+    fireEvent.click(within(promptField).getByRole("button", { name: "{{steps.n2.output}}" }));
     expect(onChange).toHaveBeenCalled();
     const updated = onChange.mock.calls[0][0] as WfAgentNode;
     expect(updated.prompt).toContain("{{steps.n2.output}}");
@@ -391,7 +395,7 @@ describe("VariableHints — variable autocomplete (A)", () => {
 
   test("only the trigger chip when there are no sibling nodes", () => {
     renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={[agentNode]} />);
-    expect(screen.getByRole("button", { name: "{{trigger}}" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "{{trigger}}" })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "{{steps.n2.output}}" })).not.toBeInTheDocument();
   });
 });

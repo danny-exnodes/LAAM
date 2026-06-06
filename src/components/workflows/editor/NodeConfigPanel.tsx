@@ -109,6 +109,7 @@ function AgentForm({
   t: Translator;
   suggestions: string[];
 }) {
+  const systemRef = useRef<HTMLTextAreaElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
   return (
     <>
@@ -116,11 +117,19 @@ function AgentForm({
         <>
           {label(t("wf.node.agent.systemLabel"))}
           <textarea
+            ref={systemRef}
             className={inputCls()}
             rows={3}
             value={node.system ?? ""}
             placeholder={t("wf.node.agent.systemPlaceholder")}
             onChange={(e) => onChange({ ...node, system: e.target.value || undefined })}
+          />
+          <VariableHints
+            tokens={suggestions}
+            inputRef={systemRef}
+            value={node.system ?? ""}
+            onChange={(v) => onChange({ ...node, system: v || undefined })}
+            hintLabel={t("wf.node.insertVar")}
           />
         </>,
       )}
