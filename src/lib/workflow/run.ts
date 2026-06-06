@@ -13,15 +13,23 @@ import { runWorkflow } from "./engine";
 import { evalPredicate } from "./predicate";
 import { emptyContext, DEFAULT_BUDGET } from "./types";
 import type { RunContext, StepRecord, WfNode, Budget, WorkflowGraph } from "./types";
+import { withWriteIdempotency } from "./idempotency";
 
 const MAX_OUTPUT_BYTES = 256 * 1024; // PIN-D4b — cap output persist, KHÔNG cắt context RAM
 
-function capForPersist(v: unknown): unknown {
+export function capForPersist(v: unknown): unknown {
   try {
     const s = JSON.stringify(v);
     if (s.length > MAX_OUTPUT_BYTES) return { _truncated: true, bytes: s.length, preview: s.slice(0, 1000) };
   } catch { /* non-serializable */ }
   return v;
+}
+
+// The shape capForPersist writes when output exceeds MAX_OUTPUT_BYTES (PIN-D4b). Exported
+// so resume can detect a truncated journal value before it reaches interpolation (where a
+// missing field would throw on an arg-sink or silently become "" on a text-sink).
+export function isTruncatedMarker(v: unknown): v is { _truncated: true; bytes: number; preview: string } {
+  return !!v && typeof v === "object" && (v as { _truncated?: unknown })._truncated === true;
 }
 
 export type ExecuteRunDeps = {
@@ -92,7 +100,10 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
     deps.publish({ type: "workflow_run_step", runId, nodeId: s.nodeId, seq: s.seq, status: s.status });
   };
 
-  const runNode = deps.buildRunNode(runRow.userId, { dryRun: runRow.dryRun ?? false });
+  // F1 WAL: wrap so writes are recorded in workflow_node_idempotency on the INITIAL run too
+  // (not just resume) → a crash-resume replays instead of re-sending.
+  const baseRunNode = deps.buildRunNode(runRow.userId, { dryRun: runRow.dryRun ?? false });
+  const runNode = withWriteIdempotency(baseRunNode, { db: deps.db, runId });
   const budget = deps.budget ?? DEFAULT_BUDGET;
 
   // A1 follow-up: engine THROW (budget/validate/foreach-not-array) → finalize FAILED,

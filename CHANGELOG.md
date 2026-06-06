@@ -14,6 +14,15 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 - **selection-at-scale:** suite riêng `npm run eval:scale` đo **đường cong selection vs #tool** (8/16/24/40, distractor = union prod THẬT internal+connector, Wilson CI 95%, **tách no-call vs wrong-call**). CTO nâng tầm = **cổng quyết định cho lộ trình connector** (crater → tool-subsetting trước GA).
 - Đo-only · `scripts/eval/*` cô lập · **0 dep mới, không đụng harness prod**. Live run = host (`npm run eval` + `eval:scale`, cần Ollama). Verify: **1072 test xanh**, tsc sạch. Plan: `docs/superpowers/plans/2026-06-06-eval-v2-e1-selection-scale.md`.
 
+### Đã thêm — AI Workflow P0a: Durable Resume Spine (reliability, 2026-06-06)
+- **Crash-resume**: run bị gián đoạn (crash/restart) **tự tiếp tục** từ journal `workflow_run_step` — KHÔNG chạy lại node đã xong, KHÔNG gửi lại connector write. Phát hiện orphan ở **boot** (`instrumentation.register()`: run còn `running` lúc khởi động = mồ côi → `resumable`; giả định **1 process**), đánh thức qua tick poke.
+- **Idempotency per-node (`workflow_node_idempotency`)**: key xác định `UNIQUE(runId, nodeId, iterIndex)` + claim nguyên tử `INSERT ON CONFLICT DO NOTHING RETURNING`. WAL — ghi ở **CẢ** lần chạy đầu (`executeRunRow`) **lẫn** resume → bảng là nguồn-chân-lý-duy-nhất cho writes: write đã `done` → replay output (không re-send); write `claimed`-chưa-record (crash giữa-gửi) → **fail-loud** (không đoán). **KHÔNG** tái dùng nonce `audit_log` (cửa-sổ-10′ + no-unique-index → vỡ với sleep nhiều ngày).
+- **Truncation guard (PIN-D4b)**: rebuild ctx từ journal đã cắt 256KB → producer **read** truncated → re-run; **write** truncated → fail-loud (không để `{{steps.x.output.field}}` throw mơ hồ / ra `""`).
+- **`tickResume`**: claim `resumable` **bounded + atomic** trong UPDATE (`id IN (SELECT … LIMIT 25 FOR UPDATE SKIP LOCKED)`) → không double-claim, không strand run thừa. Wire vào `POST /api/workflows/tick`.
+- Engine A0 **bất biến** (toàn bộ resume ở run-layer). Migration `0008` (additive). Verify: **1085 test xanh**, `tsc` sạch. Plan: `docs/superpowers/plans/2026-06-06-workflow-p0a-resume-spine.md`.
+- **Bước host (USER chạy — agent-ops):** `npm run db:migrate` áp **0008** (bảng `workflow_node_idempotency`); không backfill. Resume cưỡi tick poke có sẵn — KHÔNG service mới.
+- **⚠️ Deploy precondition (1 lần):** **drain các run đang `running` TRƯỚC lần deploy P0a đầu tiên.** Run mồ côi có-từ-trước-WAL không có idempotency row → boot-sweep đánh `resumable` → resume có thể **re-send write đã commit**. Mọi run tạo sau P0a đều mang WAL → steady-state an toàn. (Review #2.)
+
 ### Đã thêm — Harness: World-Tools Layer (web/util tools, 2026-06-06)
 - **`web_search`** (SearXNG self-host, **$0**, không SaaS) + **`web_read`** (promote `fetch-url` thành tool model gọi được): agent giờ **tự tìm & đọc web** trong tool-loop. Lõi fetch (`isBlockedHost` SSRF + html→text) tách `src/lib/web/readable.ts` dùng chung route + tool; tool cap text 6000 ký tự (vừa bound guard 8192).
 - **`laam_search_sessions`** (tìm phiên theo từ khoá việc-đang-làm) · **`laam_get_timeline`** (timeline 1 phiên, host-only) · **`laam_query_audit`** (audit log gần nhất).

@@ -15,8 +15,16 @@ function fakeDb(workflowRow: unknown) {
   const updated: unknown[] = [];
   const db = {
     select: () => ({ from: () => ({ where: () => ({ limit: async () => (workflowRow ? [workflowRow] : []) }) }) }),
+    // insert(table).values(v): awaitable (onStep) AND chainable to .onConflictDoNothing().returning()
+    // (withWriteIdempotency.claimNode records initial-run writes — F1). Fresh run → returning [{id}].
     insert: (table: unknown) => ({
-      values: async (v: unknown) => { (inserted[String((table as Record<symbol, unknown>)[Symbol.for("drizzle:Name")] ?? "t")] ||= []).push(v); },
+      values: (v: unknown) => {
+        (inserted[String((table as Record<symbol, unknown>)[Symbol.for("drizzle:Name")] ?? "t")] ||= []).push(v);
+        return {
+          onConflictDoNothing: () => ({ returning: async () => [{ id: "idem" }] }),
+          then: (resolve: (x: unknown) => void) => resolve(undefined),
+        };
+      },
     }),
     update: () => ({ set: (v: unknown) => ({ where: async () => { updated.push(v); } }) }),
   };

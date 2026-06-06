@@ -12,12 +12,14 @@
 // tickExecute — execution: nhặt run status='queued' (limit) → executeRunRow (flip
 //   running → finalize). Tách khỏi claim → claim chết-giữa-chừng chỉ rollback tx,
 //   execute chết-giữa-chừng để run kẹt 'running' (recover được, KHÔNG mất slot).
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, lte, inArray } from "drizzle-orm";
 import type { db as Db } from "@/db";
 import { workflows, workflowSchedules, workflowRuns } from "@/db/schema";
 import { nextRunAt as cronNext } from "./cron";
 import { executeRunRow } from "./run";
 import type { ExecuteRunDeps } from "./run";
+import { resumeRunRow as resumeRunRowImpl } from "./resume";
+import type { ResumeDeps } from "./resume";
 import type { WorkflowGraph } from "./types";
 
 // Floor 1 Date về ranh giới phút (bỏ giây + mili). nextRunAt đã lưu vốn trên ranh
@@ -138,4 +140,32 @@ export async function tickExecute(db: typeof Db, deps: ExecuteRunDeps): Promise<
     );
   }
   return rows.length;
+}
+
+const MAX_RESUME_PER_TICK = 25;
+
+// Resume orphaned runs (marked 'resumable' by the boot sweep). The claim is ATOMIC and
+// BOUNDED inside the UPDATE — id IN (SELECT … LIMIT n FOR UPDATE SKIP LOCKED) — so two
+// concurrent pokes can't double-claim one run AND runs beyond the cap are NOT stranded as
+// 'running' (F2: flip-all-then-slice would orphan #26+). Resume each from its journal.
+export async function tickResume(
+  db: typeof Db,
+  deps: Pick<ResumeDeps, "publish" | "buildRunNode"> & { resumeRunRow?: typeof resumeRunRowImpl },
+): Promise<number> {
+  const resume = deps.resumeRunRow ?? resumeRunRowImpl;
+  const sub = db
+    .select({ id: workflowRuns.id })
+    .from(workflowRuns)
+    .where(eq(workflowRuns.status, "resumable"))
+    .limit(MAX_RESUME_PER_TICK)
+    .for("update", { skipLocked: true });
+  const claimed = (await db
+    .update(workflowRuns)
+    .set({ status: "running" })
+    .where(inArray(workflowRuns.id, sub))
+    .returning({ id: workflowRuns.id })) as { id: string }[];
+  for (const r of claimed) {
+    await resume(r.id, { db, publish: deps.publish, buildRunNode: deps.buildRunNode });
+  }
+  return claimed.length;
 }
