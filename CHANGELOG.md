@@ -9,6 +9,11 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Eval v2: coverage world-tools + selection-at-scale (tooling, 2026-06-06)
+- **E1 coverage:** grader `citesRealUrl` (Rule 13 cho URL → dim grounding) + 6 scenario đo world-tools (web research-loop/restraint, util_calc, laam search_sessions/get_timeline/query_audit). Eval lên **16 scenario**.
+- **selection-at-scale:** suite riêng `npm run eval:scale` đo **đường cong selection vs #tool** (8/16/24/40, distractor = union prod THẬT internal+connector, Wilson CI 95%, **tách no-call vs wrong-call**). CTO nâng tầm = **cổng quyết định cho lộ trình connector** (crater → tool-subsetting trước GA).
+- Đo-only · `scripts/eval/*` cô lập · **0 dep mới, không đụng harness prod**. Live run = host (`npm run eval` + `eval:scale`, cần Ollama). Verify: **1072 test xanh**, tsc sạch. Plan: `docs/superpowers/plans/2026-06-06-eval-v2-e1-selection-scale.md`.
+
 ### Đã thêm — Harness: World-Tools Layer (web/util tools, 2026-06-06)
 - **`web_search`** (SearXNG self-host, **$0**, không SaaS) + **`web_read`** (promote `fetch-url` thành tool model gọi được): agent giờ **tự tìm & đọc web** trong tool-loop. Lõi fetch (`isBlockedHost` SSRF + html→text) tách `src/lib/web/readable.ts` dùng chung route + tool; tool cap text 6000 ký tự (vừa bound guard 8192).
 - **`laam_search_sessions`** (tìm phiên theo từ khoá việc-đang-làm) · **`laam_get_timeline`** (timeline 1 phiên, host-only) · **`laam_query_audit`** (audit log gần nhất).
