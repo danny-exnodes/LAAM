@@ -499,3 +499,17 @@ describe("WorkflowEditor — undo/redo toolbar", () => {
     expect(redoBtn).toBeDisabled();
   });
 });
+
+describe("WorkflowEditor — config panel dock mode (B)", () => {
+  test("panel toggle switches right↔float and persists to localStorage", async () => {
+    localStorage.clear();
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    // Default is "right" → the toggle offers the "float" action.
+    fireEvent.click(screen.getByRole("button", { name: /tách panel|float panel/i }));
+    expect(localStorage.getItem("wf-panel-mode")).toBe("float");
+    // Now in "float" → the toggle offers the "dock" action; clicking returns to right.
+    fireEvent.click(screen.getByRole("button", { name: /gắn panel|dock panel/i }));
+    expect(localStorage.getItem("wf-panel-mode")).toBe("right");
+  });
+});

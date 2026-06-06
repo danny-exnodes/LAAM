@@ -29,7 +29,7 @@ import {
   NodeToolbar,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
-import { Copy, Trash2, Undo2, Redo2 } from "lucide-react";
+import { Copy, Trash2, Undo2, Redo2, Move, PanelRight } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
@@ -333,6 +333,11 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   const historyRef = useRef<HistoryState>(emptyHistory());
   const restoringRef = useRef(false);
   const [histFlags, setHistFlags] = useState({ undo: false, redo: false });
+
+  // Config panel dock mode (B): "right" (docked) | "float" (draggable overlay).
+  // Desktop only — mobile always uses the bottom sheet. Persisted to localStorage.
+  const [panelMode, setPanelMode] = useState<"right" | "float">("right");
+  const [floatPos, setFloatPos] = useState({ x: 24, y: 24 });
 
   // Stable ref holding the latest delete/copy callbacks.
   // Using a ref instead of putting callbacks in node data prevents full-tree
@@ -739,6 +744,38 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [undoEdit, redoEdit]);
 
+  // ── Config panel dock mode (B) ────────────────────────────────────────────
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem("wf-panel-mode");
+      if (m === "float" || m === "right") setPanelMode(m);
+    } catch { /* SSR / disabled storage → keep default */ }
+  }, []);
+
+  const setPanelModePersist = useCallback((m: "right" | "float") => {
+    setPanelMode(m);
+    try { localStorage.setItem("wf-panel-mode", m); } catch { /* ignore */ }
+  }, []);
+
+  // Drag the floating panel by its header (delta tracking on document).
+  const startFloatDrag = useCallback(
+    (e: React.MouseEvent) => {
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const ox = floatPos.x;
+      const oy = floatPos.y;
+      const onMove = (ev: MouseEvent) =>
+        setFloatPos({ x: Math.max(0, ox + ev.clientX - startX), y: Math.max(0, oy + ev.clientY - startY) });
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [floatPos],
+  );
+
   // ── Render ───────────────────────────────────────────────────────────────
 
   if (loadState === "loading") {
@@ -802,6 +839,15 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             aria-label={t("wf.editor.name")}
             className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
           />
+          <button
+            type="button"
+            onClick={() => setPanelModePersist(panelMode === "right" ? "float" : "right")}
+            aria-label={panelMode === "right" ? t("wf.editor.panelFloat") : t("wf.editor.panelDock")}
+            title={panelMode === "right" ? t("wf.editor.panelFloat") : t("wf.editor.panelDock")}
+            className="hidden shrink-0 rounded-lg p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 md:inline-flex dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            {panelMode === "right" ? <Move size={16} aria-hidden /> : <PanelRight size={16} aria-hidden />}
+          </button>
           <button
             type="button"
             onClick={() => void handleTest()}
@@ -908,22 +954,56 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
               </div>
             </div>
           )}
-        </div>
 
-        {/* Desktop config panel — hidden on mobile */}
-        <div className="hidden w-72 shrink-0 border-l border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900 md:block">
-          {selectedWfNode ? (
-            <NodeConfigPanel
-              node={selectedWfNode}
-              onChange={onNodeConfigChange}
-              onDelete={() => handleDeleteNode(selectedWfNode.id)}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center p-4 text-sm text-neutral-400">
-              {t("wf.editor.noSelection")}
+          {/* Floating config panel (desktop, panelMode "float") — draggable overlay */}
+          {panelMode === "float" && selectedWfNode && (
+            <div
+              className="absolute z-40 hidden w-72 flex-col rounded-xl border border-neutral-200 bg-white shadow-2xl md:flex dark:border-neutral-700 dark:bg-neutral-900"
+              style={{ left: floatPos.x, top: floatPos.y, maxHeight: "calc(100% - 2rem)" }}
+            >
+              <div
+                onMouseDown={startFloatDrag}
+                className="flex shrink-0 cursor-move items-center justify-between rounded-t-xl border-b border-neutral-100 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-800/40"
+              >
+                <span className="text-xs font-semibold text-neutral-500">{t("wf.editor.configTitle")}</span>
+                <button
+                  type="button"
+                  onClick={() => setPanelModePersist("right")}
+                  aria-label={t("wf.editor.panelDock")}
+                  title={t("wf.editor.panelDock")}
+                  className="rounded p-1 text-neutral-400 transition hover:bg-neutral-200 hover:text-neutral-700 dark:hover:bg-neutral-700"
+                >
+                  <PanelRight size={14} aria-hidden />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto">
+                <NodeConfigPanel
+                  node={selectedWfNode}
+                  onChange={onNodeConfigChange}
+                  onDelete={() => handleDeleteNode(selectedWfNode.id)}
+                />
+              </div>
             </div>
           )}
         </div>
+
+        {/* Desktop config panel — docked right (panelMode "right"); "float" mode
+            renders a draggable overlay inside the canvas instead. Mobile → sheet. */}
+        {panelMode === "right" && (
+          <div className="hidden w-72 shrink-0 border-l border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900 md:block">
+            {selectedWfNode ? (
+              <NodeConfigPanel
+                node={selectedWfNode}
+                onChange={onNodeConfigChange}
+                onDelete={() => handleDeleteNode(selectedWfNode.id)}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center p-4 text-sm text-neutral-400">
+                {t("wf.editor.noSelection")}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Mobile config panel — animated bottom sheet + scrim (H). Stays mounted
