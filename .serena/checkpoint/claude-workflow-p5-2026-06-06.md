@@ -22,3 +22,21 @@ workflow-editor.css; WorkflowEditor.tsx(+test); WorkflowEditorLive.tsx; nodeStat
 ## Blockers / Risks
 - **Concurrent agent active in this working tree** (WDK-research docs/memories appeared/moved mid-session). Mitigated: separate branch + explicit-path commits only; never staged INDEX.md (holds their change) or their files. Verify branch before each commit.
 - INDEX.md entry for the P5-review spec NOT added (avoided touching the cross-agent-modified file). Add once their work settles.
+
+## E2E results (2026-06-06, Claude-in-Chrome, dark mode, Tailscale :8443)
+Ran on workflow "QA — condition branch" (5 nodes: agent→condition→agent→agent→connector).
+- **G ✅** canvas Controls (+/−/fit/lock) + MiniMap render dark-themed (light icons on dark) — reported bug FIXED.
+- **Item 6 ✅** MiniMap node colors match kinds (blue/orange/blue/blue/purple).
+- **E ✅** "▶ Chạy thử" dry-run executed end-to-end.
+- **D ✅** all 5 nodes got live green ✓ badges (succeeded→success mapping correct over SSE).
+- **C ~** run-status pipeline proven (badges update live); flow animation wired (transient marching-ants not pixel-captured; run too fast).
+- **item 7 ✅** condition structured form (Vế trái/Toán tử/Vế phải) + JSON↗ toggle + Copy/Delete NodeToolbar on selected node.
+- **B ✅** dock toggle → float panel (draggable overlay) + dock-back.
+- **F ✅** config edit → undo enables + ● dirty; undo reverts (undo→disabled, redo→enabled).
+- **H ⚠ not captured** — resize_window didn't change the capture viewport; mobile sheet is implemented + unit-tested (mount/close) but not visually confirmed live.
+- **D-error red edge / write-mock** — not exercised live (no failing/write node in this workflow); unit-tested.
+
+UX findings:
+1. **Condition operator hint overflows** the 288px config panel (text "op: eq|ne|…not_e…" clipped at right edge, in both docked + float). Minor — wrap/shorten.
+2. Dry-run creates a normal-looking run-history entry (no "dry-run" badge — we chose not to persist a flag). Follow-up if it clutters history.
+3. **A (variable autocomplete) still pending** — would directly serve the "smart input" goal for the `{{steps.a.output}}`-style fields seen in the condition form.
