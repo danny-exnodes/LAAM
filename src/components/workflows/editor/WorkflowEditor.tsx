@@ -130,6 +130,7 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
           type="button"
           title="Delete node"
           aria-label="Delete node"
+          data-testid="toolbar-delete"
           className="wf-toolbar-btn danger"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => { e.stopPropagation(); actionsRef?.current.delete(wf.id); }}

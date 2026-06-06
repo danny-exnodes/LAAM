@@ -416,9 +416,7 @@ describe("WorkflowEditor — node toolbar", () => {
     const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
 
     fireEvent.click(screen.getByTestId("node-n1"));
-    // getAllByRole: toolbar "Delete node" + config panel delete button both match aria-label
-    const deleteBtn = screen.getAllByRole("button", { name: /delete node/i })[0]!;
-    fireEvent.click(deleteBtn);
+    fireEvent.click(screen.getByTestId("toolbar-delete"));
 
     const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
     expect(after).toBe(before - 1);
