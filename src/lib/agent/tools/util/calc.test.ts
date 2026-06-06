@@ -9,6 +9,9 @@ describe("evalExpr", () => {
     ["1 + 2 * 3", 7], // precedence
     ["(1 + 2) * 3", 9], // parens
     ["2 ^ 3 ^ 2", 512], // ^ is right-associative → 2^(3^2)
+    ["-2 ^ 2", -4], // standard math: ^ binds tighter than unary minus → -(2^2)
+    ["-3 ^ 2", -9],
+    ["2 ^ -2", 0.25], // ...but a minus in the EXPONENT is unary on the exponent → 2^(-2)
     ["10 % 3", 1], // modulo
     ["-5 + 3", -2], // leading unary minus
     ["2 * -3", -6], // unary minus after an operator

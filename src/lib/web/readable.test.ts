@@ -95,3 +95,59 @@ describe("fetchReadable", () => {
     if (!r.ok) expect(r.status).toBe(502);
   });
 });
+
+describe("fetchReadable — redirect SSRF hardening", () => {
+  test("follows a redirect to another PUBLIC host", async () => {
+    const calls: string[] = [];
+    const r = await fetchReadable("https://a.com/start", {
+      fetchImpl: async (url: string) => {
+        calls.push(url);
+        if (calls.length === 1)
+          return new Response(null, { status: 302, headers: { location: "https://b.com/dest" } });
+        return new Response("<title>Dest</title><body>ok</body>", { headers: { "content-type": "text/html" } });
+      },
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.title).toBe("Dest");
+      expect(r.data.url).toBe("https://b.com/dest"); // final URL, not the start
+    }
+    expect(calls).toEqual(["https://a.com/start", "https://b.com/dest"]);
+  });
+
+  test("BLOCKS a redirect to an internal host and never fetches it (cloud-metadata SSRF)", async () => {
+    const calls: string[] = [];
+    const r = await fetchReadable("https://a.com/start", {
+      fetchImpl: async (url: string) => {
+        calls.push(url);
+        return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data/" } });
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.status).toBe(403);
+    expect(calls).toEqual(["https://a.com/start"]); // the internal target is NEVER fetched
+  });
+
+  test("caps a redirect loop instead of looping forever", async () => {
+    let n = 0;
+    const r = await fetchReadable("https://a.com/loop", {
+      fetchImpl: async () => {
+        n++;
+        return new Response(null, { status: 302, headers: { location: "https://a.com/loop?" + n } });
+      },
+    });
+    expect(r.ok).toBe(false);
+    expect(n).toBeLessThanOrEqual(8); // bounded, not infinite
+  });
+});
+
+describe("fetchReadable — title", () => {
+  test("decodes HTML entities in the title the same way as the body", async () => {
+    const r = await fetchReadable("https://example.com", {
+      fetchImpl: async () =>
+        new Response("<title>Tom &amp; Jerry</title><body>x</body>", { headers: { "content-type": "text/html" } }),
+    });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.title).toBe("Tom & Jerry");
+  });
+});

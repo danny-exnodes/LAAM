@@ -11,8 +11,10 @@ type Tok =
   | { t: "lp" }
   | { t: "rp" };
 
-const PREC: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2, "%": 2, "^": 3 };
-const U_PREC = 4; // unary binds tighter than any binary op
+const PREC: Record<string, number> = { "+": 1, "-": 1, "*": 2, "/": 2, "%": 2, "^": 4 };
+// Unary +/- binds looser than ^ but tighter than * / % — standard math convention:
+// -2^2 = -(2^2) = -4, while 2^-2 = 2^(-2) (a minus in the exponent stays unary there).
+const U_PREC = 3;
 const RIGHT = new Set(["^"]); // right-associative binary ops
 
 export function tokenize(expr: string): Tok[] {
@@ -119,8 +121,8 @@ function apply(op: string, a: number, b: number): number {
 export const utilCalc: Tool = {
   name: "util_calc",
   description:
-    "Tính một biểu thức số học chính xác: + - * / % ^ và ngoặc (vd '12.5 * (3 + 4) ^ 2'). " +
-    "Dùng công cụ này thay vì tự nhẩm để tránh sai số.",
+    "Tính một biểu thức số học chính xác: + - * / % ^ và ngoặc, số thập phân (vd '12.5 * (3 + 4) ^ 2'). " +
+    "Không hỗ trợ ký hiệu khoa học/hex/hàm. Dùng công cụ này thay vì tự nhẩm để tránh sai số.",
   kind: "read",
   parameters: {
     type: "object",

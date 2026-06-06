@@ -17,13 +17,15 @@ const MAX_COUNT = 10;
 export function mapSearxngResults(json: unknown, count: number): SearchHit[] {
   const raw = (json as { results?: unknown } | null)?.results;
   if (!Array.isArray(raw)) return [];
+  // Filter url-less entries (SearXNG widgets/answers) BEFORE the count cap, so
+  // `count` real hits are returned rather than silently fewer.
   return raw
-    .slice(0, count)
     .map((r) => {
       const o = (r ?? {}) as Record<string, unknown>;
       return { title: String(o.title ?? ""), url: String(o.url ?? ""), snippet: String(o.content ?? "") };
     })
-    .filter((h) => h.url);
+    .filter((h) => h.url)
+    .slice(0, count);
 }
 
 export async function searxngSearch(

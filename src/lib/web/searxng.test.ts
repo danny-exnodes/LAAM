@@ -33,6 +33,20 @@ describe("mapSearxngResults", () => {
     expect(hits).toEqual([{ title: "", url: "https://ok.com", snippet: "" }]);
   });
 
+  test("filters url-less entries BEFORE applying count (no silent under-count)", () => {
+    // SearXNG often returns a leading url-less widget/answer entry. count=2 must still
+    // yield 2 real hits, not 1.
+    const json = {
+      results: [
+        { title: "widget", content: "no url here" },
+        { title: "A", url: "https://a.com", content: "a" },
+        { title: "B", url: "https://b.com", content: "b" },
+        { title: "C", url: "https://c.com", content: "c" },
+      ],
+    };
+    expect(mapSearxngResults(json, 2).map((h) => h.url)).toEqual(["https://a.com", "https://b.com"]);
+  });
+
   test("non-array results → []", () => {
     expect(mapSearxngResults({}, 5)).toEqual([]);
     expect(mapSearxngResults({ results: "nope" }, 5)).toEqual([]);

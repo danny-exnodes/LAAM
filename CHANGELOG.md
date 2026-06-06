@@ -15,7 +15,8 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 - **`util_calc`**: số học deterministic (shunting-yard parser, KHÔNG `eval`).
 - Wiring: `INTERNAL_TOOLS = [...LAAM_TOOLS, ...WEB_TOOLS, ...UTIL_TOOLS]` — SP-2 gate / SP-4 trace tự áp (tool read-only nên qua gate tự do). **0 migration, 0 đổi hợp đồng SP-1.**
 - Hạ tầng: service `searxng` trong `docker-compose` (localhost-only `:8888`) + `searxng/settings.yml` (bật JSON API) + `SEARXNG_URL` trong `.env.example`. **Chạy SearXNG = bước host (user)**; thiếu nó → `web_search` fail-soft.
-- Verify: toàn bộ **897 test xanh**, `tsc` sạch. Spec: `docs/superpowers/specs/2026-06-06-world-tools-layer-design.md`.
+- **An toàn (sau code-review)**: `web_read` theo dõi redirect **thủ công + re-validate mỗi hop** (chặn SSRF: 302 → host nội bộ / cloud-metadata `169.254.169.254` bị chặn, KHÔNG fetch); `util_calc` ưu tiên `^` theo chuẩn toán (`-2^2 = -4`, nhưng `2^-2 = 0.25`); SearXNG lọc kết quả không-URL **trước** khi cắt `count` (không thiếu hụt thầm lặng).
+- Verify: toàn bộ **905 test xanh**, `tsc` sạch. Spec: `docs/superpowers/specs/2026-06-06-world-tools-layer-design.md`.
 
 ### Đã thêm — AI Workflow G2: Scheduler (Phase B, backend, 2026-06-05)
 - **Lịch định kỳ (`workflow_schedule`)**: cron 5-field tự viết (`min hour dom month dow`; `*`, int, `*/n`, `a-b`, `a,b`), thuần, theo **giờ server-local** (tz/DST hoãn). Migration `0006`.
