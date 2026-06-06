@@ -11,7 +11,7 @@
  *   - save handler: fromReactFlow → assertRunnable → PATCH → toast/error
  */
 
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef, type RefObject } from "react";
 import { useRouter } from "next/navigation";
 import {
   ReactFlow,
@@ -59,9 +59,23 @@ const DEFAULT_EDGE_OPTIONS = {
   markerEnd: { type: MarkerType.ArrowClosed, color: "#94a3b8", width: 18, height: 18 },
 };
 
+// Actions passed to every node card via a stable ref — avoids re-render churn
+// that would occur if callbacks were placed directly in `data`.
+type NodeActions = {
+  delete: (nodeId: string) => void;
+  copy: (nodeId: string) => void;
+};
+
+type WfNodeData = {
+  node: WfNode;
+  actionsRef: RefObject<NodeActions>;
+  /** Node run status — set by WorkflowEditorInner when a run is active */
+  status?: "idle" | "running" | "success" | "error";
+};
+
 // RF NodeProps data is Record<string, unknown>; we cast to extract our payload.
 function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selected?: boolean }) {
-  const wf = (data as { node: WfNode }).node;
+  const { node: wf, status } = data as WfNodeData;
   const color = KIND_COLORS[wf.kind] ?? "#64748b";
   const label =
     wf.kind === "agent"
@@ -127,6 +141,32 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
       ) : (
         <Handle type="source" position={Position.Right} />
       )}
+
+      {/* Run status badge — shown when editor has an active run (P5-C) */}
+      {status && status !== "idle" && (
+        <div
+          style={{
+            position: "absolute",
+            top: -8,
+            right: -8,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            background:
+              status === "running" ? "#3b82f6" :
+              status === "success" ? "#22c55e" :
+              "#ef4444",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 9,
+            color: "#fff",
+            fontWeight: 700,
+          }}
+        >
+          {status === "running" ? "…" : status === "success" ? "✓" : "✕"}
+        </div>
+      )}
     </div>
   );
 }
@@ -174,6 +214,11 @@ export interface WorkflowEditorProps {
   fetchImpl?: FetchLike;
   /** Called after a successful save — if omitted, uses router.push */
   onSaved?: () => void;
+  /**
+   * Node run statuses from an active workflow run.
+   * Key = node id. Used to show status badges on nodes (P5-C run-in-editor).
+   */
+  nodeStatuses?: Record<string, "idle" | "running" | "success" | "error">;
 }
 
 /**
@@ -189,7 +234,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
   );
 }
 
-function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorProps) {
+function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: WorkflowEditorProps) {
   const t = useT(dict);
   const router = useRouter();
   const rfInstance = useReactFlow();
@@ -222,6 +267,29 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
   // Dirty tracking — only active after initial load
   const [isDirty, setIsDirty] = useState(false);
   const loadedRef = useRef(false);
+
+  // Stable ref holding the latest delete/copy callbacks.
+  // Using a ref instead of putting callbacks in node data prevents full-tree
+  // re-renders whenever handleDeleteNode or handleCopyNode are recreated.
+  const nodeActionsRef = useRef<NodeActions>({
+    delete: () => {},
+    copy: () => {},
+  });
+
+  // Merge external nodeStatuses into RF node data so WfNodeCard can render status badges.
+  const nodesWithStatus = useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        data: {
+          ...n.data,
+          actionsRef: nodeActionsRef,
+          status: nodeStatuses?.[n.id] ?? "idle",
+        } satisfies WfNodeData,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [nodes, nodeStatuses],
+  );
 
   // Load on mount
   useEffect(() => {
@@ -533,7 +601,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved }: WorkflowEditorP
         {/* React Flow canvas */}
         <div className="relative min-h-0 flex-1">
           <ReactFlow
-            nodes={nodes}
+            nodes={nodesWithStatus}
             edges={edges}
             nodeTypes={NODE_TYPES}
             defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
