@@ -250,4 +250,5 @@ export const workflows: Dict = {
 
   // Editor — mobile config panel title
   "wf.editor.configTitle": { vi: "Cấu hình node", en: "Configure node", zh: "配置节点" },
+  "wf.editor.closePanel": { vi: "Đóng", en: "Close", zh: "关闭" },
 };

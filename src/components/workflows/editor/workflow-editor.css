@@ -64,3 +64,21 @@
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
 }
+
+/* ── React Flow chrome theming (Controls + MiniMap) ───────────────────────── */
+/* xyflow v12 gates its dark vars on `.react-flow.dark` (the class must sit on    */
+/* the .react-flow div). LAAM toggles dark via `.dark` on <html> and never sets   */
+/* RF's `colorMode` prop, so the library's dark defaults never fire and the       */
+/* Controls/MiniMap render light-on-dark. Fix: override the (non-`-default`)      */
+/* --xy-* vars to LAAM's --wf-* vars — these already flip under `.dark`, and CSS  */
+/* custom props resolve at the element's use-site, so this covers BOTH modes with */
+/* no !important and no JS colorMode prop. */
+
+.react-flow {
+  --xy-controls-button-background-color: var(--wf-node-bg);
+  --xy-controls-button-background-color-hover: color-mix(in srgb, var(--color-accent, #2563eb) 12%, var(--wf-node-bg));
+  --xy-controls-button-color: var(--wf-node-text);
+  --xy-controls-button-color-hover: var(--color-accent, #2563eb);
+  --xy-controls-button-border-color: var(--wf-node-border);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--wf-node-bg) 55%, transparent);
+}

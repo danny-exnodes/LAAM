@@ -282,6 +282,12 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
   // Selection + config
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Mobile bottom-sheet animation (H): mounted in DOM vs visually open, plus the
+  // node to show — `sheetNode` is retained during the close slide-down after deselect.
+  const [sheetMounted, setSheetMounted] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [sheetNode, setSheetNode] = useState<WfNode | null>(null);
+
   // Save status
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -544,6 +550,21 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
     ? (selectedRfNode.data as { node: WfNode }).node
     : null;
 
+  // ── Mobile sheet open/close animation (H) ────────────────────────────────
+  // Mount immediately on select, then flip `open` next frame so the closed
+  // (translate-y-full) state paints first and the slide-up transitions. On
+  // deselect, slide down; `onTransitionEnd` unmounts. `sheetNode` keeps the last
+  // node visible during the close animation.
+  useEffect(() => {
+    if (selectedWfNode) {
+      setSheetNode(selectedWfNode);
+      setSheetMounted(true);
+      const raf = requestAnimationFrame(() => setSheetOpen(true));
+      return () => cancelAnimationFrame(raf);
+    }
+    setSheetOpen(false);
+  }, [selectedWfNode]);
+
   // ── Save ─────────────────────────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
@@ -733,33 +754,47 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses }: W
         </div>
       </div>
 
-      {/* Mobile config panel — bottom sheet, shown when a node is selected */}
-      {selectedWfNode && (
-        <div
-          className="fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl border-t border-neutral-200 bg-white shadow-2xl md:hidden dark:border-neutral-700 dark:bg-neutral-900"
-          style={{ maxHeight: "65dvh" }}
-        >
-          <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
-            <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
-              {t("wf.editor.configTitle")}
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedId(null)}
-              className="rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
-              aria-label="Close"
-            >
-              ✕
-            </button>
+      {/* Mobile config panel — animated bottom sheet + scrim (H). Stays mounted
+          while sliding; unmounts after the close transition (onTransitionEnd). */}
+      {sheetMounted && sheetNode && (
+        <>
+          <div
+            className={`fixed inset-0 z-40 bg-black/30 transition-opacity duration-300 md:hidden ${sheetOpen ? "opacity-100" : "opacity-0"}`}
+            onClick={() => setSelectedId(null)}
+            aria-hidden
+          />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("wf.editor.configTitle")}
+            className={`fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl border-t border-neutral-200 bg-white shadow-2xl transition-transform duration-300 ease-out md:hidden dark:border-neutral-700 dark:bg-neutral-900 ${sheetOpen ? "translate-y-0" : "translate-y-full"}`}
+            style={{ maxHeight: "65dvh" }}
+            onTransitionEnd={(e) => {
+              if (e.propertyName === "transform" && !sheetOpen) setSheetMounted(false);
+            }}
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
+              <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
+                {t("wf.editor.configTitle")}
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedId(null)}
+                className="rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                aria-label={t("wf.editor.closePanel")}
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <NodeConfigPanel
+                node={sheetNode}
+                onChange={onNodeConfigChange}
+                onDelete={() => sheetNode && handleDeleteNode(sheetNode.id)}
+              />
+            </div>
           </div>
-          <div className="flex-1 overflow-y-auto">
-            <NodeConfigPanel
-              node={selectedWfNode}
-              onChange={onNodeConfigChange}
-              onDelete={() => handleDeleteNode(selectedWfNode.id)}
-            />
-          </div>
-        </div>
+        </>
       )}
     </div>
   );

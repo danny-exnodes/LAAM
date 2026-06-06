@@ -18,6 +18,7 @@ import {
   waitFor,
   cleanup,
   act,
+  within,
 } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import type { WorkflowGraph } from "@/lib/workflow/types";
@@ -421,5 +422,28 @@ describe("WorkflowEditor — node toolbar", () => {
 
     const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
     expect(after).toBe(before - 1);
+  });
+});
+
+describe("WorkflowEditor — mobile config sheet (H)", () => {
+  test("selecting a node mounts the animated bottom sheet (dialog)", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    // No sheet before any selection
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // Selecting a node mounts the bottom sheet
+    fireEvent.click(screen.getByTestId("node-n1"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  test("close button on the sheet deselects the node", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    fireEvent.click(screen.getByTestId("node-n1"));
+    const sheet = screen.getByRole("dialog");
+    // Close (aria-label i18n: vi "Đóng" / en "Close")
+    fireEvent.click(within(sheet).getByRole("button", { name: /đóng|close/i }));
+    // Desktop panel falls back to the no-selection prompt
+    expect(screen.getByText(/chọn một node|select a node/i)).toBeInTheDocument();
   });
 });
