@@ -12,7 +12,7 @@
  * On change → calls onChange(updatedNode). PURE UI — no side effects.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Trash2 } from "lucide-react";
 import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode, Predicate, WorkflowGraph } from "@/lib/workflow/types";
 import { useT } from "@/i18n/provider";
@@ -173,18 +173,35 @@ function ConnectorForm({
       {field(
         <>
           {label(t("wf.node.connector.actionLabel"))}
-          {useSelects && availableActions.length > 0 ? (
-            <select
-              className={inputCls()}
-              value={node.action}
-              disabled={!node.connectorId}
-              onChange={(e) => onChange({ ...node, action: e.target.value })}
-            >
-              <option value="">{t("wf.node.connector.selectAction")}</option>
-              {availableActions.map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
+          {useSelects ? (
+            availableActions.length > 0 ? (
+              <select
+                className={inputCls()}
+                value={node.action}
+                disabled={!node.connectorId}
+                onChange={(e) => onChange({ ...node, action: e.target.value })}
+              >
+                <option value="">{t("wf.node.connector.selectAction")}</option>
+                {availableActions.map((a) => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  className={inputCls()}
+                  value={node.action}
+                  placeholder={t("wf.node.connector.actionPlaceholder")}
+                  onChange={(e) => onChange({ ...node, action: e.target.value })}
+                />
+                {node.connectorId && (
+                  <p className="mt-1 text-xs text-neutral-400">
+                    {t("wf.node.connector.noTools")}
+                  </p>
+                )}
+              </>
+            )
           ) : (
             <input
               type="text"
@@ -348,15 +365,17 @@ export function NodeConfigPanel({
   const t = useT(dict);
   const [connectors, setConnectors] = useState<ConnectorListItem[]>(connectorsProp ?? []);
 
+  // Capture at mount time — avoids re-firing when a caller passes a new array literal
+  const injectedRef = useRef(connectorsProp !== undefined);
   useEffect(() => {
-    if (connectorsProp !== undefined) return; // test injection — skip fetch
+    if (injectedRef.current) return; // test injection — skip fetch
     void fetch("/api/connectors")
       .then((r) => (r.ok ? r.json() : null))
       .then((data: { connectors?: ConnectorListItem[] } | null) => {
         if (data?.connectors) setConnectors(data.connectors);
       })
       .catch(() => { /* keep empty — fallback to text inputs */ });
-  }, [connectorsProp]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex h-full flex-col">

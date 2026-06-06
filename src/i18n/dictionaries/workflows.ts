@@ -196,6 +196,11 @@ export const workflows: Dict = {
     en: "⚠ Connector not connected — workflow will fail at runtime",
     zh: "⚠ 连接器未连接 — 运行时工作流将失败",
   },
+  "wf.node.connector.noTools": {
+    vi: "Connector này không có action — nhập thủ công",
+    en: "This connector has no registered actions — enter manually",
+    zh: "此连接器没有注册的操作 — 请手动输入",
+  },
 
   // Node config panel — condition
   "wf.node.condition.label": {
