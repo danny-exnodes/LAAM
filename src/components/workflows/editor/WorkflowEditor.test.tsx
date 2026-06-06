@@ -31,7 +31,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 // @xyflow/react — mock the entire module; we test behavior not visuals
 vi.mock("@xyflow/react", () => {
   const { useState, useCallback } = require("react") as typeof import("react");
-  function ReactFlow({ children, onNodeClick, onPaneClick, nodes, nodeTypes, onConnect }: {
+  function ReactFlow({ children, onNodeClick, onPaneClick, nodes, nodeTypes, onConnect, edges, onEdgeClick }: {
     children?: React.ReactNode;
     onNodeClick?: (e: React.MouseEvent, node: { id: string; data: unknown }) => void;
     onPaneClick?: () => void;
@@ -39,6 +39,8 @@ vi.mock("@xyflow/react", () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     nodeTypes?: Record<string, React.ComponentType<any>>;
     onConnect?: (c: { source: string; target: string }) => void;
+    edges?: { id: string; label?: unknown }[];
+    onEdgeClick?: (e: React.MouseEvent, edge: { id: string; label?: unknown }) => void;
   }) {
     const [mockSelectedId, setMockSelectedId] = useState<string | null>(null);
     return (
@@ -69,6 +71,12 @@ vi.mock("@xyflow/react", () => {
             </div>
           );
         })}
+        {/* Render edges as buttons so tests can click them (fires onEdgeClick). */}
+        {edges?.map((e, i) => (
+          <button key={e.id ?? i} data-testid={`edge-${i}`} onClick={(ev) => onEdgeClick?.(ev, e)}>
+            {String(e.label ?? "edge")}
+          </button>
+        ))}
         {children}
       </div>
     );
@@ -497,6 +505,67 @@ describe("WorkflowEditor — undo/redo toolbar", () => {
     // Baseline is only seeded after the debounce; before any edit both are disabled.
     expect(undoBtn).toBeDisabled();
     expect(redoBtn).toBeDisabled();
+  });
+});
+
+describe("WorkflowEditor — edge editing", () => {
+  const fetchOneEdge: FetchLike = async () =>
+    ({
+      ok: true,
+      json: async () => ({
+        name: "WF",
+        graph: {
+          nodes: [
+            { id: "n1", kind: "agent", prompt: "a" },
+            { id: "n2", kind: "agent", prompt: "b" },
+          ],
+          edges: [{ from: "n1", to: "n2" }],
+        },
+      }),
+    }) as Response;
+
+  const fetchCondEdge: FetchLike = async () =>
+    ({
+      ok: true,
+      json: async () => ({
+        name: "WF",
+        graph: {
+          nodes: [
+            { id: "c", kind: "condition", when: { left: "{{x}}", op: "eq", right: 1 } },
+            { id: "n2", kind: "agent", prompt: "b" },
+          ],
+          edges: [{ from: "c", to: "n2", label: "true" }],
+        },
+      }),
+    }) as Response;
+
+  test("clicking an edge shows the toolbar; delete removes the edge", async () => {
+    render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor workflowId="wf1" fetchImpl={fetchOneEdge} onSaved={vi.fn()} />
+      </I18nProvider>,
+    );
+    await screen.findByTestId("node-n1");
+    expect(screen.getByTestId("edge-0")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("edge-0"));
+    // Edge toolbar's delete button (aria/text "Xoá cạnh")
+    fireEvent.click(screen.getByRole("button", { name: /xoá cạnh|delete edge/i }));
+    expect(screen.queryByTestId("edge-0")).not.toBeInTheDocument();
+  });
+
+  test("condition edge can be relabeled true→false", async () => {
+    render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor workflowId="wf1" fetchImpl={fetchCondEdge} onSaved={vi.fn()} />
+      </I18nProvider>,
+    );
+    await screen.findByTestId("node-c");
+    expect(screen.getByTestId("edge-0").textContent).toBe("true");
+    fireEvent.click(screen.getByTestId("edge-0"));
+    // The toolbar's true/false select (only shown for condition edges)
+    const select = screen.getByRole("combobox", { name: /nhãn cạnh|edge label/i });
+    fireEvent.change(select, { target: { value: "false" } });
+    expect(screen.getByTestId("edge-0").textContent).toBe("false");
   });
 });
 

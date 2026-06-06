@@ -268,4 +268,7 @@ export const workflows: Dict = {
   "wf.node.insertVar": { vi: "Chèn:", en: "Insert:", zh: "插入:" },
   // Run history — dry-run (Test) badge
   "wf.run.dryRun": { vi: "Thử", en: "Dry-run", zh: "试运行" },
+  // Editor — edge toolbar
+  "wf.editor.editEdge": { vi: "Cạnh", en: "Edge", zh: "连线" },
+  "wf.editor.deleteEdge": { vi: "Xoá cạnh", en: "Delete edge", zh: "删除连线" },
 };

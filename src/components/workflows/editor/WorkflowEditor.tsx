@@ -309,6 +309,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   const [sheetOpen, setSheetOpen] = useState(false);
   const [sheetNode, setSheetNode] = useState<WfNode | null>(null);
 
+  // Edge editing: id of the currently selected edge (drives the edge toolbar).
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+
   // Save status
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -368,19 +371,21 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     () =>
       edges.map((e) => {
         const { animated, errored } = edgeRunDecoration(nodeStatuses?.[e.source] ?? "idle", runStatus);
-        if (!animated && !errored) return e; // unchanged → keep stable reference
+        const selected = e.id === selectedEdgeId;
+        if (!animated && !errored && !selected) return e; // unchanged → keep stable reference
+        const stroke = errored ? "#ef4444" : selected ? "var(--color-accent)" : "var(--wf-edge-stroke)";
         return {
           ...e,
           animated,
           style: {
             ...(e.style ?? {}),
-            strokeWidth: errored ? 2.5 : 2,
-            stroke: errored ? "#ef4444" : "var(--wf-edge-stroke)",
+            strokeWidth: errored || selected ? 2.5 : 2,
+            stroke,
           },
           ...(errored ? { markerEnd: { type: MarkerType.ArrowClosed, color: "#ef4444", width: 18, height: 18 } } : {}),
         };
       }),
-    [edges, nodeStatuses, runStatus],
+    [edges, nodeStatuses, runStatus, selectedEdgeId],
   );
 
   // Load on mount
@@ -510,11 +515,36 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: RFNode) => {
     setSelectedId(node.id);
+    setSelectedEdgeId(null);
   }, []);
 
   const onPaneClick = useCallback(() => {
     setSelectedId(null);
+    setSelectedEdgeId(null);
   }, []);
+
+  // ── Edge editing: select / delete / relabel (condition true·false) ─────────
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: RFEdge) => {
+    setSelectedEdgeId(edge.id);
+    setSelectedId(null);
+  }, []);
+
+  const deleteEdge = useCallback(
+    (id: string) => {
+      setEdges((prev) => prev.filter((e) => e.id !== id));
+      setSelectedEdgeId(null);
+      setIsDirty(true);
+    },
+    [setEdges],
+  );
+
+  const relabelEdge = useCallback(
+    (id: string, label: string) => {
+      setEdges((prev) => prev.map((e) => (e.id === id ? { ...e, label } : e)));
+      setIsDirty(true);
+    },
+    [setEdges],
+  );
 
   // ── Config panel onChange ────────────────────────────────────────────────
 
@@ -605,6 +635,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     ? (selectedRfNode.data as { node: WfNode }).node
     : null;
 
+  // Selected edge (for the edge toolbar). Condition edges carry a "true"/"false" label.
+  const selectedEdge = selectedEdgeId ? (edges.find((e) => e.id === selectedEdgeId) ?? null) : null;
+
   // All graph nodes (WfNode shape) — passed to NodeConfigPanel for {{variable}} hints.
   const allWfNodes = useMemo(() => nodes.map((n) => (n.data as { node: WfNode }).node), [nodes]);
 
@@ -621,6 +654,10 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
       return () => cancelAnimationFrame(raf);
     }
     setSheetOpen(false);
+    // Reliable unmount via timeout — onTransitionEnd can fail to fire, leaving the
+    // scrim mounted and (even at opacity-0) capturing clicks across the whole screen.
+    const t = setTimeout(() => setSheetMounted(false), 320);
+    return () => clearTimeout(t);
   }, [selectedWfNode]);
 
   // ── Save ─────────────────────────────────────────────────────────────────
@@ -909,6 +946,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             onEdgesChange={wrappedOnEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             fitView
             minZoom={0.2}
@@ -955,6 +993,39 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
                   {t("wf.cancel")}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Edge toolbar — shown when an edge is clicked: delete + (condition) relabel true/false */}
+          {selectedEdge && (
+            <div className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl border border-neutral-200 bg-white p-2 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+              <span className="px-1 text-xs font-semibold text-neutral-500">{t("wf.editor.editEdge")}</span>
+              {(selectedEdge.label === "true" || selectedEdge.label === "false") && (
+                <select
+                  value={String(selectedEdge.label)}
+                  onChange={(e) => relabelEdge(selectedEdge.id, e.target.value)}
+                  aria-label={t("wf.editor.condEdgeLabel")}
+                  className="rounded-lg border border-neutral-200 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-800"
+                >
+                  <option value="true">true</option>
+                  <option value="false">false</option>
+                </select>
+              )}
+              <button
+                type="button"
+                onClick={() => deleteEdge(selectedEdge.id)}
+                className="flex items-center gap-1 rounded-lg border border-red-200 px-2 py-1 text-sm font-semibold text-red-600 transition hover:bg-red-50 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/20"
+              >
+                <Trash2 size={13} aria-hidden /> {t("wf.editor.deleteEdge")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedEdgeId(null)}
+                aria-label={t("wf.editor.closePanel")}
+                className="rounded-lg p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-600 dark:hover:bg-neutral-800"
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -1016,7 +1087,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
       {sheetMounted && sheetNode && (
         <>
           <div
-            className={`fixed inset-0 z-40 bg-black/30 transition-opacity duration-300 md:hidden ${sheetOpen ? "opacity-100" : "opacity-0"}`}
+            className={`fixed inset-0 z-40 bg-black/30 transition-opacity duration-300 md:hidden ${sheetOpen ? "opacity-100" : "opacity-0 pointer-events-none"}`}
             onClick={() => setSelectedId(null)}
             aria-hidden
           />
@@ -1026,9 +1097,6 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             aria-label={t("wf.editor.configTitle")}
             className={`fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl border-t border-neutral-200 bg-white shadow-2xl transition-transform duration-300 ease-out md:hidden dark:border-neutral-700 dark:bg-neutral-900 ${sheetOpen ? "translate-y-0" : "translate-y-full"}`}
             style={{ maxHeight: "65dvh" }}
-            onTransitionEnd={(e) => {
-              if (e.propertyName === "transform" && !sheetOpen) setSheetMounted(false);
-            }}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
               <span className="text-sm font-semibold text-neutral-700 dark:text-neutral-300">
