@@ -4,7 +4,9 @@
 
 **Goal:** Build the auth backbone that generalizes the machine/collector token into a single `access_token` model (verdict H3), so later phases (MCP-server, per-user API) plug in without a second bearer mechanism. P0 is backend spine + minimal repoint, **forward-compatible** (no big-bang token re-issue, collector keeps working throughout).
 
-**Decision source (LOCKED):** `.serena/memories/decisions/machines-decomposition.md` + verdict `comms/.../consultant-to-cto-machines-decomposition.md`.
+**Decision source (LOCKED):** `.serena/memories/decisions/machines-decomposition.md` + verdict `comms/resolved/consultant-to-cto-machines-decomposition.md`.
+
+**Gate status:** ✅ CTO GATED (2026-06-07) with 3 conditions **folded into this plan**: **A1** (DELETE dual-revoke, binding — Task 4) · **A2** (set `access_token.userId` on issue + backfill — Tasks 4/5) · **A3** (sentinel `last4="----"` consistent — Task 5). Gate thread: `comms/resolved/consultant-to-cto-access-spine-p0-plan.md`.
 
 **Architecture:** New `access_token` table (token removed from `machines` conceptually; `machines.tokenHash` **kept during transition**, dropped in a later phase). One `verifyAccessToken()` chokepoint. `/api/ingest` resolves `access_token(kind=collector)` first, **falls back to `machines.tokenHash`** so existing collectors don't break. Machine creation (`POST /api/machines`) repoints to issue via `access_token` + link `machineId`. sha256 kept (high-entropy token, not a password). UNIQUE index on `tokenHash`. `prefix`/`last4` columns for UI identification.
 
@@ -69,14 +71,15 @@ export const accessTokens = pgTable("access_token", {
 
 ## Task 4 — `POST /api/machines` issues via access_token; revoke (TDD)
 
-- [ ] **Failing tests** (`route.test.ts`): owner/admin POST → creates `machine` row + `access_token(kind=collector, machineId, scopes:["ingest"])`, returns `{token, prefix, last4}` once; non-owner → 403; DELETE `/[id]` → sets `revokedAt` on linked token (token no longer verifies) and the machine row handling matches current behavior.
-- [ ] **Implement.** POST: create machine (no `tokenHash` now), then `accessTokens.insert` with `formatTokenDisplay`. Return raw token once. GET stays (machines list); `hasToken` derives from existence of a non-revoked linked access_token (LEFT JOIN or follow-up query). DELETE: revoke token (set `revokedAt`), keep current machine semantics.
+- [ ] **Failing tests** (`route.test.ts`): owner/admin POST → creates `machine` row + `access_token(kind=collector, machineId, userId=session.user.id, scopes:["ingest"])`, returns `{token, prefix, last4}` once; non-owner → 403; **[A1] DELETE `/[id]` dual-revoke:** a **backfilled** machine (carries BOTH `machines.tokenHash` AND a linked access_token of the same hash) → DELETE → ingest returns **401 via BOTH paths** (no surviving path). Assert `machines.tokenHash IS NULL` AND every linked access_token has `revokedAt` set.
+- [ ] **Implement.** POST: create machine (no `tokenHash` now), then `accessTokens.insert` with `formatTokenDisplay` + **[A2] `userId = session.user.id`** (provenance, NOT an isolation key — ingest still org-shared). Return raw token once. GET stays (machines list); `hasToken` derives from existence of a non-revoked linked access_token (LEFT JOIN or follow-up query).
+- [ ] **[A1 — BINDING, Rule 12] DELETE must revoke BOTH paths.** After backfill a machine has a legacy `machines.tokenHash` *and* an `access_token` with the same hash; the ingest resolver tries access_token first then falls back to `machines.tokenHash`. Revoking only one path = a no-op revoke. DELETE `/api/machines/[id]` MUST: `UPDATE machines SET tokenHash=NULL WHERE id=:id` **AND** `UPDATE access_token SET revokedAt=now() WHERE machineId=:id AND revokedAt IS NULL`. This is a gate condition, not a suggestion.
 - **Note (FE):** `machines-manager.tsx` token-display copy unchanged (still shows raw token once on create). Listing "token hoạt động" now reads non-revoked access_token. Minimal — no `/settings/access` page yet.
-- **Success:** issue→ingest→revoke→ingest-401 round-trip green.
+- **Success:** issue→ingest→revoke→ingest-401 round-trip green, with 401 asserted on **both** the access_token path and the legacy `machines.tokenHash` path.
 
 ## Task 5 — Backfill script (one-shot, host-run)
 
-- [ ] `scripts/backfill-access-token.ts`: for each `machines` row with non-null `tokenHash` and no linked access_token → insert `access_token(kind=collector, machineId, tokenHash, prefix:"laam_…", last4:"????", scopes:["ingest"], name:machine.name)`. Idempotent (skip if a token with that `tokenHash` exists). `prefix/last4` unknown for legacy hashes → store sentinels (`"legacy"`, `"----"`); display layer tolerates.
+- [ ] `scripts/backfill-access-token.ts`: for each `machines` row with non-null `tokenHash` and no linked access_token → insert `access_token(kind=collector, machineId, tokenHash, userId=machine.ownerUserId, scopes:["ingest"], name:machine.name, prefix:"legacy", last4:"----")`. Idempotent (skip if a token with that `tokenHash` exists). **[A2]** `userId = machine.ownerUserId` (provenance/audit — fulfills Q2 from day one; nullable if owner was cleared). **[A3]** legacy `prefix/last4` cannot be reconstructed from sha256 → fixed sentinels `prefix:"legacy"` (never collides with real `laam_` prefix) + `last4:"----"` (consistent — NOT `"????"`); display layer tolerates. Rotating a legacy token later self-heals the sentinel.
 - **Success:** running twice = no dupes; legacy collectors keep working via either path.
 
 ---
@@ -84,7 +87,7 @@ export const accessTokens = pgTable("access_token", {
 ## Verification (Phase 5 — never skipped)
 - [ ] `npx tsc --noEmit` clean.
 - [ ] `npm test` — full suite green (existing 1117+ tests + new).
-- [ ] Manual round-trip (HOST/USER, agent does NOT run services): `db:migrate` 0009 → backfill → create machine → run collector with new token → ingest 200 → revoke → ingest 401. Legacy token (pre-migrate) → ingest 200 (fallback).
+- [ ] Manual round-trip (HOST/USER, agent does NOT run services): `db:migrate` 0009 → backfill → create machine → run collector with new token → ingest 200 → DELETE → ingest **401 on BOTH paths** (A1). Legacy token (pre-migrate) → ingest 200 (fallback); after backfill+DELETE that same legacy token → 401.
 
 ## Sequencing note
 This is **P0** of the locked roadmap: `Access (P0)` → [`MCP-server` ∥ `Monitoring read-model`]. The `scopes` column + `kind=api|mcp` are laid here but exercised by later phases. Dropping `machines.tokenHash` is a **separate later migration** after all collectors are confirmed migrated.

@@ -42,3 +42,11 @@ Cột đã có sẵn; không wiring = phí chính verdict Q2 (attribution-record
 
 **Gate:** ✅ vào `executing-plans` task 1→5 SAU khi nhúng A1+A2+A3 vào plan. Migration `db:generate`/`db:migrate` chạy ở HOST (drizzle-kit không chạy sandbox) — plan đã ghi đúng. Verify cuối: tsc sạch + full suite + round-trip issue→ingest→revoke→ingest-401 (CẢ legacy path, theo A1).
 <!-- /CTO gate -->
+
+---
+### Consultant — FOLDED (2026-06-07)
+3 điều kiện đã nhúng vào `docs/superpowers/plans/2026-06-07-access-spine-p0.md`:
+- **A1** (binding) → Task 4: DELETE dual-revoke (`machines.tokenHash=NULL` AND `access_token.revokedAt=now() WHERE machineId AND revokedAt IS NULL`) + test ingest-401 CẢ HAI đường trên machine đã-backfill. Header + Verification cũng ghi rõ both-path 401.
+- **A2** → Task 4 POST `userId=session.user.id`, Task 5 backfill `userId=machine.ownerUserId` (provenance, KHÔNG isolation key).
+- **A3** → Task 5 sentinel thống nhất `prefix:"legacy"` + `last4:"----"` (bỏ `"????"`).
+Header plan ghi Gate status + pointer thread. Sẵn sàng worktree → `executing-plans` task 1→5. Migration db:generate/db:migrate = HOST. **Đóng thread → resolved.**
