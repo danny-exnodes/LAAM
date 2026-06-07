@@ -11,6 +11,55 @@
   --metric-vram: #38bdf8; /* sky-400 — graphics memory accent (VRAM) */
 }
 
+/* ── Matte Dark design tokens ─────────────────────────────────────────────
+   Brand redesign ("Matte Dark", not glassmorphism): opaque, low-saturation
+   cool-cyan surfaces; depth comes from ambient gradients + decorative Bloom,
+   NOT from translucency/backdrop-blur. Consumed via Tailwind arbitrary values
+   (`bg-[var(--surface-1)]`) by the `components/ui/*` primitives, so light/dark
+   theming is just a re-map of these vars.
+
+   `:root` = light fallback (kept functional, not the design focus).
+   `.dark` = the designed surface. Contrast verified ≥7:1 primary / ≥4.5:1
+   secondary+muted on --surface-1; accent fill text ≥4.5:1. */
+:root {
+  --bg-base: #f4f7f7;
+  --surface-1: #ffffff;
+  --surface-2: #f1f5f5;
+  --surface-3: #e6eded;
+  --border-subtle: rgba(0, 40, 40, 0.1);
+  --border-strong: rgba(0, 40, 40, 0.18);
+  --text-primary: #0a1f1f;
+  --text-secondary: #3a5555;
+  --text-muted: #5d7878;
+  --accent: #2a8fbf; /* darkened for contrast on light surfaces */
+  --accent-hover: #2380ad;
+  --accent-fg: #ffffff;
+  --accent-muted: rgba(54, 166, 214, 0.14);
+  --accent-glow: rgba(54, 166, 214, 0.3);
+  --bloom-cyan: rgba(54, 166, 214, 0.1);
+  --bloom-aqua: rgba(45, 210, 200, 0.08);
+  --bloom-sky: rgba(56, 130, 246, 0.07);
+}
+.dark {
+  --bg-base: #001616;
+  --surface-1: #052020;
+  --surface-2: #0a2a2a;
+  --surface-3: #103434;
+  --border-subtle: rgba(120, 210, 210, 0.1);
+  --border-strong: rgba(120, 210, 210, 0.18);
+  --text-primary: #e6f2f2;
+  --text-secondary: #9fb8b8;
+  --text-muted: #6f8c8c;
+  --accent: #36a6d6;
+  --accent-hover: #4fb6e0;
+  --accent-fg: #03171b;
+  --accent-muted: rgba(54, 166, 214, 0.16);
+  --accent-glow: rgba(54, 166, 214, 0.38);
+  --bloom-cyan: rgba(54, 166, 214, 0.22);
+  --bloom-aqua: rgba(45, 210, 200, 0.16);
+  --bloom-sky: rgba(56, 130, 246, 0.14);
+}
+
 /* App-like input feel on phones: kill double-tap-to-zoom + iOS text auto-zoom.
    (Pinch-zoom is blocked by NoZoom's gesture handlers; see components/no-zoom.) */
 html {
@@ -59,16 +108,16 @@ body::after {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(65% 55% at 50% 102%, rgba(37, 99, 235, 0.10), transparent 70%),
-    radial-gradient(42% 40% at 12% 6%, rgba(59, 130, 246, 0.06), transparent 70%),
-    radial-gradient(48% 45% at 90% 16%, rgba(30, 64, 175, 0.07), transparent 70%);
+    radial-gradient(65% 55% at 50% 102%, rgba(54, 166, 214, 0.1), transparent 70%),
+    radial-gradient(42% 40% at 12% 6%, rgba(45, 210, 200, 0.06), transparent 70%),
+    radial-gradient(48% 45% at 90% 16%, rgba(56, 130, 246, 0.06), transparent 70%);
   animation: laam-bg-drift 20s ease-in-out infinite alternate;
 }
 .dark body::after {
   background:
-    radial-gradient(65% 55% at 50% 102%, rgba(37, 99, 235, 0.20), transparent 70%),
-    radial-gradient(45% 42% at 10% 6%, rgba(59, 130, 246, 0.11), transparent 70%),
-    radial-gradient(48% 45% at 92% 16%, rgba(29, 78, 216, 0.13), transparent 70%);
+    radial-gradient(65% 55% at 50% 102%, rgba(54, 166, 214, 0.18), transparent 70%),
+    radial-gradient(45% 42% at 10% 6%, rgba(45, 210, 200, 0.12), transparent 70%),
+    radial-gradient(48% 45% at 92% 16%, rgba(54, 166, 214, 0.14), transparent 70%);
 }
 
 @keyframes laam-bg-drift {
