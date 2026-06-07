@@ -40,8 +40,27 @@ Rollout choice = **token + primitives first, no page redesign this pass**.
 Verified: 1125 tests pass, tsc clean. Contrast self-checked (primary 14.4:1,
 secondary 7.9:1, muted 4.6:1, accent-fill text 6.8:1 on `--surface-1`).
 
-## Next (rollout, future sessions)
-Cuốn chiếu primitives → pages: Dashboard → Agents → Chat → Connectors/Graph/
-Machines. Repoint legacy `--color-accent` + chart theming (`useChartTheme`) to
-the new accent. Remove `/ui-preview`. Primitives are presentational → no i18n
-keys needed (only add keys when restyling pages introduces strings).
+## ROLLOUT DONE — applied app-wide (2026-06-07, user said "apply toàn bộ")
+Done via a **token-level lever**, NOT 135 hand-edits (Rule 2/3):
+- `@theme` retints the whole **`neutral` scale** (~950 usages = the entire
+  surface/border/text system) to a teal family, **lightness preserved per step**
+  so contrast ratios are unchanged; dark end (800/900/950) aligned to
+  `--surface-*`/`--bg-base` so legacy `dark:bg-neutral-900` == `<MatteCard>`.
+- `--color-accent` repointed `#6d5efc`→`#36a6d6`; the 18 hardcoded `#6d5efc`
+  swapped across charts/`metric-colors`; `ram` `#8b5cf6`→`#2dd4bf` (aqua);
+  workflow `connector` node `#7c3aed`→cyan; AuthShell violet/indigo→cyan.
+- **Left intentionally**: 10-hue categorical chart palettes (ChartBlock/
+  Doughnut/TrendChart) keep warm hues — they're data encodings; forcing
+  monochrome-cool hurts legibility. Surfaced to user.
+- a11y verified (WCAG): primary 17:1/14.6:1, secondary 11.4/6.7:1, muted-500
+  4.9:1 light / 3.47 dark-tertiary (≥ pre-redesign). 1125 tests green, tsc clean.
+
+## Residual / future
+- `/ui-preview` kept as a living style gallery (can delete anytime).
+- Known-minor: `--color-accent` is a single value → accent-as-text on white in
+  light mode = 2.77:1 (accent is used as fills/inline chart colors, not body
+  text, so low impact). The new primitives use mode-aware `--accent` (#2a8fbf
+  in light) which is fine.
+- Optional polish later: sprinkle `<Bloom>` on hero areas (dashboard KPI/auth),
+  recolor categorical chart palettes if desired, MatteCard adoption in new code.
+- Primitives are presentational → no i18n keys needed.

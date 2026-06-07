@@ -6,9 +6,28 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-accent: #6d5efc;
+  --color-accent: #36a6d6;
   --metric-gpu: #22d3ee; /* cyan-400 — graphics accent (GPU) */
   --metric-vram: #38bdf8; /* sky-400 — graphics memory accent (VRAM) */
+
+  /* Matte Dark rebrand, app-wide lever: the whole app builds surfaces, borders
+     and text from the `neutral` scale (~950 usages). We re-hue that scale to a
+     cool teal family while KEEPING each step's lightness ≈ the Tailwind default,
+     so every existing `*-neutral-*` utility cools to cyan WITHOUT touching call
+     sites and WITHOUT changing contrast ratios. The dark end (800/900/950) is
+     aligned to the --surface-*/--bg-base tokens so legacy `dark:bg-neutral-900`
+     cards match the new <MatteCard> primitive exactly. */
+  --color-neutral-50: #f3f6f6;
+  --color-neutral-100: #e9efef;
+  --color-neutral-200: #d5e0e0;
+  --color-neutral-300: #c2d2d2;
+  --color-neutral-400: #8ba8a8;
+  --color-neutral-500: #5a7676;
+  --color-neutral-600: #3f5c5c;
+  --color-neutral-700: #243e3e;
+  --color-neutral-800: #0a2a2a; /* = --surface-2 */
+  --color-neutral-900: #052020; /* = --surface-1 */
+  --color-neutral-950: #001616; /* = --bg-base */
 }
 
 /* ── Matte Dark design tokens ─────────────────────────────────────────────

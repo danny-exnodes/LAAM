@@ -13,7 +13,7 @@ import { useChartTheme } from "@/hooks/useChartTheme";
 
 // Series palette (matches v1 palette().series order).
 export const SERIES = [
-  "#6d5efc",
+  "#36a6d6",
   "#16a34a",
   "#0ea5e9",
   "#f59e0b",

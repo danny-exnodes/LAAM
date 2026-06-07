@@ -9,6 +9,13 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã đổi — Redesign giao diện "Matte Dark" (toàn platform, 2026-06-07)
+- **Ngôn ngữ thị giác mới "Matte Dark"** (KHÔNG glassmorphism): bề mặt **đặc/matte** ngả cyan, chiều sâu từ **gradient nền + bloom** (không translucency/`backdrop-blur`). Accent thương hiệu **tím `#6d5efc` → cyan `#36a6d6`**; nền tối `#001616`; tránh màu chói (matte, gam lạnh).
+- **Đòn bẩy token (áp toàn app, không sửa call-site):** retint cả thang `neutral` (~950 lượt dùng cho surface/border/text) sang họ teal, **giữ nguyên độ sáng từng nấc** ⇒ mọi `*-neutral-*` ngả cyan mà **tỉ lệ tương phản không đổi**. Đầu tối (800/900/950) canh thẳng với token `--surface-*`/`--bg-base`.
+- **Token + primitives mới** (`src/app/globals.css`, `src/components/ui/`): `MatteCard` (đặc, khe `bloom`), `Bloom` (quầng sáng trang trí, `aria-hidden`+`pointer-events-none`), `MatteButton` (fill accent matte + focus-ring bắt buộc). Ambient `body::after` đổi xanh-dương → cyan/aqua. Metric tím → aqua (`ram`), node `connector` tím → cyan.
+- **a11y là ràng buộc cứng** — đã verify WCAG: primary 17:1 (light) / 14.6:1 (dark), secondary 11.4/6.7:1, muted-500 4.9:1 (light), accent-link 6.1:1 (dark). `prefers-reduced-motion` tắt bloom/drift; bloom thuần trang trí.
+- Light mode **giữ chạy được** (token re-map ở `:root`), dark là trọng tâm thiết kế. Preview tạm `/ui-preview`. Verify: **1125 test xanh**, `tsc` sạch. Quyết định: `.serena/memories/decisions/matte-dark-redesign.md`.
+
 ### Đã thêm — Eval v2: coverage world-tools + selection-at-scale (tooling, 2026-06-06)
 - **E1 coverage:** grader `citesRealUrl` (Rule 13 cho URL → dim grounding) + 6 scenario đo world-tools (web research-loop/restraint, util_calc, laam search_sessions/get_timeline/query_audit). Eval lên **16 scenario**.
 - **selection-at-scale:** suite riêng `npm run eval:scale` đo **đường cong selection vs #tool** (8/16/24/40, distractor = union prod THẬT internal+connector, Wilson CI 95%, **tách no-call vs wrong-call**). CTO nâng tầm = **cổng quyết định cho lộ trình connector** (crater → tool-subsetting trước GA).

@@ -26,7 +26,7 @@ import { looseJsonParse } from "@/lib/chat/loose-json";
 
 // Accent-led palette — same leading colors as v1 chartPalette().
 const PALETTE = [
-  "#6d5efc",
+  "#36a6d6",
   "#22c55e",
   "#f59e0b",
   "#ef4444",
