@@ -24,4 +24,21 @@ Gate plan (hoặc chỉnh 3 D trên). Sau gate: worktree → `executing-plans` T
 
 ---
 ### CTO GATE
-<!-- CTO append tại đây -->
+**Ngày:** 2026-06-07 · **Từ:** CTO · **Trạng thái:** ✅ GATED — plan duyệt, honor đủ 4 verdict. 3 D xác nhận, kèm **1 sửa bắt buộc (A1)** + 1 việc-làm-ngay (A2) + 1 nit (A3).
+
+**Đã verify từ code trước khi gate:** `DELETE /api/machines/[id]` hiện tại **đã là soft-revoke** (`set machines.tokenHash=null`, giữ machine+sessions — đúng comment route), KHÔNG xoá row. Nên D3 an toàn, KHÔNG vướng cascade `access_token.machineId onDelete:cascade`. Plan đứng vững.
+
+**3 D — xác nhận:** D1 ✅ (giữ `machines.tokenHash` trong P0 = đúng forward-compat tôi mandate ở Q1) · D2 ✅ (không tái dựng prefix/last4 từ sha256 → sentinel là lựa chọn đúng; xem A3) · D3 ✅ (soft-revoke = đúng, kèm A1).
+
+**A1 — SỬA BẮT BUỘC (correctness, Rule 12): DELETE phải revoke CẢ HAI đường.**
+Sau backfill, mỗi machine mang ĐỒNG THỜI `machines.tokenHash` (legacy, giữ) **và** `access_token` cùng hash. Ingest resolver tra access_token trước, fallback machines.tokenHash. Vậy nếu DELETE chỉ null `machines.tokenHash` (như "current semantics") mà KHÔNG set `revokedAt` trên access_token → **collector vẫn push được qua đường access_token → revoke giả**. Ngược lại cũng hở. ⇒ DELETE trong P0 BẮT BUỘC: `machines.tokenHash=null` **AND** `revokedAt=now()` trên MỌI access_token non-revoked link tới machineId đó. **Test bắt buộc (Task 4):** machine đã-backfill → DELETE → ingest **401 qua CẢ HAI đường** (không còn path nào sống). Đây là điều kiện gate, không phải gợi ý.
+
+**A2 — LÀM NGAY (rẻ, fulfill Q2 từ ngày đầu): set `access_token.userId`.**
+Cột đã có sẵn; không wiring = phí chính verdict Q2 (attribution-recorded). POST `/api/machines` → `userId = session.user.id` (người cấp). Backfill (Task 5) → `userId = machine.ownerUserId`. Nhắc lại invariant: đây là **provenance/audit**, KHÔNG phải khoá cô lập — ingest vẫn ghi org-shared (plan Task 3 đã đúng).
+
+**A3 — nit:** thống nhất sentinel `last4` (plan dùng cả `"????"` dòng 79 lẫn `"----"` D2) → chọn **`"----"`**. Prefix sentinel `"legacy"` giữ (không đụng prefix thật `laam_`). Rotate token legacy sau này tự lành sentinel.
+
+**Không cản:** scopes jsonb laydown (Q3 groundwork), kind api|mcp chưa enforce, không đụng nav/i18n (Q4) — đúng scope P0.
+
+**Gate:** ✅ vào `executing-plans` task 1→5 SAU khi nhúng A1+A2+A3 vào plan. Migration `db:generate`/`db:migrate` chạy ở HOST (drizzle-kit không chạy sandbox) — plan đã ghi đúng. Verify cuối: tsc sạch + full suite + round-trip issue→ingest→revoke→ingest-401 (CẢ legacy path, theo A1).
+<!-- /CTO gate -->
