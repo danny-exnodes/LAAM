@@ -43,6 +43,15 @@ Top-nav **Monitoring** (tab Local/Chat/Workflows/External) · Machines = filter 
 Sequencing duyệt: `Access (P0)` → [`MCP-server` ∥ `Monitoring read-model`].
 Next: writing-plans cho **P0 Access spine** (H3 migration + unique index + prefix/last4 + ingest resolver); spec B khắc invariant Q2.
 
+## P0 Access spine — IMPLEMENTED (2026-06-07, agent)
+Code DONE (tsc sạch, full suite **1137 pass**, +20 test mới). Plan: `docs/superpowers/plans/2026-06-07-access-spine-p0.md`.
+- `schema.ts` bảng `accessTokens` (unique `tokenHash`, `kind/userId/prefix/last4/scopes/machineId/lastUsedAt/expiresAt/revokedAt`).
+- `lib/access-token.ts`: `generateAccessToken`/`hashToken`(reuse machine-token)/`formatTokenDisplay`/`verifyAccessToken`(kind+revoked+expiry)/`machinesWithActiveToken`.
+- `/api/ingest`: resolver forward-compat (access_token kind=collector TRƯỚC → fallback `machines.tokenHash`); vẫn org-shared.
+- `/api/machines` POST: tạo machine (no tokenHash) + access_token(kind=collector, userId=creator, scopes=["ingest"]); GET hasToken = legacy OR active token; DELETE **dual-revoke A1** (null tokenHash + revokedAt mọi token link).
+- `scripts/backfill-access-token.ts` (idempotent onConflictDoNothing); `settings/machines/page.tsx` hasToken.
+- ⏳ HOST/USER: `db:generate`(0009)→`db:migrate`→backfill→round-trip. `machines.tokenHash` GIỮ (drop ở phase sau). MCP-server(C)+Monitoring read-model(B) chưa làm.
+
 ## CTO review
 Bản trình CTO tự-chứa (chờ verdict): [[comms/active/consultant-to-cto-machines-decomposition]].
 

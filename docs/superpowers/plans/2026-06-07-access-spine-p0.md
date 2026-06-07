@@ -8,6 +8,8 @@
 
 **Gate status:** ✅ CTO GATED (2026-06-07) with 3 conditions **folded into this plan**: **A1** (DELETE dual-revoke, binding — Task 4) · **A2** (set `access_token.userId` on issue + backfill — Tasks 4/5) · **A3** (sentinel `last4="----"` consistent — Task 5). Gate thread: `comms/resolved/consultant-to-cto-access-spine-p0-plan.md`.
 
+**Implementation status (2026-06-07):** ✅ CODE DONE by agent — Tasks 1–5 (`schema.ts accessTokens`, `lib/access-token.ts`, ingest resolver, machines POST/GET/DELETE dual-revoke, `scripts/backfill-access-token.ts`) + `settings/machines/page.tsx` hasToken. **tsc clean, full suite 1137 pass (+20 new).** ⏳ HOST/USER pending: `npm run db:generate` (produces `0009` + snapshot — drizzle-kit doesn't run in sandbox) → `npm run db:migrate` → `npx tsx scripts/backfill-access-token.ts` → live round-trip (issue→ingest 200→DELETE→ingest 401 both paths; legacy token still 200 pre-backfill).
+
 **Architecture:** New `access_token` table (token removed from `machines` conceptually; `machines.tokenHash` **kept during transition**, dropped in a later phase). One `verifyAccessToken()` chokepoint. `/api/ingest` resolves `access_token(kind=collector)` first, **falls back to `machines.tokenHash`** so existing collectors don't break. Machine creation (`POST /api/machines`) repoints to issue via `access_token` + link `machineId`. sha256 kept (high-entropy token, not a password). UNIQUE index on `tokenHash`. `prefix`/`last4` columns for UI identification.
 
 **Tech Stack:** Next.js 16 App Router, Drizzle ORM (node-postgres), Postgres 16, Vitest. Migration via `db:generate`→commit `drizzle/`→`db:migrate` (host/user runs it — drizzle-kit doesn't run in sandbox; see [[db-migrations]]).

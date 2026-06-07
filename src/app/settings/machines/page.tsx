@@ -7,6 +7,7 @@ import { AppHeader } from "@/components/app-header";
 import { PageHeader } from "@/components/page-header";
 import { MachinesManager } from "@/components/machines-manager";
 import { HardwareAnalytics } from "@/components/machines/HardwareAnalytics";
+import { machinesWithActiveToken } from "@/lib/access-token";
 
 export const dynamic = "force-dynamic";
 
@@ -26,12 +27,15 @@ export default async function MachinesPage() {
     .from(machines)
     .orderBy(desc(machines.lastSeen));
 
+  // The collector token now lives in access_token; a machine has an active token
+  // via a legacy machines.tokenHash OR a non-revoked collector access_token.
+  const active = await machinesWithActiveToken();
   const list = rows.map((m) => ({
     id: m.id,
     name: m.name,
     hostname: m.hostname,
     lastSeen: m.lastSeen ? m.lastSeen.toISOString() : null,
-    hasToken: !!m.tokenHash,
+    hasToken: !!m.tokenHash || active.has(m.id),
   }));
 
   const canManage =

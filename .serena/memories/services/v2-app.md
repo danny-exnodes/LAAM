@@ -13,10 +13,12 @@ Cập nhật: 2026-06-03. Stack: Next.js 16 + React 19 + TS + Tailwind 4 + Auth.
 - Verified LIVE (Chrome): P1+P2+P3. Chat cần Ollama gemma4:e4b + login để test.
 
 ## Schema (`src/db/schema.ts`)
-Auth.js: user/account/session/verificationToken + `role`. App: machines(`tokenHash`), projects, agent_sessions (+jsonb subAgents/tools/histo, transcriptPath), chat_conversations, chat_messages, audit_log.
+Auth.js: user/account/session/verificationToken + `role`. App: machines(`tokenHash` — legacy, giữ tạm), **access_token (P0 06-07: kind/userId/prefix/last4/tokenHash unique/scopes/machineId/expiresAt/revokedAt)**, projects, agent_sessions (+jsonb subAgents/tools/histo, transcriptPath), chat_conversations, chat_messages, audit_log.
 
 ## Lib chính
-`src/lib/sync.ts` (upsertSessions, syncLocalMonitoring) · `src/lib/monitoring/*` (parser copy) · `src/lib/machine-token.ts` · `src/lib/format.ts` · `src/auth.ts` + `auth.config.ts` + `proxy.ts`.
+`src/lib/sync.ts` (upsertSessions, syncLocalMonitoring) · `src/lib/monitoring/*` (parser copy) · `src/lib/machine-token.ts` · **`src/lib/access-token.ts` (P0: generate/hash/format/verifyAccessToken/machinesWithActiveToken — xương sống credential, [[decisions/machines-decomposition]])** · `src/lib/format.ts` · `src/auth.ts` + `auth.config.ts` + `proxy.ts`.
+
+> **P0 Access spine ✅ code (06-07)** — token hợp nhất vào `access_token` (collector/api/mcp). `/api/ingest` resolver forward-compat (access_token→fallback machines.tokenHash). `/api/machines` POST cấp qua access_token, DELETE dual-revoke. ⏳ host: db:generate(0009)/migrate/backfill. Tiếp: MCP-server(C) + Monitoring read-model(B).
 
 ## Parity roadmap (v1→v2) — `docs/v2-parity-roadmap.md`
 - **Wave 0 hạ tầng ✅ (2026-06-03)** — làm bằng Agent Team `laam-v2-wave0` (5 agent song song), TDD. Test harness mới: **vitest + RTL + jsdom** (`npm test`). 123 test pass, next build xanh. Đã build:
