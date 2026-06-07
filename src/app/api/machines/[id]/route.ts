@@ -24,12 +24,16 @@ export async function DELETE(
     return NextResponse.json({ error: "Cần quyền owner/admin" }, { status: 403 });
   }
   const { id } = await params;
-  // 1) legacy path
-  await db.update(machines).set({ tokenHash: null }).where(eq(machines.id, id));
-  // 2) unified access_token path
-  await db
-    .update(accessTokens)
-    .set({ revokedAt: new Date() })
-    .where(and(eq(accessTokens.machineId, id), isNull(accessTokens.revokedAt)));
+  // Atomic dual-revoke: close BOTH paths in one transaction so a concurrent
+  // ingest can't slip through the window between the two updates.
+  await db.transaction(async (tx) => {
+    // 1) legacy path
+    await tx.update(machines).set({ tokenHash: null }).where(eq(machines.id, id));
+    // 2) unified access_token path
+    await tx
+      .update(accessTokens)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(accessTokens.machineId, id), isNull(accessTokens.revokedAt)));
+  });
   return NextResponse.json({ ok: true });
 }

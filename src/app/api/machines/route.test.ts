@@ -24,6 +24,7 @@ function fakeDb(selectRows: unknown[]) {
   const db = {
     select: () => ({ from: () => ({ orderBy: async () => selectRows }) }),
     insert: (table: unknown) => ({ values: async (values: unknown) => { inserts.push({ table, values }); } }),
+    transaction: async (cb: (tx: unknown) => Promise<void>) => cb(db),
   };
   return { db, inserts };
 }

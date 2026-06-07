@@ -155,72 +155,79 @@ export async function getMonitoredRuns(
 ): Promise<MonitoredRun[]> {
   const limit = Math.min(q.limit ?? 100, 200);
   const want = (s: MonitoredSource) => !q.source || q.source === s;
-  const out: MonitoredRun[] = [];
-
-  // agent_sessions (org-shared sources)
   const agentSrc = AGENT_SOURCES.filter(want);
-  if (agentSrc.length) {
-    const rows = await db
-      .select()
-      .from(agentSessions)
-      .where(inArray(agentSessions.source, agentSrc))
-      .orderBy(desc(agentSessions.lastActivity))
-      .limit(limit);
-    for (const r of rows) out.push(normalizeAgentSession(r as never));
-  }
 
-  // chat_conversations (per-user) + per-conversation token aggregate
-  if (want("chat")) {
-    const convos = await db
-      .select()
-      .from(chatConversations)
-      .where(eq(chatConversations.userId, viewer.userId))
-      .orderBy(desc(chatConversations.updatedAt))
-      .limit(limit);
-    const ids = convos.map((c) => c.id);
-    const aggBy = new Map<string, { tokensIn: number; tokensOut: number }>();
-    if (ids.length) {
-      const aggs = await db
+  // The three sources are independent — run them in parallel (not sequentially)
+  // so the request waits on max(query) rather than the sum.
+  const [agentRuns, chatRuns, workflowRunsOut] = await Promise.all([
+    // agent_sessions (org-shared sources)
+    (async (): Promise<MonitoredRun[]> => {
+      if (!agentSrc.length) return [];
+      const rows = await db
+        .select()
+        .from(agentSessions)
+        .where(inArray(agentSessions.source, agentSrc))
+        .orderBy(desc(agentSessions.lastActivity))
+        .limit(limit);
+      return rows.map((r) => normalizeAgentSession(r as never));
+    })(),
+
+    // chat_conversations (per-user) + per-conversation token aggregate
+    (async (): Promise<MonitoredRun[]> => {
+      if (!want("chat")) return [];
+      const convos = await db
+        .select()
+        .from(chatConversations)
+        .where(eq(chatConversations.userId, viewer.userId))
+        .orderBy(desc(chatConversations.updatedAt))
+        .limit(limit);
+      const ids = convos.map((c) => c.id);
+      const aggBy = new Map<string, { tokensIn: number; tokensOut: number }>();
+      if (ids.length) {
+        const aggs = await db
+          .select({
+            conversationId: chatMessages.conversationId,
+            tokensIn: sum(chatMessages.tokensIn),
+            tokensOut: sum(chatMessages.tokensOut),
+          })
+          .from(chatMessages)
+          .where(inArray(chatMessages.conversationId, ids))
+          .groupBy(chatMessages.conversationId);
+        for (const a of aggs)
+          aggBy.set(a.conversationId, {
+            tokensIn: Number(a.tokensIn ?? 0),
+            tokensOut: Number(a.tokensOut ?? 0),
+          });
+      }
+      return convos.map((c) => normalizeChatConversation(c, aggBy.get(c.id)));
+    })(),
+
+    // workflow_runs (per-user) + workflow name
+    (async (): Promise<MonitoredRun[]> => {
+      if (!want("workflow")) return [];
+      const rows = await db
         .select({
-          conversationId: chatMessages.conversationId,
-          tokensIn: sum(chatMessages.tokensIn),
-          tokensOut: sum(chatMessages.tokensOut),
+          id: workflowRuns.id,
+          userId: workflowRuns.userId,
+          workflowName: workflows.name,
+          status: workflowRuns.status,
+          startedAt: workflowRuns.startedAt,
+          finishedAt: workflowRuns.finishedAt,
+          createdAt: workflowRuns.createdAt,
+          tokensIn: workflowRuns.tokensIn,
+          tokensOut: workflowRuns.tokensOut,
+          costUsd: workflowRuns.costUsd,
         })
-        .from(chatMessages)
-        .where(inArray(chatMessages.conversationId, ids))
-        .groupBy(chatMessages.conversationId);
-      for (const a of aggs)
-        aggBy.set(a.conversationId, {
-          tokensIn: Number(a.tokensIn ?? 0),
-          tokensOut: Number(a.tokensOut ?? 0),
-        });
-    }
-    for (const c of convos) out.push(normalizeChatConversation(c, aggBy.get(c.id)));
-  }
+        .from(workflowRuns)
+        .leftJoin(workflows, eq(workflowRuns.workflowId, workflows.id))
+        .where(eq(workflowRuns.userId, viewer.userId))
+        .orderBy(desc(workflowRuns.createdAt))
+        .limit(limit);
+      return rows.map((r) => normalizeWorkflowRun(r as never));
+    })(),
+  ]);
 
-  // workflow_runs (per-user) + workflow name
-  if (want("workflow")) {
-    const rows = await db
-      .select({
-        id: workflowRuns.id,
-        userId: workflowRuns.userId,
-        workflowName: workflows.name,
-        status: workflowRuns.status,
-        startedAt: workflowRuns.startedAt,
-        finishedAt: workflowRuns.finishedAt,
-        createdAt: workflowRuns.createdAt,
-        tokensIn: workflowRuns.tokensIn,
-        tokensOut: workflowRuns.tokensOut,
-        costUsd: workflowRuns.costUsd,
-      })
-      .from(workflowRuns)
-      .leftJoin(workflows, eq(workflowRuns.workflowId, workflows.id))
-      .where(eq(workflowRuns.userId, viewer.userId))
-      .orderBy(desc(workflowRuns.createdAt))
-      .limit(limit);
-    for (const r of rows) out.push(normalizeWorkflowRun(r as never));
-  }
-
+  const out = [...agentRuns, ...chatRuns, ...workflowRunsOut];
   return mergeAndSort(
     out.filter((r) => isVisible(r, viewer)),
     limit,

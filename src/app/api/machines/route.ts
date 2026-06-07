@@ -19,18 +19,21 @@ export async function GET() {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const rows = await db
-    .select({
-      id: machines.id,
-      name: machines.name,
-      hostname: machines.hostname,
-      lastSeen: machines.lastSeen,
-      createdAt: machines.createdAt,
-      tokenHash: machines.tokenHash,
-    })
-    .from(machines)
-    .orderBy(desc(machines.lastSeen));
-  const active = await machinesWithActiveToken();
+  // Independent reads — run in parallel.
+  const [rows, active] = await Promise.all([
+    db
+      .select({
+        id: machines.id,
+        name: machines.name,
+        hostname: machines.hostname,
+        lastSeen: machines.lastSeen,
+        createdAt: machines.createdAt,
+        tokenHash: machines.tokenHash,
+      })
+      .from(machines)
+      .orderBy(desc(machines.lastSeen)),
+    machinesWithActiveToken(),
+  ]);
   return NextResponse.json({
     machines: rows.map(({ tokenHash, ...m }) => ({
       ...m,
@@ -63,20 +66,23 @@ export async function POST(req: Request) {
   const { prefix, last4 } = formatTokenDisplay(token);
   const id = `m:${crypto.randomUUID()}`;
 
-  await db.insert(machines).values({
-    id,
-    name: parsed.data.name,
-    ownerUserId: session.user.id,
-  });
-  await db.insert(accessTokens).values({
-    kind: "collector",
-    machineId: id,
-    userId: session.user.id, // provenance/audit, NOT an isolation key
-    name: parsed.data.name,
-    prefix,
-    last4,
-    tokenHash: hashToken(token),
-    scopes: ["ingest"],
+  // Atomic: a machine without its token (or vice-versa) is a broken half-state.
+  await db.transaction(async (tx) => {
+    await tx.insert(machines).values({
+      id,
+      name: parsed.data.name,
+      ownerUserId: session.user.id,
+    });
+    await tx.insert(accessTokens).values({
+      kind: "collector",
+      machineId: id,
+      userId: session.user.id, // provenance/audit, NOT an isolation key
+      name: parsed.data.name,
+      prefix,
+      last4,
+      tokenHash: hashToken(token),
+      scopes: ["ingest"],
+    });
   });
 
   // token shown once

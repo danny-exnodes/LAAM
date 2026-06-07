@@ -18,6 +18,7 @@ function fakeDb() {
     update: (table: unknown) => ({
       set: (patch: unknown) => ({ where: async () => { updates.push({ table, patch }); } }),
     }),
+    transaction: async (cb: (tx: unknown) => Promise<void>) => cb(db),
   };
   return { db, updates };
 }
