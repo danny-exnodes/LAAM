@@ -40,5 +40,8 @@ Top-nav **Monitoring** (tab Local/Chat/Workflows/External) · Machines = filter 
 3. MCP-server scope: expose tool nào (chỉ `laam_*` read? gồm connectors write?).
 4. Giữ hay đổi tên "Machines" (đề xuất giữ cho tab Local, thuật ngữ chuyển sang Token/Session/Source ở tầng model).
 
+## CTO review
+Bản trình CTO tự-chứa (chờ verdict): [[comms/active/consultant-to-cto-machines-decomposition]].
+
 ## Liên quan
 [[connectors-mcp-client]] · [[agent-harness-architecture]] · [[workflow-orchestration-architecture]] · [[v2-architecture]] · [[host-metrics-sampler]] · [[v2-app]].
