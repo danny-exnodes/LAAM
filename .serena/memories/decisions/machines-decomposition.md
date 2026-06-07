@@ -1,6 +1,6 @@
 # Decision: Tách feature "Machines" → Access / Monitoring / MCP-Server
 
-**Ngày:** 2026-06-07 · **Vai trò:** technical consultant · **Trạng thái:** 🟡 PROPOSED — user (CTO) đang brainstorm, CHƯA chốt. Token model + open-Q còn mở.
+**Ngày:** 2026-06-07 · **Vai trò:** technical consultant · **Trạng thái:** 🟢 LOCKED — CTO duyệt phân rã 3 feature + ra 4 verdict (2026-06-07). Chi tiết verdict: [[comms/active/consultant-to-cto-machines-decomposition]] §CTO VERDICT.
 
 ## Vấn đề
 "Machines" được thiết kế khi LAAM chỉ là *giám sát Claude agent local*. Khi đó `máy tính = collector = token = dòng ingest` là 1:1 sạch. Platform đã tiến hoá (chat harness SP1–4, connectors+OAuth, workflow durable, MCP **client**, world-tools) và hướng đi mới của user làm quan hệ đó vỡ:
@@ -34,11 +34,14 @@ Access (precondition auth) → [MCP-server ∥ Monitoring read-model] → hội 
 ## IA mới
 Top-nav **Monitoring** (tab Local/Chat/Workflows/External) · Machines = filter trong tab Local · Hardware Analytics → panel Host/Infra · `/settings/machines` → `/settings/access`.
 
-## Open questions (chờ user)
-1. **Token model H1/H2/H3** (recommend H3).
-2. Collector ingest **org-shared vs user-attributed** khi token gắn userId? (đụng cô lập dữ liệu [[v2-architecture]]: monitoring=org-shared, chat/connector=per-user).
-3. MCP-server scope: expose tool nào (chỉ `laam_*` read? gồm connectors write?).
-4. Giữ hay đổi tên "Machines" (đề xuất giữ cho tab Local, thuật ngữ chuyển sang Token/Session/Source ở tầng model).
+## Verdict CTO (2026-06-07) — đã chốt 4
+1. **Token model = H3** — unified `access_token` + gỡ token KHỎI machines. Buộc kèm: unique index `access_token.tokenHash`; cột `prefix`/`last4`; sha256 giữ nguyên; ingest resolver forward-compat (tra access_token trước → migrate machines.tokenHash→kind=collector → drop, không re-issue big-bang). H2 loại (Rule 7 hybrid); H1 nửa vời.
+2. **Ingest = attribution ghi nhận, visibility theo nguồn** (KHÔNG per-user isolation). `userId` trên token = provenance/revoke/audit, không phải khoá cô lập. Visibility giữ đúng [[v2-architecture]]: `local-computer`/`api-mcp` = org-shared (member auth xem, viewer read-only); `chat`/`workflow` = per-user. **Invariant cho read-model B:** query phủ isolation per-source, không phẳng hoá 1 mức.
+3. **MCP-server scope = read-only `laam_*` trước.** Connector write defer sau, qua gate + blast-radius + per-key scope riêng (external = ngoài vùng tin cậy; khớp SP-2 minimal write).
+4. **Naming = giữ "Machines"** cho tab/filter Local (từ vẫn đúng surface thu hẹp); vocab Token/Session/Source/Access chỉ ở model+settings; `/settings/machines`→`/settings/access`.
+
+Sequencing duyệt: `Access (P0)` → [`MCP-server` ∥ `Monitoring read-model`].
+Next: writing-plans cho **P0 Access spine** (H3 migration + unique index + prefix/last4 + ingest resolver); spec B khắc invariant Q2.
 
 ## CTO review
 Bản trình CTO tự-chứa (chờ verdict): [[comms/active/consultant-to-cto-machines-decomposition]].

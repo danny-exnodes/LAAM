@@ -48,4 +48,26 @@ CTO chốt 4 quyết định → consultant nâng [[decisions/machines-decomposi
 
 ---
 ### CTO VERDICT
-<!-- CTO append tại đây -->
+**Ngày:** 2026-06-07 · **Từ:** CTO · **Trạng thái:** ✅ APPROVED — phân rã 3 feature **chốt**, 4 quyết định ra dưới đây. Consultant nâng memo PROPOSED→locked và viết plan P0 Access spine.
+
+**Tiền đề:** đã tự verify lại 7 claim load-bearing từ code (schema.ts:99 · ingest route bỏ RBAC · /machines redirect · machineId/source nullable · sha256+thiếu unique index · `ConnectorTool.kind` · 2 memo client/host). Brief đứng vững. Đồng ý chẩn đoán: Machines gánh 3 nghĩa chồng → tách Principal/Token × Session × Source là đúng trục.
+
+**Q1 — Token model → `H3` (unified `access_token`, gỡ token KHỎI machines).**
+Đây là lựa chọn DUY NHẤT sửa tận gốc conflation (a)máy vs (b)credential — vốn là toàn bộ luận điểm của brief. H2 = 2–3 cơ chế bearer song song → **Rule 7 cấm hybrid**, loại. H1 = nửa vời (gộp bảng nhưng vẫn hàn token vào machine, conflation sống tiếp trong bảng mới). Chi phí migration của H3 chấp nhận được: <50 user, ta sở hữu mọi collector nên rotate token dễ. **Buộc kèm:** (1) unique index trên `access_token.tokenHash` (gap thật); (2) cột `prefix`/`last4` cho UI; (3) sha256 GIỮ NGUYÊN (token entropy cao, không phải password — không bcrypt); (4) ingest resolver phải **forward-compat trong giai đoạn chuyển**: tra `access_token` trước, migrate `machines.tokenHash`→`access_token(kind=collector)` rồi mới drop cột (không big-bang re-issue).
+
+**Q2 🔴 — Ingest org-shared vs user-attributed → ATTRIBUTION ghi nhận, VISIBILITY theo nguồn.**
+Đây là quyết định load-bearing và tôi chốt dứt khoát để không drift: **monitoring KHÔNG chuyển sang per-user isolation.** Lý do sống còn: value-prop của LAAM là *cả team xem agent chạy đa máy* — cô lập row-level theo user sẽ phá chính lý do tồn tại của feature (đồng đội không thấy agent của nhau). Vậy:
+- `userId` trên token = **provenance/revoke/audit** (ai đăng ký collector, ai sở hữu key), KHÔNG phải khoá cô lập dữ liệu.
+- **Visibility theo từng nguồn, đúng mô hình đang có** ([[v2-architecture]]): rows nguồn `local-computer`/`api-mcp` = **org-shared** (mọi member auth xem; viewer read-only); rows `chat`/`workflow` = **per-user** (chủ thấy của mình) vì `chat_*` vốn per-user.
+- → Read-model "monitored runs" (feature B) **bắt buộc** phủ isolation per-source khi query, KHÔNG phẳng hoá thành 1 mức. Đây là invariant, viết vào spec B.
+
+**Q3 — MCP-server scope → read-only `laam_*` TRƯỚC, write defer sau gate riêng.**
+External agent = principal NGOÀI vùng tin cậy của ta. Cho nó kích connector write (gửi mail/tạo card) qua key của ta = blast-radius lớn qua trust boundary không kiểm soát. Khớp posture SP-2 (write surface tối thiểu, [[agent-harness-sp2-actions-safety]]) + YAGNI. **Ship read-only `laam_*`** (khép vòng với Monitoring B, an toàn tự nhiên). Write exposure = quyết định riêng SAU, kèm blast-radius gate + per-key scope grant. Cho phép A ship khái niệm `scope` ở mức read trước, chưa cần dựng trọn write-authz.
+
+**Q4 — Naming → GIỮ "Machines" cho tab/filter Local; vocab mới chỉ ở tầng model/settings.**
+"Machines" vẫn ĐÚNG cho surface đã thu hẹp (máy dev vật lý chạy collector). Không churn thuật ngữ user-facing khi từ vẫn đúng → tránh i18n churn vi/en/zh vô ích, reversible. `/settings/machines`→`/settings/access` OK (settings surface thật sự tổng quát hoá). Token/Session/Source/Access sống ở model+settings, không trồi lên nav.
+
+**Sequencing — duyệt:** `Access (P0)` → [`MCP-server` ∥ `Monitoring read-model`]. P0 Access spine là precondition cứng, làm trước.
+
+**Next:** consultant → (1) memo PROPOSED→**locked** ghi 4 verdict; (2) `superpowers:writing-plans` cho **P0 Access spine** (H3 migration forward-compat + unique index + prefix/last4 + ingest resolver). Spec B phải khắc invariant Q2 (visibility per-source). Đóng thread này → `comms/resolved/` sau khi memo locked.
+<!-- /CTO verdict -->
