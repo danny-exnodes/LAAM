@@ -7,11 +7,20 @@
 // alive per the spike decision (no migration yet) — see
 // docs/superpowers/plans/2026-06-07-streamdown-spike.md.
 
+import dynamic from "next/dynamic";
 import { MarkdownView } from "./MarkdownView";
-import { StreamdownView } from "./StreamdownView";
 
 const USE_STREAMDOWN = process.env.NEXT_PUBLIC_CHAT_RENDERER === "streamdown";
 
+// Lazy-load the streamdown stack ONLY when the flag selects it. USE_STREAMDOWN is
+// a build-time constant, so when it's false the bundler dead-code-eliminates the
+// import() below and the default path never ships streamdown/shiki. ssr:false —
+// same heavy-render pattern as MapBlock (leaflet).
+const StreamdownView = USE_STREAMDOWN
+  ? dynamic(() => import("./StreamdownView").then((m) => m.StreamdownView), { ssr: false })
+  : null;
+
 export function ChatMarkdown(props: { source: string; className?: string }) {
-  return USE_STREAMDOWN ? <StreamdownView {...props} /> : <MarkdownView {...props} />;
+  if (USE_STREAMDOWN && StreamdownView) return <StreamdownView {...props} />;
+  return <MarkdownView {...props} />;
 }

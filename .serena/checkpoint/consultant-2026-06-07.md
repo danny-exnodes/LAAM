@@ -25,6 +25,12 @@
 - Đậu hết → lên plan migration (thay hẳn, gỡ react-markdown path, cân nhắc Mermaid/KaTeX/CJK plugin, bundle).
 - Sửa memory [[v2-dark-mode-theming]] lỗi thời (dark giờ class-based).
 
+## Code review (2026-06-07, /code-review high) — 3 finding, đã sửa hết
+- F1 (medium): `ChatMarkdown` static-import → flag-OFF vẫn bundle streamdown. Fix: `next/dynamic(ssr:false)` chỉ nạp khi flag bật (theo MapBlock). DCE khi flag tắt.
+- F2 (low, Rule 9): test criterion-2 chỉ check textContent → siết assert `[data-streamdown="code-block"]` + `data-language="js"` (fail được khi Shiki regress).
+- F3 (low, reuse): `useChartTheme` lặp detection → refactor consume `useIsDark`.
+- Verify lại: 1122 test xanh, tsc sạch.
+
 ## Blockers / Risks
 - 3/4 criteria cần host runtime — agent không tự chạy được.
 - Bundle size streamdown (+mermaid/shiki) chưa đo — để khâu migration.

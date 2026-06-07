@@ -26,10 +26,15 @@ describe("StreamdownView", () => {
     expect(container.querySelector(".chat-map-wrap")).not.toBeNull();
   });
 
-  it("renders a plain code fence (criterion 2 — Shiki owns normal code)", () => {
+  it("renders a plain code fence via Streamdown's Shiki CodeBlock (criterion 2)", () => {
     const md = ["```js", "const x = 1;", "```"].join("\n");
     const { container } = render(<StreamdownView source={md} />);
-    // The exact code text survives rendering regardless of highlight tokenization.
+    // Assert Streamdown's CodeBlock actually owns it (not our inline <code> fallback
+    // nor a plain <pre>): its wrapper carries data-streamdown + the language. This
+    // fails if the override stops delegating to Shiki — which is the point of crit 2.
+    const block = container.querySelector('[data-streamdown="code-block"]');
+    expect(block).not.toBeNull();
+    expect(block?.getAttribute("data-language")).toBe("js");
     expect(container.textContent).toContain("const x = 1;");
   });
 
