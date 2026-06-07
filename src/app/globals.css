@@ -1,4 +1,10 @@
 @import "tailwindcss";
+/* SPIKE (NEXT_PUBLIC_CHAT_RENDERER=streamdown): Streamdown component styles +
+   let Tailwind v4 scan its utility classes. Harmless when the flag is off
+   (StreamdownView simply never mounts). See
+   docs/superpowers/plans/2026-06-07-streamdown-spike.md. */
+@import "streamdown/styles.css";
+@source "../../node_modules/streamdown/dist";
 
 /* Class-based dark mode: `dark:` utilities key off a `.dark` class on <html>
    (set by the theme toggle / no-flash script) instead of the OS media query,

@@ -1,6 +1,15 @@
 # Decision: Streamdown spike (renderer chat) + defer browser-act/skills
 
-**Ngày:** 2026-06-07 · **Vai trò:** technical consultant · **Trạng thái:** DUYỆT SPIKE (time-box 1–2 ngày), **chưa migration**. User đã chốt.
+**Ngày:** 2026-06-07 · **Vai trò:** technical consultant · **Trạng thái:** SPIKE BUILT — **criteria 1 & 2 đậu (jsdom), 3 & 4 chờ user verify runtime**. Sau feature flag (`NEXT_PUBLIC_CHAT_RENDERER=streamdown`), đường cũ nguyên vẹn. **Chưa migration.** Plan: `docs/superpowers/plans/2026-06-07-streamdown-spike.md`.
+
+## Kết quả spike (2026-06-07)
+- **streamdown@2.5.0** cài OK (peer react^19). API thật: `<Streamdown>` nhận `components` override y react-markdown + `shikiTheme:[light,dark]` + `mermaid` (bundle, **0 CDN ref khi render** — scan tĩnh dist; chỉ 1 `fetch` ở nút download cùng-origin).
+- **Criteria 1 ✅ (rủi ro nhị phân GIẢI tích cực):** `components.code` override route ```chart→ChartBlock / ```map→MapBlock **thắng** Shiki nội bộ — `StreamdownView.test.tsx` xanh. Code thường delegate `<CodeBlock>` của streamdown (Shiki). **KHÔNG cần fallback.**
+- **Criteria 2 ✅** presence (Shiki render code thường); theme-aware = runtime.
+- **Criteria 3 (no-flicker) & 4 (CJK) + dark-theme code + Mermaid offline = bàn giao user verify trên host** (agent không tự chạy dev/build — agent-ops-rules).
+- **Quick-win (độc lập, đường cũ):** `CodeBlock` hết hardcode `oneLight` → theme-aware qua hook mới `useIsDark` (oneDark/oneLight).
+- Verify: **1122 test xanh** (+5 mới), tsc sạch. Files: `StreamdownView.tsx`/`ChatMarkdown.tsx`/`useIsDark.ts`/`StreamdownView.test.tsx` (mới); `MessageItem`/`CodeBlock`/`globals.css`/`.env.example`/`package.json` (sửa).
+- **Conflict đã surface (Rule 7):** dark mode thực tế **class-based** (`.dark`, Tailwind v4 `@custom-variant`) — KHÁC memory cũ ghi "media-query". Code = chân lý mới hơn → [[v2-dark-mode-theming]] **lỗi thời ở điểm này**, cần sửa khi rảnh.
 
 **Nguồn:** nghiên cứu 2 công cụ ngoài — [Streamdown](https://github.com/vercel/streamdown) (drop-in react-markdown cho AI streaming) + [browser-act/skills](https://github.com/browser-act/skills) (browser-automation CLI cho agent).
 
