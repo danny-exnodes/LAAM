@@ -126,7 +126,11 @@ export const agentSessions = pgTable("agent_session", {
   projectId: text("projectId").references(() => projects.id, {
     onDelete: "set null",
   }),
-  source: text("source").notNull().default("claude"), // claude | local
+  source: text("source").notNull().default("claude"), // claude | local | api | mcp
+  // Principal for externally-driven sessions (source api|mcp): the access_token's
+  // owner. NULL for transcript-derived rows (claude|local) — those are org-shared
+  // anyway (provenance, NOT a visibility key; see machines-decomposition Q2).
+  userId: text("userId").references(() => users.id, { onDelete: "set null" }),
   model: text("model"),
   gitBranch: text("gitBranch"),
   status: text("status"), // running | idle | done

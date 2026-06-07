@@ -52,6 +52,13 @@ Code DONE (tsc sạch, full suite **1137 pass**, +20 test mới). Plan: `docs/su
 - `scripts/backfill-access-token.ts` (idempotent onConflictDoNothing); `settings/machines/page.tsx` hasToken.
 - ⏳ HOST/USER: `db:generate`(0009)→`db:migrate`→backfill→round-trip. `machines.tokenHash` GIỮ (drop ở phase sau). MCP-server(C)+Monitoring read-model(B) chưa làm.
 
+## B + C — IMPLEMENTED (2026-06-07, agent)
+Code DONE (tsc sạch, full suite **1170 pass**, +33 test). Theo sequencing đã duyệt.
+- **B Monitoring read-model:** `src/lib/monitoring/read-model.ts` (pure normalizers agent/chat/workflow + `isVisible` Q2 + `mergeAndSort` + `getMonitoredRuns`); `/api/monitoring`; page `/monitoring` + `MonitoringClient` (tab All/Local/Chat/Workflow/External) + nav "Monitoring" (Activity icon) + i18n `monitoring.ts` (vi/en/zh). **KHÔNG merge cứng** — read-model phủ 3 kho. **Invariant Q2 khắc trong `isVisible`** (org-shared local/claude/api/mcp; per-user chat/workflow) + query-level userId filter. chat cost=0 (model local free). `agent_sessions.userId` MỚI (principal external, nullable).
+- **C MCP Server:** `src/lib/mcp-server/{tools,handler}.ts` (JSON-RPC subset initialize/tools/list/tools/call/ping; expose READ-ONLY laam_* guarded — Q3); `/api/mcp` (auth access_token kind api|mcp, record monitored session source=mcp → hiện ở B; public route trong auth.config). **NGƯỢC với MCP client.**
+- **A nối dài (cho C dùng được):** `/api/access-tokens` (POST/GET per-user) + `/[id]` DELETE — cấp/list/revoke token api|mcp (scopes:["read"]). UI `/settings/access` vẫn DEFER (đúng verdict Q4).
+- ⏳ HOST: db:generate giờ gồm access_token + agent_sessions.userId (1 migration 0009). Còn defer: drop machines.tokenHash; gấp Agents thành tab trong Monitoring (hiện /agents giữ riêng = Local detail); MCP write exposure; /settings/access UI.
+
 ## CTO review
 Bản trình CTO tự-chứa (chờ verdict): [[comms/active/consultant-to-cto-machines-decomposition]].
 
