@@ -29,13 +29,14 @@ import {
   NodeToolbar,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
-import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft, Sparkles } from "lucide-react";
+import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft, Sparkles, ClipboardCheck } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
 import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
 import { NodesLibraryPanel, NODE_KIND_MIME, type LibraryMode } from "./NodesLibraryPanel";
 import { AiGeneratePanel } from "./AiGeneratePanel";
+import { AiReviewPanel } from "./AiReviewPanel";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import { assertRunnable } from "@/lib/workflow/validate";
 import { useT } from "@/i18n/provider";
@@ -346,6 +347,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   const [libraryMode, setLibraryMode] = useState<LibraryMode>("docked");
   const [libFloatPos, setLibFloatPos] = useState({ x: 16, y: 96 });
   const [aiOpen, setAiOpen] = useState(false); // #3 — AI generate-from-prompt modal
+  const [reviewOpen, setReviewOpen] = useState(false); // #3 stretch — AI review modal
   const [floatPos, setFloatPos] = useState({ x: 24, y: 24 });
 
   // Stable ref holding the latest delete/copy callbacks.
@@ -980,6 +982,14 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           </button>
           <button
             type="button"
+            onClick={() => setReviewOpen(true)}
+            title={t("wf.ai.reviewTitle")}
+            className="shrink-0 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-sm font-semibold text-neutral-600 transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] dark:border-neutral-700 dark:text-neutral-300"
+          >
+            <ClipboardCheck size={14} className="-mt-0.5 mr-1 inline" aria-hidden /> {t("wf.ai.review")}
+          </button>
+          <button
+            type="button"
             onClick={() => void handleTest()}
             disabled={testing || saveStatus === "saving"}
             title={t("wf.editor.testHint")}
@@ -1064,6 +1074,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           {/* Nodes Library — floating (desktop), draggable by its header */}
           {aiOpen && (
             <AiGeneratePanel onApply={applyGeneratedGraph} onClose={() => setAiOpen(false)} t={t} />
+          )}
+          {reviewOpen && (
+            <AiReviewPanel graph={fromReactFlow(nodes, edges)} onClose={() => setReviewOpen(false)} t={t} />
           )}
           {libraryMode === "float" && (
             <div className="absolute z-40 hidden md:block" style={{ left: libFloatPos.x, top: libFloatPos.y }}>

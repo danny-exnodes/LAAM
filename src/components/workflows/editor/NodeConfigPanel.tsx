@@ -258,6 +258,9 @@ function ConnectorForm({
           )}
         </>,
       )}
+      {selectedTool?.description && (
+        <p className="-mt-2 mb-3 text-xs text-neutral-400">{selectedTool.description}</p>
+      )}
       {field(
         <SchemaArgsForm
           node={node}

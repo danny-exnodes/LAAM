@@ -148,6 +148,7 @@ export const workflows: Dict = {
   "wf.recur.dailyAt": { vi: "Hằng ngày lúc", en: "Daily at", zh: "每天于" },
   "wf.recur.scheduleCol": { vi: "Lịch", en: "Schedule", zh: "计划" },
   "wf.recur.cancel": { vi: "Huỷ", en: "Cancel", zh: "取消" },
+  "wf.recur.next": { vi: "Lần chạy kế", en: "Next run", zh: "下次运行" },
 
   // Editor
   "wf.editor.title": { vi: "Chỉnh sửa Workflow", en: "Edit Workflow", zh: "编辑工作流" },
@@ -190,6 +191,9 @@ export const workflows: Dict = {
   "wf.ai.error": { vi: "Chưa tạo được — thử mô tả rõ hơn.", en: "Couldn't generate — try rephrasing.", zh: "生成失败 — 请换种描述。" },
   "wf.ai.ex1": { vi: "Tóm tắt công việc demo rồi gửi email", en: "Summarize demo tasks then email me", zh: "总结 demo 任务并发邮件" },
   "wf.ai.ex2": { vi: "Lấy thẻ Trello, nếu khẩn thì báo Slack", en: "Get Trello cards; if urgent, notify Slack", zh: "获取 Trello 卡片，若紧急则通知 Slack" },
+  "wf.ai.review": { vi: "Đánh giá", en: "Review", zh: "评审" },
+  "wf.ai.reviewTitle": { vi: "AI đánh giá workflow", en: "AI workflow review", zh: "AI 工作流评审" },
+  "wf.ai.reviewing": { vi: "Đang đánh giá…", en: "Reviewing…", zh: "评审中…" },
 
   "wf.editor.save": { vi: "Lưu", en: "Save", zh: "保存" },
   "wf.editor.saving": { vi: "Đang lưu…", en: "Saving…", zh: "保存中…" },

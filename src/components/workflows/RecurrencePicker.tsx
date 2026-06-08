@@ -15,7 +15,7 @@ import {
   type Recurrence,
   type Frequency,
 } from "@/lib/workflow/recurrence";
-import { parseCron } from "@/lib/workflow/cron";
+import { parseCron, nextRunAt } from "@/lib/workflow/cron";
 
 type T = (key: string) => string;
 
@@ -85,6 +85,17 @@ export function RecurrencePicker({
   useEffect(() => {
     onChange(cron);
   }, [cron, onChange]);
+
+  // Next-run preview (b2): when the cron is valid, show the next datetime it would fire
+  // (from now) so non-tech users get a concrete confirmation of what they just set.
+  const nextRunLabel = useMemo(() => {
+    if (advanced && !rawValid) return null;
+    try {
+      return nextRunAt(cron, new Date()).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+    } catch {
+      return null;
+    }
+  }, [cron, advanced, rawValid]);
 
   // Time = "HH:MM" for the frequencies that carry an hour (daily/weekly/monthly).
   const time = "hour" in rec ? formatHHMM(rec.hour, rec.minute) : "";
@@ -221,6 +232,11 @@ export function RecurrencePicker({
           </>
         )}
       </p>
+      {nextRunLabel && (
+        <p className="mt-1 text-[11px] text-neutral-400">
+          {t("wf.recur.next")}: {nextRunLabel}
+        </p>
+      )}
     </div>
   );
 }
