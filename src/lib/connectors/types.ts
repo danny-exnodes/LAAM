@@ -31,6 +31,10 @@ export type ConnectorTool = {
   // classification from THIS — single source of truth, so adding a tool touches
   // one connector file and can never drift out of sync with a central name-list.
   kind: "read" | "write";
+  // Eval-readiness for workflow autonomy. ABSENT = false = fail-closed: the tool may
+  // NOT run in a workflow run until explicitly flipped (tier-low after merge; tier-high
+  // after a destination-control gate). Orthogonal to kind: reads aren't gated by this.
+  workflowSafe?: boolean;
   function: { name: string; description: string; parameters: object };
 };
 

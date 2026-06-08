@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { resolveKind, resolveBlast, BLAST_LOW } from "./policy";
+import { resolveKind, isWorkflowSafe } from "./policy";
 import { CONNECTORS } from "@/lib/connectors/registry";
 import type { Tool } from "../types";
 
@@ -37,9 +37,9 @@ describe("resolveKind", () => {
   });
   test("registry write surface (P5) — full audit list, derived from kind", () => {
     // The COMPLETE set of self-declared writes. Adding/removing a write tool fails
-    // this on purpose → forces a conscious gate/blast review. All are gated by
-    // withSafety (confirm-card) and are HIGH blast (not in BLAST_LOW), so they are
-    // fail-closed in workflow runs — only interactive, confirmed chat.
+    // this on purpose → forces a conscious gate/readiness review. All are gated by
+    // withSafety (confirm-card) and are not yet workflowSafe (fail-closed in workflow
+    // runs until explicitly flipped) — interactive confirmed chat works regardless.
     const writes = CONNECTORS.flatMap((c) =>
       c.tools.filter((t) => t.kind === "write").map((t) => t.function.name),
     ).sort();
@@ -59,17 +59,22 @@ describe("resolveKind", () => {
   });
 });
 
-describe("resolveBlast (G2 — blast-radius tier, v1 LOW-only allowlist)", () => {
-  test("demo_create_task = LOW (allowlisted)", () => {
-    expect(resolveBlast("demo_create_task")).toBe("low");
+describe("isWorkflowSafe (workflow-readiness — fail-closed default)", () => {
+  test("demo_create_task = true (đã khai workflowSafe)", () => {
+    expect(isWorkflowSafe("demo_create_task")).toBe(true);
   });
-  test("BLAST_LOW chứa đúng demo_create_task (v1)", () => {
-    expect([...BLAST_LOW]).toEqual(["demo_create_task"]);
+  test("default fail-closed: write chưa khai cờ → false", () => {
+    // LOAD-BEARING: test này phải FAIL nếu ai đó default cờ = true cho tool chưa clear.
+    expect(isWorkflowSafe("trello_create_card")).toBe(false);
   });
-  test("write khác (trello_create_card) → HIGH", () => {
-    expect(resolveBlast("trello_create_card")).toBe("high");
+  test("tool lạ → false (fail-closed)", () => {
+    expect(isWorkflowSafe("anything_else")).toBe(false);
   });
-  test("tool không trong allowlist → HIGH (mặc định fail-closed)", () => {
-    expect(resolveBlast("anything_else")).toBe("high");
+  test("đúng tập workflowSafe (v1 = chỉ demo) — tripwire: chưa flip tool nào", () => {
+    // Khi flip tier-low (sau merge), cập nhật list này MỘT CÁCH CÓ Ý — như audit test write-surface.
+    const safe = CONNECTORS.flatMap((c) =>
+      c.tools.filter((t) => t.workflowSafe).map((t) => t.function.name),
+    ).sort();
+    expect(safe).toEqual(["demo_create_task"]);
   });
 });

@@ -31,6 +31,7 @@ const demo: Connector = {
       // with no real credentials (FEAT-5). Creates a sample task (not persisted).
       type: "function",
       kind: "write",
+      workflowSafe: true, // credential-free demo write — the one tool workflow-cleared in v1
       function: {
         name: "demo_create_task",
         description: "Tạo một công việc/đầu việc mẫu mới. Dùng để minh hoạ luồng xác nhận trước khi ghi.",
