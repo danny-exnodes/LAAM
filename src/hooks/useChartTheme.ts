@@ -2,10 +2,10 @@
 
 // Shared recharts palette that follows the app theme. Dark mode is class-based
 // (a `.dark` class on <html>, set by the theme toggle); recharts renders inline
-// SVG with literal colors, not CSS classes, so this hook reads that class and
-// re-renders when it changes (theme toggle or system change in "system" mode).
+// SVG with literal colors, not CSS classes, so it reads that class (via useIsDark)
+// and re-renders when it changes (theme toggle or system change in "system" mode).
 
-import { useEffect, useState } from "react";
+import { useIsDark } from "./useIsDark";
 
 export type ChartTheme = {
   grid: string;
@@ -43,24 +43,6 @@ const DARK: ChartTheme = {
   },
 };
 
-function hasDarkClass(): boolean {
-  return (
-    typeof document !== "undefined" &&
-    document.documentElement.classList.contains("dark")
-  );
-}
-
 export function useChartTheme(): ChartTheme {
-  const [dark, setDark] = useState(hasDarkClass);
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const el = document.documentElement;
-    const sync = () => setDark(el.classList.contains("dark"));
-    sync();
-    // Re-read whenever the <html> class changes (theme toggle / system flip).
-    const obs = new MutationObserver(sync);
-    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
-    return () => obs.disconnect();
-  }, []);
-  return dark ? DARK : LIGHT;
+  return useIsDark() ? DARK : LIGHT;
 }
