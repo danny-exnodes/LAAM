@@ -8,6 +8,7 @@ import {
   Settings,
   Gauge,
   GitBranch,
+  Activity,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { gravatarUrl } from "@/lib/gravatar";
@@ -20,6 +21,7 @@ import { BottomNav } from "@/components/bottom-nav";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/chat", label: "Chat", Icon: MessageSquare },
+  { href: "/monitoring", label: "Monitoring", Icon: Activity },
   { href: "/agents", label: "Agents", Icon: Bot },
   { href: "/workflows", label: "Workflows", Icon: GitBranch },
   { href: "/eval", label: "Reliability", Icon: Gauge },

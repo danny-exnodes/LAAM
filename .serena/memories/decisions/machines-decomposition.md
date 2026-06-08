@@ -1,0 +1,66 @@
+# Decision: Tách feature "Machines" → Access / Monitoring / MCP-Server
+
+**Ngày:** 2026-06-07 · **Vai trò:** technical consultant · **Trạng thái:** 🟢 LOCKED — CTO duyệt phân rã 3 feature + ra 4 verdict (2026-06-07). Chi tiết verdict: [[comms/active/consultant-to-cto-machines-decomposition]] §CTO VERDICT.
+
+## Vấn đề
+"Machines" được thiết kế khi LAAM chỉ là *giám sát Claude agent local*. Khi đó `máy tính = collector = token = dòng ingest` là 1:1 sạch. Platform đã tiến hoá (chat harness SP1–4, connectors+OAuth, workflow durable, MCP **client**, world-tools) và hướng đi mới của user làm quan hệ đó vỡ:
+1. **API key cho user** (cấp quyền truy cập platform qua key).
+2. **MCP server** — LAAM expose ra cho AI agent hệ khác gọi *vào* (⚠️ NGƯỢC với MCP **client** hiện có ở [[connectors-mcp-client]]).
+3. **Agent sinh từ Chat & Workflow** — chạy server-side, KHÔNG có máy nào.
+
+## Chẩn đoán gốc — Machines gánh 3 nghĩa chồng nhau
+- (a) máy tính dev vật lý (`hostname`, `id=local:<hostname>`)
+- (b) credential của chương trình không-người (`tokenHash` sha256, bearer `/api/ingest`)
+- (c) nhãn để ingest ghi vào (`agent_sessions.machineId`)
+
+Bằng chứng: `/api/ingest` BỎ QUA Auth.js/RBAC (bearer→hashToken→tra `machines`, không user/role). `/machines` đã bị giáng xuống `/settings/machines` (chỉ redirect). Hardware Analytics ([[host-metrics-sampler]]) bị bolt-on — mối quan tâm thứ 4 (telemetry host Ollama), orthogonal.
+
+Nguyên tắc khử nhiễu: tách **Principal/Token** (ai xác thực) × **Session** (đơn vị việc được giám sát) × **Source** (đến từ đâu).
+
+## Đề xuất: 3 feature
+- **A. Access & Tokens** — settings surface mới, tổng quát hoá machine token. Xương sống auth cho MCP-server + API. Collector token thành 1 *kind*.
+- **B. Monitoring** — lên top-level, đa nguồn. `source`: `local-computer` (collector cũ → 1 tab) | `chat` | `workflow` | `api/mcp`. "Machines" (máy vật lý) thành *bộ lọc* trong tab local. KHÔNG merge cứng chat_*/workflow_* vào agent_sessions (lossy) → **read-model "monitored runs"** chuẩn hoá `{id,source,principal,status,startedAt,lastActivity,cost,tokens}`, click-through về detail từng nguồn. `agent_sessions.source` + `machineId` nullable = điểm mở rộng sẵn có.
+- **C. MCP Server** — capability MỚI (khác MCP client). Expose `laam_*` tools cho agent ngoài, auth = API key (A), đi qua gate SP-2 sẵn có. Mỗi call mở 1 session được monitor (B) → khép vòng.
+
+## Token model — trade-off (CHƯA CHỐT, user chọn "phân tích")
+- **H1** 1 bảng `access_token` (kind discriminator): 1 chokepoint + 1 vòng đời revoke/rotate/expiry + gắn userId vào RBAC. Đổi: migration đụng machines/ingest, scopes đa hình cần resolver, ingest "as user".
+- **H2** giữ `machines.tokenHash` + thêm `api_key` riêng: migration nhẹ nhất NHƯNG 2 (rồi 3) cơ chế bearer song song mãi — kiểu hybrid Rule 7 cấm.
+- **H3 (RECOMMEND)** unified `access_token` + **gỡ token KHỎI machines** (machine = thực thể được giám sát thuần). Sửa tận gốc conflation (a)vs(b); enforce theo kind qua resolver (tiền lệ `resolveKind` connectors); migration vừa+bounded.
+- Nuance: **sha256 ĐÚNG** (token random entropy cao, không phải password — không cần bcrypt); cần **unique index trên tokenHash**; thêm cột **prefix/last4** cho UI nhận diện key.
+
+## Sequencing (cả 3 đều là đích — phụ thuộc cứng)
+Access (precondition auth) → [MCP-server ∥ Monitoring read-model] → hội tụ (session api/mcp hiện trong Monitoring). Monitoring-unification độc lập auth nên parallel-safe.
+
+## IA mới
+Top-nav **Monitoring** (tab Local/Chat/Workflows/External) · Machines = filter trong tab Local · Hardware Analytics → panel Host/Infra · `/settings/machines` → `/settings/access`.
+
+## Verdict CTO (2026-06-07) — đã chốt 4
+1. **Token model = H3** — unified `access_token` + gỡ token KHỎI machines. Buộc kèm: unique index `access_token.tokenHash`; cột `prefix`/`last4`; sha256 giữ nguyên; ingest resolver forward-compat (tra access_token trước → migrate machines.tokenHash→kind=collector → drop, không re-issue big-bang). H2 loại (Rule 7 hybrid); H1 nửa vời.
+2. **Ingest = attribution ghi nhận, visibility theo nguồn** (KHÔNG per-user isolation). `userId` trên token = provenance/revoke/audit, không phải khoá cô lập. Visibility giữ đúng [[v2-architecture]]: `local-computer`/`api-mcp` = org-shared (member auth xem, viewer read-only); `chat`/`workflow` = per-user. **Invariant cho read-model B:** query phủ isolation per-source, không phẳng hoá 1 mức.
+3. **MCP-server scope = read-only `laam_*` trước.** Connector write defer sau, qua gate + blast-radius + per-key scope riêng (external = ngoài vùng tin cậy; khớp SP-2 minimal write).
+4. **Naming = giữ "Machines"** cho tab/filter Local (từ vẫn đúng surface thu hẹp); vocab Token/Session/Source/Access chỉ ở model+settings; `/settings/machines`→`/settings/access`.
+
+Sequencing duyệt: `Access (P0)` → [`MCP-server` ∥ `Monitoring read-model`].
+Next: writing-plans cho **P0 Access spine** (H3 migration + unique index + prefix/last4 + ingest resolver); spec B khắc invariant Q2.
+
+## P0 Access spine — IMPLEMENTED (2026-06-07, agent)
+Code DONE (tsc sạch, full suite **1137 pass**, +20 test mới). Plan: `docs/superpowers/plans/2026-06-07-access-spine-p0.md`.
+- `schema.ts` bảng `accessTokens` (unique `tokenHash`, `kind/userId/prefix/last4/scopes/machineId/lastUsedAt/expiresAt/revokedAt`).
+- `lib/access-token.ts`: `generateAccessToken`/`hashToken`(reuse machine-token)/`formatTokenDisplay`/`verifyAccessToken`(kind+revoked+expiry)/`machinesWithActiveToken`.
+- `/api/ingest`: resolver forward-compat (access_token kind=collector TRƯỚC → fallback `machines.tokenHash`); vẫn org-shared.
+- `/api/machines` POST: tạo machine (no tokenHash) + access_token(kind=collector, userId=creator, scopes=["ingest"]); GET hasToken = legacy OR active token; DELETE **dual-revoke A1** (null tokenHash + revokedAt mọi token link).
+- `scripts/backfill-access-token.ts` (idempotent onConflictDoNothing); `settings/machines/page.tsx` hasToken.
+- ⏳ HOST/USER: `db:generate`(0009)→`db:migrate`→backfill→round-trip. `machines.tokenHash` GIỮ (drop ở phase sau). MCP-server(C)+Monitoring read-model(B) chưa làm.
+
+## B + C — IMPLEMENTED (2026-06-07, agent)
+Code DONE (tsc sạch, full suite **1170 pass**, +33 test). Theo sequencing đã duyệt.
+- **B Monitoring read-model:** `src/lib/monitoring/read-model.ts` (pure normalizers agent/chat/workflow + `isVisible` Q2 + `mergeAndSort` + `getMonitoredRuns`); `/api/monitoring`; page `/monitoring` + `MonitoringClient` (tab All/Local/Chat/Workflow/External) + nav "Monitoring" (Activity icon) + i18n `monitoring.ts` (vi/en/zh). **KHÔNG merge cứng** — read-model phủ 3 kho. **Invariant Q2 khắc trong `isVisible`** (org-shared local/claude/api/mcp; per-user chat/workflow) + query-level userId filter. chat cost=0 (model local free). `agent_sessions.userId` MỚI (principal external, nullable).
+- **C MCP Server:** `src/lib/mcp-server/{tools,handler}.ts` (JSON-RPC subset initialize/tools/list/tools/call/ping; expose READ-ONLY laam_* guarded — Q3); `/api/mcp` (auth access_token kind api|mcp, record monitored session source=mcp → hiện ở B; public route trong auth.config). **NGƯỢC với MCP client.**
+- **A nối dài (cho C dùng được):** `/api/access-tokens` (POST/GET per-user) + `/[id]` DELETE — cấp/list/revoke token api|mcp (scopes:["read"]). UI `/settings/access` vẫn DEFER (đúng verdict Q4).
+- ⏳ HOST: db:generate giờ gồm access_token + agent_sessions.userId (1 migration 0009). Còn defer: drop machines.tokenHash; gấp Agents thành tab trong Monitoring (hiện /agents giữ riêng = Local detail); MCP write exposure; /settings/access UI.
+
+## CTO review
+Bản trình CTO tự-chứa (chờ verdict): [[comms/active/consultant-to-cto-machines-decomposition]].
+
+## Liên quan
+[[connectors-mcp-client]] · [[agent-harness-architecture]] · [[workflow-orchestration-architecture]] · [[v2-architecture]] · [[host-metrics-sampler]] · [[v2-app]].

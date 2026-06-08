@@ -126,7 +126,11 @@ export const agentSessions = pgTable("agent_session", {
   projectId: text("projectId").references(() => projects.id, {
     onDelete: "set null",
   }),
-  source: text("source").notNull().default("claude"), // claude | local
+  source: text("source").notNull().default("claude"), // claude | local | api | mcp
+  // Principal for externally-driven sessions (source api|mcp): the access_token's
+  // owner. NULL for transcript-derived rows (claude|local) — those are org-shared
+  // anyway (provenance, NOT a visibility key; see machines-decomposition Q2).
+  userId: text("userId").references(() => users.id, { onDelete: "set null" }),
   model: text("model"),
   gitBranch: text("gitBranch"),
   status: text("status"), // running | idle | done
@@ -148,6 +152,46 @@ export const agentSessions = pgTable("agent_session", {
   transcriptPath: text("transcriptPath"),
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
+
+// ---------------------------------------------------------------------------
+// Access tokens (P0 Access spine) — unified credential for non-interactive
+// callers. Generalizes the old machine/collector token (machines.tokenHash,
+// kept during the forward-compat transition) into one model with a `kind`
+// discriminator so MCP-server + per-user API plug in without a second bearer
+// mechanism. sha256(token) — high-entropy random token, NOT a password (no
+// bcrypt). `userId` = provenance/revoke/audit, NOT a data-isolation key
+// (ingest stays org-shared — see decisions/machines-decomposition.md, Q2).
+// ---------------------------------------------------------------------------
+
+export const accessTokens = pgTable(
+  "access_token",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    // Who registered the token. set-null (not cascade): revoking a user must not
+    // silently delete the audit trail of tokens they issued.
+    userId: text("userId").references(() => users.id, { onDelete: "set null" }),
+    kind: text("kind").notNull(), // collector | api | mcp
+    name: text("name").notNull(),
+    prefix: text("prefix").notNull(), // display, non-secret (e.g. "laam_a3f2"; "legacy" for backfilled)
+    last4: text("last4").notNull(), // display ("----" for backfilled legacy hashes)
+    tokenHash: text("tokenHash").notNull(), // sha256(token)
+    scopes: jsonb("scopes").$type<string[]>(), // stored now, enforced in later phases (collector = ["ingest"])
+    // collector tokens link to the machine they push for; cascade so deleting a
+    // machine removes its tokens.
+    machineId: text("machineId").references(() => machines.id, {
+      onDelete: "cascade",
+    }),
+    lastUsedAt: timestamp("lastUsedAt", { mode: "date" }),
+    expiresAt: timestamp("expiresAt", { mode: "date" }),
+    revokedAt: timestamp("revokedAt", { mode: "date" }),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [unique("access_token_hash_key").on(t.tokenHash)],
+);
+
+export type AccessToken = typeof accessTokens.$inferSelect;
 
 // ---------------------------------------------------------------------------
 // Chat (Phase 4) — per-user conversations with the local Gemma 4 model.
