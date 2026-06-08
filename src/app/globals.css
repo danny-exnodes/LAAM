@@ -21,7 +21,7 @@
      cool teal family while KEEPING each step's lightness ≈ the Tailwind default,
      so every existing `*-neutral-*` utility cools to cyan WITHOUT touching call
      sites and WITHOUT changing contrast ratios. The dark end (800/900/950) is
-     aligned to the --surface-*/--bg-base tokens so legacy `dark:bg-neutral-900`
+     aligned to the --surface-* / --bg-base tokens so legacy `dark:bg-neutral-900`
      cards match the new <MatteCard> primitive exactly. */
   --color-neutral-50: #f3f6f6;
   --color-neutral-100: #e9efef;
