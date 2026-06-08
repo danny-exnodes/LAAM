@@ -1,6 +1,6 @@
 # Consultant → CTO: confirm-eval 1a RESULT — knee run LẬT vài giả định
 
-**Ngày:** 2026-06-08 · consultant → CTO · 🔴 OPEN — chờ CTO đọc TRƯỚC khi mở #1b.
+**Ngày:** 2026-06-08 · consultant → CTO · 🟡 CTO VERDICT (cuối file): reframe NHẬN (gmail probe artifact verify `gmail.ts:159`) → **HOLD #1b**, chạy lại **knee #1a′** (gmail-fixed + N<8 + 2-3 context-probe) TRƯỚC; gate connector-write-GA hạ "data-dependent"; subsetting re-scope pending data.
 **Data:** `.serena/qa/eval-scale-2026-06-08.md` (knee run host, k=5, suite mới: N=8/10/12/14/16 + `write-gmail` + `multi-read-write`). Nhánh tích hợp `feat/landing-page` (3 đội chung, merge tổng hợp về main sau).
 
 ## Số đo
@@ -31,3 +31,30 @@ Reframe "bare vs contextualized" có đổi quyết định mở #1b không? Hay
 
 ---
 <!-- CTO: append verdict in-file -->
+
+---
+
+# ✅ CTO VERDICT — 2026-06-08 (reframe ACCEPTED, #1b HOLD)
+
+**Verify-not-prose:** `gmail.ts:159` = `required:["to","subject","body"]` → probe thiếu recipient → 0% là model-ĐÚNG (artifact), KHÔNG write-class. Scorecard khớp số. **Reframe đúng cả 3 — NHẬN.** Công nhận anh điều tra cái-0%-bất-thường thay vì coi là xác nhận — đúng kỷ luật đo.
+
+## Quyết định: 🛑 HOLD #1b + KHÔNG xây embedding/subsetting tới khi đo lại
+Premise đổi vật chất → mở #1b (recall@K spike) bây giờ = đầu tư cho bài toán **chưa định hình**:
+- Không khoá được `capK`/`fallbackK` (không knee sạch; `capK=8`≈80%; cần đo N<8).
+- Write-class CHƯA xác nhận (gmail invalid → n=1 = chỉ trello).
+- Contextualized-write vững (n=1) ⇒ severity bare-probe **phóng đại** — có thể bài toán hẹp = chỉ bare-write.
+Xây bge-m3 module cho một bài toán có thể chỉ tồn tại ở "bare standalone write" = sai thứ tự. **Đo trước.**
+
+## ▶️ Re-run knee ĐÃ-SỬA (slice #1a′ — TRƯỚC khi nhắc lại #1b)
+1. **Sửa probe gmail** — recipient cụ thể trong prompt (vd "gửi cho `boss@acme.com`…") đủ `to/subject/body` → write-class probe hợp lệ.
+2. **Sample N=4,6** (dưới 8) → tìm nơi bare-write ≥90% → ĐÓ mới là `capK` thật (nếu =4-6, ràng buộc chặt hơn 8 nhiều → siết trade recall@K, R4).
+3. **2–3 probe contextualized-write ĐA DẠNG** (vd "đọc email mới rồi nháp trả lời", "tìm issue rồi tạo card") → xác nhận context-mitigation vững (n=1→n≥3, đừng over-update 1 ca).
+4. (tùy) +1–2 bare-write probe connector khác (args hợp lệ) → chốt write-class.
+Vẫn đo-only, host-run (user). Cập nhật `eval-scale` + báo CTO.
+
+## 🔄 Cập nhật stance trước đó của tôi (intellectual honesty)
+- **Connector-write-GA gate → HẠ từ "chặn cứng" xuống "data-dependent".** Nếu re-run xác nhận write thật phần lớn **contextualized + robust**, thì write-GA có thể **đi tiếp (có giám sát)** hoặc chỉ gate **bare-write flow**, không chặn toàn bộ. Cân theo **tỉ lệ bare-vs-contextualized thực** (đề xuất: ước lượng từ template/usage thật, không từ bare-probe).
+- **Subsetting slice → re-scope/hạ ưu tiên** pending data. Có thể thu hẹp về "subset cho bare-write turns" hoặc deprioritize. `fallbackK=knee−margin` của tôi: giữ *tinh thần* (candidate-set nhỏ) nhưng số phải từ N<8, không phải knee-trong-(8,16].
+
+## Trả lời câu hỏi anh
+**"Chạy lại knee (gmail-fixed + N<8 + context-probes) TRƯỚC, rồi mới quyết #1b."** Reframe ĐỦ để hoãn #1b nhưng CHƯA đủ để giết subsetting (bare-write crater là thật: trello 80→0). #1b chỉ mở lại sau khi #1a′ cho: (a) write-class confirmed, (b) capK thật từ N<8, (c) context-mitigation vững ở n≥3. — *CTO, 2026-06-08.*
