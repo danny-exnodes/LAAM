@@ -8,7 +8,7 @@ import { useT } from "@/i18n/provider";
 import { dashboard } from "@/i18n/dictionaries/dashboard";
 import type { Stats } from "@/lib/stats.types";
 
-const ACCENT = "#6d5efc";
+const ACCENT = "#36a6d6";
 const DAY_KEYS = [
   "dash.hm.day.sun",
   "dash.hm.day.mon",

@@ -29,7 +29,7 @@ export function mapCostByModel(
     .slice(0, topN);
 }
 
-const BAR_COLOR = "#6d5efc";
+const BAR_COLOR = "#36a6d6";
 
 export function CostByModel({
   modelComparison,

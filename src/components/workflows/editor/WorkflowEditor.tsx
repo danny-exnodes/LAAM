@@ -47,7 +47,7 @@ import type { HistoryState, Snapshot } from "./historyStack";
 
 const KIND_COLORS: Record<WfNodeKind, string> = {
   agent: "#2563eb",
-  connector: "#7c3aed",
+  connector: "#06b6d4",
   condition: "#d97706",
   foreach: "#16a34a",
 };

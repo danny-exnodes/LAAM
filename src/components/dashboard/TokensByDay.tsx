@@ -37,7 +37,7 @@ export function mapTokensByDay(
   });
 }
 
-const IN_COLOR = "#6d5efc";
+const IN_COLOR = "#36a6d6";
 const OUT_COLOR = "#22c55e";
 
 export function TokensByDay({ activity }: { activity: Stats["activity"] }) {

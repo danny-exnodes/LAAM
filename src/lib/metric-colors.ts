@@ -1,10 +1,11 @@
 // Source of truth for metric accent colors (recharts needs literal color values,
 // not CSS classes). Mirrors the --metric-* tokens added to globals.css @theme.
-// System metrics = purple family; graphics metrics = blue family.
+// Matte Dark: cool family throughout — system metrics = cyan/aqua, graphics
+// metrics = bright cyan/sky. Four distinguishable hues, no warm tones.
 
 export const METRIC_COLORS = {
-  cpu: "#6d5efc", // accent (system)
-  ram: "#8b5cf6", // accent-vivid (system)
+  cpu: "#36a6d6", // accent (system)
+  ram: "#2dd4bf", // aqua (system)
   gpu: "#22d3ee", // --metric-gpu (graphics)
   vram: "#38bdf8", // --metric-vram (graphics)
 } as const;
