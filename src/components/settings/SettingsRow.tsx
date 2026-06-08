@@ -11,7 +11,7 @@ export function SettingsRow({
   sub,
   href,
   right,
-  color = "#6d5efc",
+  color = "#36a6d6",
 }: {
   icon: ReactNode;
   label: string;

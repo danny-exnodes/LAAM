@@ -11,7 +11,7 @@ import { Activity, Bot, MessageSquare, Plug } from "lucide-react";
 const FEATURES = [
   { Icon: Bot, label: "Agents", v: "thời gian thực", c: "bg-green-400" },
   { Icon: MessageSquare, label: "Chat cục bộ", v: "miễn phí · $0", c: "bg-blue-400" },
-  { Icon: Plug, label: "Connectors", v: "7 dịch vụ", c: "bg-violet-400" },
+  { Icon: Plug, label: "Connectors", v: "7 dịch vụ", c: "bg-cyan-400" },
 ];
 
 export function AuthShell({ children }: { children: React.ReactNode }) {
@@ -52,7 +52,7 @@ export function AuthShell({ children }: { children: React.ReactNode }) {
         />
         {/* floating gradient orbs */}
         <div aria-hidden className="anim-float pointer-events-none absolute -left-16 top-24 h-64 w-64 rounded-full bg-blue-500/30 blur-3xl" />
-        <div aria-hidden className="anim-float-2 pointer-events-none absolute -right-10 bottom-10 h-72 w-72 rounded-full bg-indigo-500/25 blur-3xl" />
+        <div aria-hidden className="anim-float-2 pointer-events-none absolute -right-10 bottom-10 h-72 w-72 rounded-full bg-cyan-500/25 blur-3xl" />
         <div aria-hidden className="anim-glow pointer-events-none absolute right-24 top-1/3 h-40 w-40 rounded-full bg-cyan-400/20 blur-2xl" />
 
         <div className="relative z-10 flex items-center gap-2 text-lg font-bold tracking-tight">

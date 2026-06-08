@@ -7,7 +7,7 @@ import { useChartTheme } from "@/hooks/useChartTheme";
 import type { TrendPoint } from "@/lib/eval-stats";
 
 const DIM_COLORS: Record<string, string> = {
-  "tool-selection": "#6d5efc", args: "#0ea5e9", grounding: "#22c55e",
+  "tool-selection": "#36a6d6", args: "#0ea5e9", grounding: "#22c55e",
   restraint: "#f59e0b", termination: "#14b8a6", "write-intent": "#ef4444", "rich-block": "#a855f7",
 };
 

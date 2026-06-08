@@ -24,8 +24,8 @@ export function CostChart({
         <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -12 }}>
           <defs>
             <linearGradient id="costGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#6d5efc" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="#6d5efc" stopOpacity={0} />
+              <stop offset="0%" stopColor="#36a6d6" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="#36a6d6" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
@@ -38,7 +38,7 @@ export function CostChart({
           <Area
             type="monotone"
             dataKey="cost"
-            stroke="#6d5efc"
+            stroke="#36a6d6"
             strokeWidth={2}
             fill="url(#costGrad)"
           />

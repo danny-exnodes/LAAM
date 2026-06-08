@@ -27,7 +27,7 @@ describe("chartToRecharts (pure mapper)", () => {
     expect(r.rows[0][r.series[0].key]).toBe(3);
     expect(r.rows[1][r.series[1].key]).toBe(2);
     // palette: first series uses accent
-    expect(r.series[0].color).toBe("#6d5efc");
+    expect(r.series[0].color).toBe("#36a6d6");
   });
 
   it("maps a line chart to kind=line", () => {
@@ -56,7 +56,7 @@ describe("chartToRecharts (pure mapper)", () => {
     ]);
     // pie slices get a per-row color from the palette
     expect(r.sliceColors).toBeDefined();
-    expect(r.sliceColors?.[0]).toBe("#6d5efc");
+    expect(r.sliceColors?.[0]).toBe("#36a6d6");
   });
 
   it("returns an error for invalid JSON", () => {

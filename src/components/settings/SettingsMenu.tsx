@@ -66,7 +66,7 @@ export function SettingsMenu({ user }: { user: SettingsUser }) {
           icon={<Palette size={18} />}
           label={t("settings.appearance")}
           right={<ThemeToggle />}
-          color="#8b5cf6"
+          color="#2dd4bf"
         />
         <SettingsRow
           icon={<Languages size={18} />}

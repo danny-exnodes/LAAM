@@ -26,7 +26,7 @@ function fmtDur(ms: number): string {
 // Inline accent (see AgentCard) so the left colour survives `dark:border-*`,
 // which would otherwise override border-left-color in dark mode.
 const TONE_ACCENT: Record<Tone, string> = {
-  accent: "#8b5cf6",
+  accent: "#2dd4bf",
   running: "#22c55e",
   done: "#94a3b8",
 };
