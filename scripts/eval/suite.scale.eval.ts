@@ -30,8 +30,10 @@ const PROBES: { id: string; correct: string | string[]; scn: Scenario }[] = [
   { id: "calc", correct: "util_calc", scn: {
     id: "scale-calc", capability: "tool-selection", input: "Tính chính xác 19 * 23 giúp tôi.",
     toolStubs: { util_calc: { expr: "19*23", result: 437 } }, expect: { callsTool: "util_calc" } } },
+  // bare-write trello — 1a″ FIX: prompt cho idList HỢP LỆ (trello_create_card required ["idList","name"], trello.ts:118).
+  // (bản trước "board Sprint" = TÊN không phải list-ID → model ĐÚNG khi do dự → "crater" = cùng artifact thiếu-arg như gmail.)
   { id: "write", correct: "trello_create_card", scn: {
-    id: "scale-write", capability: "tool-selection", input: "Tạo card Trello 'Fix login' trong board Sprint.",
+    id: "scale-write", capability: "tool-selection", input: "Tạo card Trello tên 'Fix login' vào list có id 'lst_5f2a9'.",
     toolStubs: { trello_create_card: { status: "pending_write" } }, expect: { callsTool: "trello_create_card" } } },
   // non-trello bare-write — #1a′ FIX: prompt đủ to/subject/body (gmail_send required) → probe HỢP LỆ.
   // (bản trước "gửi cho sếp" thiếu recipient → model ĐÚNG khi không gọi → 0% = artifact, KHÔNG phải write-class.)
@@ -39,6 +41,11 @@ const PROBES: { id: string; correct: string | string[]; scn: Scenario }[] = [
     id: "scale-write-gmail", capability: "tool-selection",
     input: "Gửi email tới boss@acme.com, tiêu đề 'Báo cáo sprint', nội dung 'Sprint đã xong'.",
     toolStubs: { gmail_send: { status: "pending_write" } }, expect: { callsTool: "gmail_send" } } },
+  // 1a″ — bare-write #3 (gcal, args đủ summary/start/end, gcal.ts:114) → write-class confirm ở n≥3 clean writes.
+  { id: "write-gcal", correct: "gcal_create_event", scn: {
+    id: "scale-write-gcal", capability: "tool-selection",
+    input: "Tạo sự kiện Google Calendar tiêu đề 'Họp sprint', bắt đầu 2026-06-10T15:00:00, kết thúc 2026-06-10T16:00:00.",
+    toolStubs: { gcal_create_event: { status: "pending_write" } }, expect: { callsTool: "gcal_create_event" } } },
   // T4 — multi-tool (read+write cùng lượt): cả hai phải lọt ≤ capK (callsTool[] = tất-cả-phải-gọi, types.ts:11).
   { id: "multi-read-write", correct: ["laam_find_stuck", "trello_create_card"], scn: {
     id: "scale-multi", capability: "tool-selection", input: "Xem agent nào đang kẹt rồi tạo card Trello nhắc tôi xử lý.",
