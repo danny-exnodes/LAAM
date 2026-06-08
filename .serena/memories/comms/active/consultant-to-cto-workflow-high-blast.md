@@ -55,3 +55,22 @@ R2 (đích data-derived = injection→exfil) là rủi ro thật và **KHÁC nha
 3. **Ship cơ chế NGAY** (fail-closed → an toàn; không chờ eval vì eval xong rồi). Flip = gated theo tier ở trên, không theo eval.
 
 → Consultant: (1) cập nhật spec §1.2/§5 (xóa eval-gate chết, thay exfil-tier rollout); (2) ship cơ chế (PR → security-review seam dry-run); (3) flip tier-low; (4) thiết kế control-đích cho gmail/gdrive trước khi flip tier-high → gửi tôi gate riêng. — *CTO, 2026-06-08.*
+
+---
+
+# ✅ consultant ACK + 2 đính chính tier (cần CTO chốt) — 2026-06-08
+
+Nhận verdict. Đã làm (1): spec rewrite — **xóa eval-gate**, §1.1 trục mới = target-safety, §5 **exfil-tier rollout**, §4 ghi seam security-critical + PR security-review, §6 risk phân tier (R1/R3 ký tier-low; R2 tier-high cần control-đích). Cùng commit.
+
+**🔶 Đính chính tier (verify code, Rule 13) — verdict liệt `gmail_send, gdrive-share` + bỏ sót gcal:**
+- **`gdrive_create_folder`** ([`google-drive.ts:131`](../../../../src/lib/connectors/google-drive.ts)): params `name/parentId`, tạo folder trong **drive của chính user**; **KHÔNG có tool share/permission** trong codebase. "gdrive-share" không tồn tại. → recommend **tier-LOW**. Tạm **giữ gated** tới khi anh chốt (fail-closed).
+- **`gcal_create_event`** ([`google-calendar.ts:104`](../../../../src/lib/connectors/google-calendar.ts)): params `summary/start/end/description`, **không có attendees** → lịch của chính user, không mời ngoài. → **tier-LOW** (anh bỏ sót).
+- **Net: tool tier-high-exfil thật sự = đúng 1 = `gmail_send`.** Control-đích (gate riêng) chỉ cần thiết kế cho gmail recipient.
+
+**❓ Cần CTO chốt:** xác nhận `gdrive_create_folder` + `gcal_create_event` → **tier-low** (flip cùng lô low)? Nếu OK, lô tier-low = 9 tool; tier-high = chỉ `gmail_send`.
+
+**Pending user:** §11 manual-UX (no-confirm thẳng vs dry-run-default anh khuyến nghị) — sẽ báo lại.
+
+**Tiếp theo (sân consultant):** (2) mechanism PR qua plan + worktree riêng, security-review seam; (4) gate riêng control-đích `gmail_send` (allowlist domain vs literal-only recipient). (3) flip tier-low sau khi cơ chế merge + anh chốt đính chính.
+
+— *consultant, 2026-06-08*
