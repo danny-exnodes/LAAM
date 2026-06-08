@@ -35,14 +35,14 @@ Verified `registry.ts:15-22` (`modelToolSchemas`) vs `:24-55` (`makeDispatch`): 
 
 ## 5. Thành phần (module `src/lib/agent/tool-retrieval/`)
 - **`embedding-client.ts`** — `embedQuery(text)`, `embedTexts(texts[])` qua Ollama embeddings API; reuse config Ollama sẵn có; model = env (`TOOL_RETRIEVAL_EMBED_MODEL`, default `bge-m3`).
-- **`tool-embedding-cache.ts`** — embed `name + description` mỗi tool **TĨNH, 1 lần/catalog**, cache in-memory keyed theo hash bộ tool (re-embed khi catalog đổi). Warm lúc boot. Runtime **chỉ embed query**.
+- **`tool-embedding-cache.ts`** — embed `name + description` mỗi tool **TĨNH, 1 lần cho TOÀN catalog code-defined** (`INTERNAL_TOOLS` + mọi tool trong `CONNECTORS` registry — định nghĩa tĩnh dù connector per-user). **Cache key = hash CHUỖI ĐÃ EMBED (name+description)** (R1: sửa description mà không re-embed = vector lạc; KHÔNG key theo tool-count/identity). Per-request **chỉ LỌC** xuống subset user thấy — đều đã có embedding sẵn (R2: KHÔNG cache per-request-set → tránh thrash theo tổ hợp connector). Warm lúc boot, runtime **chỉ embed query**.
 - **`selector.ts`** — `selectTools(query, schemas, opts) → schemas` (hàm thuần): embed query → cosine vs cache → top-k → confidence-gate → trả **đúng object schema gốc**.
 - **`config.ts`** — flag `TOOL_RETRIEVAL` (default **OFF**), `capK`, `fallbackK`, `tau`, model name.
 
 ## 6. Thuật toán retrieval — trần fallback = f(knee) ⚠️ LOAD-BEARING
 1. `embedQuery(userMessage)`; cosine với từng tool-embedding cache.
 2. Sort giảm dần, lấy **top-`capK`** (path thường).
-3. **Confidence gate:** nếu cosine top-1 < `tau` *hoặc* phân bố phẳng (không match nổi bật) → nới tới **top-`fallbackK`**, **KHÔNG BAO GIỜ full pool**.
+3. **Confidence gate:** nếu cosine top-1 < `tau` *hoặc* phân bố "phẳng" — đo bằng **metric cụ thể** (vd gap `top1 − top_capK`, hoặc variance top-k), **tune ở slice #1 KHÔNG hardcode** (R5) — → nới tới **top-`fallbackK`**, **KHÔNG BAO GIỜ full pool**.
 
 **Bất biến (CTO sharpening):**
 - `capK ≤ 8` — hằng số an toàn DUY NHẤT được hardcode (data: @8 = 100%).
@@ -65,6 +65,7 @@ Verified `registry.ts:15-22` (`modelToolSchemas`) vs `:24-55` (`makeDispatch`): 
 
 ## 9. VRAM (host RTX 5070 Ti 16GB)
 8B-q8 = 9.8GB; `bge-m3` resident ~1.5GB → **~4.7GB headroom KV** (chấp nhận, **theo dõi dưới tải**). Embedding tool-desc tĩnh nên chi phí runtime = embed 1 query/lượt (tí xíu). VRAM căng → **plan B `bge-small`/`nomic-embed`**; `bge-m3` trước.
+**Ops (R3):** đặt Ollama `keep_alive` cho `bge-m3` để **resident** — nếu Ollama unload (memory pressure), query-embed lượt sau **cold = chậm giây**. Ghi vào env/runbook.
 
 ## 10. Test & nghiệm thu
 **Unit (`npm test`, tất định):** `selector` với **embedder STUB** (tiêm vector có kiểm soát — Rule 13, không echo) — top-k, gate nới đúng, **trần fallback không bao giờ = full / không bao giờ vượt `fallbackK`**, schema-object giữ nguyên, cosine math.
@@ -76,7 +77,9 @@ Verified `registry.ts:15-22` (`modelToolSchemas`) vs `:24-55` (`makeDispatch`): 
 - **Implicit write-intent + đa ngữ:** ca ẩn ý ("ghi lại việc này" thay vì "tạo card Trello") + vi/en/zh → vào **`recall@K`**.
 - **`recall@K` metric (mới):** mỗi scenario — tool đúng có lọt subset không? Đo trực tiếp false-negative của subsetting, tách khỏi hành vi model.
 
-**Live acceptance (`eval:scale`, flag ON):** write probe **phục hồi 0% → ~read-level @40**. Đây là số nghiệm thu. KHÔNG ship connector-write GA tới khi curve phục hồi.
+**Net-trade (R4 — load-bearing):** subsetting KHÔNG xoá false-negative, nó **DỜI** từ "model ngợp toolset" → "retrieval miss". v1 **chưa có lưới runtime** cho genuine miss (2-pass hoãn §11) → chấp nhận + ĐO. ⇒ nghiệm thu phải chứng minh **cược `miss-rate(recall@K) ≪ crater-rate`**, KHÔNG chỉ "write phục hồi". **Hai thước CÙNG phải đạt:** (a) write-recovery `eval:scale` @40 + (b) `recall@K` đủ cao (đặc biệt ca implicit + đa ngữ).
+
+**Live acceptance (`eval:scale`, flag ON):** write probe **phục hồi 0% → ~read-level @40**. KHÔNG ship connector-write GA tới khi curve phục hồi **VÀ** recall đạt ngưỡng.
 
 ## 11. Phân lát
 1. **Confirm-eval** (đo knee + non-trello + multi-tool + implicit + recall@K) → khoá `fallbackK`/`tau`.
@@ -100,3 +103,11 @@ Soi chéo cả 10 ràng buộc đã gate → spec **honor toàn bộ**, đặc b
 - **R5 (gate "phẳng" cụ thể):** §6 "phân bố phẳng" cần metric đo-được (gap top1−top_capK / variance) — tune ở slice #1, không đoán. (Spec đã ghi hướng; confirm là **đo** không hardcode.)
 
 **Disposition:** spec design APPROVED. Plan confirm-eval (slice #1) gửi `comms/active/` cho CTO gate trước `executing-plans`; fold R1–R5. — *CTO, 2026-06-08.*
+
+---
+### Consultant — FOLDED R1–R5 (2026-06-08)
+- **R1+R2** → §5 cache: key = hash(name+description); embed TOÀN catalog code-defined 1 lần, per-request chỉ lọc (không thrash per-user).
+- **R3** → §9: Ollama `keep_alive` resident cho bge-m3 (env/runbook).
+- **R4** → §10: net-trade `miss-rate ≪ crater-rate`; nghiệm thu = recall@K **VÀ** write-recovery (không chỉ recovery).
+- **R5** → §6: flat-gate = metric đo được (gap top1−top_capK / variance), tune slice #1.
+**Next:** `superpowers:writing-plans` cho confirm-eval slice #1 → plan vào `comms/active/` cho CTO plan-gate.
