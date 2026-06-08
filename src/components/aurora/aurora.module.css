@@ -1,0 +1,47 @@
+/* Global app-wide Aurora — calmer than the landing hero (the dot density/alpha/
+   speed are dialed down via useDotField opts; these layers are a touch dimmer).
+   Mounted behind all app content in dark mode only. Scoped CSS module. */
+
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0; /* covers the legacy body::after ambient (z -1); content wrapper is z 1 */
+  overflow: hidden;
+  pointer-events: none;
+  animation: auroraFade 0.5s ease both;
+}
+@keyframes auroraFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.base {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(120% 95% at 50% 122%, #06203a 0%, #02101f 48%, #00080f 100%),
+    linear-gradient(180deg, #03182c 0%, #00070e 100%);
+}
+.key {
+  position: absolute;
+  left: -16%;
+  top: -26%;
+  width: 70vw;
+  height: 70vw;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 34%, rgba(170, 205, 255, 0.22) 0%, rgba(110, 160, 235, 0.09) 32%, transparent 64%);
+  filter: blur(18px);
+}
+.stars {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.vig {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(125% 125% at 50% 40%, transparent 52%, rgba(0, 0, 0, 0.6) 100%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene { animation: none; }
+}

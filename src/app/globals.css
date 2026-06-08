@@ -16,24 +16,24 @@
   --metric-gpu: #22d3ee; /* cyan-400 — graphics accent (GPU) */
   --metric-vram: #38bdf8; /* sky-400 — graphics memory accent (VRAM) */
 
-  /* Matte Dark rebrand, app-wide lever: the whole app builds surfaces, borders
-     and text from the `neutral` scale (~950 usages). We re-hue that scale to a
-     cool teal family while KEEPING each step's lightness ≈ the Tailwind default,
-     so every existing `*-neutral-*` utility cools to cyan WITHOUT touching call
-     sites and WITHOUT changing contrast ratios. The dark end (800/900/950) is
-     aligned to the --surface-* / --bg-base tokens so legacy `dark:bg-neutral-900`
-     cards match the new <MatteCard> primitive exactly. */
-  --color-neutral-50: #f3f6f6;
-  --color-neutral-100: #e9efef;
-  --color-neutral-200: #d5e0e0;
-  --color-neutral-300: #c2d2d2;
-  --color-neutral-400: #8ba8a8;
-  --color-neutral-500: #5a7676;
-  --color-neutral-600: #3f5c5c;
-  --color-neutral-700: #243e3e;
-  --color-neutral-800: #0a2a2a; /* = --surface-2 */
-  --color-neutral-900: #052020; /* = --surface-1 */
-  --color-neutral-950: #001616; /* = --bg-base */
+  /* App-wide lever: the whole app builds surfaces, borders and text from the
+     `neutral` scale (~950 usages). We re-hue it to a cool BLUE-OCEAN family
+     (B > G > R) while KEEPING each step's lightness ≈ the Tailwind default, so
+     every `*-neutral-*` utility shifts to deep-ocean blue WITHOUT touching call
+     sites and WITHOUT changing contrast ratios — and so surfaces match the
+     app-wide Aurora background (was a teal family; retoned blue per design).
+     The dark end (800/900/950) aligns to --surface-* / --bg-base. */
+  --color-neutral-50: #f3f5f9;
+  --color-neutral-100: #e9edf4;
+  --color-neutral-200: #d6dded;
+  --color-neutral-300: #c2cce0;
+  --color-neutral-400: #8ba2c2;
+  --color-neutral-500: #5a7096;
+  --color-neutral-600: #3f567a;
+  --color-neutral-700: #243a58;
+  --color-neutral-800: #0e2236; /* = --surface-2 */
+  --color-neutral-900: #08182b; /* = --surface-1 */
+  --color-neutral-950: #03101d; /* = --bg-base */
 }
 
 /* ── Matte Dark design tokens ─────────────────────────────────────────────
@@ -66,22 +66,22 @@
   --bloom-sky: rgba(56, 130, 246, 0.07);
 }
 .dark {
-  --bg-base: #001616;
-  --surface-1: #052020;
-  --surface-2: #0a2a2a;
-  --surface-3: #103434;
-  --border-subtle: rgba(120, 210, 210, 0.1);
-  --border-strong: rgba(120, 210, 210, 0.18);
-  --text-primary: #e6f2f2;
-  --text-secondary: #9fb8b8;
-  --text-muted: #6f8c8c;
+  --bg-base: #03101d;
+  --surface-1: #08182b;
+  --surface-2: #0e2236;
+  --surface-3: #163049;
+  --border-subtle: rgba(125, 175, 230, 0.1);
+  --border-strong: rgba(125, 175, 230, 0.18);
+  --text-primary: #e8eef8;
+  --text-secondary: #a2b2cc;
+  --text-muted: #748aa6;
   --accent: #36a6d6;
   --accent-hover: #4fb6e0;
-  --accent-fg: #03171b;
+  --accent-fg: #03131f;
   --accent-muted: rgba(54, 166, 214, 0.16);
   --accent-glow: rgba(54, 166, 214, 0.38);
   --bloom-cyan: rgba(54, 166, 214, 0.22);
-  --bloom-aqua: rgba(45, 210, 200, 0.16);
+  --bloom-aqua: rgba(64, 150, 235, 0.16);
   --bloom-sky: rgba(56, 130, 246, 0.14);
 }
 

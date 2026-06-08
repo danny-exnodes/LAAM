@@ -13,7 +13,10 @@ interface P {
   x: number; y: number; vx: number; vy: number; sa: number; sp: number; ss: number; tp: number; ts: number;
 }
 
-export function useDotField(canvasRef: RefObject<HTMLCanvasElement | null>): void {
+export function useDotField(
+  canvasRef: RefObject<HTMLCanvasElement | null>,
+  { density = 1, alpha = 1, speed = 1 }: { density?: number; alpha?: number; speed?: number } = {},
+): void {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -47,13 +50,13 @@ export function useDotField(canvasRef: RefObject<HTMLCanvasElement | null>): voi
       const col = color(k === 's');
       return {
         k, d, r: rad * DPR, h: col.h, s: col.s, l: col.l, a, tb, ta,
-        x: rand(0, W), y: rand(0, H), vx: (rand(3, 9) + d * rand(15, 30)) * DPR, vy: rand(-5, 5) * DPR,
+        x: rand(0, W), y: rand(0, H), vx: (rand(3, 9) + d * rand(15, 30)) * DPR * speed, vy: rand(-5, 5) * DPR * speed,
         sa: (2 + d * 15) * DPR, sp: rand(0, 6.28), ss: rand(0.12, 0.4), tp: rand(0, 6.28),
         ts: k === 's' ? rand(0.6, 1.7) : rand(0.25, 0.7),
       };
     };
     const build = () => {
-      const n = Math.round(Math.min(120, (innerWidth * innerHeight) / 13000));
+      const n = Math.round(Math.min(120, (innerWidth * innerHeight) / 13000) * density);
       ps = [];
       for (let i = 0; i < n; i++) ps.push(mk());
     };
@@ -67,7 +70,7 @@ export function useDotField(canvasRef: RefObject<HTMLCanvasElement | null>): voi
     };
     const draw = (p: P, t: number) => {
       const tw = p.tb + p.ta * Math.sin(t * p.ts + p.tp);
-      const a = p.a * tw;
+      const a = p.a * tw * alpha;
       if (a <= 0.002) return;
       const px = p.x + (m.x - 0.5) * 70 * DPR * p.d;
       const py = p.y + (m.y - 0.5) * 50 * DPR * p.d + Math.sin(t * p.ss + p.sp) * p.sa;
@@ -118,5 +121,5 @@ export function useDotField(canvasRef: RefObject<HTMLCanvasElement | null>): voi
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('resize', onResize);
     };
-  }, [canvasRef]);
+  }, [canvasRef, density, alpha, speed]);
 }

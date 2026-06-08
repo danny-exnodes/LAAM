@@ -5,6 +5,7 @@ import { I18nProvider } from "@/i18n/provider";
 import { LANG_COOKIE } from "@/i18n/cookie";
 import type { Lang } from "@/i18n/types";
 import { NoZoom } from "@/components/no-zoom";
+import { GlobalAurora } from "@/components/aurora/GlobalAurora";
 
 // Runs before first paint: applies the saved theme (or the OS preference in
 // "system" mode) by toggling `.dark` on <html>, so there is no light→dark flash.
@@ -43,7 +44,12 @@ export default async function RootLayout({
       </head>
       <body className="min-h-dvh bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100">
         <NoZoom />
-        <I18nProvider lang={lang}>{children}</I18nProvider>
+        <I18nProvider lang={lang}>
+          {/* App-wide Aurora background (dark mode, all routes except the landing,
+              which has its own). Fixed at z-0; content sits in a z-1 layer above. */}
+          <GlobalAurora />
+          <div className="relative z-[1]">{children}</div>
+        </I18nProvider>
       </body>
     </html>
   );
