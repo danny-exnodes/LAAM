@@ -113,7 +113,11 @@ export async function list(userId: string): Promise<ConnectorListItem[]> {
           masked: creds[f.key] ? (f.secret ? maskValue(creds[f.key]) : creds[f.key]) : "",
         })),
       },
-      tools: def.tools.map((t) => t.function.name),
+      tools: def.tools.map((t) => ({
+        name: t.function.name,
+        description: t.function.description,
+        parameters: t.function.parameters,
+      })),
       status,
       connected: status === "connected",
       account: creds.google_email || null,

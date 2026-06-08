@@ -204,7 +204,11 @@ export const workflows: Dict = {
     en: "e.g. demo_list_tasks",
     zh: "如：demo_list_tasks",
   },
-  "wf.node.connector.argsLabel": { vi: "Args (JSON)", en: "Args (JSON)", zh: "Args (JSON)" },
+  "wf.node.connector.argsLabel": { vi: "Tham số", en: "Arguments", zh: "参数" },
+  "wf.node.connector.advancedArgs": { vi: "Nâng cao (JSON)", en: "Advanced (JSON)", zh: "高级 (JSON)" },
+  "wf.node.connector.formArgs": { vi: "Biểu mẫu", en: "Form", zh: "表单" },
+  "wf.node.connector.noArgs": { vi: "Tool này không cần tham số.", en: "This tool needs no arguments.", zh: "此工具无需参数。" },
+  "wf.node.connector.someAdvanced": { vi: "Một số tham số phức tạp — dùng Nâng cao (JSON).", en: "Some arguments are complex — use Advanced (JSON).", zh: "部分参数较复杂 — 请使用高级 (JSON)。" },
   "wf.node.connector.selectConnector": {
     vi: "— chọn connector —",
     en: "— select connector —",

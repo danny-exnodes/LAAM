@@ -314,12 +314,12 @@ describe("ConnectorForm — connector/action picker", () => {
   const mockConnectors = [
     {
       id: "demo", name: "Demo", icon: "🔌", blurb: "",
-      connected: true, status: "connected" as const, account: null, tools: ["demo_list_tasks", "demo_create_task"],
+      connected: true, status: "connected" as const, account: null, tools: [{ name: "demo_list_tasks", description: "", parameters: {} }, { name: "demo_create_task", description: "", parameters: {} }],
       auth: { type: "none", provider: "", scopes: [], help: "", setup: "", fields: [] }, connectedAt: null,
     },
     {
       id: "github", name: "GitHub", icon: "🐙", blurb: "",
-      connected: false, status: "disconnected" as const, account: null, tools: ["github_list_repos"],
+      connected: false, status: "disconnected" as const, account: null, tools: [{ name: "github_list_repos", description: "", parameters: {} }],
       auth: { type: "token", provider: "", scopes: [], help: "", setup: "", fields: [] }, connectedAt: null,
     },
   ];
@@ -360,6 +360,54 @@ describe("ConnectorForm — connector/action picker", () => {
     const inputs = screen.getAllByRole("textbox");
     const connectorInput = inputs.find((i) => (i as HTMLInputElement).value === "demo");
     expect(connectorInput).toBeInTheDocument();
+  });
+});
+
+// ─── Schema-driven connector args (#1) ────────────────────────────────────────
+
+describe("ConnectorForm — schema-driven args (#1)", () => {
+  const schemaConnectors = [
+    {
+      id: "demo", name: "Demo", icon: "🔌", blurb: "",
+      connected: true, status: "connected" as const, account: null,
+      tools: [
+        {
+          name: "demo_create_task",
+          description: "Create a task",
+          parameters: {
+            type: "object",
+            properties: {
+              title: { type: "string", description: "Task title" },
+              status: { type: "string", enum: ["todo", "done"] },
+            },
+            required: ["title"],
+          },
+        },
+      ],
+      auth: { type: "none", provider: "", scopes: [], help: "", setup: "", fields: [] }, connectedAt: null,
+    },
+  ];
+  const node: WfConnectorNode = { id: "c1", kind: "connector", connectorId: "demo", action: "demo_create_task", args: {} };
+
+  test("renders a labelled field per tool parameter (not raw JSON)", () => {
+    renderPanel(<NodeConfigPanel node={node} onChange={vi.fn()} connectors={schemaConnectors} />);
+    expect(screen.getByText("title *")).toBeInTheDocument(); // required marker
+    expect(screen.getByText("status")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "todo" })).toBeInTheDocument(); // enum option
+  });
+
+  test("editing a field writes node.args[key]", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={node} onChange={onChange} connectors={schemaConnectors} />);
+    const titleInput = screen.getByText("title *").parentElement!.querySelector("input")!;
+    fireEvent.change(titleInput, { target: { value: "Buy milk" } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ args: { title: "Buy milk" } }));
+  });
+
+  test("Advanced toggle switches to the raw JSON editor", () => {
+    renderPanel(<NodeConfigPanel node={node} onChange={vi.fn()} connectors={schemaConnectors} />);
+    fireEvent.click(screen.getByText("Nâng cao (JSON)"));
+    expect(screen.getByPlaceholderText(/"key"/)).toBeInTheDocument();
   });
 });
 

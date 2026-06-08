@@ -53,6 +53,10 @@ export type Connector = {
 // refresh tokens after ~7 days) — the UI shows a one-click "Reconnect".
 export type ConnectorStatus = "connected" | "needs_reconnect" | "disconnected";
 
+// Browser-safe tool info: name + description + JSON-schema params. Drives the
+// connector-node argument form (schema-driven fields). Mirror of ConnectorTool.function.
+export type ConnectorToolInfo = { name: string; description: string; parameters: object };
+
 // Browser-safe projection of a connector (NO raw secrets — masked hints only).
 export type ConnectorListItem = {
   id: string;
@@ -74,7 +78,7 @@ export type ConnectorListItem = {
       masked: string;
     }[];
   };
-  tools: string[];
+  tools: ConnectorToolInfo[];
   status: ConnectorStatus;
   // Back-compat convenience: connected === (status === "connected").
   connected: boolean;

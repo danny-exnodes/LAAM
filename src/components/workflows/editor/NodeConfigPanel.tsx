@@ -20,6 +20,7 @@ import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { Translator } from "@/i18n/types";
 import type { ConnectorListItem } from "@/lib/connectors/types";
 import { variableSuggestions } from "./variableHints";
+import { parseArgSchema, type ArgField } from "./schemaForm";
 
 // ── Shared style helpers ────────────────────────────────────────────────────
 
@@ -164,41 +165,17 @@ function ConnectorForm({
   onChange,
   t,
   connectors,
+  suggestions,
 }: {
   node: WfConnectorNode;
   onChange: (n: WfNode) => void;
   t: Translator;
   connectors: ConnectorListItem[];
+  suggestions: string[];
 }) {
-  const [argsText, setArgsText] = useState(
-    Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "",
-  );
-  const [argsError, setArgsError] = useState<string | null>(null);
-
-  // Sync argsText when node.args changes externally (e.g. initial load)
-  useEffect(() => {
-    setArgsText(Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "");
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.id]);
-
-  function handleArgsChange(raw: string) {
-    setArgsText(raw);
-    if (!raw.trim()) {
-      setArgsError(null);
-      onChange({ ...node, args: {} });
-      return;
-    }
-    try {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      setArgsError(null);
-      onChange({ ...node, args: parsed });
-    } catch {
-      setArgsError(t("wf.node.jsonInvalid"));
-    }
-  }
-
   const selectedConnector = connectors.find((c) => c.id === node.connectorId) ?? null;
   const availableActions = selectedConnector?.tools ?? [];
+  const selectedTool = availableActions.find((tl) => tl.name === node.action) ?? null;
   const useSelects = connectors.length > 0;
 
   return (
@@ -247,11 +224,11 @@ function ConnectorForm({
                 className={inputCls()}
                 value={node.action}
                 disabled={!node.connectorId}
-                onChange={(e) => onChange({ ...node, action: e.target.value })}
+                onChange={(e) => onChange({ ...node, action: e.target.value, args: {} })}
               >
                 <option value="">{t("wf.node.connector.selectAction")}</option>
-                {availableActions.map((a) => (
-                  <option key={a} value={a}>{a}</option>
+                {availableActions.map((tool) => (
+                  <option key={tool.name} value={tool.name} title={tool.description}>{tool.name}</option>
                 ))}
               </select>
             ) : (
@@ -282,19 +259,194 @@ function ConnectorForm({
         </>,
       )}
       {field(
+        <SchemaArgsForm
+          node={node}
+          onChange={onChange}
+          t={t}
+          suggestions={suggestions}
+          schema={selectedTool?.parameters ?? null}
+        />,
+      )}
+    </>
+  );
+}
+
+// ── Connector args: schema-driven form (#1) ─────────────────────────────────
+// Renders a labelled field per tool parameter (from its JSON schema) instead of a
+// raw JSON blob. Falls back to a raw-JSON "Advanced" editor for nested/array args
+// (or when no schema is available, e.g. a hand-typed connectorId).
+
+function SchemaArgsForm({
+  node,
+  onChange,
+  t,
+  suggestions,
+  schema,
+}: {
+  node: WfConnectorNode;
+  onChange: (n: WfNode) => void;
+  t: Translator;
+  suggestions: string[];
+  schema: object | null;
+}) {
+  const { fields, propCount, flat } = parseArgSchema(schema);
+  const [advanced, setAdvanced] = useState(!flat);
+  const [argsText, setArgsText] = useState(
+    Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "",
+  );
+  const [argsError, setArgsError] = useState<string | null>(null);
+
+  // Re-seed raw text + default mode when the node or the selected action changes.
+  useEffect(() => {
+    setArgsText(Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "");
+    setAdvanced(!flat);
+    setArgsError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id, node.action]);
+
+  function setArg(key: string, value: unknown) {
+    const next = { ...node.args };
+    if (value === undefined || value === "") delete next[key];
+    else next[key] = value;
+    onChange({ ...node, args: next });
+  }
+
+  function handleRaw(raw: string) {
+    setArgsText(raw);
+    if (!raw.trim()) {
+      setArgsError(null);
+      onChange({ ...node, args: {} });
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      setArgsError(null);
+      onChange({ ...node, args: parsed });
+    } catch {
+      setArgsError(t("wf.node.jsonInvalid"));
+    }
+  }
+
+  return (
+    <>
+      <div className="mb-1 flex items-center justify-between">
+        {label(t("wf.node.connector.argsLabel"))}
+        {schema && (fields.length > 0 || propCount === 0) && (
+          <button
+            type="button"
+            className="text-xs text-neutral-500 underline hover:text-[var(--color-accent)]"
+            onClick={() => setAdvanced((a) => !a)}
+          >
+            {advanced ? t("wf.node.connector.formArgs") : t("wf.node.connector.advancedArgs")}
+          </button>
+        )}
+      </div>
+
+      {advanced || !schema ? (
         <>
-          {label(t("wf.node.connector.argsLabel"))}
           <textarea
             className={inputCls(!!argsError)}
             rows={5}
             value={argsText}
             placeholder={'{\n  "key": "{{var}}"\n}'}
-            onChange={(e) => handleArgsChange(e.target.value)}
+            onChange={(e) => handleRaw(e.target.value)}
           />
           {argsError && errorMsg(argsError)}
-        </>,
+        </>
+      ) : propCount === 0 ? (
+        <p className="text-xs text-neutral-400">{t("wf.node.connector.noArgs")}</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {fields.map((f) => (
+            <ArgFieldInput key={f.key} field={f} node={node} setArg={setArg} suggestions={suggestions} t={t} />
+          ))}
+          {fields.length < propCount && (
+            <p className="text-xs text-amber-600 dark:text-amber-400">{t("wf.node.connector.someAdvanced")}</p>
+          )}
+        </div>
       )}
     </>
+  );
+}
+
+function ArgFieldInput({
+  field: f,
+  node,
+  setArg,
+  suggestions,
+  t,
+}: {
+  field: ArgField;
+  node: WfConnectorNode;
+  setArg: (key: string, value: unknown) => void;
+  suggestions: string[];
+  t: Translator;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  const raw = node.args[f.key];
+  const labelText = f.required ? `${f.key} *` : f.key;
+
+  if (f.kind === "boolean") {
+    return (
+      <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-200">
+        <input type="checkbox" checked={raw === true} onChange={(e) => setArg(f.key, e.target.checked)} />
+        <span className="font-semibold text-neutral-500">{labelText}</span>
+        {f.description && <span className="text-xs font-normal text-neutral-400">{f.description}</span>}
+      </label>
+    );
+  }
+
+  if (f.kind === "enum") {
+    return (
+      <div>
+        {label(labelText)}
+        <select className={inputCls()} value={String(raw ?? "")} onChange={(e) => setArg(f.key, e.target.value)}>
+          <option value="">—</option>
+          {f.enumValues!.map((v) => (
+            <option key={v} value={v}>{v}</option>
+          ))}
+        </select>
+        {f.description && <p className="mt-1 text-xs text-neutral-400">{f.description}</p>}
+      </div>
+    );
+  }
+
+  if (f.kind === "number") {
+    return (
+      <div>
+        {label(labelText)}
+        <input
+          type="number"
+          className={inputCls()}
+          value={typeof raw === "number" ? raw : ""}
+          onChange={(e) => setArg(f.key, e.target.value === "" ? undefined : Number(e.target.value))}
+        />
+        {f.description && <p className="mt-1 text-xs text-neutral-400">{f.description}</p>}
+      </div>
+    );
+  }
+
+  // string
+  const strVal = raw === undefined || raw === null ? "" : String(raw);
+  return (
+    <div>
+      {label(labelText)}
+      <input
+        ref={ref}
+        type="text"
+        className={inputCls()}
+        value={strVal}
+        placeholder={f.description}
+        onChange={(e) => setArg(f.key, e.target.value)}
+      />
+      <VariableHints
+        tokens={suggestions}
+        inputRef={ref}
+        value={strVal}
+        onChange={(v) => setArg(f.key, v)}
+        hintLabel={t("wf.node.insertVar")}
+      />
+    </div>
   );
 }
 
@@ -659,7 +811,7 @@ export function NodeConfigPanel({
           <AgentForm node={node} onChange={onChange} t={t} suggestions={suggestions} />
         )}
         {node.kind === "connector" && (
-          <ConnectorForm node={node} onChange={onChange} t={t} connectors={connectors} />
+          <ConnectorForm node={node} onChange={onChange} t={t} connectors={connectors} suggestions={suggestions} />
         )}
         {node.kind === "condition" && (
           <ConditionForm node={node} onChange={onChange} t={t} suggestions={suggestions} />

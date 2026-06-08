@@ -13,7 +13,10 @@ function item(over: Partial<ConnectorListItem> = {}): ConnectorListItem {
     name: "GitHub",
     icon: "github",
     blurb: "Repos, issues, PRs",
-    tools: ["github_list_repos", "github_search"],
+    tools: [
+      { name: "github_list_repos", description: "", parameters: {} },
+      { name: "github_search", description: "", parameters: {} },
+    ],
     account: null,
     connectedAt: null,
     ...rest,
@@ -60,7 +63,7 @@ afterEach(() => {
 
 test("renders connectors from the list endpoint", async () => {
   const fetchMock = mockFetch({
-    "/api/connectors": { connectors: [item(), item({ id: "demo", name: "Demo", blurb: "Sample tasks", auth: { type: "none", provider: "", scopes: [], help: "No auth", setup: "", fields: [] }, tools: ["demo_list_tasks"] })] },
+    "/api/connectors": { connectors: [item(), item({ id: "demo", name: "Demo", blurb: "Sample tasks", auth: { type: "none", provider: "", scopes: [], help: "No auth", setup: "", fields: [] }, tools: [{ name: "demo_list_tasks", description: "", parameters: {} }] })] },
   });
   vi.stubGlobal("fetch", fetchMock);
 

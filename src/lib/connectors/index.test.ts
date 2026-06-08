@@ -76,7 +76,8 @@ describe("list", () => {
     const items = await list("u1");
     const gh = items.find((i) => i.id === "github")!;
     expect(gh.connected).toBe(true);
-    expect(gh.tools).toEqual(["github_list_repos"]);
+    // #1: the projection now carries each tool's schema (name + description + params)
+    expect(gh.tools).toEqual([{ name: "github_list_repos", description: "d", parameters: {} }]);
     expect(gh.connectedAt).toBe("2026-06-03T00:00:00Z");
     const f = gh.auth.fields[0];
     expect(f.set).toBe(true);

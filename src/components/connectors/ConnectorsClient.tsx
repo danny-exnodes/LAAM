@@ -237,7 +237,7 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
 
       {c.tools.length > 0 && (
         <div className="break-words font-mono text-[11px] leading-snug text-neutral-400">
-          {t("conn.toolsLabel")}: {c.tools.join(", ")}
+          {t("conn.toolsLabel")}: {c.tools.map((tl) => tl.name).join(", ")}
         </div>
       )}
 
