@@ -62,4 +62,15 @@ describe("POST /api/workflows/generate", () => {
     genMock.mockRejectedValue(new Error("Ollama 500"));
     expect((await POST(req({ prompt: "x" }))).status).toBe(502);
   });
+
+  test("edit mode: `current` turns the model message into an edit instruction (refine)", async () => {
+    authed();
+    genMock.mockResolvedValue(VALID);
+    const current = { nodes: [{ id: "x", kind: "agent", prompt: "old" }], edges: [] };
+    expect((await POST(req({ prompt: "đổi sang Gmail", current }))).status).toBe(200);
+    const messages = genMock.mock.calls[0][0] as { role: string; content: string }[];
+    const userMsg = messages.find((m) => m.role === "user")!;
+    expect(userMsg.content).toContain("Workflow hiện tại");
+    expect(userMsg.content).toContain("đổi sang Gmail");
+  });
 });

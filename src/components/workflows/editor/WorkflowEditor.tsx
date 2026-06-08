@@ -1073,7 +1073,12 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
 
           {/* Nodes Library — floating (desktop), draggable by its header */}
           {aiOpen && (
-            <AiGeneratePanel onApply={applyGeneratedGraph} onClose={() => setAiOpen(false)} t={t} />
+            <AiGeneratePanel
+              onApply={applyGeneratedGraph}
+              onClose={() => setAiOpen(false)}
+              t={t}
+              currentGraph={fromReactFlow(nodes, edges)}
+            />
           )}
           {reviewOpen && (
             <AiReviewPanel graph={fromReactFlow(nodes, edges)} onClose={() => setReviewOpen(false)} t={t} />

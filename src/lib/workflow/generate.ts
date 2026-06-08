@@ -55,6 +55,23 @@ export function generationSystem(catalog: string): string {
   ].join("\n");
 }
 
+// Frame the user message: a plain prompt for fresh generation, or — when a non-empty
+// `current` graph is supplied (refine / #3 stretch) — an EDIT instruction that embeds the
+// current graph and asks for the FULL edited graph back (so coerce+validate still apply).
+export function buildUserMessage(prompt: string, current?: unknown): string {
+  const nodes = (current as { nodes?: unknown } | null | undefined)?.nodes;
+  if (Array.isArray(nodes) && nodes.length > 0) {
+    return (
+      "Workflow hiện tại:\n```json\n" +
+      JSON.stringify(current) +
+      "\n```\n\nSửa workflow trên theo yêu cầu sau. GIỮ NGUYÊN các phần không liên quan, " +
+      "và trả về TOÀN BỘ graph mới sau khi sửa:\n" +
+      prompt
+    );
+  }
+  return prompt;
+}
+
 // ── Permissive format schema for Ollama `format`. Structure only (loose union of all
 //    kinds' fields); coerceGraph + assertRunnable enforce real validity afterwards.
 export const GRAPH_FORMAT = {

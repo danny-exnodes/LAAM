@@ -49,4 +49,20 @@ describe("AiGeneratePanel", () => {
     expect((screen.getByLabelText("wf.ai.title") as HTMLTextAreaElement).value).toBe("wf.ai.ex1");
     expect(gen).not.toBeDisabled();
   });
+
+  test("with a current graph: defaults to Edit mode and sends { prompt, current } (refine)", async () => {
+    const current = { nodes: [{ id: "a", kind: "agent" as const, prompt: "x" }], edges: [] };
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve({ ok: true, json: async () => ({ graph: current }) }),
+    );
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
+    render(<AiGeneratePanel onApply={vi.fn()} onClose={vi.fn()} t={t} currentGraph={current} />);
+    expect(screen.getByText("wf.ai.modeEdit")).toBeInTheDocument(); // mode toggle present
+    fireEvent.change(screen.getByLabelText("wf.ai.title"), { target: { value: "đổi sang Gmail" } });
+    fireEvent.click(screen.getByText("wf.ai.generate"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const sent = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(sent).toMatchObject({ prompt: "đổi sang Gmail", current });
+    vi.unstubAllGlobals();
+  });
 });

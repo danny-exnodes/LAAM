@@ -13,11 +13,16 @@ export function AiGeneratePanel({
   onApply,
   onClose,
   t,
+  currentGraph,
 }: {
   onApply: (graph: WorkflowGraph) => void;
   onClose: () => void;
   t: Translator;
+  /** The editor's current graph — when non-empty, enables "Chỉnh sửa" (refine) mode. */
+  currentGraph?: WorkflowGraph;
 }) {
+  const canEdit = (currentGraph?.nodes?.length ?? 0) > 0;
+  const [mode, setMode] = useState<"new" | "edit">(canEdit ? "edit" : "new");
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +38,7 @@ export function AiGeneratePanel({
       const res = await fetch("/api/workflows/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: p }),
+        body: JSON.stringify(mode === "edit" && canEdit ? { prompt: p, current: currentGraph } : { prompt: p }),
       });
       const body = (await res.json().catch(() => ({}))) as { graph?: WorkflowGraph; error?: string };
       if (!res.ok || !body.graph) {
@@ -69,7 +74,27 @@ export function AiGeneratePanel({
             <X size={16} aria-hidden />
           </button>
         </div>
-        <p className="mb-2 text-xs text-neutral-500">{t("wf.ai.hint")}</p>
+        {canEdit && (
+          <div className="mb-2 flex gap-1">
+            {(["new", "edit"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                aria-pressed={mode === m}
+                className={
+                  "rounded-lg px-2.5 py-1 text-xs font-medium transition " +
+                  (mode === m
+                    ? "bg-[var(--color-accent)] text-white"
+                    : "border border-neutral-200 text-neutral-500 dark:border-neutral-700")
+                }
+              >
+                {m === "new" ? t("wf.ai.modeNew") : t("wf.ai.modeEdit")}
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="mb-2 text-xs text-neutral-500">{mode === "edit" ? t("wf.ai.editHint") : t("wf.ai.hint")}</p>
         <textarea
           autoFocus
           value={prompt}
@@ -77,23 +102,25 @@ export function AiGeneratePanel({
           onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void generate();
           }}
-          placeholder={t("wf.ai.placeholder")}
+          placeholder={mode === "edit" ? t("wf.ai.editPlaceholder") : t("wf.ai.placeholder")}
           rows={4}
           aria-label={t("wf.ai.title")}
           className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)] dark:border-neutral-700 dark:bg-neutral-950"
         />
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {examples.map((ex) => (
-            <button
-              key={ex}
-              type="button"
-              onClick={() => setPrompt(ex)}
-              className="rounded-full border border-neutral-200 px-2.5 py-1 text-xs text-neutral-500 transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] dark:border-neutral-700"
-            >
-              {ex}
-            </button>
-          ))}
-        </div>
+        {mode === "new" && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {examples.map((ex) => (
+              <button
+                key={ex}
+                type="button"
+                onClick={() => setPrompt(ex)}
+                className="rounded-full border border-neutral-200 px-2.5 py-1 text-xs text-neutral-500 transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] dark:border-neutral-700"
+              >
+                {ex}
+              </button>
+            ))}
+          </div>
+        )}
         {error && (
           <p className="mt-2 rounded bg-red-50 px-2 py-1 text-xs text-red-600 dark:bg-red-950/30 dark:text-red-400">{error}</p>
         )}

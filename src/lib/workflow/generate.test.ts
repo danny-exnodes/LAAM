@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { buildCatalog, coerceGraph, generationSystem, GRAPH_FORMAT } from "./generate";
+import { buildCatalog, coerceGraph, generationSystem, GRAPH_FORMAT, buildUserMessage } from "./generate";
 import { assertRunnable } from "./validate";
 import type { ConnectorListItem } from "@/lib/connectors/types";
 
@@ -116,5 +116,20 @@ describe("generationSystem + GRAPH_FORMAT", () => {
   test("format schema requires nodes + edges arrays", () => {
     expect(GRAPH_FORMAT.required).toEqual(["nodes", "edges"]);
     expect(GRAPH_FORMAT.properties.nodes.type).toBe("array");
+  });
+});
+
+describe("buildUserMessage (refine — #3 stretch)", () => {
+  test("plain prompt when there's no current graph (or it's empty)", () => {
+    expect(buildUserMessage("make a flow")).toBe("make a flow");
+    expect(buildUserMessage("x", { nodes: [], edges: [] })).toBe("x"); // empty → generate, not edit
+  });
+  test("an edit instruction embedding the current graph when non-empty", () => {
+    const cur = { nodes: [{ id: "a", kind: "agent", prompt: "hi" }], edges: [] };
+    const msg = buildUserMessage("đổi sang Gmail", cur);
+    expect(msg).toContain("Workflow hiện tại");
+    expect(msg).toContain(JSON.stringify(cur));
+    expect(msg).toContain("đổi sang Gmail");
+    expect(msg).toContain("TOÀN BỘ graph"); // asks for the full edited graph back
   });
 });

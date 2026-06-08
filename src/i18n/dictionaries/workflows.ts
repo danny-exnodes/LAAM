@@ -194,6 +194,18 @@ export const workflows: Dict = {
   "wf.ai.review": { vi: "Đánh giá", en: "Review", zh: "评审" },
   "wf.ai.reviewTitle": { vi: "AI đánh giá workflow", en: "AI workflow review", zh: "AI 工作流评审" },
   "wf.ai.reviewing": { vi: "Đang đánh giá…", en: "Reviewing…", zh: "评审中…" },
+  "wf.ai.modeNew": { vi: "Tạo mới", en: "New", zh: "新建" },
+  "wf.ai.modeEdit": { vi: "Chỉnh sửa flow", en: "Edit flow", zh: "编辑流程" },
+  "wf.ai.editHint": {
+    vi: "Mô tả thay đổi — AI sẽ sửa flow hiện tại (bạn xem lại & Undo được).",
+    en: "Describe the change — AI edits the current flow (review & Undo anytime).",
+    zh: "描述改动 — AI 会修改当前流程（可检查并撤销）。",
+  },
+  "wf.ai.editPlaceholder": {
+    vi: "VD: đổi bước Agent sang gửi Slack; thêm điều kiện nếu khẩn",
+    en: "e.g. change the Agent step to send Slack; add a condition if urgent",
+    zh: "例如：把 Agent 步骤改为发 Slack；紧急时加一个条件",
+  },
 
   "wf.editor.save": { vi: "Lưu", en: "Save", zh: "保存" },
   "wf.editor.saving": { vi: "Đang lưu…", en: "Saving…", zh: "保存中…" },

@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { list } from "@/lib/connectors";
 import { assertRunnable } from "@/lib/workflow/validate";
-import { buildCatalog, generationSystem, coerceGraph, GRAPH_FORMAT } from "@/lib/workflow/generate";
+import { buildCatalog, generationSystem, coerceGraph, GRAPH_FORMAT, buildUserMessage } from "@/lib/workflow/generate";
 import { callOllamaGenerate } from "@/lib/workflow/ollama";
 import type { ChatMessage } from "@/lib/agent/orchestrator";
 
@@ -17,7 +17,7 @@ export async function POST(req: Request): Promise<Response> {
   const session = await auth();
   if (!session?.user?.id) return json({ error: "Unauthorized" }, 401);
 
-  const body = (await req.json().catch(() => ({}))) as { prompt?: string };
+  const body = (await req.json().catch(() => ({}))) as { prompt?: string; current?: unknown };
   const prompt = (body.prompt ?? "").trim();
   if (!prompt) return json({ error: "prompt rỗng" }, 400);
   if (prompt.length > MAX_PROMPT) return json({ error: "prompt quá dài" }, 400);
@@ -25,7 +25,8 @@ export async function POST(req: Request): Promise<Response> {
   const connectors = await list(session.user.id);
   const messages: ChatMessage[] = [
     { role: "system", content: generationSystem(buildCatalog(connectors)) },
-    { role: "user", content: prompt },
+    // refine (#3 stretch): when `current` is a non-empty graph, this becomes an edit instruction
+    { role: "user", content: buildUserMessage(prompt, body.current) },
   ];
 
   let lastErr = "";
