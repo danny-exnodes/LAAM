@@ -102,6 +102,7 @@ export const workflows: Dict = {
   "wf.run.col.duration": { vi: "Thời lượng", en: "Duration", zh: "耗时" },
   "wf.run.trigger.manual": { vi: "Thủ công", en: "Manual", zh: "手动" },
   "wf.run.trigger.schedule": { vi: "Lịch", en: "Schedule", zh: "计划" },
+  "wf.waterfall.title": { vi: "Dòng thời gian", en: "Timeline", zh: "时间线" },
 
   // Schedule table
   "wf.schedule.col.cron": { vi: "Cron", en: "Cron", zh: "Cron" },
