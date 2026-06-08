@@ -26,6 +26,8 @@ export const workflows: Dict = {
   "wf.runNow": { vi: "Chạy ngay", en: "Run now", zh: "立即运行" },
   "wf.view": { vi: "Xem chi tiết", en: "View details", zh: "查看详情" },
   "wf.edit": { vi: "Chỉnh sửa", en: "Edit", zh: "编辑" },
+  "wf.rename": { vi: "Đổi tên", en: "Rename", zh: "重命名" },
+  "wf.renameLabel": { vi: "Tên workflow", en: "Workflow name", zh: "工作流名称" },
   "wf.clone": { vi: "Nhân bản", en: "Clone", zh: "克隆" },
   "wf.delete": { vi: "Xoá", en: "Delete", zh: "删除" },
   "wf.cancel": { vi: "Đóng", en: "Close", zh: "关闭" },
@@ -102,6 +104,7 @@ export const workflows: Dict = {
   "wf.run.col.duration": { vi: "Thời lượng", en: "Duration", zh: "耗时" },
   "wf.run.trigger.manual": { vi: "Thủ công", en: "Manual", zh: "手动" },
   "wf.run.trigger.schedule": { vi: "Lịch", en: "Schedule", zh: "计划" },
+  "wf.waterfall.title": { vi: "Dòng thời gian", en: "Timeline", zh: "时间线" },
 
   // Schedule table
   "wf.schedule.col.cron": { vi: "Cron", en: "Cron", zh: "Cron" },
@@ -153,6 +156,21 @@ export const workflows: Dict = {
   "wf.editor.addConnector": { vi: "+ Connector", en: "+ Connector", zh: "+ 连接器" },
   "wf.editor.addCondition": { vi: "+ Condition", en: "+ Condition", zh: "+ 条件" },
   "wf.editor.addForeach": { vi: "+ Foreach", en: "+ Foreach", zh: "+ 循环" },
+
+  // Nodes Library panel (A1)
+  "wf.lib.title": { vi: "Thư viện Node", en: "Nodes Library", zh: "节点库" },
+  "wf.lib.float": { vi: "Tách nổi (kéo thả)", en: "Float", zh: "浮动" },
+  "wf.lib.dock": { vi: "Gắn trái", en: "Dock left", zh: "停靠左侧" },
+  "wf.lib.hide": { vi: "Ẩn thư viện", en: "Hide library", zh: "隐藏" },
+  "wf.lib.show": { vi: "Hiện thư viện Node", en: "Show Nodes Library", zh: "显示节点库" },
+  "wf.lib.agent.name": { vi: "Agent", en: "Agent", zh: "Agent" },
+  "wf.lib.agent.desc": { vi: "Bước AI: tóm tắt, sinh nội dung", en: "AI step: summarize, generate", zh: "AI 步骤：总结、生成" },
+  "wf.lib.connector.name": { vi: "Connector", en: "Connector", zh: "连接器" },
+  "wf.lib.connector.desc": { vi: "Gọi tool của app đã kết nối", en: "Call a connected app's tool", zh: "调用已连接应用的工具" },
+  "wf.lib.condition.name": { vi: "Điều kiện", en: "Condition", zh: "条件" },
+  "wf.lib.condition.desc": { vi: "Rẽ nhánh true / false", en: "Branch true / false", zh: "分支 true / false" },
+  "wf.lib.foreach.name": { vi: "Lặp (Foreach)", en: "Loop (Foreach)", zh: "循环 (Foreach)" },
+  "wf.lib.foreach.desc": { vi: "Lặp qua từng phần tử", en: "Iterate over each item", zh: "遍历每个元素" },
   "wf.editor.save": { vi: "Lưu", en: "Save", zh: "保存" },
   "wf.editor.saving": { vi: "Đang lưu…", en: "Saving…", zh: "保存中…" },
   "wf.editor.saved": { vi: "Đã lưu", en: "Saved", zh: "已保存" },

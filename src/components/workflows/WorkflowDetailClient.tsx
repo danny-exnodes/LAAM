@@ -33,6 +33,7 @@ import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import { useWorkflowEvents } from "@/hooks/useWorkflowEvents";
 import type { Workflow, WorkflowRun, WorkflowRunStep, WorkflowSchedule } from "@/db/schema";
 import { RecurrencePicker, describeCron } from "./RecurrencePicker";
+import { RunWaterfall } from "./RunWaterfall";
 
 // ----- Types -----
 type RunDetail = { run: WorkflowRun; steps: WorkflowRunStep[] };
@@ -473,6 +474,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
                             </div>
                           ) : runDetails[run.id] ? (
                             <RunStepLog
+                              run={runDetails[run.id].run}
                               steps={runDetails[run.id].steps}
                               liveSteps={activeRunId === run.id ? liveSteps : []}
                               t={t}
@@ -684,10 +686,12 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
 type LiveStep = { nodeId: string; status: string; seq: number };
 
 function RunStepLog({
+  run,
   steps,
   liveSteps,
   t,
 }: {
+  run: WorkflowRun;
   steps: WorkflowRunStep[];
   liveSteps: LiveStep[];
   t: ReturnType<typeof useT>;
@@ -699,11 +703,15 @@ function RunStepLog({
   });
 
   return (
-    <ol className="flex flex-col gap-2" aria-label="run steps">
-      {merged.map((s) => (
-        <StepRow key={s.id} step={s} t={t} />
-      ))}
-    </ol>
+    <div className="flex flex-col">
+      {/* A2: run waterfall — step durations on a timeline above the step list */}
+      <RunWaterfall run={run} steps={merged} t={t} />
+      <ol className="flex flex-col gap-2" aria-label="run steps">
+        {merged.map((s) => (
+          <StepRow key={s.id} step={s} t={t} />
+        ))}
+      </ol>
+    </div>
   );
 }
 

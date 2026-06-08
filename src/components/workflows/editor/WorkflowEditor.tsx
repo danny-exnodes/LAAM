@@ -29,11 +29,12 @@ import {
   NodeToolbar,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
-import { Copy, Trash2, Undo2, Redo2, Move, PanelRight } from "lucide-react";
+import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
 import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
+import { NodesLibraryPanel, NODE_KIND_MIME, type LibraryMode } from "./NodesLibraryPanel";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import { assertRunnable } from "@/lib/workflow/validate";
 import { useT } from "@/i18n/provider";
@@ -340,6 +341,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   // Config panel dock mode (B): "right" (docked) | "float" (draggable overlay).
   // Desktop only — mobile always uses the bottom sheet. Persisted to localStorage.
   const [panelMode, setPanelMode] = useState<"right" | "float">("right");
+  // Nodes Library panel (desktop): docked-left | float | hidden.
+  const [libraryMode, setLibraryMode] = useState<LibraryMode>("docked");
+  const [libFloatPos, setLibFloatPos] = useState({ x: 16, y: 96 });
   const [floatPos, setFloatPos] = useState({ x: 24, y: 24 });
 
   // Stable ref holding the latest delete/copy callbacks.
@@ -420,18 +424,20 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   // ── Palette: add node ────────────────────────────────────────────────────
 
   const addNode = useCallback(
-    (kind: WfNodeKind) => {
+    (kind: WfNodeKind, position?: { x: number; y: number }) => {
       const wfNode = defaultNode(kind);
-      // Place new node at the current viewport center so it's always visible,
-      // with a small stagger offset per existing node count to avoid exact overlap.
-      const center = rfInstance.screenToFlowPosition({
-        x: window.innerWidth / 2 + nodes.length * 10,
-        y: window.innerHeight / 2,
-      });
+      // Drag-drop supplies a drop position; click-to-add falls back to the viewport
+      // center (staggered per node count so click-added nodes don't stack exactly).
+      const pos =
+        position ??
+        rfInstance.screenToFlowPosition({
+          x: window.innerWidth / 2 + nodes.length * 10,
+          y: window.innerHeight / 2,
+        });
       const rfNode: RFNode<{ node: WfNode }> = {
         id: wfNode.id,
         type: "wf",
-        position: center,
+        position: pos,
         data: { node: wfNode },
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
@@ -440,6 +446,23 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
       setIsDirty(true);
     },
     [nodes.length, setNodes, rfInstance],
+  );
+
+  // Drag-to-add from the Nodes Library: drop a node kind onto the canvas at the cursor.
+  const onCanvasDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes(NODE_KIND_MIME)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+    }
+  }, []);
+  const onCanvasDrop = useCallback(
+    (e: React.DragEvent) => {
+      const kind = e.dataTransfer.getData(NODE_KIND_MIME) as WfNodeKind;
+      if (!kind) return;
+      e.preventDefault();
+      addNode(kind, rfInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
+    },
+    [addNode, rfInstance],
   );
 
   // Wrapped change handlers — mark dirty on user-driven changes (post-load)
@@ -794,6 +817,14 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     } catch { /* SSR / disabled storage → keep default */ }
   }, []);
 
+  // Nodes Library layout — restore the last choice (docked/float/hidden).
+  useEffect(() => {
+    try {
+      const m = localStorage.getItem("wf-lib-mode");
+      if (m === "docked" || m === "float" || m === "hidden") setLibraryMode(m);
+    } catch { /* SSR / disabled storage → keep default */ }
+  }, []);
+
   const setPanelModePersist = useCallback((m: "right" | "float") => {
     setPanelMode(m);
     try { localStorage.setItem("wf-panel-mode", m); } catch { /* ignore */ }
@@ -816,6 +847,27 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
       document.addEventListener("mouseup", onUp);
     },
     [floatPos],
+  );
+
+  const setLibraryModePersist = useCallback((m: LibraryMode) => {
+    setLibraryMode(m);
+    try { localStorage.setItem("wf-lib-mode", m); } catch { /* ignore */ }
+  }, []);
+
+  // Drag the floating Nodes Library by its header (delta tracking on document).
+  const startLibFloatDrag = useCallback(
+    (e: React.MouseEvent) => {
+      const startX = e.clientX, startY = e.clientY, ox = libFloatPos.x, oy = libFloatPos.y;
+      const onMove = (ev: MouseEvent) =>
+        setLibFloatPos({ x: Math.max(0, ox + ev.clientX - startX), y: Math.max(0, oy + ev.clientY - startY) });
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+      };
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+    },
+    [libFloatPos],
   );
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -873,14 +925,16 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           >
             <Redo2 size={16} aria-hidden />
           </button>
-          <div className="h-4 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700" />
-          <input
-            type="text"
-            value={wfName}
-            onChange={(e) => { setWfName(e.target.value); setIsDirty(true); }}
-            aria-label={t("wf.editor.name")}
-            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
-          />
+          {/* View-controls cluster: Nodes Library toggle + config-panel dock/float */}
+          <button
+            type="button"
+            onClick={() => setLibraryModePersist(libraryMode === "hidden" ? "docked" : "hidden")}
+            aria-label={libraryMode === "hidden" ? t("wf.lib.show") : t("wf.lib.hide")}
+            title={libraryMode === "hidden" ? t("wf.lib.show") : t("wf.lib.hide")}
+            className="hidden shrink-0 rounded-lg p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 md:inline-flex dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            <PanelLeft size={16} aria-hidden />
+          </button>
           <button
             type="button"
             onClick={() => setPanelModePersist(panelMode === "right" ? "float" : "right")}
@@ -890,6 +944,14 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           >
             {panelMode === "right" ? <Move size={16} aria-hidden /> : <PanelRight size={16} aria-hidden />}
           </button>
+          <div className="h-4 w-px shrink-0 bg-neutral-200 dark:bg-neutral-700" />
+          <input
+            type="text"
+            value={wfName}
+            onChange={(e) => { setWfName(e.target.value); setIsDirty(true); }}
+            aria-label={t("wf.editor.name")}
+            className="min-w-0 flex-1 rounded-lg border border-transparent bg-transparent px-2 py-1 text-sm font-semibold focus:border-[var(--color-accent)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]"
+          />
           <button
             type="button"
             onClick={() => void handleTest()}
@@ -917,8 +979,8 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             </span>
           )}
         </div>
-        {/* Row 2: palette — horizontally scrollable on small screens */}
-        <div className="flex items-center gap-2 overflow-x-auto border-t border-neutral-100 px-3 pb-2 pt-1.5 dark:border-neutral-800">
+        {/* Row 2: palette — MOBILE ONLY (desktop uses the left Nodes Library panel) */}
+        <div className="flex items-center gap-2 overflow-x-auto border-t border-neutral-100 px-3 pb-2 pt-1.5 md:hidden dark:border-neutral-800">
           <span className="shrink-0 text-xs text-neutral-400">{t("wf.editor.palette")}</span>
           <PaletteBtn label={t("wf.editor.addAgent")} onClick={() => addNode("agent")} />
           <PaletteBtn label={t("wf.editor.addConnector")} onClick={() => addNode("connector")} />
@@ -935,10 +997,16 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
         </div>
       )}
 
-      {/* Body: canvas + config panel */}
+      {/* Body: nodes library + canvas + config panel */}
       <div className="flex min-h-0 flex-1">
+        {/* Nodes Library — docked left (desktop only; mobile uses the palette row) */}
+        {libraryMode === "docked" && (
+          <div className="hidden md:block">
+            <NodesLibraryPanel onAdd={addNode} t={t} mode="docked" onSetMode={setLibraryModePersist} />
+          </div>
+        )}
         {/* React Flow canvas */}
-        <div className="relative min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1" onDrop={onCanvasDrop} onDragOver={onCanvasDragOver}>
           <ReactFlow
             nodes={nodesWithStatus}
             edges={edgesWithStatus}
@@ -966,6 +1034,30 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
               style={{ background: "var(--wf-node-bg)", border: "1px solid var(--wf-node-border)" }}
             />
           </ReactFlow>
+
+          {/* Nodes Library — floating (desktop), draggable by its header */}
+          {libraryMode === "float" && (
+            <div className="absolute z-40 hidden md:block" style={{ left: libFloatPos.x, top: libFloatPos.y }}>
+              <NodesLibraryPanel
+                onAdd={addNode}
+                t={t}
+                mode="float"
+                onSetMode={setLibraryModePersist}
+                onFloatDragStart={startLibFloatDrag}
+              />
+            </div>
+          )}
+          {/* Nodes Library — hidden → compact re-show launcher (desktop) */}
+          {libraryMode === "hidden" && (
+            <button
+              type="button"
+              onClick={() => setLibraryModePersist("docked")}
+              title={t("wf.lib.show")}
+              className="absolute left-3 top-3 z-40 hidden items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-neutral-600 shadow-md transition hover:border-[var(--color-accent)] md:inline-flex dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
+            >
+              <PanelLeft size={14} aria-hidden /> {t("wf.lib.title")}
+            </button>
+          )}
 
           {/* Condition edge-label picker (inline overlay) */}
           {pendingEdge && (
