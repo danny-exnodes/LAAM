@@ -9,17 +9,17 @@ import { buildRunNode } from "./runtime";
 import { emptyContext } from "./types";
 import type { WfConnectorNode } from "./types";
 
-describe("buildRunNode — blast gate wired into connector path", () => {
-  test("HIGH write connector node → THROW blast (KHÔNG gọi connectorExecute)", async () => {
-    const run = buildRunNode("u1");
+describe("buildRunNode — workflow-readiness gate wired into connector path", () => {
+  test("🔴 SEAM: real-run + un-cleared write → THROW (default=real=enforced), KHÔNG execute", async () => {
+    const run = buildRunNode("u1"); // no dryRun → real-run
     const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "trello", action: "trello_create_card", args: {} };
     // Gate ném đồng bộ TRƯỚC khi trả promise → bọc trong Promise.resolve().then để
     // bắt cả sync-throw lẫn rejection (engine await runNode trong try/catch → fail-stop).
-    await expect(Promise.resolve().then(() => run(node, emptyContext({ source: "manual" })))).rejects.toThrow(/blast/i);
+    await expect(Promise.resolve().then(() => run(node, emptyContext({ source: "manual" })))).rejects.toThrow(/workflow/i);
     expect(execSpy).not.toHaveBeenCalled(); // gate chặn TRƯỚC execute
   });
 
-  test("LOW write connector node qua gate → gọi connectorExecute", async () => {
+  test("cleared write connector node qua gate → gọi connectorExecute", async () => {
     execSpy.mockClear();
     const run = buildRunNode("u1");
     const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "demo", action: "demo_create_task", args: { title: "x" } };
@@ -37,10 +37,10 @@ describe("buildRunNode — blast gate wired into connector path", () => {
 });
 
 describe("buildRunNode — dry-run mocks connector writes", () => {
-  test("dryRun + LOW write → output giả, KHÔNG gọi connectorExecute", async () => {
+  test("dryRun + cleared write → output giả, KHÔNG gọi connectorExecute", async () => {
     execSpy.mockClear();
     const run = buildRunNode("u1", { dryRun: true });
-    // demo_create_task = WRITE + BLAST_LOW (qua gate). Dry-run phải mock, không execute thật.
+    // demo_create_task = WRITE + workflowSafe (cleared). Dry-run phải mock, không execute thật.
     const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "demo", action: "demo_create_task", args: { title: "x" } };
     const out = await run(node, emptyContext({ source: "manual" }));
     expect(execSpy).not.toHaveBeenCalled();
@@ -55,11 +55,13 @@ describe("buildRunNode — dry-run mocks connector writes", () => {
     expect(execSpy).toHaveBeenCalledWith("u1", "demo_list_tasks", {});
   });
 
-  test("dryRun + HIGH write → vẫn THROW blast (gate KHÔNG bị bỏ qua)", async () => {
+  test("dryRun + un-cleared write → MOCK preview (KHÔNG throw — xem trước được)", async () => {
     execSpy.mockClear();
     const run = buildRunNode("u1", { dryRun: true });
-    const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "trello", action: "trello_create_card", args: {} };
-    await expect(Promise.resolve().then(() => run(node, emptyContext({ source: "manual" })))).rejects.toThrow(/blast/i);
-    expect(execSpy).not.toHaveBeenCalled();
+    // trello_create_card chưa workflowSafe → real-run sẽ throw, NHƯNG dry-run phải mock để preview.
+    const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "trello", action: "trello_create_card", args: { name: "x" } };
+    const out = await run(node, emptyContext({ source: "manual" }));
+    expect(execSpy).not.toHaveBeenCalled(); // mock — không execute thật
+    expect(out).toMatchObject({ dryRun: true, wouldHaveCalled: "trello_create_card", args: { name: "x" } });
   });
 });
