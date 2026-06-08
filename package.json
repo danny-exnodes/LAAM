@@ -21,6 +21,8 @@
   "dependencies": {
     "@auth/drizzle-adapter": "1.11.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
     "@xyflow/react": "12.11.0",
     "bcryptjs": "3.0.3",
     "drizzle-orm": "0.45.2",
@@ -39,6 +41,7 @@
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "streamdown": "^2.5.0",
+    "three": "^0.184.0",
     "zod": "4.4.3"
   },
   "devDependencies": {
@@ -51,6 +54,7 @@
     "@types/react": "19.2.16",
     "@types/react-dom": "19.2.3",
     "@types/react-syntax-highlighter": "^15.5.13",
+    "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^6.0.2",
     "dotenv": "^16.4.0",
     "drizzle-kit": "0.31.10",
