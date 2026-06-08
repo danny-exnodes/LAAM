@@ -14,7 +14,10 @@
 
   position: relative;
   min-height: 100dvh;
-  overflow-x: hidden;
+  /* `clip` (not `hidden`) prevents horizontal overflow WITHOUT promoting the
+     element to a scroll container — `overflow-x: hidden` would force computed
+     `overflow-y: auto`, which breaks `position: sticky` on the mech section. */
+  overflow-x: clip;
   background: #000b16;
   color: var(--text);
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
