@@ -66,6 +66,10 @@
 - [workflow-qa-feature-upgrades](backlog/workflow-qa-feature-upgrades.md) — xoá workflow · quản lý schedule (xoá/tắt/sửa) · editor: xoá node/cảnh báo chưa lưu/form condition-foreach/picker connector · huỷ run.
 - [workflow-qa-ux-improvements](backlog/workflow-qa-ux-improvements.md) — toast run · markdown step output · nhãn step thân thiện · detail load chậm · validate message · Rule 13 digest LLM-reproduced.
 
+### QA E2E Merged Batch (2026-06-08) — QA/QC lead, live trên `:8443` (Chrome đã đăng nhập) + DB introspection + eval host. Batch HEAD `00aba41`. Kết quả: `.serena/qa/e2e-merged-batch-2026-06-08.md`; checkpoint `checkpoint/qa-e2e-merged-2026-06-08.md`; reply ở `comms/active/cto-to-qa-e2e-merged-2026-06-08`. **PASS:** write-guard (cả 2 path, ID:T-103 + audit), editor F1/U3/F3/F2/save, P0a schema/precondition/WAL, Access-spine schema, 7 connector. **Findings + gate:**
+- [matte-dark-qa-ui-bugs](backlog/matte-dark-qa-ui-bugs.md) — A1🟠 contrast accent light **2.77:1** (fail AA+floor) · A2🟠 `backdrop-blur` còn ở header/mobile-nav · A3🟠 recharts /eval `#111827` tàng hình + Y-axis "00%" · A4🟢 doc-drift WCAG.
+- [harness-write-tool-subsetting](backlog/harness-write-tool-subsetting.md) — 🔴 **CỔNG:** write-tool selection crater **100%@8 → 0%@16+** → subset tool trước connector-write GA. **Unexercised:** Access-spine behavior (0 token), P0a resume (user skip).
+
 ## Trạng thái hiện tại (2026-06-03)
 - v2: P1 auth/RBAC ✅ · P2 monitoring ✅ · P3 collector đa máy (đơn giản) ✅ · P4 Chat Gemma 4 đã build, **chờ test runtime**. Verified live P1+P2+P3.
 - App cũ (vanilla, Docker :4317) vẫn chạy; Phase 0 fixes (gemma4 default + toolbar) chưa deploy.

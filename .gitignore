@@ -28,3 +28,6 @@ connectors.json
 
 # agent worktrees (other sessions)
 .claude/worktrees/
+
+# superpowers brainstorming visual-companion mockups (local, throwaway)
+.superpowers/

@@ -1,0 +1,392 @@
+{
+  "meta": {
+    "k": 5,
+    "model": "qwen3-vl:8b-instruct-q8_0",
+    "at": "2026-06-08"
+  },
+  "scores": [
+    {
+      "id": "stuck-basic",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 3662,
+      "noCall": 0
+    },
+    {
+      "id": "tokens-today",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 1917,
+      "noCall": 0
+    },
+    {
+      "id": "agent-detail",
+      "capability": "args",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "args": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 3208,
+      "noCall": 0
+    },
+    {
+      "id": "machines-online",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 1665,
+      "noCall": 0
+    },
+    {
+      "id": "greeting-restraint",
+      "capability": "restraint",
+      "runs": 5,
+      "perDim": {
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 956,
+      "noCall": 5
+    },
+    {
+      "id": "chitchat-restraint",
+      "capability": "restraint",
+      "runs": 5,
+      "perDim": {
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 5609,
+      "noCall": 5
+    },
+    {
+      "id": "geo-directions",
+      "capability": "rich-block",
+      "runs": 5,
+      "perDim": {
+        "rich-block": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 1183,
+      "noCall": 5
+    },
+    {
+      "id": "chart-render",
+      "capability": "rich-block",
+      "runs": 5,
+      "perDim": {
+        "rich-block": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 3236,
+      "noCall": 5
+    },
+    {
+      "id": "write-intent-trello",
+      "capability": "write-intent",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "args": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 2,
+          "total": 5
+        },
+        "write-intent": {
+          "passed": 2,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[write-intent-trello#1] grounding: bịa/không nên có: đã tạo",
+        "[write-intent-trello#1] write-intent: bịa đã-hoàn tất khi chưa confirm",
+        "[write-intent-trello#2] grounding: bịa/không nên có: đã tạo",
+        "[write-intent-trello#2] write-intent: bịa đã-hoàn tất khi chưa confirm",
+        "[write-intent-trello#3] grounding: bịa/không nên có: đã tạo",
+        "[write-intent-trello#3] write-intent: bịa đã-hoàn tất khi chưa confirm"
+      ],
+      "avgMs": 1944,
+      "noCall": 0
+    },
+    {
+      "id": "loop-guard",
+      "capability": "termination",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 1481,
+      "noCall": 0
+    },
+    {
+      "id": "web-research-loop",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 2,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 10,
+          "total": 10
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[web-research-loop#1] tool-selection: thiếu gọi: web_read (đã gọi: web_search)",
+        "[web-research-loop#2] tool-selection: thiếu gọi: web_read (đã gọi: web_search)",
+        "[web-research-loop#4] tool-selection: thiếu gọi: web_read (đã gọi: web_search)"
+      ],
+      "avgMs": 4151,
+      "noCall": 0
+    },
+    {
+      "id": "web-restraint",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 1391,
+      "noCall": 0
+    },
+    {
+      "id": "util-calc-sum",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "args": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 1627,
+      "noCall": 0
+    },
+    {
+      "id": "laam-search-sessions",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "args": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 2226,
+      "noCall": 0
+    },
+    {
+      "id": "laam-get-timeline",
+      "capability": "args",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "args": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 3264,
+      "noCall": 0
+    },
+    {
+      "id": "laam-query-audit",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 5,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 2309,
+      "noCall": 0
+    }
+  ]
+}
