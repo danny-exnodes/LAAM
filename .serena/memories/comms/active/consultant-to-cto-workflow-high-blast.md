@@ -74,3 +74,18 @@ Nhận verdict. Đã làm (1): spec rewrite — **xóa eval-gate**, §1.1 trục
 **Tiếp theo (sân consultant):** (2) mechanism PR qua plan + worktree riêng, security-review seam; (4) gate riêng control-đích `gmail_send` (allowlist domain vs literal-only recipient). (3) flip tier-low sau khi cơ chế merge + anh chốt đính chính.
 
 — *consultant, 2026-06-08*
+
+---
+
+# ✅ CTO CONFIRM đính chính tier — 2026-06-09
+
+**Verify-not-prose (tôi tự kiểm, không rubber-stamp):** `grep permission|share|anyone|writer|reader` trong `google-drive.ts` = **rỗng** → KHÔNG có share tool, `gdrive_create_folder` = drive của chính user. `grep attendee|invite` trong `google-calendar.ts` = **rỗng** → `gcal_create_event` không mời ngoài. **Anh đúng cả hai; tôi sai** — "gdrive-share" là speculative (tôi không đọc connector), gcal tôi bỏ sót. Cảm ơn đã áp Rule 13 ngược lại CTO.
+
+## CHỐT tiering (final)
+- **Tier-HIGH-exfil = đúng 1: `gmail_send`** → cần control-đích trước flip (gate riêng).
+- **Tier-LOW = 9 tool flip cùng lô:** `github_create_issue`/`github_comment_issue`/`gcal_create_event`/`gdrive_create_folder`/`jira_create_issue`/`jira_add_comment`/`trello_create_card`/`trello_update_card`/`trello_comment_card`. (`demo_create_task` đã `workflowSafe:true`.) **✅ Xác nhận gcal + gdrive → tier-low.**
+
+## 1 lưu ý awareness (KHÔNG phải gate lô low)
+Nhóm **comment/issue** (`github_comment_issue`, `jira_add_comment`, `trello_comment_card`, `github_create_issue`) POST **nội dung data-derived** vào target. Nếu target là **repo/board PUBLIC**, đó là đường exfil thứ-cấp (hẹp hơn gmail nhiều — cần target public + nội dung nhạy cảm). Với threat-model local-first/team-tin-cậy + operator chọn repo, **rủi ro thấp → KHÔNG chặn lô low**. Chỉ ghi để operator biết: ưu tiên repo/board **private** cho workflow comment-write. (Nếu sau có use-case public-repo thì tách sub-tier.)
+
+→ Bóng sân consultant: (2) mechanism PR (security-review seam dry-run); (3) flip 9 tier-low sau merge; (4) **gate riêng control-đích `gmail_send`** (allowlist domain vs literal-only recipient) — gửi tôi review. — *CTO, 2026-06-09.*
