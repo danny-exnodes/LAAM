@@ -48,22 +48,25 @@
    `.dark` = the designed surface. Contrast verified ≥7:1 primary / ≥4.5:1
    secondary+muted on --surface-1; accent fill text ≥4.5:1. */
 :root {
-  --bg-base: #f4f7f7;
+  /* Light mode: cool-NEUTRAL (low saturation), matching the neutral-charcoal dark
+     theme. Flat/clean — no ambient; cards pop via white surface + neutral borders
+     + shadow. Accent stays cyan (darkened for contrast on light). */
+  --bg-base: #f5f6f8;
   --surface-1: #ffffff;
-  --surface-2: #f1f5f5;
-  --surface-3: #e6eded;
-  --border-subtle: rgba(0, 40, 40, 0.1);
-  --border-strong: rgba(0, 40, 40, 0.18);
-  --text-primary: #0a1f1f;
-  --text-secondary: #3a5555;
-  --text-muted: #5d7878;
+  --surface-2: #f1f2f5;
+  --surface-3: #e6e8ed;
+  --border-subtle: rgba(20, 28, 45, 0.1);
+  --border-strong: rgba(20, 28, 45, 0.16);
+  --text-primary: #15181f;
+  --text-secondary: #474c57;
+  --text-muted: #6b7180;
   --accent: #2a8fbf; /* darkened for contrast on light surfaces */
   --accent-hover: #2380ad;
   --accent-fg: #ffffff;
   --accent-muted: rgba(54, 166, 214, 0.14);
   --accent-glow: rgba(54, 166, 214, 0.3);
   --bloom-cyan: rgba(54, 166, 214, 0.1);
-  --bloom-aqua: rgba(45, 210, 200, 0.08);
+  --bloom-aqua: rgba(64, 150, 235, 0.07);
   --bloom-sky: rgba(56, 130, 246, 0.07);
 }
 .dark {
