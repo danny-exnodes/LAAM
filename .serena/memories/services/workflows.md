@@ -1,4 +1,30 @@
 
+## P6/P7/P8 — Editor + AI feature wave (2026-06-08) — ALL on main, live-verified (→1306 tests, tsc clean)
+
+3 user-feedback rounds; commit-per-feature; tests+tsc green each.
+
+**P6 — feedback fixes:**
+- **#5 canvas positions** (`c2d9e51`): `WorkflowGraph.positions` (jsonb, no migration); `capturePositions()` on save + `toReactFlow` restore; `fromReactFlow` stays position-free (serde round-trip contract).
+- **#2 flow-aware vars** (`c2d9e51`): `variableSuggestions(allNodes, edges, id)` → upstream ancestors only (backward BFS); `edges` threaded to NodeConfigPanel (×3 instances).
+- **#4 recurrence picker** (`852bbdd`): pure `recurrence.ts` (recurrenceToCron / cronToRecurrence→null-for-custom / defaultRecurrence / formatHHMM); `RecurrencePicker` (Hourly/Daily/Weekly/Monthly + Advanced raw-cron) wired into WorkflowDetailClient create + inline edit; list shows `describeCron` friendly text.
+- **#1 schema connector forms** (`a1f93fc`) + **default-mode FIX** (`ea71d16`): `ConnectorListItem.tools` string[]→`ConnectorToolInfo[]`{name,description,parameters}; pure `schemaForm.ts` (parseArgSchema) + `SchemaArgsForm`/`ArgFieldInput`; string fields get {{var}} chips; "Advanced (JSON)" escape hatch. **QA-found bug:** defaulted to JSON because the schema loads ASYNC + `advanced` froze at mount — fixed via `defaultAdvanced` + effect dep; +async regression test (sync-prop tests masked it).
+
+**P7 — editor UX overhaul** (ref: user images + `vercel-labs/workflow-builder-template`):
+- **A1 left "Nodes Library" panel** (`a15ef2f`): `NodesLibraryPanel` show/hide/float (persisted), click+drag add (`NODE_KIND_MIME` canvas onDrop); toolbar regrouped (float/library toggles clustered by undo/redo); palette row → mobile-only.
+- **A2 run waterfall** (`36a034d`): pure `waterfallLayout` (offset/width % from step startedAt/finishedAt; running→run-end; seq-sorted) + `RunWaterfall` inline in the detail run-expand.
+- **A3 clickable rows + inline rename** (`480dcfb`): workflow name → Link to detail + "Đổi tên" menu → inline input → PATCH {name}.
+
+**#3 AI assistant (create · review · edit)** — all 3 endpoints verified LIVE vs Ollama (`gemma4:e4b`). Rule 13: model proposes, code disposes (coerceGraph + assertRunnable gate; +1 self-repair retry; undoable proposals, never auto-saved/run). Spec `676f875`.
+- **Generate** (`c776905`): pure `generate.ts` (buildCatalog/generationSystem/GRAPH_FORMAT/coerceGraph) + `/api/workflows/generate` (Ollama `format` structured output) + `callOllamaGenerate` + `AiGeneratePanel` "✨ Tạo bằng AI" + `applyGeneratedGraph` (snapshot→swap→fitView).
+- **Review** (`434e391`): `/api/workflows/review` {graph} → callOllamaChat → VN markdown (Tóm tắt/Vấn đề/Gợi ý) via shared `MarkdownView`; "Đánh giá" button + `AiReviewPanel`.
+- **Edit/refine** (`4d43e09`): `AiGeneratePanel` New|Edit toggle → {prompt, current}; `buildUserMessage` frames "edit, keep unrelated, return FULL graph". Live: original node ids preserved + requested step appended.
+- UX polish: **b1** connector form shows selected tool description; **b2** recurrence next-run preview (`nextRunAt`).
+
+**Ops note:** much of P6/P7 was committed to main via throwaway worktrees (divergence-guarded file copies) while the shared worktree sat on the other session's `feat/landing-page`; user later merged → I moved to direct main commits. The running editor dev-server bundle is STALE (beforeunload guard blocked reload) → the new AI/library UI buttons need a **hard reload** to appear; all endpoints verified live regardless.
+**Remaining:** real-device mobile pass (resize tool can't reflow viewport over Tailscale).
+
+---
+
 ## P5 Review Pass (2026-06-06) — MERGED to main, 8/8 items done + E2E verified
 
 Spec: `docs/superpowers/specs/2026-06-06-workflow-p5-review.md`. From a mobile review of the editor; 3 phases, commit-per-phase. **1053 tests pass, tsc clean. NOT merged.**
