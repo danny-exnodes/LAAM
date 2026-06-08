@@ -11,7 +11,7 @@
 // reply is streaming (copy never mutates, so it stays enabled). An empty
 // assistant message during streaming shows a "typing…" placeholder.
 
-import { MarkdownView } from "@/components/render/MarkdownView";
+import { ChatMarkdown } from "@/components/render/ChatMarkdown";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { ChatMsg } from "./types";
@@ -85,7 +85,7 @@ export function MessageItem({
         ) : isAssistant ? (
           <>
             <ToolTrace items={msg.toolTrace} />
-            <MarkdownView source={msg.content} />
+            <ChatMarkdown source={msg.content} />
             <Citations names={msg.cites} />
             {msg.pendingWrite && onConfirm && (
               <ConfirmCard

@@ -38,6 +38,7 @@
     "recharts": "3.8.1",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
+    "streamdown": "^2.5.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

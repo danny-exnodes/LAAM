@@ -6,10 +6,12 @@
 
 import { useState } from "react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { oneLight, oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { useIsDark } from "@/hooks/useIsDark";
 
 export function CodeBlock({ code, language }: { code: string; language?: string }) {
   const [copied, setCopied] = useState(false);
+  const dark = useIsDark();
 
   async function copy() {
     try {
@@ -34,7 +36,7 @@ export function CodeBlock({ code, language }: { code: string; language?: string 
       </button>
       <SyntaxHighlighter
         language={language || "text"}
-        style={oneLight}
+        style={dark ? oneDark : oneLight}
         customStyle={{ margin: 0, borderRadius: 8, fontSize: 12.5 }}
       >
         {code}
