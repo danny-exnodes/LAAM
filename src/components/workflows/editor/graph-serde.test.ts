@@ -7,7 +7,7 @@
  * These tests are the serialization round-trip contract.
  */
 import { describe, expect, test } from "vitest";
-import { toReactFlow, fromReactFlow } from "./graph-serde";
+import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
 import type { WorkflowGraph, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode } from "@/lib/workflow/types";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -253,5 +253,46 @@ describe("round-trip: fromReactFlow(toReactFlow(g)) deep-equals g", () => {
   test("empty graph (0 nodes, 0 edges)", () => {
     const graph: WorkflowGraph = { nodes: [], edges: [] };
     expect(roundTrip(graph)).toEqual(graph);
+  });
+
+  test("round-trip stays position-free (positions are NOT added by fromReactFlow)", () => {
+    const graph: WorkflowGraph = { nodes: [agentNode, connectorNode], edges: [] };
+    const result = roundTrip(graph);
+    expect("positions" in result).toBe(false);
+  });
+});
+
+// ─── Positions persistence (#5) ───────────────────────────────────────────────
+
+describe("positions persistence (#5)", () => {
+  test("capturePositions maps each node id to its rounded xy", () => {
+    const { nodes } = toReactFlow({ nodes: [agentNode, connectorNode], edges: [] });
+    nodes[0] = { ...nodes[0], position: { x: 123.4, y: 56.7 } };
+    nodes[1] = { ...nodes[1], position: { x: 400, y: 200 } };
+    const positions = capturePositions(nodes);
+    expect(positions["agent-1"]).toEqual({ x: 123, y: 57 });
+    expect(positions["conn-1"]).toEqual({ x: 400, y: 200 });
+  });
+
+  test("toReactFlow restores saved positions instead of auto-layout", () => {
+    const graph: WorkflowGraph = {
+      nodes: [agentNode, connectorNode],
+      edges: [],
+      positions: { "agent-1": { x: 500, y: 300 }, "conn-1": { x: 50, y: 80 } },
+    };
+    const { nodes } = toReactFlow(graph);
+    expect(nodes.find((n) => n.id === "agent-1")!.position).toEqual({ x: 500, y: 300 });
+    expect(nodes.find((n) => n.id === "conn-1")!.position).toEqual({ x: 50, y: 80 });
+  });
+
+  test("toReactFlow auto-layouts nodes without a saved position", () => {
+    const graph: WorkflowGraph = {
+      nodes: [agentNode, connectorNode],
+      edges: [],
+      positions: { "agent-1": { x: 500, y: 300 } }, // conn-1 has none
+    };
+    const { nodes } = toReactFlow(graph);
+    expect(nodes.find((n) => n.id === "agent-1")!.position).toEqual({ x: 500, y: 300 });
+    expect(nodes.find((n) => n.id === "conn-1")!.position).toEqual({ x: 220, y: 0 }); // index 1 × 220
   });
 });

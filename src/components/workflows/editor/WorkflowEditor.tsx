@@ -33,7 +33,7 @@ import { Copy, Trash2, Undo2, Redo2, Move, PanelRight } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
-import { toReactFlow, fromReactFlow } from "./graph-serde";
+import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import { assertRunnable } from "@/lib/workflow/validate";
 import { useT } from "@/i18n/provider";
@@ -667,6 +667,8 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   const persistGraph = useCallback(async () => {
     const graph = fromReactFlow(nodes, edges);
     assertRunnable(graph); // client preflight — throws on invalid
+    // Persist canvas positions so node layout round-trips through save (#5).
+    graph.positions = capturePositions(nodes);
     const res = await f(`/api/workflows/${encodeURIComponent(workflowId)}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -1056,6 +1058,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
                   onChange={onNodeConfigChange}
                   onDelete={() => handleDeleteNode(selectedWfNode.id)}
                   allNodes={allWfNodes}
+                  edges={edges}
                 />
               </div>
             </div>
@@ -1072,6 +1075,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
                 onChange={onNodeConfigChange}
                 onDelete={() => handleDeleteNode(selectedWfNode.id)}
                 allNodes={allWfNodes}
+                edges={edges}
               />
             ) : (
               <div className="flex h-full items-center justify-center p-4 text-sm text-neutral-400">
@@ -1117,6 +1121,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
                 onChange={onNodeConfigChange}
                 onDelete={() => sheetNode && handleDeleteNode(sheetNode.id)}
                 allNodes={allWfNodes}
+                edges={edges}
               />
             </div>
           </div>

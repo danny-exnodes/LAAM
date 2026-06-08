@@ -365,15 +365,17 @@ describe("ConnectorForm — connector/action picker", () => {
 
 // ─── Variable autocomplete (A) ────────────────────────────────────────────────
 
-describe("VariableHints — variable autocomplete (A)", () => {
+describe("VariableHints — flow-aware variable autocomplete (A / #2)", () => {
   const agentNode: WfAgentNode = { id: "a1", kind: "agent", prompt: "Hi" };
   const allNodes: WfNode[] = [
     agentNode,
     { id: "n2", kind: "connector", connectorId: "demo", action: "x", args: {} },
   ];
+  // n2 runs BEFORE a1 (n2 → a1) → n2 is upstream of a1.
+  const edges = [{ source: "n2", target: "a1" }];
 
-  test("renders trigger + sibling chips under both agent fields, excludes self", () => {
-    renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={allNodes} />);
+  test("renders trigger + UPSTREAM chips under both agent fields, excludes self", () => {
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={allNodes} edges={edges} />);
     // chips render under BOTH the system and prompt fields → 2 of each token
     expect(screen.getAllByRole("button", { name: "{{trigger}}" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "{{steps.n2.output}}" })).toHaveLength(2);
@@ -382,7 +384,7 @@ describe("VariableHints — variable autocomplete (A)", () => {
 
   test("clicking the prompt's chip inserts the token into the prompt, keeps existing text", () => {
     const onChange = vi.fn();
-    renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} allNodes={allNodes} />);
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} allNodes={allNodes} edges={edges} />);
     // Scope to the prompt field's container so we click ITS chip (not the system field's)
     const promptArea = screen.getByPlaceholderText(/Nhập prompt/);
     const promptField = promptArea.parentElement as HTMLElement;
@@ -393,8 +395,8 @@ describe("VariableHints — variable autocomplete (A)", () => {
     expect(updated.prompt).toContain("Hi");
   });
 
-  test("only the trigger chip when there are no sibling nodes", () => {
-    renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={[agentNode]} />);
+  test("only the trigger chip when nothing is upstream (no edges)", () => {
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={allNodes} edges={[]} />);
     expect(screen.getAllByRole("button", { name: "{{trigger}}" })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "{{steps.n2.output}}" })).not.toBeInTheDocument();
   });

@@ -3,13 +3,12 @@
  *
  * Converts between LAAM WorkflowGraph ↔ React Flow nodes/edges.
  *
- * Position strategy (v1 decision):
- *   - Positions are stored in React Flow only (RFNode.position).
- *   - WfNode has NO position field — we keep the domain type clean.
- *   - On first load (no stored positions), we auto-layout by index
- *     using a simple left-to-right topo arrangement.
- *   - Positions round-trip through the editor state (nodes array),
- *     NOT through the saved WorkflowGraph. This is intentional for v1.
+ * Position strategy:
+ *   - WfNode has NO position field — the domain type stays clean.
+ *   - Positions persist in WorkflowGraph.positions (nodeId → xy): captured on save
+ *     via capturePositions() and restored by toReactFlow(). The WfNode round-trip
+ *     (fromReactFlow ∘ toReactFlow) stays position-free.
+ *   - First load / new nodes with no saved position → auto-layout by index.
  */
 import type { Node as RFNode, Edge as RFEdge } from "@xyflow/react";
 import type { WfNode, WfEdge, WorkflowGraph } from "@/lib/workflow/types";
@@ -41,7 +40,8 @@ export function toReactFlow(graph: WorkflowGraph): RFGraph {
   const rfNodes: WfRFNode[] = graph.nodes.map((node, i) => ({
     id: node.id,
     type: NODE_TYPE,
-    position: { x: i * AUTO_LAYOUT_X, y: 0 },
+    // Restore the saved canvas position; fall back to auto-layout by index.
+    position: graph.positions?.[node.id] ?? { x: i * AUTO_LAYOUT_X, y: 0 },
     data: { node },
   }));
 
@@ -80,4 +80,16 @@ export function fromReactFlow(
   });
 
   return { nodes, edges };
+}
+
+/**
+ * capturePositions — RF nodes → a nodeId → xy map for WorkflowGraph.positions.
+ * Kept separate from fromReactFlow so the WfNode round-trip stays position-free.
+ */
+export function capturePositions(rfNodes: RFNode[]): Record<string, { x: number; y: number }> {
+  const positions: Record<string, { x: number; y: number }> = {};
+  for (const n of rfNodes) {
+    if (n.position) positions[n.id] = { x: Math.round(n.position.x), y: Math.round(n.position.y) };
+  }
+  return positions;
 }

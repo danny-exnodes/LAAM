@@ -29,7 +29,13 @@ export type WfForeachNode = { id: string; kind: "foreach"; items: string; body: 
 
 export type WfNode = WfAgentNode | WfConnectorNode | WfConditionNode | WfForeachNode;
 export type WfEdge = { from: string; to: string; label?: string }; // label cho nhánh condition ("true"/"false")
-export type WorkflowGraph = { nodes: WfNode[]; edges: WfEdge[]; viewport?: unknown };
+export type WorkflowGraph = {
+  nodes: WfNode[];
+  edges: WfEdge[];
+  viewport?: unknown;
+  // Editor-persisted canvas layout: nodeId → xy. Ignored by the engine/validate.
+  positions?: Record<string, { x: number; y: number }>;
+};
 
 // G1: cận chạy (chống runaway). Token-precise budgeting hoãn (đổi runNode contract A0).
 export type Budget = { maxSteps: number; maxForeachItems: number };

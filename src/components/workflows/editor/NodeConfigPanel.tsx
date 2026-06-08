@@ -603,19 +603,22 @@ export function NodeConfigPanel({
   onDelete,
   connectors: connectorsProp,
   allNodes,
+  edges,
 }: {
   node: WfNode;
   onChange: (updated: WfNode) => void;
   onDelete?: () => void;
   /** Injected for tests; if omitted, fetched from /api/connectors on mount */
   connectors?: ConnectorListItem[];
-  /** All graph nodes — used to suggest {{steps.<sibling>.output}} variables. */
+  /** All graph nodes — used to derive upstream {{steps.<id>.output}} variables. */
   allNodes?: WfNode[];
+  /** Edges (source→target) — used to compute which nodes are upstream of this one. */
+  edges?: ReadonlyArray<{ source: string; target: string }>;
 }) {
   // t is called here (top-level component) and passed to sub-forms as a prop,
   // since sub-forms are local functions and cannot call hooks directly.
   const t = useT(dict);
-  const suggestions = variableSuggestions(allNodes ?? [], node.id);
+  const suggestions = variableSuggestions(allNodes ?? [], edges ?? [], node.id);
   const [connectors, setConnectors] = useState<ConnectorListItem[]>(connectorsProp ?? []);
 
   // Capture at mount time — avoids re-firing when a caller passes a new array literal
