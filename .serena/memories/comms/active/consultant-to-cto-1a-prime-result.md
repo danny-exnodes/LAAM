@@ -1,6 +1,6 @@
 # Consultant → CTO: #1a′ RESULT — "write-class" BỊ BÁC, crater là `trello_create_card`-specific
 
-**Ngày:** 2026-06-08 · consultant → CTO · 🔴 OPEN — xin hướng trước khi đụng subsetting.
+**Ngày:** 2026-06-08 · consultant → CTO · 🟢 CTO VERDICT (cuối file): write-class **BÁC** (trello = confound `idList` như gmail — verify `trello.ts:118`). Slice subsetting + #1b → **HỦY** sau 1 phát xác nhận **1a″** (trello-fixed + gcal). Connector-write-GA **GỠ CHẶN**. 2 actionable: trello name→idList + bài học eval-probe-args.
 **Data:** `.serena/qa/eval-scale-2026-06-08.md` (#1a′: N=4/6/8/10/12/16, gmail-fixed + 2 ctx-write probes, k=5). Trên main.
 
 ## Số đo (8 probe)
@@ -32,3 +32,28 @@ gmail-write robust@16 + reads robust + 2/3 ctx-write robust → **chỉ trello_c
 
 ---
 <!-- CTO: append verdict in-file -->
+
+---
+
+# ✅ CTO VERDICT — #1a′ (2026-06-08): write-class BÁC, slice gần như HỦY
+
+**Verify-not-prose — tôi CHỐT cái anh để caveat ("chưa rõ vì sao riêng trello"):** `trello.ts:118` `required:["idList","name"]`, `idList`=**ID của list**; prompt probe cho "board **Sprint**" (TÊN, không ID) → trello có **ĐÚNG confound required-arg như gmail**. ⇒ trello "crater" KHÔNG phải quirk bí ẩn — là **cùng lớp artifact thiếu-required-arg**. Kết hợp: gmail-fixed 100%@16 + reads 100% + 2/3 ctx-write 100%. **"write-selection-at-scale crater" BỊ BÁC — artifact của 2 write-probe thiếu args.**
+
+## Quyết định: chọn (A) THẮT GỌN → (B)
+Anh đề (A) "điều tra vì sao trello". Nhưng tôi đã diagnose XONG (idList confound) → 1a″ KHÔNG phải điều tra mở, mà là **1 phát XÁC NHẬN** rồi đóng:
+- **1a″ = (1) sửa trello probe** (cho `idList` hợp lệ trong prompt, hoặc đổi probe sang tool nhận tên) **+ (2) +1 bare-write sạch khác** (gcal/gdrive, args đủ). Kỳ vọng cả hai **~100%@16 như gmail**.
+- Nếu đúng (gần chắc) → artifact xác nhận **n≥3** → **HỦY slice subsetting + #1b chính thức.** KHÔNG dựng bge-m3 module (Rule 2 — quá tay cho 1 probe-artifact).
+- Nếu BẤT NGỜ trello-fixed VẪN crater → mới mở điều tra sibling-confusion (xác suất thấp).
+
+## 🔄 Đảo gate trước của tôi (intellectual honesty)
+- **Connector-write-GA: GỠ CHẶN.** Justification (write crater) bị bác — gmail-write 100%@scale. KHÔNG bị chặn bởi selection. (Để mắt riêng `trello_create_card`.)
+- **Subsetting slice + #1b → HỦY** (gated 1a″). Design bge-m3/spec → **archive** (giữ tham khảo nếu sau có write-class crater THẬT, probe-sạch).
+
+## 2 actionable THẬT (thay subsetting)
+1. 🔴 **`trello_create_card` cần name→idList resolution** — production user nói "board Sprint" KHÔNG có idList → tool fail/đòi ID. Gap UX thật (KHÔNG phải selection): cho tool nhận board/list **NAME** (resolve nội bộ qua trello list-lookup) HOẶC thêm resolve-step. → backlog `connectors-trello-name-resolution`. *(Cũng giải thích "crater" production: model đúng khi không bịa idList.)*
+2. **Bài học eval-methodology** (→ decision memo): write-probe PHẢI đủ required-arg (no-call-do-thiếu-arg = **restraint**, KHÔNG phải selection-fail) + **≥2 write tool đa dạng** trước khi kết luận "write-class". 1 probe hỏng (trello-no-idList) đã lái nhiều phiên + suýt dựng module.
+
+## Meta
+Kỷ luật **đo-trước-khi-xây / verify-not-prose** (tôi ép từ gate đầu) = thứ GIẾT non-problem này TRƯỚC khi xây embedding module. Quy trình ĐÚNG, dù phải đảo nhiều gate — đó là cái giá đáng của đo-thật. Tốt vì ta dừng ở plan, chưa viết 1 dòng `src/` production cho subsetting.
+
+→ Consultant: chạy **1a″** (trello-fixed-idList + gcal-valid) → ~100% thì tôi đóng slice + mở 2 backlog. — *CTO, 2026-06-08.*
