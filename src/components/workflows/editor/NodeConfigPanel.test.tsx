@@ -7,7 +7,7 @@
  *   3. The connector form calls onChange when connectorId/action changes.
  */
 import { describe, expect, test, vi } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode } from "@/lib/workflow/types";
@@ -408,6 +408,24 @@ describe("ConnectorForm — schema-driven args (#1)", () => {
     renderPanel(<NodeConfigPanel node={node} onChange={vi.fn()} connectors={schemaConnectors} />);
     fireEvent.click(screen.getByText("Nâng cao (JSON)"));
     expect(screen.getByPlaceholderText(/"key"/)).toBeInTheDocument();
+  });
+
+  // Regression (QA E2E): with NO connectors prop the panel self-fetches /api/connectors,
+  // so the tool schema arrives AFTER mount. The default mode must RE-SYNC to the form —
+  // earlier it stayed stuck on the raw-JSON editor because the default was frozen at mount
+  // (schema still null). Sync-prop tests above missed this; only the async path catches it.
+  test("defaults to the FORM (not raw JSON) when connectors load async", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: true, json: async () => ({ connectors: schemaConnectors }) })) as unknown as typeof fetch,
+    );
+    try {
+      renderPanel(<NodeConfigPanel node={node} onChange={vi.fn()} />);
+      await waitFor(() => expect(screen.getByText("title *")).toBeInTheDocument());
+      expect(screen.queryByPlaceholderText(/"key"/)).not.toBeInTheDocument(); // no JSON textarea
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

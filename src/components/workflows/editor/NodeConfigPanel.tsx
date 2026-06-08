@@ -290,7 +290,14 @@ function SchemaArgsForm({
   schema: object | null;
 }) {
   const { fields, propCount, flat } = parseArgSchema(schema);
-  const [advanced, setAdvanced] = useState(!flat);
+  // Default to the friendly form when the schema is a renderable object (flat fields,
+  // or a no-arg object); raw JSON only when no schema is available yet or the schema
+  // has fields the form can't render. Recomputed each render so the default RE-SYNCS
+  // when the connector list (hence the schema) loads ASYNC after mount — otherwise the
+  // panel gets stuck on JSON, since `schema` is null at first paint. [QA fix #1]
+  const schemaIsObject = !!schema && (schema as { type?: string }).type === "object";
+  const defaultAdvanced = !schemaIsObject || (propCount > 0 && !flat);
+  const [advanced, setAdvanced] = useState(defaultAdvanced);
   const [argsText, setArgsText] = useState(
     Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "",
   );
@@ -299,10 +306,10 @@ function SchemaArgsForm({
   // Re-seed raw text + default mode when the node or the selected action changes.
   useEffect(() => {
     setArgsText(Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "");
-    setAdvanced(!flat);
+    setAdvanced(defaultAdvanced);
     setArgsError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.id, node.action]);
+  }, [node.id, node.action, defaultAdvanced]);
 
   function setArg(key: string, value: unknown) {
     const next = { ...node.args };
