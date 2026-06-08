@@ -21,3 +21,24 @@ export async function callOllamaChat(messages: ChatMessage[], tools: ConnectorTo
   if (!r.ok) throw new Error(`Ollama ${r.status}`);
   return (await r.json()) as OllamaChatResponse;
 }
+
+// Structured generation (#3): ask the model to emit JSON matching `format` (Ollama's
+// schema-constrained output). No tools — one-shot. Returns the raw JSON string from
+// message.content; the caller parses → coerceGraph → assertRunnable. Lower temperature
+// for steadier structure.
+export async function callOllamaGenerate(messages: ChatMessage[], format: object): Promise<string> {
+  const r = await fetch(`${OLLAMA_URL}/api/chat`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      format,
+      options: { num_ctx: NUM_CTX, temperature: 0.2 },
+      stream: false,
+    }),
+  });
+  if (!r.ok) throw new Error(`Ollama ${r.status}`);
+  const data = (await r.json()) as OllamaChatResponse;
+  return data.message?.content ?? "";
+}

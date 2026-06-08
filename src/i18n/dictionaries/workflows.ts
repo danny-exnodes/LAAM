@@ -171,6 +171,26 @@ export const workflows: Dict = {
   "wf.lib.condition.desc": { vi: "Rẽ nhánh true / false", en: "Branch true / false", zh: "分支 true / false" },
   "wf.lib.foreach.name": { vi: "Lặp (Foreach)", en: "Loop (Foreach)", zh: "循环 (Foreach)" },
   "wf.lib.foreach.desc": { vi: "Lặp qua từng phần tử", en: "Iterate over each item", zh: "遍历每个元素" },
+
+  // AI generate-from-prompt (#3)
+  "wf.ai.button": { vi: "Tạo bằng AI", en: "AI generate", zh: "AI 生成" },
+  "wf.ai.title": { vi: "Tạo workflow bằng AI", en: "Generate workflow with AI", zh: "用 AI 生成工作流" },
+  "wf.ai.hint": {
+    vi: "Mô tả workflow bằng lời — AI sẽ phác thảo các bước (bạn xem lại & sửa trước khi lưu).",
+    en: "Describe the workflow in words — AI drafts the steps (review & edit before saving).",
+    zh: "用文字描述工作流 — AI 会起草步骤（保存前请检查并修改）。",
+  },
+  "wf.ai.placeholder": {
+    vi: "VD: mỗi sáng tóm tắt thẻ Trello chưa xong rồi gửi email cho tôi",
+    en: "e.g. every morning, summarize my open Trello cards and email me",
+    zh: "例如：每天早上总结我未完成的 Trello 卡片并发邮件给我",
+  },
+  "wf.ai.generate": { vi: "Tạo", en: "Generate", zh: "生成" },
+  "wf.ai.generating": { vi: "Đang tạo…", en: "Generating…", zh: "生成中…" },
+  "wf.ai.error": { vi: "Chưa tạo được — thử mô tả rõ hơn.", en: "Couldn't generate — try rephrasing.", zh: "生成失败 — 请换种描述。" },
+  "wf.ai.ex1": { vi: "Tóm tắt công việc demo rồi gửi email", en: "Summarize demo tasks then email me", zh: "总结 demo 任务并发邮件" },
+  "wf.ai.ex2": { vi: "Lấy thẻ Trello, nếu khẩn thì báo Slack", en: "Get Trello cards; if urgent, notify Slack", zh: "获取 Trello 卡片，若紧急则通知 Slack" },
+
   "wf.editor.save": { vi: "Lưu", en: "Save", zh: "保存" },
   "wf.editor.saving": { vi: "Đang lưu…", en: "Saving…", zh: "保存中…" },
   "wf.editor.saved": { vi: "Đã lưu", en: "Saved", zh: "已保存" },

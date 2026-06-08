@@ -29,17 +29,18 @@ import {
   NodeToolbar,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
-import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft } from "lucide-react";
+import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft, Sparkles } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
 import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
 import { NodesLibraryPanel, NODE_KIND_MIME, type LibraryMode } from "./NodesLibraryPanel";
+import { AiGeneratePanel } from "./AiGeneratePanel";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import { assertRunnable } from "@/lib/workflow/validate";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
-import type { WfNode, WfNodeKind } from "@/lib/workflow/types";
+import type { WfNode, WfNodeKind, WorkflowGraph } from "@/lib/workflow/types";
 import { edgeRunDecoration } from "./nodeStatus";
 import { emptyHistory, pushSnapshot, undo, redo, canUndo, canRedo } from "./historyStack";
 import type { HistoryState, Snapshot } from "./historyStack";
@@ -344,6 +345,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   // Nodes Library panel (desktop): docked-left | float | hidden.
   const [libraryMode, setLibraryMode] = useState<LibraryMode>("docked");
   const [libFloatPos, setLibFloatPos] = useState({ x: 16, y: 96 });
+  const [aiOpen, setAiOpen] = useState(false); // #3 — AI generate-from-prompt modal
   const [floatPos, setFloatPos] = useState({ x: 24, y: 24 });
 
   // Stable ref holding the latest delete/copy callbacks.
@@ -463,6 +465,22 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
       addNode(kind, rfInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY }));
     },
     [addNode, rfInstance],
+  );
+
+  // #3: load an AI-generated graph as an UNDOABLE proposal — snapshot the current canvas
+  // to history first (so Undo reverts the replacement), then swap nodes/edges + fit view.
+  const applyGeneratedGraph = useCallback(
+    (graph: WorkflowGraph) => {
+      historyRef.current = pushSnapshot(historyRef.current, { nodes, edges, sig: dataSig(nodes, edges) });
+      const rf = toReactFlow(graph);
+      setNodes(rf.nodes.map((n) => ({ ...n, sourcePosition: Position.Right, targetPosition: Position.Left })));
+      setEdges(rf.edges.map((e) => ({ ...DEFAULT_EDGE_OPTIONS, ...e })));
+      setIsDirty(true);
+      requestAnimationFrame(() => {
+        try { rfInstance.fitView({ padding: 0.2, duration: 300 }); } catch { /* no viewport yet */ }
+      });
+    },
+    [nodes, edges, setNodes, setEdges, rfInstance],
   );
 
   // Wrapped change handlers — mark dirty on user-driven changes (post-load)
@@ -954,6 +972,14 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           />
           <button
             type="button"
+            onClick={() => setAiOpen(true)}
+            title={t("wf.ai.title")}
+            className="shrink-0 rounded-lg border border-[var(--color-accent)]/40 px-2.5 py-1.5 text-sm font-semibold text-[var(--color-accent)] transition hover:bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)]"
+          >
+            ✨ {t("wf.ai.button")}
+          </button>
+          <button
+            type="button"
             onClick={() => void handleTest()}
             disabled={testing || saveStatus === "saving"}
             title={t("wf.editor.testHint")}
@@ -1036,6 +1062,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           </ReactFlow>
 
           {/* Nodes Library — floating (desktop), draggable by its header */}
+          {aiOpen && (
+            <AiGeneratePanel onApply={applyGeneratedGraph} onClose={() => setAiOpen(false)} t={t} />
+          )}
           {libraryMode === "float" && (
             <div className="absolute z-40 hidden md:block" style={{ left: libFloatPos.x, top: libFloatPos.y }}>
               <NodesLibraryPanel
