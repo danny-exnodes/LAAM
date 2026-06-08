@@ -16,6 +16,7 @@ export const authConfig = {
       const isLoggedIn = !!auth?.user;
       const p = nextUrl.pathname;
       const isPublic =
+        p === "/" || // public marketing landing page (shown to everyone)
         p === "/login" ||
         p === "/register" ||
         p === "/api/register" || // signup endpoint must be reachable when logged out
