@@ -109,7 +109,7 @@ const SIZES = [8, 10, 12, 14, 16]; // knee-finding: mẫu dày trong (8,16] (24/
 
 - [ ] **Step 3: Thay resolution bằng resolver tổng quát**
 
-Import (đầu file): thêm `resolveProbeSchemas` vào dòng import `./scale/distractors`. Xoá `schemaOf` (dòng 19-20). Trong thân `test(...)` (dòng 47-50) đổi:
+Import (đầu file): thêm `resolveProbeSchemas` vào dòng import `./scale/distractors`. Xoá `schemaOf` (dòng 19-20). Trong thân `test(...)` (dòng **46-50**, `correctSchema` + `padToN`) đổi:
 ```ts
 const names = Array.isArray(p.correct) ? p.correct : [p.correct];
 const union = padToN(resolveProbeSchemas(names), POOL, n);
@@ -204,6 +204,7 @@ Expected: ghi `.serena/qa/eval-scale-<date>.md` với hàng `write`, `write-gmai
 Từ bảng: tìm N nhỏ nhất nơi `write` (và `write-gmail`) bắt đầu < 100% / no-call nhảy. Đó = **knee**.
 - Nếu `write-gmail` cũng crater quanh cùng N ⇒ **xác nhận lỗi-lớp-write** (không trello-đặc-thù).
 - Nếu chỉ `write` (trello) crater, `write-gmail` giữ 100% ⇒ **chẩn đoán đổi** → báo CTO trước slice #2.
+- **Multi-tool — label đúng lớp (CTO):** nếu `multi-read-write` thấp ở **MỌI N (kể cả 8)** ⇒ đó là **weak-multi-step-actor** (vấn đề TÁCH, spec §2 non-goal), **KHÔNG** phải bằng chứng subsetting. Chỉ khi nó **cao@8 → sụp theo N** mới là tín hiệu toolset-size. Đừng quy nhầm.
 
 - [ ] **Step 3: Khoá hằng số vào spec**
 
