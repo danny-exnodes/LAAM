@@ -1,6 +1,10 @@
-import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { Landing } from "@/components/landing/Landing";
 
-export default function Home() {
-  // Middleware will bounce unauthenticated users to /login.
-  redirect("/dashboard");
+// Public marketing landing page, shown to everyone at `/` (see auth.config.ts
+// isPublic). Reads the session only to flip the nav CTA between
+// "Get started / Sign in" (logged out) and "Go to dashboard" (logged in).
+export default async function Home() {
+  const session = await auth();
+  return <Landing isAuthed={Boolean(session?.user)} />;
 }

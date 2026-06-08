@@ -183,6 +183,7 @@
 .footerTitle { font-size: clamp(1.8rem, 3.6vw, 2.6rem); font-weight: 300; margin-bottom: 14px; }
 .footerSub { color: var(--muted); max-width: 56ch; margin: 0 auto 26px; line-height: 1.6; font-weight: 300; }
 .footerNote { margin-top: 26px; color: var(--faint); font-size: 13px; letter-spacing: 0.04em; }
+.stackRow { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 28px; }
 
 .section { padding: 12vh 0 6vh; }
 
