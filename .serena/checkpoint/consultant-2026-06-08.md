@@ -26,3 +26,10 @@
 ## Blockers / Risks
 - Live eval host-only (Ollama) — knee chưa đo được tới khi user chạy T5.
 - Cược load-bearing (R4): `miss-rate(recall@K) ≪ crater-rate` — phải đo ở 1b, chưa chứng minh.
+
+## Execution update — slice #1a T1–T4 DONE (branch `feat/confirm-eval-knee`)
+- Plan 1a **CTO-gated** (`comms/resolved/consultant-to-cto-confirm-eval-plan.md`): Q1 tách 1a/1b ✅ (1b=kill-switch spike, hard-cases bắt buộc), Q2 bỏ 24/40 ✅.
+- Commits: `b7af9ad` resolver (TDD 7/7) · `56fba25` knee SIZES [8,10,12,14,16] + probe `gmail_send` (write-class) + `multi-read-write`. `tsc` sạch.
+- ⏳ **T5 BLOCKED on host:** user chạy `npm run eval:scale` (Ollama) → ghi `.serena/qa/eval-scale-2026-06-08.md` (đè bản 4-điểm cũ; bản cũ còn trong git).
+- Sau T5: đọc knee (write + write-gmail) → khoá `fallbackK=knee−margin`/`capK` vào spec §6 → finish branch → viết **plan 1b** (recall@K spike).
+- ⚠️ Đọc multi-tool đúng lớp (CTO): thấp ở MỌI N = weak-multi-step-actor (TÁCH), không phải subsetting.
