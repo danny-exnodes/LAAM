@@ -52,8 +52,11 @@ export function MechModel({ progressRef, pointerRef }: MechHandles) {
     return out;
   }, []);
 
+  const pSmooth = useRef(0);
   useFrame(() => {
-    const p = progressRef.current ?? 0;
+    const target = progressRef.current ?? 0;
+    pSmooth.current += (target - pSmooth.current) * 0.08; // glide toward scroll target
+    const p = pSmooth.current;
     (Object.keys(vecs) as PartKey[]).forEach((k) => {
       const g = partRefs.current[k];
       if (g) g.position.copy(vecs[k].home).addScaledVector(vecs[k].ex, p);
