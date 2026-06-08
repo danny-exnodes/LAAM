@@ -230,8 +230,10 @@ describe("WorkflowDetailClient — schedule section", () => {
     ui();
     await waitFor(() => screen.getByText("Thêm lịch"));
     fireEvent.click(screen.getByText("Thêm lịch"));
-    await waitFor(() => screen.getByLabelText("Cron (5 trường)"));
-    fireEvent.change(screen.getByLabelText("Cron (5 trường)"), {
+    // Picker mounts → switch to Advanced and type a raw cron
+    await waitFor(() => screen.getByText("Nâng cao (cron)"));
+    fireEvent.click(screen.getByText("Nâng cao (cron)"));
+    fireEvent.change(screen.getByPlaceholderText("0 9 * * 1-5"), {
       target: { value: "0 9 * * 1-5" },
     });
     fireEvent.click(screen.getByText("Lưu lịch"));
@@ -368,14 +370,12 @@ describe("WorkflowDetailClient — schedule actions", () => {
     ui();
     await waitFor(() => screen.getByText("0 9 * * 1-5"));
 
-    // Click cron cell button to open inline editor
-    fireEvent.click(screen.getByTitle("Click để sửa"));
+    // Click the schedule cell to open the inline picker (custom cron → Advanced raw)
+    fireEvent.click(screen.getByText("0 9 * * 1-5"));
+    await waitFor(() => screen.getByPlaceholderText("0 9 * * 1-5"));
 
-    // Input should appear
-    await waitFor(() => screen.getByRole("textbox"));
-
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "0 12 * * *" } });
-    fireEvent.blur(screen.getByRole("textbox"));
+    fireEvent.change(screen.getByPlaceholderText("0 9 * * 1-5"), { target: { value: "0 12 * * *" } });
+    fireEvent.click(screen.getByText("Lưu lịch")); // inline edit saves via button (no longer on blur)
 
     await waitFor(() => {
       const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
@@ -386,8 +386,9 @@ describe("WorkflowDetailClient — schedule actions", () => {
       const body = JSON.parse(patchCall![1].body as string) as { cron: string };
       expect(body.cron).toBe("0 12 * * *");
     });
+    // Row now shows the new cron rendered friendly (0 12 * * * → daily at 12:00)
     await waitFor(() => {
-      expect(screen.getByText("0 12 * * *")).toBeTruthy();
+      expect(screen.getByText("Hằng ngày lúc 12:00")).toBeTruthy();
     });
   });
 
@@ -401,11 +402,11 @@ describe("WorkflowDetailClient — schedule actions", () => {
     ui();
     await waitFor(() => screen.getByText("0 9 * * 1-5"));
 
-    fireEvent.click(screen.getByTitle("Click để sửa"));
-    await waitFor(() => screen.getByRole("textbox"));
+    fireEvent.click(screen.getByText("0 9 * * 1-5"));
+    await waitFor(() => screen.getByPlaceholderText("0 9 * * 1-5"));
 
-    fireEvent.change(screen.getByRole("textbox"), { target: { value: "0 12 * * *" } });
-    fireEvent.blur(screen.getByRole("textbox"));
+    fireEvent.change(screen.getByPlaceholderText("0 9 * * 1-5"), { target: { value: "0 12 * * *" } });
+    fireEvent.click(screen.getByText("Lưu lịch"));
 
     await waitFor(() => {
       expect(screen.getByText("Lưu cron thất bại.")).toBeTruthy();

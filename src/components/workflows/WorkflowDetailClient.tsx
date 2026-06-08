@@ -32,6 +32,7 @@ import { useLang, useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import { useWorkflowEvents } from "@/hooks/useWorkflowEvents";
 import type { Workflow, WorkflowRun, WorkflowRunStep, WorkflowSchedule } from "@/db/schema";
+import { RecurrencePicker, describeCron } from "./RecurrencePicker";
 
 // ----- Types -----
 type RunDetail = { run: WorkflowRun; steps: WorkflowRunStep[] };
@@ -504,32 +505,24 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
 
         {/* Schedule form */}
         {showScheduleForm && (
-          <div className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-            <label className="flex flex-col gap-1">
-              <span className="text-xs text-neutral-500">{t("wf.detail.cronLabel")}</span>
-              <input
-                type="text"
-                value={cronInput}
-                onChange={(e) => setCronInput(e.target.value)}
-                placeholder="0 9 * * 1-5"
-                className="w-52 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-sm outline-none focus:border-[var(--color-accent)] dark:border-neutral-700 dark:bg-neutral-950"
-                aria-label={t("wf.detail.cronLabel")}
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => void handleSaveSchedule()}
-              disabled={savingSchedule || !cronInput.trim()}
-              className={btn("primary")}
-            >
-              {savingSchedule ? <Loader2 size={13} className="animate-spin" aria-hidden /> : null}
-              {t("wf.detail.cronSave")}
-            </button>
-            {scheduleNote && (
-              <p className={"text-xs " + (scheduleNote.ok ? "text-green-600" : "text-red-500")}>
-                {scheduleNote.msg}
-              </p>
-            )}
+          <div className="mb-4 flex flex-col gap-3 rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
+            <RecurrencePicker initialCron="" onChange={setCronInput} t={t} />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleSaveSchedule()}
+                disabled={savingSchedule || !cronInput.trim()}
+                className={btn("primary")}
+              >
+                {savingSchedule ? <Loader2 size={13} className="animate-spin" aria-hidden /> : null}
+                {t("wf.detail.cronSave")}
+              </button>
+              {scheduleNote && (
+                <p className={"text-xs " + (scheduleNote.ok ? "text-green-600" : "text-red-500")}>
+                  {scheduleNote.msg}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -548,7 +541,7 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-100 text-xs font-semibold text-neutral-500 dark:border-neutral-800">
-                  <th className="px-4 py-3 text-left">{t("wf.schedule.col.cron")}</th>
+                  <th className="px-4 py-3 text-left">{t("wf.recur.scheduleCol")}</th>
                   <th className="px-4 py-3 text-left">{t("wf.schedule.col.tz")}</th>
                   <th className="px-4 py-3 text-left">{t("wf.schedule.col.next")}</th>
                   <th className="px-4 py-3 text-left">{t("wf.schedule.col.enabled")}</th>
@@ -558,32 +551,27 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {schedules.map((s) => (
                   <tr key={s.id} className="hover:bg-neutral-50 dark:hover:bg-neutral-800/50">
-                    <td className="px-4 py-3 font-mono text-xs">
+                    <td className="px-4 py-3 align-top text-sm">
                       {cronEditId === s.id ? (
-                        <input
-                          autoFocus
-                          type="text"
-                          value={cronDraft}
-                          onChange={(e) => setCronDraft(e.target.value)}
-                          onBlur={() => void handleSaveCron(s.id)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              void handleSaveCron(s.id);
-                            }
-                            if (e.key === "Escape") setCronEditId(null);
-                          }}
-                          title={t("wf.schedule.editCron")}
-                          className="w-32 rounded border border-[var(--color-accent)] bg-transparent px-1 py-0.5 font-mono text-xs focus:outline-none"
-                        />
+                        <div className="flex min-w-[18rem] flex-col gap-2" data-testid="inline-recur-edit">
+                          <RecurrencePicker initialCron={s.cron} onChange={setCronDraft} t={t} />
+                          <div className="flex gap-1.5">
+                            <button type="button" onClick={() => void handleSaveCron(s.id)} className={btn("primary")}>
+                              {t("wf.detail.cronSave")}
+                            </button>
+                            <button type="button" onClick={() => setCronEditId(null)} className={btn("secondary")}>
+                              {t("wf.recur.cancel")}
+                            </button>
+                          </div>
+                        </div>
                       ) : (
                         <button
                           type="button"
-                          title={t("wf.schedule.clickToEdit")}
+                          title={`${t("wf.schedule.clickToEdit")} · ${s.cron}`}
                           onClick={() => { setCronDraft(s.cron); setCronEditId(s.id); }}
-                          className="hover:text-[var(--color-accent)] transition"
+                          className="text-left hover:text-[var(--color-accent)] transition"
                         >
-                          {s.cron}
+                          {describeCron(s.cron, t)}
                         </button>
                       )}
                     </td>
