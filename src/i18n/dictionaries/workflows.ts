@@ -26,6 +26,8 @@ export const workflows: Dict = {
   "wf.runNow": { vi: "Chạy ngay", en: "Run now", zh: "立即运行" },
   "wf.view": { vi: "Xem chi tiết", en: "View details", zh: "查看详情" },
   "wf.edit": { vi: "Chỉnh sửa", en: "Edit", zh: "编辑" },
+  "wf.rename": { vi: "Đổi tên", en: "Rename", zh: "重命名" },
+  "wf.renameLabel": { vi: "Tên workflow", en: "Workflow name", zh: "工作流名称" },
   "wf.clone": { vi: "Nhân bản", en: "Clone", zh: "克隆" },
   "wf.delete": { vi: "Xoá", en: "Delete", zh: "删除" },
   "wf.cancel": { vi: "Đóng", en: "Close", zh: "关闭" },

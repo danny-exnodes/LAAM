@@ -13,7 +13,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { GitBranch, Play, Eye, Copy, AlertTriangle, Loader2, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import { GitBranch, Play, Eye, Copy, AlertTriangle, Loader2, Pencil, Type, Trash2, MoreHorizontal } from "lucide-react";
 import { useLang, useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import { PageHeader } from "@/components/page-header";
@@ -88,6 +88,29 @@ export function WorkflowsClient() {
 
   // Row actions dropdown — only one open at a time
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // Inline rename (A3) — renameId = the row being renamed; draft holds the edited name.
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const handleRename = useCallback(
+    async (wfId: string) => {
+      const name = renameDraft.trim();
+      setRenameId(null);
+      if (!name) return;
+      setWorkflows((prev) => prev.map((w) => (w.id === wfId ? { ...w, name } : w))); // optimistic
+      setActionError(null);
+      try {
+        const res = await fetch(`/api/workflows/${encodeURIComponent(wfId)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        if (!res.ok) setActionError(t("wf.actionErr"));
+      } catch {
+        setActionError(t("wf.actionErr"));
+      }
+    },
+    [renameDraft, t],
+  );
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -353,7 +376,27 @@ export function WorkflowsClient() {
                             />
                           )}
                           <div>
-                            <div className="font-medium">{wf.name}</div>
+                            {renameId === wf.id ? (
+                              <input
+                                autoFocus
+                                value={renameDraft}
+                                onChange={(e) => setRenameDraft(e.target.value)}
+                                onBlur={() => void handleRename(wf.id)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") { e.preventDefault(); void handleRename(wf.id); }
+                                  if (e.key === "Escape") setRenameId(null);
+                                }}
+                                aria-label={t("wf.renameLabel")}
+                                className="w-full rounded border border-[var(--color-accent)] bg-transparent px-1.5 py-0.5 text-sm font-medium focus:outline-none"
+                              />
+                            ) : (
+                              <Link
+                                href={`/workflows/${encodeURIComponent(wf.id)}`}
+                                className="font-medium transition hover:text-[var(--color-accent)] hover:underline"
+                              >
+                                {wf.name}
+                              </Link>
+                            )}
                             {wf.description && (
                               <div className="mt-0.5 line-clamp-1 max-w-xs text-xs text-neutral-500">
                                 {wf.description}
@@ -433,6 +476,15 @@ export function WorkflowsClient() {
                                   <Pencil size={14} aria-hidden />
                                   {t("wf.edit")}
                                 </Link>
+                                <button
+                                  type="button"
+                                  onClick={() => { setOpenMenuId(null); setRenameDraft(wf.name); setRenameId(wf.id); }}
+                                  aria-label={t("wf.rename")}
+                                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-neutral-700 hover:bg-neutral-50 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                                >
+                                  <Type size={14} aria-hidden />
+                                  {t("wf.rename")}
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => { setOpenMenuId(null); void handleClone(wf.id); }}
