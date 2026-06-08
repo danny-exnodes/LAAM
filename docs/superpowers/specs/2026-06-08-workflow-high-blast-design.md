@@ -199,8 +199,11 @@ fail-closed default · write-idempotency WAL ([`idempotency.ts`](../../src/lib/w
 
 ---
 
-## 11. Manual UX — quyết định chờ user
-CTO khuyến nghị manual HIGH-write **mặc định dry-run** (nút "chạy thật" tường minh) — cổng-người rẻ khi người đang ngồi đó, không phá no-confirm của scheduled. User chọn (D5) no-confirm thẳng. **Cần user chốt:** giữ no-confirm thẳng cho manual, hay nhận khuyến nghị dry-run-default? (Ảnh hưởng UI editor + route `/run`, không ảnh hưởng cơ chế gate.)
+## 11. Manual UX — dry-run-default (user chốt 2026-06-08)
+**Quyết định:** manual HIGH-write **mặc định dry-run**; nút "chạy thật" tường minh để commit (theo khuyến nghị CTO, override D5 no-confirm-thẳng cho riêng đường manual). Scheduled vẫn no-confirm autonomous (không đổi).
+- **Phạm vi:** route `/run` + editor/detail client — manual run của workflow **chứa** write `workflowSafe` → mặc định `dryRun:true`, hiện kết quả (đích + args đã resolve), 1 nút "chạy thật" gửi `dryRun:false`. KHÔNG ảnh hưởng cơ chế gate (§3).
+- **Lưu ý:** "chạy thật" là run thật MỚI (agent non-deterministic → nội dung có thể khác preview chút); đây là cổng-người sanity-check đích, không phải snapshot-then-commit.
+- **Slice riêng:** UX này tách khỏi PR cơ chế (cơ chế = security-critical, review riêng); ship sau khi cơ chế merge.
 
 ---
 
