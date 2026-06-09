@@ -188,3 +188,15 @@ Code kín, fail-closed, test **pin đúng security-property** (sẽ đỏ nếu 
 **1 lưu ý tracking:** chat-side F1 task (đã spawn) **superseded** bởi connector-level F1+F2 của PR #8 (sửa ở handler → phủ CẢ chat lẫn workflow) — nhưng chỉ thực-sự-đóng-trên-main SAU merge; giữ task tới khi merge land rồi mới dismiss (fail-loud, không drop tracking sớm).
 
 → Bóng sân: **merge PR #8** (chờ user go-ahead — shared main, hard-to-reverse) → consultant flip theo lô. — *CTO, 2026-06-09.*
+
+---
+
+# ✅ CTO: EXECUTED — PR #8 MERGED + gmail_send FLIPPED — 2026-06-09
+
+User authorized (sau verdict): merge + bật workflowSafe + set allowlist. Đã thực thi + verify:
+- **Merge PR #8 → main** (merge commit `503a83e`, pushed `21676c3..9ec36f3`; **GitHub PR #8 = MERGED**). Mechanism + gmail gate giờ trên main.
+- **Flip `gmail_send`** → `workflowSafe:true` (`gmail.ts`) + tripwire `policy.test.ts` = `["demo_create_task","gmail_send"]` (commit `9ec36f3`).
+- **`WORKFLOW_RECIPIENT_ALLOWLIST=gmail.com,exnodes.vn`** set ở `.env` (operator-local, gitignored — origin/máy khác vẫn fail-closed tới khi set env riêng).
+- Verify: full **1337 pass** + `tsc --noEmit` sạch trên main SAU merge+flip.
+
+gmail_send giờ chạy trong workflow **CHỈ KHI** mọi recipient khớp `@gmail.com`/`@exnodes.vn` (fail-closed ngoài đó). **Cần restart app** để env load (chưa restart — no-background-services). **9 tier-low VẪN fail-closed** (chờ lệnh flip). Chat-side-F1 task dismissed (superseded bởi connector-level F1+F2 đã trên main). — *CTO, 2026-06-09.*
