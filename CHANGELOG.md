@@ -9,6 +9,26 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+---
+
+## [2.1.0] — 2026-06-09 — Durable AI Workflows, Gmail-send an toàn & World-Tools
+
+> **LAAM v2.1** biến workflow thành **đáng tin cậy để chạy nền**: tự phục hồi sau
+> crash, lập lịch cron, và — lần đầu — **ghi ra ứng dụng ngoài** (tạo card/issue,
+> **gửi Gmail**) dưới các cổng an toàn **fail-closed**. Kèm **World-Tools** (web
+> search/read, tính toán), loạt nâng cấp **Chat**, **Eval v2** (đo selection-at-scale)
+> và **redesign "Matte Dark"** toàn platform. **1337 test xanh**, `tsc` sạch.
+
+### Đã thêm — AI Workflow: connector writes trong workflow (HIGH-blast) + Gmail recipient-gate (2026-06-08/09)
+- **Cờ tự-khai `workflowSafe`** (suy từ registry, **fail-closed** mặc định) thay `BLAST_LOW` hardcoded: một connector `write` chỉ chạy trong workflow khi tool tự khai `workflowSafe:true`. **Dry-run** preview mọi write (mock side-effect, không gửi thật); **real-run** enforce gate. Seam `dryRun` là hằng-số/run → không có đường real-run lọt nhánh mock.
+- **Recipient-gate cho `gmail_send`** (tool tier-high-exfil **duy nhất** — đã verify gdrive/gcal chỉ ghi tài-nguyên-mình-sở-hữu): trong workflow chỉ gửi khi **mọi** người nhận (đã resolve) khớp **operator allowlist** `WORKFLOW_RECIPIENT_ALLOWLIST` (domain hoặc full-address, **không** author-widenable). **Fail-closed** (G4/G5): allowlist rỗng / 1 recipient ngoài danh sách → throw.
+- **Chống RFC 2822 header-injection** — sửa ở tầng connector nên đóng **cả chat lẫn workflow**: **F1** reject CRLF ở `to`/`subject`; **F2** dựng lại `To:` từ parser canonical dùng-chung `parseRecipients` (chỉ chấp địa chỉ trần `local@domain`, loại display-name/comment/nhiều-`@`/CRLF) → "gate-thấy == Gmail-gửi", xoá parser-differential. `body` đa-dòng vẫn hợp lệ (digest).
+- `gmail_send` đã **flip `workflowSafe:true`** (defense-in-depth 3 lớp: cờ code ⊥ operator allowlist ⊥ recipient khớp per-run); 9 tool tier-low (github/jira/trello/gcal/gdrive) vẫn fail-closed tới khi flip có chủ đích. Specs: `docs/superpowers/specs/2026-06-08-workflow-high-blast-design.md` + `2026-06-09-gmail-recipient-gate-design.md`.
+
+### Đã đổi — Hạ tầng / vận hành
+- **Postgres dev đổi host-port → `5434`** (container vẫn `5432`) tránh đụng Postgres dự án khác trên `:5432`. Cập nhật `DATABASE_URL` (`.env`/`.env.example`); override in-network của app container giữ nguyên `postgres:5432`.
+- **Re-sync `package-lock.json` trong `node:22-alpine`** giữ các optional dep musl/WASM (`@emnapi`, `@tailwindcss/oxide`) mà npm host hay rớt → `npm ci` của Docker build không gãy.
+
 ### Đã đổi — Redesign giao diện "Matte Dark" (toàn platform, 2026-06-07)
 - **Ngôn ngữ thị giác mới "Matte Dark"** (KHÔNG glassmorphism): bề mặt **đặc/matte** ngả cyan, chiều sâu từ **gradient nền + bloom** (không translucency/`backdrop-blur`). Accent thương hiệu **tím `#6d5efc` → cyan `#36a6d6`**; nền tối `#001616`; tránh màu chói (matte, gam lạnh).
 - **Đòn bẩy token (áp toàn app, không sửa call-site):** retint cả thang `neutral` (~950 lượt dùng cho surface/border/text) sang họ teal, **giữ nguyên độ sáng từng nấc** ⇒ mọi `*-neutral-*` ngả cyan mà **tỉ lệ tương phản không đổi**. Đầu tối (800/900/950) canh thẳng với token `--surface-*`/`--bg-base`.
@@ -250,4 +270,6 @@ docker compose -f docker-compose.yml -f docker-compose.macos.yml up -d --build
 
 ---
 
+[2.1.0]: https://github.com/danny-exnodes/LAAM/releases/tag/v2.1.0
+[2.0.0]: https://github.com/danny-exnodes/LAAM/releases/tag/v2.0.0
 [0.9.0]: https://github.com/danny-exnodes/LAAM/releases/tag/v0.9.0
