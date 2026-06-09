@@ -15,7 +15,9 @@ services:
       POSTGRES_PASSWORD: laam
       POSTGRES_DB: laam
     ports:
-      - "5432:5432"
+      # Host port 5434 (container stays 5432) — avoids the conflict with another
+      # project's Postgres already on host :5432 (e.g. am-ai-postgres).
+      - "5434:5432"
     volumes:
       - laam-v2-pg:/var/lib/postgresql/data
     healthcheck:
