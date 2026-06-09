@@ -2,8 +2,14 @@ import { describe, expect, test, vi } from "vitest";
 
 // Mock connectors execute để phân biệt "gate chặn" vs "lọt xuống execute".
 // vi.hoisted: factory vi.mock được hoist lên đầu file → biến phải qua hoisted.
-const { execSpy } = vi.hoisted(() => ({ execSpy: vi.fn(async () => ({ ok: true })) }));
+const { execSpy, recipientSpy } = vi.hoisted(() => ({
+  execSpy: vi.fn(async () => ({ ok: true })),
+  recipientSpy: vi.fn(),
+}));
 vi.mock("@/lib/connectors", () => ({ execute: execSpy }));
+// Spy the recipient gate: its BEHAVIOR is tested in recipient.test.ts; here we verify WIRING
+// (invoked in the real-execute branch with resolved args; skipped on the dry-run mock path).
+vi.mock("./recipient", () => ({ assertRecipientAllowed: recipientSpy }));
 
 import { buildRunNode } from "./runtime";
 import { emptyContext } from "./types";
@@ -63,5 +69,27 @@ describe("buildRunNode — dry-run mocks connector writes", () => {
     const out = await run(node, emptyContext({ source: "manual" }));
     expect(execSpy).not.toHaveBeenCalled(); // mock — không execute thật
     expect(out).toMatchObject({ dryRun: true, wouldHaveCalled: "trello_create_card", args: { name: "x" } });
+  });
+});
+
+describe("buildRunNode — recipient gate wired into real-execute", () => {
+  test("real-run connector → assertRecipientAllowed(action, resolvedArgs) called", async () => {
+    execSpy.mockClear();
+    recipientSpy.mockClear();
+    const run = buildRunNode("u1");
+    const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "demo", action: "demo_create_task", args: { title: "x" } };
+    await run(node, emptyContext({ source: "manual" }));
+    expect(recipientSpy).toHaveBeenCalledWith("demo_create_task", { title: "x" });
+    expect(execSpy).toHaveBeenCalled();
+  });
+
+  test("dry-run write → assertRecipientAllowed NOT called (mock short-circuits before real-execute)", async () => {
+    execSpy.mockClear();
+    recipientSpy.mockClear();
+    const run = buildRunNode("u1", { dryRun: true });
+    const node: WfConnectorNode = { id: "n1", kind: "connector", connectorId: "demo", action: "demo_create_task", args: { title: "x" } };
+    await run(node, emptyContext({ source: "manual" }));
+    expect(recipientSpy).not.toHaveBeenCalled();
+    expect(execSpy).not.toHaveBeenCalled();
   });
 });
