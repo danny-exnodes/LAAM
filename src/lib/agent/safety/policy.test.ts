@@ -70,11 +70,13 @@ describe("isWorkflowSafe (workflow-readiness — fail-closed default)", () => {
   test("tool lạ → false (fail-closed)", () => {
     expect(isWorkflowSafe("anything_else")).toBe(false);
   });
-  test("đúng tập workflowSafe (v1 = chỉ demo) — tripwire: chưa flip tool nào", () => {
-    // Khi flip tier-low (sau merge), cập nhật list này MỘT CÁCH CÓ Ý — như audit test write-surface.
+  test("đúng tập workflowSafe (demo + gmail_send) — tripwire: flip CÓ Ý", () => {
+    // gmail_send flip CÓ Ý 2026-06-09: CTO code-verify parseRecipients + recipient-allowlist
+    // gate (chỉ chạy khi WORKFLOW_RECIPIENT_ALLOWLIST set + recipient khớp). 9 tool tier-low
+    // VẪN fail-closed tới khi flip. Thêm/bớt workflowSafe phải cập nhật list này (audit).
     const safe = CONNECTORS.flatMap((c) =>
       c.tools.filter((t) => t.workflowSafe).map((t) => t.function.name),
     ).sort();
-    expect(safe).toEqual(["demo_create_task"]);
+    expect(safe).toEqual(["demo_create_task", "gmail_send"]);
   });
 });
