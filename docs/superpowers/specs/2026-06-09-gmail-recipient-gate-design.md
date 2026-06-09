@@ -1,6 +1,6 @@
 # Design: Gmail recipient-control gate (tier-high-exfil destination bound)
 
-**Ngày:** 2026-06-09 · **Vai trò:** technical consultant · **Trạng thái:** 🟢 F1+F2 FOLDED (§3.2/§3.5/§6/§10) theo CTO §9 — model duyệt; header-injection đóng ở tầng connector (canonical parse + sanitize). **1 đính chính (§10):** F1 chỉ chặn CRLF ở `to`+`subject` (header fields); `body` KHÔNG chặn (multi-line hợp lệ + nối sau `\r\n\r\n` → không inject header). Implementation sau PR #8 merge → gửi CTO xác nhận đính chính trước flip.
+**Ngày:** 2026-06-09 · **Vai trò:** technical consultant · **Trạng thái:** 🟢 SPEC CLEAR (CTO confirm §11) — model + F1/F2 fold sạch; đính chính `body` (F1=to+subject only, không body) **CTO xác nhận đúng** (verify `gmail.ts:211` body sau separator). Flip `gmail_send` chỉ sau PR #8 merge + implement + CTO verify CODE `parseRecipients` + operator set allowlist.
 
 > **TL;DR:** `gmail_send` là tool tier-high-exfil **duy nhất** (gdrive/gcal đã verify own-resource). CTO không ký mở `gmail_send` trần — bắt buộc 1 control-đích. Spec này thêm **recipient-allowlist gate**: tool tự-khai `recipientField`; runtime kiểm recipient (đã resolve) phải khớp **operator env allowlist** (`WORKFLOW_RECIPIENT_ALLOWLIST`), nếu không → fail-closed THROW. Không phải confirm-machinery (tôn trọng no-confirm của user) — chỉ chặn vector exfil. Gmail cần **3 điều kiện** để chạy: `workflowSafe:true` (flip) + allowlist set + recipient khớp.
 
@@ -196,3 +196,19 @@ Verify handler thật (`gmail.ts:201-219`). BLOCKER đúng — đã fold §3.2/�
 - Fix ở tầng connector → đóng luôn **chat-side** vuln (CTO nêu), không chỉ workflow.
 
 **→ Xin CTO xác nhận đính chính `body`** (KHÔNG chặn CRLF body) — phần còn lại fold đúng §9. Sau xác nhận + PR #8 merge → implement → flip `gmail_send`. — *consultant, 2026-06-09.*
+
+---
+
+## 11. CTO CONFIRM — 2026-06-09: đính chính body ĐÚNG, fold sạch, spec CLEAR
+
+**✅ Xác nhận đính chính `body`.** Verify `gmail.ts:211` — header block đóng ở `...\r\n\r\n`, `body` nối ở `:212` (sau separator) → CRLF body = **nội dung**, không inject header; chặn nó **phá email multi-line** (digest). **F1 của tôi (§9) gồm `body` là OVER-BROAD — anh sửa đúng.** F1 = `to`+`subject` only.
+
+**✅ Fold F1+F2 đúng + đầy đủ:**
+- `to`-injection đóng (F1 reject CRLF **VÀ** F2 canonical-parse — double cover).
+- `subject`-injection đóng (F1).
+- parser-differential đóng (F2 shared `parseRecipients`, handler dựng `To:` từ list canonical = gate-thấy = Gmail-gửi).
+- `body` đúng-không-over-block. §6 test phủ trúng cả 5 (incl. body-multiline-OK).
+
+**Verdict: 🟢 spec CLEAR** (model + F1/F2 + đính chính). **Flip `gmail_send` CHỈ sau:** (1) PR #8 mechanism merge, (2) implement F1/F2 + tôi **verify CODE** (không chỉ spec) `parseRecipients` kín (regex bare-addr không lọt CRLF/`<>`/`()`), (3) operator set `WORKFLOW_RECIPIENT_ALLOWLIST`. 9 tool tier-low không liên quan, đi tiếp.
+
+**Lưu ý task:** chat-side handler fix (F1) tôi đã spawn task — sẽ chỉnh scope = `to`+`subject` only (theo đính chính này). — *CTO, 2026-06-09.*
