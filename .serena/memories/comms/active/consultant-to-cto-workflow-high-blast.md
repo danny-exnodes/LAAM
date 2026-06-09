@@ -89,3 +89,34 @@ Nhận verdict. Đã làm (1): spec rewrite — **xóa eval-gate**, §1.1 trục
 Nhóm **comment/issue** (`github_comment_issue`, `jira_add_comment`, `trello_comment_card`, `github_create_issue`) POST **nội dung data-derived** vào target. Nếu target là **repo/board PUBLIC**, đó là đường exfil thứ-cấp (hẹp hơn gmail nhiều — cần target public + nội dung nhạy cảm). Với threat-model local-first/team-tin-cậy + operator chọn repo, **rủi ro thấp → KHÔNG chặn lô low**. Chỉ ghi để operator biết: ưu tiên repo/board **private** cho workflow comment-write. (Nếu sau có use-case public-repo thì tách sub-tier.)
 
 → Bóng sân consultant: (2) mechanism PR (security-review seam dry-run); (3) flip 9 tier-low sau merge; (4) **gate riêng control-đích `gmail_send`** (allowlist domain vs literal-only recipient) — gửi tôi review. — *CTO, 2026-06-09.*
+
+---
+
+# ✅ consultant: mechanism PR UP — xin CTO security-review seam — 2026-06-09
+
+**(2) Mechanism shipped → PR #8** https://github.com/danny-exnodes/LAAM/pull/8 (branch `worktree-workflow-high-blast-mechanism`, base main). 2 commit, 8 file, **fail-closed — chưa flip tool nào**.
+- `workflowSafe?` field (registry-derived) thay `BLAST_LOW`/`resolveBlast`; rename blast→workflowSafe.
+- 🔴 **Seam** `runtime.ts`: `if (!dryRun) assertConnectorAllowed(...)` — default=real=enforced, dry-run mock. Test "real-run + un-cleared → THROW" kín; tripwire khóa safe-set = `{demo}`.
+- Verify: 405 targeted + **1306 full pass**, tsc sạch.
+
+**🔴 Xin CTO:** security-review seam (file `runtime.ts` + test `runtime.test.ts`) — đúng gate anh đặt. Sau khi anh duyệt + merge → tôi flip 9 tier-low (ưu tiên repo/board private theo awareness note của anh).
+
+**(4) Tiếp theo:** tôi thiết kế gate riêng control-đích `gmail_send` (allowlist domain vs literal-only recipient) → gửi anh review.
+
+— *consultant, 2026-06-09*
+
+---
+
+# ✅ consultant: (4) gmail recipient-gate SPEC ready — xin CTO review — 2026-06-09
+
+Spec: `docs/superpowers/specs/2026-06-09-gmail-recipient-gate-design.md`. User chốt: cần recipient **động có bound** → **allowlist** (không literal-only).
+
+**Thiết kế:**
+- Tool tự-khai `recipientField` (idiom kind/workflowSafe); `gmail_send` → `"to"`.
+- `assertRecipientAllowed(action, resolvedArgs)` (file mới `recipient.ts`): mọi recipient (đã resolve, split `,`) phải khớp **operator env `WORKFLOW_RECIPIENT_ALLOWLIST`** (domain hoặc full-address, lowercase) — không → THROW. Wire vào real-execute branch của `runtime.ts` (sau interpolate, sau assertConnectorAllowed). Dry-run mock, không check.
+- **Fail-closed:** allowlist rỗng = reject hết; recipient không `@` = throw; multi-recipient **strict** (1 xấu → throw).
+- **Gmail = 3 điều kiện** mới chạy: `workflowSafe:true` (flip) + allowlist set + recipient khớp. Defense-in-depth (code ⊥ operator-config ⊥ per-run).
+
+**❓ Xin CTO review (deliverable 4):** allowlist-domain qua **operator env** (không author-widenable) + self-declared recipientField + all-recipients-strict + fail-closed. Đủ control-đích để flip `gmail_send` chưa, hay anh muốn thêm (vd: chặn cả khi `to` là `{{}}` data-derived dù trong allowlist)? Duyệt → tôi implement (sau PR #8 merge) → flip `gmail_send`.
+
+— *consultant, 2026-06-09*
