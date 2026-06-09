@@ -1,6 +1,6 @@
 # Design: Gmail recipient-control gate (tier-high-exfil destination bound)
 
-**Ngày:** 2026-06-09 · **Vai trò:** technical consultant · **Trạng thái:** 🟢 SPEC CLEAR (CTO confirm §11) — model + F1/F2 fold sạch; đính chính `body` (F1=to+subject only, không body) **CTO xác nhận đúng** (verify `gmail.ts:211` body sau separator). Flip `gmail_send` chỉ sau PR #8 merge + implement + CTO verify CODE `parseRecipients` + operator set allowlist.
+**Ngày:** 2026-06-09 · **Vai trò:** technical consultant · **Trạng thái:** 🟢 SPEC CLEAR (CTO confirm §11) — model + F1/F2 fold sạch; đính chính `body` (F1=to+subject only, không body) **CTO xác nhận đúng** (verify `gmail.ts:211` body sau separator). Flip `gmail_send` chỉ sau PR #8 merge + implement + CTO verify CODE `parseRecipients` + operator set allowlist. **CTO code-verify ✅ 2026-06-09 (PASS — regex kín; seam không bypass) → APPROVED merge, xem §13.**
 
 > **TL;DR:** `gmail_send` là tool tier-high-exfil **duy nhất** (gdrive/gcal đã verify own-resource). CTO không ký mở `gmail_send` trần — bắt buộc 1 control-đích. Spec này thêm **recipient-allowlist gate**: tool tự-khai `recipientField`; runtime kiểm recipient (đã resolve) phải khớp **operator env allowlist** (`WORKFLOW_RECIPIENT_ALLOWLIST`), nếu không → fail-closed THROW. Không phải confirm-machinery (tôn trọng no-confirm của user) — chỉ chặn vector exfil. Gmail cần **3 điều kiện** để chạy: `workflowSafe:true` (flip) + allowlist set + recipient khớp.
 
@@ -235,3 +235,15 @@ User chỉ đạo implement sau §11 CLEAR. Code TDD trên branch mechanism → 
 **README:** không có env-section (các env khác như `WORKFLOW_TICK_SECRET` cũng chỉ ở `.env.example`) → document ở `.env.example` (canonical), bỏ README để nhất quán.
 
 **Còn lại để flip `gmail_send`:** CTO code-verify `parseRecipients` + security-review seam → merge PR #8 → operator set `WORKFLOW_RECIPIENT_ALLOWLIST` → flip (`workflowSafe:true` + cập nhật tripwire `policy.test.ts`).
+
+---
+
+## 13. CTO CODE-VERIFY + MERGE APPROVAL — 2026-06-09: 🟢 PASS
+
+CTO re-verify trên branch `worktree-workflow-high-blast-mechanism@cab2072` (context mới, verify-not-prose):
+- `parseRecipients` regex **KÍN** — CRLF / `<>` / `()` / multiple-`@` / bare-host đều throw (JS `$` non-`m` = cuối-tuyệt-đối input → chặn CRLF; negated-class loại structural chars).
+- Seam `runtime.ts` **không có real-run bypass** — `dryRun` hằng-số/run, 2 gate (readiness + recipient) luôn enforce trên real-write; default=real=enforced.
+- Fail-closed G4/G5 (`recipient.ts`) · F1(`to`+`subject`)/F2(canonical `To:`) đúng (`gmail.ts`) · deviation pure-module (`connectors/recipients.ts`) ACCEPTED (phá vòng phụ thuộc).
+- `tsc --noEmit` exit 0 · **64/64** test (7 file) · test **pin đúng** security-property (Rule 9/13, incl. anti-echo F2 feed mixed-case→assert canonical).
+
+**Verdict: 🟢 APPROVED merge PR #8** (fail-closed — KHÔNG tool nào flip khi merge; gate dormant tới operator-config + flip tường minh). Chi tiết đầy đủ: comms `consultant-to-cto-workflow-high-blast` (CTO code-verify section). — *CTO, 2026-06-09.*

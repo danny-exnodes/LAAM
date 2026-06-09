@@ -152,3 +152,39 @@ User chỉ đạo implement sau khi spec CLEAR (§11). Đã code TDD trên branc
 Sau CTO code-verify + security-review seam + merge + operator set `WORKFLOW_RECIPIENT_ALLOWLIST` → flip `gmail_send`. 9 tier-low flip song song (sau merge).
 
 — *consultant, 2026-06-09*
+
+---
+
+# ✅ CTO CODE-VERIFY + SEAM SECURITY-REVIEW — 2026-06-09: 🟢 PASS · APPROVED merge (fail-closed)
+
+**Method (verify-not-prose, CONTEXT MỚI — không tin summary của chính tôi):** re-read 6 file security-critical trên `worktree-workflow-high-blast-mechanism@cab2072` (worktree sạch) + `tsc --noEmit` **exit 0** (full project) + **64/64 test** (7 file: recipients/recipient/blast/policy/gmail/runtime/gate) + soi **CHẤT LƯỢNG** test (Rule 9/13), không chỉ "xanh".
+
+## 🔴 (Điều kiện flip #2) Code-verify `parseRecipients` — PASS, regex KÍN
+`/^[^\s@<>(),"]+@[^\s@<>(),"]+\.[^\s@<>(),"]+$/` — soi từng vector:
+- **CRLF:** `\s` gồm `\r`/`\n` → negated-class loại; JS `$` (KHÔNG cờ `m`) khớp **chỉ cuối-tuyệt-đối input** (khác Perl: KHÔNG khớp trước `\n` cuối) → `ok@x.com\r\nBcc:…` ⟹ throw. ✓
+- **display-name `<>`, comment `()`, quote `"`, comma trong token:** đều trong negated-class → throw ✓ (chặn recipient ẩn).
+- **multiple-`@`** (`a@b@x.com`): domain-part loại `@` → fail tại `@` thứ 2 → throw ✓ (chặn `a@b@evil.com`).
+- **bare-host** (`a@localhost`): bắt buộc `\.` → throw ✓. **internal-whitespace / empty / "1 xấu trong nhóm"** → throw ✓.
+Pipeline `split(",")→trim→lowercase→filter→test mỗi token`: đúng. **Không lọt case.**
+
+## 🔴 Seam security-review (`runtime.ts`) — PASS, KHÔNG có đường real-run bypass
+`dryRun` = **hằng-số/run** (đóng băng trong closure từ `opts?.dryRun ?? false`) → real-run (false) KHÔNG BAO GIỜ vào nhánh mock; cả 2 gate (`assertConnectorAllowed` readiness + `assertRecipientAllowed` đích) **LUÔN** chạy trước `connectorExecute` trên real-write. Default (no-opts)=real=enforced. `runtime.test.ts` chốt: real-run un-cleared→THROW + `execSpy` NOT called; recipient-gate gọi-trên-real / NOT-trên-dry-run-mock. ✓
+
+## ✅ Defense-in-depth còn lại — SOUND
+- `recipient.ts`: fail-closed G4 (allowlist rỗng→reject) + G5 strict-all-match (1 recipient xấu→throw cả lô) + shared `parseRecipients` (zero-differential gate↔Gmail). ✓
+- `gmail.ts`: F1 reject CRLF `to`+`subject` (KHÔNG body — sau `\r\n\r\n`, đúng §11) + F2 dựng `To:` từ `parseRecipients`. Test F2 feed mixed-case/space → assert **canonical output** = anti-echo Rule 13. ✓
+- `blast.ts`/`policy.ts`: derive-từ-registry, unknown→write/not-safe = fail-closed. ✓
+
+## ✅ Deviation §5 (`parseRecipients`→`connectors/recipients.ts` pure) — ACCEPTED
+Lý do phá vòng `gmail→workflow/recipient→registry→gmail` đúng; module pure (0 import) là cách sạch nhất, tốt hơn vị trí gốc trong spec.
+
+## Verdict: 🟢 APPROVED merge PR #8
+Code kín, fail-closed, test **pin đúng security-property** (sẽ đỏ nếu regress). Merge AN TOÀN — **KHÔNG tool nào flip** (gate dormant tới khi operator-config + flip tường minh).
+
+**Sau merge (gated, KHÔNG tự động):**
+1. `gmail_send` flip = `workflowSafe:true` + operator set `WORKFLOW_RECIPIENT_ALLOWLIST` + cập nhật tripwire `policy.test.ts`.
+2. 9 tier-low flip song song (ưu tiên repo/board **private** theo awareness note).
+
+**1 lưu ý tracking:** chat-side F1 task (đã spawn) **superseded** bởi connector-level F1+F2 của PR #8 (sửa ở handler → phủ CẢ chat lẫn workflow) — nhưng chỉ thực-sự-đóng-trên-main SAU merge; giữ task tới khi merge land rồi mới dismiss (fail-loud, không drop tracking sớm).
+
+→ Bóng sân: **merge PR #8** (chờ user go-ahead — shared main, hard-to-reverse) → consultant flip theo lô. — *CTO, 2026-06-09.*
