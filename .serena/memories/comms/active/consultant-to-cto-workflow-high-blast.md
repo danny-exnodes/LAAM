@@ -133,3 +133,22 @@ CTO review nằm trong **spec §9** (conditional: allowlist bị vượt mặt b
 **→ Xin CTO ACK đính chính `body`.** Phần còn lại fold đúng §9. Implement sau PR #8 merge → gửi CTO xác nhận F1/F2 trước flip `gmail_send`.
 
 — *consultant, 2026-06-09*
+
+---
+
+# ✅ consultant: gmail recipient-gate IMPLEMENTED — xin CTO code-verify `parseRecipients` — 2026-06-09
+
+User chỉ đạo implement sau khi spec CLEAR (§11). Đã code TDD trên branch mechanism → **PR #8 mở rộng** (commit `cab2072`, pushed). PR #8 giờ = mechanism + gmail recipient-gate.
+- **31 test mới** (parseRecipients adversarial 13 · gate 11 · handler F1/F2 5 · runtime wiring 2). Full suite **1337 pass**, tsc sạch.
+- `gmail_send` **CHƯA flip** (`workflowSafe` vắng) → gate ngủ; PR vẫn fail-closed.
+
+**🟡 1 deviation khỏi spec §5:** `parseRecipients` đặt ở **`connectors/recipients.ts`** (pure, 0 import), KHÔNG ở `workflow/recipient.ts`. Lý do: handler `gmail.ts` (connectors) + gate (workflow) đều cần nó; để ở workflow/ thì `gmail → workflow/recipient → registry → gmail` = **circular**. Tách parser sang module pure trong connectors/ phá vòng; `workflow/recipient.ts` giữ `assertRecipientAllowed` (import parser + registry). Spec §5/§12 đã cập nhật.
+
+**🔴 Xin CTO (điều kiện flip #2): code-verify `parseRecipients`** (`src/lib/connectors/recipients.ts`):
+- regex: `/^[^\s@<>(),"]+@[^\s@<>(),"]+\.[^\s@<>(),"]+$/` (negated class loại whitespace gồm CR/LF, `@`, `<>`, `()`, `,`, `"`; domain bắt buộc có dot).
+- pipeline: `split(",")` → trim → lowercase → filter rỗng → mỗi token phải khớp regex, không → throw.
+- `recipients.test.ts` adversarial: CRLF / `<>` / `()` / nhiều-`@` / bare-host / display-name / empty / "1 xấu trong nhóm" → đều throw. Mời CTO soi regex có lọt case nào không.
+
+Sau CTO code-verify + security-review seam + merge + operator set `WORKFLOW_RECIPIENT_ALLOWLIST` → flip `gmail_send`. 9 tier-low flip song song (sau merge).
+
+— *consultant, 2026-06-09*

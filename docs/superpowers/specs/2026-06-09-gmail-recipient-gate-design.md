@@ -111,7 +111,8 @@ Thiếu bất kỳ → fail-closed. Defense-in-depth: flip (code) ⊥ allowlist 
 |---|---|
 | `src/lib/connectors/types.ts` | +`recipientField?: string` trên `ConnectorTool` |
 | `src/lib/connectors/gmail.ts` | `gmail_send` khai `recipientField: "to"`; **F1** reject CRLF ở `to`+`subject`; **F2** dựng `To:` từ `parseRecipients` (không nối raw) |
-| `src/lib/workflow/recipient.ts` | **mới** — `parseRecipients` (F2, shared) + `assertRecipientAllowed` + parse env |
+| `src/lib/connectors/recipients.ts` | **mới** — `parseRecipients` (F2, parser PURE shared; đặt ở connectors/ để **phá vòng phụ thuộc** gmail↔workflow) |
+| `src/lib/workflow/recipient.ts` | **mới** — `assertRecipientAllowed` + `parseAllowlist` (env) |
 | `src/lib/workflow/runtime.ts` | wire `assertRecipientAllowed` vào real-execute branch |
 | `.env.example` · `README.md` | document `WORKFLOW_RECIPIENT_ALLOWLIST` (vi) |
 | tests | `recipient.test.ts` (mới) + `runtime.test.ts` (gmail recipient path) |
@@ -212,3 +213,25 @@ Verify handler thật (`gmail.ts:201-219`). BLOCKER đúng — đã fold §3.2/�
 **Verdict: 🟢 spec CLEAR** (model + F1/F2 + đính chính). **Flip `gmail_send` CHỈ sau:** (1) PR #8 mechanism merge, (2) implement F1/F2 + tôi **verify CODE** (không chỉ spec) `parseRecipients` kín (regex bare-addr không lọt CRLF/`<>`/`()`), (3) operator set `WORKFLOW_RECIPIENT_ALLOWLIST`. 9 tool tier-low không liên quan, đi tiếp.
 
 **Lưu ý task:** chat-side handler fix (F1) tôi đã spawn task — sẽ chỉnh scope = `to`+`subject` only (theo đính chính này). — *CTO, 2026-06-09.*
+
+---
+
+## 12. Implementation status — DONE in PR #8 (commit `cab2072`) — 2026-06-09
+
+User chỉ đạo implement sau §11 CLEAR. Code TDD trên branch mechanism → **PR #8 mở rộng** (mechanism + gmail gate). `gmail_send` **CHƯA flip** → gate dormant, PR fail-closed.
+
+| Thành phần | File | Test |
+|---|---|---|
+| `parseRecipients` (F2, pure shared) | `connectors/recipients.ts` | `recipients.test.ts` (13, adversarial) |
+| `assertRecipientAllowed` + `parseAllowlist` | `workflow/recipient.ts` | `recipient.test.ts` (11) |
+| `gmail_send` `recipientField:"to"` + F1 + F2 handler | `connectors/gmail.ts` | `gmail.test.ts` (+5, incl. body-multiline-OK) |
+| wire vào real-execute | `workflow/runtime.ts` | `runtime.test.ts` (+2 wiring) |
+| env doc | `.env.example` | — |
+
+**Verify:** 31 test mới · full suite **1337 pass** · `tsc` sạch.
+
+**🟡 Deviation khỏi §5 (đã ghi):** `parseRecipients` → `connectors/recipients.ts` (pure) thay vì `workflow/recipient.ts`, để phá vòng `gmail → workflow/recipient → registry → gmail`. `workflow/recipient.ts` chỉ giữ `assertRecipientAllowed`.
+
+**README:** không có env-section (các env khác như `WORKFLOW_TICK_SECRET` cũng chỉ ở `.env.example`) → document ở `.env.example` (canonical), bỏ README để nhất quán.
+
+**Còn lại để flip `gmail_send`:** CTO code-verify `parseRecipients` + security-review seam → merge PR #8 → operator set `WORKFLOW_RECIPIENT_ALLOWLIST` → flip (`workflowSafe:true` + cập nhật tripwire `policy.test.ts`).
