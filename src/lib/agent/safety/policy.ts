@@ -30,16 +30,15 @@ export function resolveKind(
   return "write";
 }
 
-// G2 blast-radius tier (orthogonal to read/write). v1 workflow runs may only
-// perform LOW-blast actions; everything else is HIGH and fail-closed in the
-// workflow connector path (manual AND scheduled). The allowlist is code-defined
-// (NOT user-editable) and fail-closed: anything not listed is HIGH. Reads are
-// gated separately by resolveKind — only WRITEs are blast-classified at the call
-// site. (spec scheduler "blast-radius gate, v1 BLAST_LOW-only".)
-export const BLAST_LOW: ReadonlySet<string> = new Set([
-  "demo_create_task", // credential-free demo write, low impact
-]);
+// Workflow-readiness gate (orthogonal to read/write). A connector WRITE may run inside a
+// workflow run ONLY if its tool self-declares workflowSafe:true. Derived from the CONNECTORS
+// registry (single source of truth, same idiom as kind) and FAIL-CLOSED: anything not declared
+// is treated as not-safe. Reads are gated separately by resolveKind — only WRITEs are
+// readiness-classified at the call site. (spec 2026-06-08 §3.)
+const WORKFLOW_SAFE: ReadonlySet<string> = new Set(
+  CONNECTORS.flatMap((c) => c.tools.filter((t) => t.workflowSafe).map((t) => t.function.name)),
+);
 
-export function resolveBlast(name: string): "low" | "high" {
-  return BLAST_LOW.has(name) ? "low" : "high";
+export function isWorkflowSafe(name: string): boolean {
+  return WORKFLOW_SAFE.has(name);
 }

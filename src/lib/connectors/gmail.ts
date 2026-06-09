@@ -3,6 +3,7 @@
 // token automatically. The gapi() wrapper reads creds.access_token, which execute()
 // keeps fresh before each call.
 import type { Connector } from "./types";
+import { parseRecipients } from "./recipients";
 
 const API = "https://gmail.googleapis.com";
 
@@ -145,6 +146,7 @@ const gmail: Connector = {
     {
       type: "function",
       kind: "write",
+      recipientField: "to", // outbound destination → workflow recipient-gate enforces allowlist
       function: {
         name: "gmail_send",
         description:
@@ -202,10 +204,20 @@ const gmail: Connector = {
       const to = String(args.to || "");
       const subject = String(args.subject || "");
       const body = String(args.body || "");
+      // F1 (header fields): reject CRLF in `to`/`subject` — they sit in the header block, so a
+      // newline is header injection. `body` is intentionally NOT checked: it is appended after
+      // the \r\n\r\n separator below and is legitimately multi-line (digest). (spec §3.5, §10.)
+      if (/[\r\n]/.test(to) || /[\r\n]/.test(subject)) {
+        throw new Error("gmail_send: ký tự xuống dòng trong 'to'/'subject' (header injection)");
+      }
+      // F2: rebuild `To:` from the SHARED canonical parser → bare addresses only, identical to
+      // what the workflow recipient-gate validated (zero differential). Throws on non-canonical
+      // input (display-name, comment, multiple-@, CRLF).
+      const toHeader = parseRecipients(to).join(", ");
       // RFC 2822 message; base64url-encoded as Gmail's `raw` field expects.
       const message =
         "To: " +
-        to +
+        toHeader +
         "\r\nSubject: " +
         subject +
         '\r\nContent-Type: text/plain; charset="UTF-8"\r\nMIME-Version: 1.0\r\n\r\n' +

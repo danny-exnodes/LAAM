@@ -31,6 +31,14 @@ export type ConnectorTool = {
   // classification from THIS — single source of truth, so adding a tool touches
   // one connector file and can never drift out of sync with a central name-list.
   kind: "read" | "write";
+  // Eval-readiness for workflow autonomy. ABSENT = false = fail-closed: the tool may
+  // NOT run in a workflow run until explicitly flipped (tier-low after merge; tier-high
+  // after a destination-control gate). Orthogonal to kind: reads aren't gated by this.
+  workflowSafe?: boolean;
+  // Name of the arg field holding the OUTBOUND destination (exfil target). When set, the
+  // workflow recipient-gate enforces the operator allowlist on this field's RESOLVED value.
+  // Absent → tool is not recipient-controlled. (spec 2026-06-09 §3.1.)
+  recipientField?: string;
   function: { name: string; description: string; parameters: object };
 };
 

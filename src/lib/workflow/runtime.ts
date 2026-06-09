@@ -1,8 +1,8 @@
 // buildRunNode CHUNG cho cả manual (route) lẫn scheduled (tickExecute). Wire
 // executors với runtime thật (closure userId). Agent node = read-only: tool union
 // chỉ internal read tools; withSafety bọc dispatch (write → throw). Connector node
-// đi qua BLAST GATE (assertConnectorAllowed) TRƯỚC khi execute → write blast-cao
-// fail-closed ở MỌI đường (manual + scheduled, spec F1 v1-LOW-only).
+// đi qua WORKFLOW-READINESS GATE (assertConnectorAllowed) TRƯỚC execute trên REAL-run →
+// write chưa-clear fail-closed (manual + scheduled). Dry-run preview: gate skip + mock write.
 import { runToolRounds } from "@/lib/agent/orchestrator";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { withSafety } from "@/lib/agent/safety/gate";
@@ -10,6 +10,7 @@ import { execute as connectorExecute } from "@/lib/connectors";
 import { callOllamaChat } from "./ollama";
 import { runAgentNode, runConnectorNode } from "./executors";
 import { assertConnectorAllowed } from "./blast";
+import { assertRecipientAllowed } from "./recipient";
 import { resolveKind } from "@/lib/agent/safety/policy";
 import type { RunContext, WfNode } from "./types";
 
@@ -19,14 +20,22 @@ export function buildRunNode(userId: string, opts?: { dryRun?: boolean }) {
   // Engine xử lý condition/foreach NỘI BỘ → runNode chỉ nhận agent|connector (hợp đồng A0).
   return (node: WfNode, ctx: RunContext) => {
     if (node.kind === "connector") {
-      assertConnectorAllowed(node.action, INTERNAL_TOOLS); // blast gate (fail-closed) — áp CẢ dry-run
+      // SECURITY-CRITICAL SEAM: real-run enforces the readiness gate (default = real =
+      // enforced). Dry-run is the NARROW, explicit opt-out — writes are mocked below, so an
+      // un-cleared write can be previewed but NEVER executes on any path.
+      if (!dryRun) assertConnectorAllowed(node.action, INTERNAL_TOOLS);
       // Dry-run: vô hiệu hoá SIDE-EFFECT của node WRITE — trả output giả để node sau /
       // nhánh condition vẫn chạy tiếp; READ vẫn execute THẬT (local model $0, xem spec).
-      // Blast gate KHÔNG bị bỏ qua → write blast-cao vẫn lỗi đúng như run thật (item D).
-      const execute = (action: string, args: Record<string, unknown>): Promise<unknown> =>
-        dryRun && resolveKind(action, INTERNAL_TOOLS) === "write"
-          ? Promise.resolve({ dryRun: true, wouldHaveCalled: action, args })
-          : connectorExecute(userId, action, args);
+      const execute = (action: string, args: Record<string, unknown>): Promise<unknown> => {
+        if (dryRun && resolveKind(action, INTERNAL_TOOLS) === "write") {
+          return Promise.resolve({ dryRun: true, wouldHaveCalled: action, args });
+        }
+        // Destination-safety: enforce the recipient allowlist on the RESOLVED args (real-run
+        // only — dry-run mocked above; no-op for tools without a recipientField). Runs after
+        // the readiness gate + interpolation. (spec 2026-06-09 §3.4.)
+        assertRecipientAllowed(action, args);
+        return connectorExecute(userId, action, args);
+      };
       return runConnectorNode(node, ctx, { execute });
     }
     if (node.kind === "agent") {

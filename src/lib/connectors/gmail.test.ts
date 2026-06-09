@@ -143,3 +143,52 @@ describe("gmail connector", () => {
     expect(decoded).toContain("Nội dung thư.");
   });
 });
+
+describe("gmail_send hardening (F1 sanitize + F2 canonical recipients)", () => {
+  test("F1: CRLF in `to` → throw, no fetch (header injection)", async () => {
+    const spy = vi.spyOn(global, "fetch");
+    await expect(
+      gmail.handlers.gmail_send({ to: "ok@x.com\r\nBcc: evil@y.com", subject: "s", body: "b" }, { access_token: "ya29" }),
+    ).rejects.toThrow();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("F1: CRLF in `subject` → throw, no fetch (header injection)", async () => {
+    const spy = vi.spyOn(global, "fetch");
+    await expect(
+      gmail.handlers.gmail_send({ to: "ok@x.com", subject: "hi\r\nBcc: evil@y.com", body: "b" }, { access_token: "ya29" }),
+    ).rejects.toThrow();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("F2: `To:` rebuilt from canonical parse (lowercased, joined) — gate-seen == sent", async () => {
+    const spy = vi.spyOn(global, "fetch");
+    spy.mockResolvedValueOnce(Response.json({ id: "s1" }));
+    await gmail.handlers.gmail_send({ to: "Alice@X.com,  Bob@Y.com ", subject: "s", body: "b" }, { access_token: "ya29" });
+    const [, init] = spy.mock.calls[0] as [string, RequestInit];
+    const decoded = Buffer.from((JSON.parse(String(init.body)) as { raw: string }).raw, "base64url").toString("utf8");
+    expect(decoded).toContain("To: alice@x.com, bob@y.com");
+  });
+
+  test("F2: display-name / brackets in `to` → throw, no fetch", async () => {
+    const spy = vi.spyOn(global, "fetch");
+    await expect(
+      gmail.handlers.gmail_send({ to: '"Evil" <a@x.com>', subject: "s", body: "b" }, { access_token: "ya29" }),
+    ).rejects.toThrow();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  test("multi-line body (newlines) is ALLOWED — digest case, not over-blocked", async () => {
+    const spy = vi.spyOn(global, "fetch");
+    spy.mockResolvedValueOnce(Response.json({ id: "s2" }));
+    const body = "Tóm tắt:\n- agent1: 3h\n- agent2: lỗi\n";
+    const r = (await gmail.handlers.gmail_send(
+      { to: "me@x.com", subject: "Digest", body },
+      { access_token: "ya29" },
+    )) as { ok: boolean };
+    expect(r.ok).toBe(true);
+    const [, init] = spy.mock.calls[0] as [string, RequestInit];
+    const decoded = Buffer.from((JSON.parse(String(init.body)) as { raw: string }).raw, "base64url").toString("utf8");
+    expect(decoded).toContain(body); // newlines preserved verbatim in the body
+  });
+});

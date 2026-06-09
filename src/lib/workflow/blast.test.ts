@@ -6,22 +6,22 @@ import type { Tool } from "@/lib/agent/types";
 // để resolveKind phân loại đúng connector actions theo allowlist policy.
 const internal: Tool[] = [];
 
-describe("assertConnectorAllowed (blast gate, v1 BLAST_LOW-only)", () => {
+describe("assertConnectorAllowed (workflow-readiness gate, fail-closed)", () => {
   test("connector READ qua được (demo_list_tasks)", () => {
     expect(() => assertConnectorAllowed("demo_list_tasks", internal)).not.toThrow();
   });
 
-  test("LOW write qua được (demo_create_task)", () => {
+  test("cleared write qua được (demo_create_task)", () => {
     expect(() => assertConnectorAllowed("demo_create_task", internal)).not.toThrow();
   });
 
-  test("HIGH write fail-closed THROW (trello_create_card)", () => {
-    expect(() => assertConnectorAllowed("trello_create_card", internal)).toThrow(/blast/i);
+  test("un-cleared write fail-closed THROW (trello_create_card)", () => {
+    expect(() => assertConnectorAllowed("trello_create_card", internal)).toThrow(/workflow/i);
   });
 
-  test("tool lạ (chưa phân loại) = write fail-closed → HIGH → THROW", () => {
-    // resolveKind tool lạ = write (fail-closed) + resolveBlast = high → gate chặn.
-    expect(() => assertConnectorAllowed("unknown_write_tool", internal)).toThrow(/blast/i);
+  test("tool lạ (chưa phân loại) = write fail-closed → un-cleared → THROW", () => {
+    // resolveKind tool lạ = write (fail-closed) + isWorkflowSafe = false → gate chặn.
+    expect(() => assertConnectorAllowed("unknown_write_tool", internal)).toThrow(/workflow/i);
   });
 
   test("thông báo lỗi nêu tên action", () => {
