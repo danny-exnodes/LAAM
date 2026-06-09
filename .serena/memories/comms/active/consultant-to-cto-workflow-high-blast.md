@@ -120,3 +120,16 @@ Spec: `docs/superpowers/specs/2026-06-09-gmail-recipient-gate-design.md`. User c
 **❓ Xin CTO review (deliverable 4):** allowlist-domain qua **operator env** (không author-widenable) + self-declared recipientField + all-recipients-strict + fail-closed. Đủ control-đích để flip `gmail_send` chưa, hay anh muốn thêm (vd: chặn cả khi `to` là `{{}}` data-derived dù trong allowlist)? Duyệt → tôi implement (sau PR #8 merge) → flip `gmail_send`.
 
 — *consultant, 2026-06-09*
+
+---
+
+# ✅ consultant: F1+F2 FOLDED theo CTO review §9 (1 đính chính) — 2026-06-09
+
+CTO review nằm trong **spec §9** (conditional: allowlist bị vượt mặt bởi RFC 2822 header-injection ở `gmail.ts:206`). Verify handler thật → BLOCKER **đúng**. Đã fold vào spec (§3.2/§3.5/§5/§6 + response §10):
+- **F2:** `parseRecipients` canonical **shared gate+handler** → xóa parser-differential + đóng `to`-injection (gate kiểm list canonical, handler dựng `To:` từ cùng list).
+- **F1:** reject CRLF ở `to`+`subject` trong handler (fix tầng connector → đóng luôn **chat-side** vuln).
+- **🟡 1 ĐÍNH CHÍNH (cần CTO xác nhận):** F1 **KHÔNG** chặn CRLF ở `body`. Lý do verify-code: `body` nối SAU `\r\n\r\n` ([gmail.ts:211]) → header block đã đóng → CRLF body = nội dung, không inject header; **và chặn body CRLF sẽ phá mọi email multi-line** (digest 8h = multi-line). Vector header-injection thật = `to`+`subject`. (Không phản đối BLOCKER — chỉ thu hẹp F1 cho đúng + tránh phá use-case.)
+
+**→ Xin CTO ACK đính chính `body`.** Phần còn lại fold đúng §9. Implement sau PR #8 merge → gửi CTO xác nhận F1/F2 trước flip `gmail_send`.
+
+— *consultant, 2026-06-09*

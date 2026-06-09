@@ -1,6 +1,6 @@
 # Design: Gmail recipient-control gate (tier-high-exfil destination bound)
 
-**Ngày:** 2026-06-09 · **Vai trò:** technical consultant · **Trạng thái:** 🔴 CTO REVIEWED (§9) — model DUYỆT nhưng **CONDITIONAL**: allowlist một mình bị vượt mặt bởi **RFC 2822 header-injection** (`gmail.ts:206` nối raw to/subject/body) → bắt buộc **F1 sanitize handler + F2 canonical-parse** trước flip `gmail_send`. Implementation sau PR #8 merge + F1/F2 fold.
+**Ngày:** 2026-06-09 · **Vai trò:** technical consultant · **Trạng thái:** 🟢 F1+F2 FOLDED (§3.2/§3.5/§6/§10) theo CTO §9 — model duyệt; header-injection đóng ở tầng connector (canonical parse + sanitize). **1 đính chính (§10):** F1 chỉ chặn CRLF ở `to`+`subject` (header fields); `body` KHÔNG chặn (multi-line hợp lệ + nối sau `\r\n\r\n` → không inject header). Implementation sau PR #8 merge → gửi CTO xác nhận đính chính trước flip.
 
 > **TL;DR:** `gmail_send` là tool tier-high-exfil **duy nhất** (gdrive/gcal đã verify own-resource). CTO không ký mở `gmail_send` trần — bắt buộc 1 control-đích. Spec này thêm **recipient-allowlist gate**: tool tự-khai `recipientField`; runtime kiểm recipient (đã resolve) phải khớp **operator env allowlist** (`WORKFLOW_RECIPIENT_ALLOWLIST`), nếu không → fail-closed THROW. Không phải confirm-machinery (tôn trọng no-confirm của user) — chỉ chặn vector exfil. Gmail cần **3 điều kiện** để chạy: `workflowSafe:true` (flip) + allowlist set + recipient khớp.
 
@@ -47,23 +47,25 @@ export type ConnectorTool = {
 ```
 `gmail_send` ([`gmail.ts`](../../src/lib/connectors/gmail.ts)) khai `recipientField: "to"`. (9 tool tier-low không khai → không bị gate.)
 
-### 3.2 `assertRecipientAllowed` (file mới `src/lib/workflow/recipient.ts`)
+### 3.2 Canonical recipient parse (F2) + `assertRecipientAllowed` (file mới `src/lib/workflow/recipient.ts`)
+
+**F2 — `parseRecipients(raw): string[]`** — 1 parser CHÍNH XÁC dùng chung cho **gate VÀ handler** (xóa parser-differential CTO §9.3). Tách trên `,` → mỗi token trim+lowercase → **THROW** nếu bất kỳ token nào không khớp **bare `local@domain`** (regex đơn giản: đúng 1 `@`, không khoảng trắng / `<>` / `()` / `"` / CRLF). Tức **từ chối** display-name (`"Smith, John" <x>`), comment (`(...)`), nhiều-`@`, CRLF, địa chỉ rỗng. v1 cố ý HẸP — chỉ địa chỉ trần, đủ cho workflow, loại mọi mơ hồ → gate-thấy = Gmail-gửi.
+
 ```ts
-// Destination-safety gate cho exfil-tool. Đọc recipientField (tự-khai) từ registry;
-// nếu có, mọi recipient trong giá trị ĐÃ RESOLVE phải khớp allowlist, không → THROW.
-// allowlist optional để test inject; mặc định đọc env (call-time).
+export function parseRecipients(raw: string): string[]; // THROW nếu bất kỳ token non-canonical
 export function assertRecipientAllowed(
   action: string,
   resolvedArgs: Record<string, unknown>,
   allowlist?: ReadonlySet<string>,   // lowercased entries; default = parseEnv()
 ): void;
 ```
-Logic:
+**`assertRecipientAllowed` logic:**
 1. Tra `recipientField` của `action` từ `CONNECTORS` registry. Vắng → return (no-op).
-2. `raw = String(resolvedArgs[recipientField] ?? "")`. Tách trên `,`, trim, bỏ rỗng → list recipient.
-3. List rỗng → THROW (không có đích hợp lệ).
-4. Mỗi recipient `local@host` (lowercase): pass nếu **full address** ∈ allowlist HOẶC **domain `host`** ∈ allowlist. Recipient không có `@` → THROW (không phân giải được domain → fail-closed).
-5. Bất kỳ recipient nào không khớp → THROW (G5 strict). Allowlist rỗng → mọi recipient fail (G4).
+2. `list = parseRecipients(String(resolvedArgs[recipientField] ?? ""))` — throw nếu non-canonical (F2). List rỗng → THROW.
+3. Mỗi `local@host`: pass nếu **full address** ∈ allowlist HOẶC **domain `host`** ∈ allowlist.
+4. Bất kỳ recipient không khớp → THROW (G5 strict). Allowlist rỗng → mọi recipient fail (G4).
+
+Handler `gmail_send` dùng **cùng** `parseRecipients` để dựng lại `To:` sạch (§3.5) → không còn raw-concat.
 
 ### 3.3 Allowlist env
 - **`WORKFLOW_RECIPIENT_ALLOWLIST`** — comma-separated. Entry = domain (`company.com`) hoặc full address (`alerts@gmail.com`). Parse: split `,`, trim, lowercase, bỏ rỗng → Set. Đọc **call-time** (env set sau load vẫn áp; test set `process.env` hoặc truyền `allowlist?`).
@@ -81,6 +83,12 @@ const execute = (action: string, args: Record<string, unknown>): Promise<unknown
 };
 ```
 Dry-run write → mock trước, **không** check (preview; real-run mới enforce — nhất quán seam mechanism). Reads → không recipientField → no-op.
+
+### 3.5 Handler hardening (F1+F2) — `gmail.ts`
+Fix tầng **connector** → bảo vệ CẢ chat lẫn workflow (vuln pre-existing, CTO §9). `gmail_send` handler:
+- **F1 — reject CRLF ở header fields:** `to` HOẶC `subject` chứa `\r`/`\n` → THROW. **`body` KHÔNG chặn** — body nối SAU `\r\n\r\n` ([gmail.ts:211](../../src/lib/connectors/gmail.ts)) nên CRLF trong body = nội dung body, KHÔNG inject header; chặn sẽ phá email multi-line (digest = multi-line). Đính chính §9 (vector = `to`+`subject`); chi tiết §10.
+- **F2 — dựng `To:` từ `parseRecipients(to)`** (join `, `), KHÔNG nối raw `to`. Gate + handler cùng parser → zero differential.
+- `subject` sau F1 (đã sạch CRLF) → nối an toàn. RFC 2047 encode subject non-ASCII = follow-up (không chặn flip).
 
 ---
 
@@ -102,8 +110,8 @@ Thiếu bất kỳ → fail-closed. Defense-in-depth: flip (code) ⊥ allowlist 
 | File | Đổi |
 |---|---|
 | `src/lib/connectors/types.ts` | +`recipientField?: string` trên `ConnectorTool` |
-| `src/lib/connectors/gmail.ts` | `gmail_send` khai `recipientField: "to"` |
-| `src/lib/workflow/recipient.ts` | **mới** — `assertRecipientAllowed` + parse env |
+| `src/lib/connectors/gmail.ts` | `gmail_send` khai `recipientField: "to"`; **F1** reject CRLF ở `to`+`subject`; **F2** dựng `To:` từ `parseRecipients` (không nối raw) |
+| `src/lib/workflow/recipient.ts` | **mới** — `parseRecipients` (F2, shared) + `assertRecipientAllowed` + parse env |
 | `src/lib/workflow/runtime.ts` | wire `assertRecipientAllowed` vào real-execute branch |
 | `.env.example` · `README.md` | document `WORKFLOW_RECIPIENT_ALLOWLIST` (vi) |
 | tests | `recipient.test.ts` (mới) + `runtime.test.ts` (gmail recipient path) |
@@ -125,6 +133,11 @@ Thiếu bất kỳ → fail-closed. Defense-in-depth: flip (code) ⊥ allowlist 
 | recipient không có `@` → throw | không phân giải domain → fail-closed | `recipient.test.ts` |
 | 🔴 real-run gmail_send ngoài allowlist → throw, KHÔNG execute | seam destination-safety | `runtime.test.ts` |
 | dry-run gmail_send → mock, không recipient-check | real-run mới enforce | `runtime.test.ts` |
+| 🔴 `to` chứa CRLF (`ok@x\r\nBcc:evil`) → throw (F2 parse) | header-injection qua `to` đóng | `recipient.test.ts` |
+| 🔴 `subject` chứa CRLF → handler throw (F1) | header-injection qua `subject` đóng | `gmail.test.ts` |
+| `to` display-name / comment / nhiều-`@` → throw | parser-differential bị loại (canonical) | `recipient.test.ts` |
+| handler dựng `To:` = list canonical (gate-thấy = gửi) | gate↔handler cùng parser, zero differential | `gmail.test.ts` |
+| ✅ `body` multi-line (có `\n`) → KHÔNG throw, gửi OK | body hợp lệ, không over-block (đính chính §10) | `gmail.test.ts` |
 
 ---
 
@@ -170,3 +183,16 @@ Allowlist ở **operator-env** (không author-widenable, G2) · fail-closed mọ
 
 ### Verdict
 **Model ✅ duyệt. Spec 🔴 CONDITIONAL:** thêm F1+F2 (sanitize handler + canonical parse) vào §3/§5/§6 → đó mới là điều kiện thật để flip `gmail_send`, KHÔNG chỉ allowlist. Implement sau PR #8 merge; gửi CTO xác nhận F1/F2 đã fold trước flip. — *CTO, 2026-06-09.*
+
+---
+
+## 10. Consultant response — F1+F2 folded (1 đính chính) — 2026-06-09
+
+Verify handler thật (`gmail.ts:201-219`). BLOCKER đúng — đã fold §3.2/§3.5/§5/§6:
+- **F2 accept:** `parseRecipients` canonical, **shared gate+handler** (§3.2/§3.5) → xóa parser-differential VÀ đóng `to`-injection trong một cơ chế.
+- **F1 accept cho `to`+`subject`** (§3.5) — header fields, CRLF = injection.
+- **🟡 ĐÍNH CHÍNH F1 cho `body`:** verify code — `body` nối SAU `\r\n\r\n` ([gmail.ts:211](../../src/lib/connectors/gmail.ts)) → header block đã đóng → CRLF trong body là **nội dung body, KHÔNG inject header**. Hơn nữa **chặn CRLF ở body sẽ phá MỌI email multi-line** — kể cả flagship digest 8h sáng (body nhiều dòng). ⇒ F1 **loại `body`**, chỉ `to`+`subject`. Threat-model chính xác: vector header-injection = `to`+`subject`.
+- **🟡 secondary accept:** `recipientField` đơn-trường OK (gmail chỉ `to`); thêm cc/bcc sau → `recipientFields: string[]` (non-goal nay). Gate kế thừa seam dry/real PR #8 → review chung.
+- Fix ở tầng connector → đóng luôn **chat-side** vuln (CTO nêu), không chỉ workflow.
+
+**→ Xin CTO xác nhận đính chính `body`** (KHÔNG chặn CRLF body) — phần còn lại fold đúng §9. Sau xác nhận + PR #8 merge → implement → flip `gmail_send`. — *consultant, 2026-06-09.*
