@@ -132,3 +132,69 @@ test("W3 vision: thả 3 ảnh → notice cap + body.images đúng 2 ảnh raw, 
   expect(message).toContain("OCRTEXT");
   expect(message).toContain("c.png"); // ảnh quá cap vẫn đi đường text như cũ
 });
+
+// C2: Claude model selected → inline cost/scope note must appear.
+// INTENT: Users must see the honesty note BEFORE they type (QUYẾT ĐỊNH #6) so
+// they understand Claude API != their personal Claude subscription quota.
+test("C2: Claude model active → claudeNote shown near composer", async () => {
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/chat" && init?.method === "POST") return streamResponse(["ok"]);
+    const json = url.startsWith("/api/conversations")
+      ? { conversations: [] }
+      : url === "/api/ollama/models"
+        ? { models: ["gemma4:e4b"] }
+        : url === "/api/chat/info"
+          ? { model: "claude-sonnet-4-6", claudeModels: ["claude-sonnet-4-6", "claude-opus-4-8"] }
+          : url === "/api/ocr"
+            ? { available: true }
+            : {};
+    return { ok: true, json: async () => json } as unknown as Response;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(
+    <I18nProvider lang="vi">
+      <ChatClient />
+    </I18nProvider>,
+  );
+  // The note must appear once /api/chat/info resolves and the claude model is active.
+  await waitFor(() => {
+    expect(screen.getByRole("note")).toBeInTheDocument();
+  });
+  // Verify the note contains the key phrase about org key billing.
+  expect(screen.getByRole("note").textContent).toContain("key chung của org");
+});
+
+// C2: Local (Ollama) model active → claudeNote must NOT appear.
+// INTENT: local model is free — showing the billing note when there's nothing to bill
+// would confuse users and undermine the core "$0 local model" value proposition.
+test("C2: local model active → claudeNote NOT shown", async () => {
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/chat" && init?.method === "POST") return streamResponse(["ok"]);
+    const json = url.startsWith("/api/conversations")
+      ? { conversations: [] }
+      : url === "/api/ollama/models"
+        ? { models: ["gemma4:e4b"] }
+        : url === "/api/chat/info"
+          // claudeModels available but default model is local
+          ? { model: "gemma4:e4b", claudeModels: ["claude-sonnet-4-6"] }
+          : url === "/api/ocr"
+            ? { available: true }
+            : {};
+    return { ok: true, json: async () => json } as unknown as Response;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  render(
+    <I18nProvider lang="vi">
+      <ChatClient />
+    </I18nProvider>,
+  );
+  // Wait for info fetch to settle (model loads).
+  await waitFor(() => {
+    expect(
+      (fetchMock.mock.calls.some(([u]) => u === "/api/chat/info")),
+    ).toBe(true);
+  });
+  // After a tick, no billing note should be visible.
+  await new Promise((r) => setTimeout(r, 50));
+  expect(screen.queryByRole("note")).toBeNull();
+});

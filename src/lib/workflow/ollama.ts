@@ -6,7 +6,8 @@ const OLLAMA_URL = (process.env.OLLAMA_URL ?? "http://localhost:11434").replace(
 const MODEL = process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
 const NUM_CTX = Math.max(2048, Number(process.env.CHAT_NUM_CTX) || 16384);
 
-export async function callOllamaChat(messages: ChatMessage[], tools: ConnectorTool[]): Promise<OllamaChatResponse> {
+// format (B1): optional JSON-schema → Ollama structured output (executors truyền ở call CUỐI của agent node).
+export async function callOllamaChat(messages: ChatMessage[], tools: ConnectorTool[], format?: Record<string, unknown>): Promise<OllamaChatResponse> {
   const r = await fetch(`${OLLAMA_URL}/api/chat`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -14,6 +15,7 @@ export async function callOllamaChat(messages: ChatMessage[], tools: ConnectorTo
       model: MODEL,
       messages,
       ...(tools.length ? { tools } : {}),
+      ...(format ? { format } : {}),
       options: { num_ctx: NUM_CTX },
       stream: false,
     }),

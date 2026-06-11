@@ -42,3 +42,38 @@ describe("TEMPLATES catalog", () => {
     }
   });
 });
+
+describe("B2 — judge-verify + scheduled-triage", () => {
+  test("judge node dùng structured output enum, condition eq trên field (KHÔNG contains trên free-text)", () => {
+    const t = getTemplate("digest-judge-verify")!;
+    const judge = t.graph.nodes.find((n) => n.id === "judge");
+    expect(judge?.kind).toBe("agent");
+    const fmt = (judge as { format?: { properties?: { verdict?: { enum?: string[] } } } }).format;
+    expect(fmt?.properties?.verdict?.enum).toEqual(["PASS", "FAIL"]);
+    const check = t.graph.nodes.find((n) => n.id === "check");
+    expect(check && "when" in check && check.when).toMatchObject({
+      left: "{{steps.judge.output.verdict}}", op: "eq", right: "PASS",
+    });
+  });
+
+  test("guard của scheduled-triage cũng dùng format enum thay vì eq trên text tự do", () => {
+    const t = getTemplate("scheduled-triage")!;
+    const guard = t.graph.nodes.find((n) => n.id === "guard");
+    const fmt = (guard as { format?: { properties?: { status?: { enum?: string[] } } } }).format;
+    expect(fmt?.properties?.status?.enum).toEqual(["stuck", "clear"]);
+  });
+
+  test("không template nào tham chiếu biến trigger.* không tồn tại (trigger thật chỉ có {source})", () => {
+    // Rule 13: {{trigger.date}} từng bị bịa ra — khoá vĩnh viễn.
+    const raw = JSON.stringify(TEMPLATES);
+    expect(raw).not.toMatch(/\{\{trigger\.(?!source)/);
+  });
+
+  test("mọi connector write trong template chỉ dùng Demo connector (connector-write-test-safety)", () => {
+    for (const t of TEMPLATES) {
+      for (const n of t.graph.nodes) {
+        if (n.kind === "connector") expect(n.connectorId, `template "${t.id}" node "${n.id}"`).toBe("demo");
+      }
+    }
+  });
+});

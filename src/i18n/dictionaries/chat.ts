@@ -243,6 +243,25 @@ export const chat: Dict = {
   'chat.proactiveCost': { vi: '{project} — chi phí cao ${c}', en: '{project} — high cost ${c}', zh: '{project} — 费用偏高 ${c}' },
   'chat.proactiveDismiss': { vi: 'Bỏ qua', en: 'Dismiss', zh: '忽略' },
   'chat.proactiveHint': { vi: 'Số liệu từ giám sát agent (agent_session).', en: 'Figures from agent monitoring (agent_session).', zh: '数据来自 agent 监控（agent_session）。' },
+  // --- C2: model picker optgroups + Claude cost labeling ---
+  // Optgroup labels in the model <select>
+  'chat.grpLocal': { vi: 'Local (Ollama) — $0', en: 'Local (Ollama) — $0', zh: '本地（Ollama）— $0' },
+  'chat.grpClaude': { vi: 'Claude API — tính phí', en: 'Claude API — billed', zh: 'Claude API — 按用量计费' },
+  // Inline note shown near the composer when a Claude model is selected.
+  // Clarifies: API key = org cost, NOT the user's personal Claude subscription.
+  'chat.claudeNote': {
+    vi: 'Claude API: tính phí theo token vào key chung của org — không ảnh hưởng subscription Claude cá nhân của bạn. Phiên bản này Claude chưa dùng được công cụ/dữ liệu LAAM; ảnh đính kèm cũng chưa gửi cho Claude — dùng model local cho vision.',
+    en: 'Claude API: billed per token against the shared org key — does not affect your personal Claude subscription. This version of Claude cannot use LAAM tools or data; image attachments are not sent to Claude — use a local model for vision.',
+    zh: 'Claude API：按 token 计费，使用组织共享密钥 — 不影响您个人的 Claude 订阅。当前版本 Claude 无法使用 LAAM 工具或数据；附加图片也不会发送给 Claude — 视觉任务请使用本地模型。',
+  },
+  // Header token total when Claude model is active — append an estimated $ cost.
+  // Pricing source: claude-api skill cache 2026-05-26 (USD per MTok in/out).
+  'chat.expTotalTokensClaude': {
+    vi: '{n} token · ≈ ${usd} (ước tính)',
+    en: '{n} tokens · ≈ ${usd} (est.)',
+    zh: '{n} token · ≈ ${usd}（估算）',
+  },
+
   // --- SP-2: write-gate confirm card (chrome only; title/summary/fields do backend cấp) ---
   'chat.confirmAction': { vi: 'Cần xác nhận hành động', en: 'Action needs confirmation', zh: '操作需确认' },
   'chat.confirm': { vi: 'Xác nhận', en: 'Confirm', zh: '确认' },

@@ -76,7 +76,7 @@ export async function AppHeader({ current }: { current: string; role?: string })
             </Link>
             <nav className="hidden gap-1 md:flex">
               {NAV.map((n) => (
-                <NavLink key={n.href} {...n} active={current === n.href} />
+                <NavLink key={n.href} {...n} active={current === n.href || current.startsWith(n.href + "/")} />
               ))}
             </nav>
           </div>

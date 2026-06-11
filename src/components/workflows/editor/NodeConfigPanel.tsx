@@ -112,6 +112,39 @@ function AgentForm({
 }) {
   const systemRef = useRef<HTMLTextAreaElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
+
+  // B1: optional structured-output JSON schema. Local text state so the user can type
+  // invalid JSON without losing it; only a valid plain object propagates via onChange.
+  const [formatText, setFormatText] = useState(node.format ? JSON.stringify(node.format, null, 2) : "");
+  const [formatError, setFormatError] = useState<string | null>(null);
+
+  // Re-seed when a different node is selected (pattern: ConditionForm/SchemaArgsForm).
+  useEffect(() => {
+    setFormatText(node.format ? JSON.stringify(node.format, null, 2) : "");
+    setFormatError(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [node.id]);
+
+  function handleFormat(raw: string) {
+    setFormatText(raw);
+    if (!raw.trim()) {
+      setFormatError(null);
+      onChange({ ...node, format: undefined });
+      return;
+    }
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        setFormatError(t("wf.node.agent.formatNotObject"));
+        return;
+      }
+      setFormatError(null);
+      onChange({ ...node, format: parsed as Record<string, unknown> });
+    } catch {
+      setFormatError(t("wf.node.jsonInvalid"));
+    }
+  }
+
   return (
     <>
       {field(
@@ -152,6 +185,20 @@ function AgentForm({
             onChange={(v) => onChange({ ...node, prompt: v })}
             hintLabel={t("wf.node.insertVar")}
           />
+        </>,
+      )}
+      {field(
+        <>
+          {label(t("wf.node.agent.formatLabel"))}
+          <textarea
+            className={inputCls(!!formatError)}
+            rows={5}
+            value={formatText}
+            placeholder={'{\n  "type": "object",\n  "properties": { "verdict": { "enum": ["PASS", "FAIL"] } }\n}'}
+            onChange={(e) => handleFormat(e.target.value)}
+          />
+          {formatError && errorMsg(formatError)}
+          <p className="mt-1 text-xs text-neutral-400 break-words">{t("wf.node.agent.formatHint")}</p>
         </>,
       )}
     </>

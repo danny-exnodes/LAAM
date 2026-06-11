@@ -107,4 +107,6 @@ v2/
 - **Chat vision:** image attachments are sent to the (vision-capable) local model — up to 2 images, ≤2 MB each — alongside the existing OCR-text path.
 - **Workflow runs are cancellable:** the run waterfall has a **Huỷ** button (`PATCH /api/workflows/runs/[id]`); the engine stops cleanly before the next node.
 - **Stuck threshold** is configurable via `LAAM_STUCK_MIN` (default 10 min), served by `GET /api/config`.
+- **Mount MCP server ngoài (per-user):** Connectors → mục **MCP servers** cho phép mỗi user khai một MCP server HTTP bất kỳ (Streamable HTTP/SSE) — tool xuất hiện trong chat dưới namespace `mcp__<slug>__<tool>`, mặc định **fail-closed** (mọi tool coi là write → qua confirm-card) trừ khi bật "tin readOnlyHint" cho server đó; URL bị chặn SSRF (localhost/IP nội bộ). Token lưu mã hoá per-user như connector thường.
+- **Claude trong chat (tuỳ chọn, MVS):** đặt `ANTHROPIC_API_KEY` (key org, server-only) để picker model có thêm **Claude Sonnet/Opus** (Messages API — tính phí token vào key org, **không liên quan/không trừ subscription Claude cá nhân**; ToS Anthropic 02/2026 không cho dùng subscription OAuth trong app thứ ba). Phiên bản này Claude **chưa dùng tool/dữ liệu LAAM** — chat thường + stream; mặc định vẫn là model local $0.
 - Never commit `.env` (real secrets) — only `.env.example`.

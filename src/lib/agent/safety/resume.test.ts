@@ -56,13 +56,23 @@ describe("runResume", () => {
 });
 
 describe("buildResumeMessages", () => {
-  test("kết thúc bằng assistant(tool_call) + tool(result); bỏ READ Turn 1", () => {
+  test("kết thúc bằng assistant(tool_call) + tool(result CÓ NHÃN [Kết quả <tool>]); bỏ READ Turn 1", () => {
     const msgs = buildResumeMessages(system, history, signed, { card: { id: "c9" } });
     expect(msgs[0]).toEqual({ role: "system", content: "SYS" });
     expect(msgs.at(-2)?.tool_calls?.[0]).toMatchObject({
       function: { name: "trello_create_card", arguments: { idList: "l1", name: "Mua sữa" } },
     });
-    expect(msgs.at(-1)).toEqual({ role: "tool", content: JSON.stringify({ card: { id: "c9" } }) });
+    // MINOR 5: JSON trần không nói nó là gì — nhãn tên tool giúp model (nhất là
+    // Claude, nơi role:"tool" bị map thành user text) tường thuật đúng kết quả.
+    expect(msgs.at(-1)).toEqual({
+      role: "tool",
+      content: '[Kết quả trello_create_card]: {"card":{"id":"c9"}}',
+    });
+  });
+
+  test("result undefined → 'null' (JSON.stringify(undefined) là undefined — không được rò chữ 'undefined'/content rỗng)", () => {
+    const msgs = buildResumeMessages(system, history, signed, undefined);
+    expect(msgs.at(-1)).toEqual({ role: "tool", content: "[Kết quả trello_create_card]: null" });
   });
 });
 

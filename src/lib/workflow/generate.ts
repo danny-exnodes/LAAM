@@ -34,7 +34,7 @@ export function generationSystem(catalog: string): string {
     'You design LAAM workflow graphs. Output ONLY a JSON object: { "nodes": [...], "edges": [...] }.',
     "",
     'Node kinds (every node has a unique "id" and a "kind"):',
-    '  - agent:     { id, kind:"agent", prompt, system? }            — an AI step (prompt/system are text)',
+    '  - agent:     { id, kind:"agent", prompt, system?, format? }   — an AI step; format = optional JSON-schema → the step outputs a parsed OBJECT (e.g. a judge node with format {verdict, reason} whose {{steps.<id>.output.verdict}} a condition can test with eq)',
     '  - connector: { id, kind:"connector", connectorId, action, args } — call a connected tool',
     '  - condition: { id, kind:"condition", when:{ left, op, right? } } — branches true/false',
     '  - foreach:   { id, kind:"foreach", items, body:{ nodes, edges } } — loop over a list',
@@ -52,6 +52,11 @@ export function generationSystem(catalog: string): string {
     '  { "id": "list", "kind": "connector", "connectorId": "demo", "action": "demo_list_tasks", "args": {} },',
     '  { "id": "sum", "kind": "agent", "prompt": "Summarize these tasks: {{steps.list.output}}" }',
     '], "edges": [ { "from": "list", "to": "sum" } ] }',
+    "",
+    "Common idioms:",
+    "  judge-verify: agent(prompt) → agent(format={verdict:enum[PASS,FAIL],reason}) → condition(eq, {{steps.judge.output.verdict}}, PASS) → true:action / false:skip",
+    "  binary-classify: chain of condition nodes on the same field with eq — each branch leads to a distinct action node; no switch node needed",
+    "  pipeline-per-item: connector(list) → foreach(items={{steps.list.output}}, body={agent(process {{vars.item}})})",
   ].join("\n");
 }
 
@@ -86,6 +91,7 @@ export const GRAPH_FORMAT = {
           kind: { type: "string", enum: KINDS },
           prompt: { type: "string" },
           system: { type: "string" },
+          format: { type: "object" },
           connectorId: { type: "string" },
           action: { type: "string" },
           args: { type: "object" },
@@ -161,6 +167,10 @@ function coerceNode(id: string, kind: WfNodeKind, n: Record<string, unknown>): W
         kind: "agent",
         prompt: String(n.prompt ?? ""),
         ...(n.system != null && n.system !== "" ? { system: String(n.system) } : {}),
+        // B1: format chỉ giữ khi là plain object (JSON-schema) — array/string bị bỏ (Rule 13).
+        ...(n.format && typeof n.format === "object" && !Array.isArray(n.format)
+          ? { format: n.format as Record<string, unknown> }
+          : {}),
       };
   }
 }

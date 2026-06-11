@@ -65,3 +65,72 @@ test("displayed temperature and topP values reflect the settings prop", () => {
   expect(screen.getByText("0.3")).toBeInTheDocument();
   expect(screen.getByText("0.70")).toBeInTheDocument();
 });
+
+// --- C2: optgroup rendering ---
+
+test("flat <option> list rendered when claudeModels is empty (unchanged DOM)", () => {
+  // INTENT: when claudeModels is absent/empty, the select must stay flat — no optgroup
+  // breakage for the common case where the server has no ANTHROPIC_API_KEY.
+  setup({ models: ["gemma4:e4b", "qwen3-vl:8b"] });
+  // No optgroup elements should exist.
+  const sel = screen.getByLabelText("Mô hình") as HTMLSelectElement;
+  expect(sel.querySelectorAll("optgroup")).toHaveLength(0);
+  // Both models still appear as flat options.
+  expect(screen.getByRole("option", { name: "gemma4:e4b" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "qwen3-vl:8b" })).toBeInTheDocument();
+});
+
+test("two optgroups rendered when claudeModels is non-empty", () => {
+  // INTENT: when claudeModels has entries, the select must show local + Claude groups
+  // so users can visually distinguish free-local from billed-API models.
+  setup({
+    models: ["gemma4:e4b"],
+    claudeModels: ["claude-sonnet-4-6", "claude-opus-4-8"],
+  });
+  const sel = screen.getByLabelText("Mô hình") as HTMLSelectElement;
+  const groups = sel.querySelectorAll("optgroup");
+  expect(groups).toHaveLength(2);
+  // Local group includes the Ollama model.
+  expect(screen.getByRole("option", { name: "gemma4:e4b" })).toBeInTheDocument();
+  // Claude group includes both Claude models.
+  expect(screen.getByRole("option", { name: "claude-sonnet-4-6" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "claude-opus-4-8" })).toBeInTheDocument();
+});
+
+test("local optgroup label contains '$0' (free indicator)", () => {
+  // INTENT: the local group must be clearly labelled as free — key product differentiation.
+  setup({
+    models: ["gemma4:e4b"],
+    claudeModels: ["claude-sonnet-4-6"],
+  });
+  const sel = screen.getByLabelText("Mô hình") as HTMLSelectElement;
+  const [localGroup] = Array.from(sel.querySelectorAll("optgroup"));
+  expect(localGroup.label).toContain("$0");
+});
+
+test("claude optgroup label contains 'tính phí' (billing indicator in vi)", () => {
+  // INTENT: the Claude group must be clearly labelled as billed so users are not
+  // surprised by charges — honesty-first per product decision QUYẾT ĐỊNH #6.
+  setup({
+    models: ["gemma4:e4b"],
+    claudeModels: ["claude-sonnet-4-6"],
+  });
+  const sel = screen.getByLabelText("Mô hình") as HTMLSelectElement;
+  const groups = Array.from(sel.querySelectorAll("optgroup"));
+  const claudeGroup = groups[1];
+  expect(claudeGroup.label).toContain("tính phí");
+});
+
+test("selecting a claude model calls onChange with that model value", () => {
+  // INTENT: model change must propagate even when the option is inside an optgroup.
+  const props = setup({
+    models: ["gemma4:e4b"],
+    claudeModels: ["claude-sonnet-4-6", "claude-opus-4-8"],
+  });
+  fireEvent.change(screen.getByLabelText("Mô hình"), {
+    target: { value: "claude-sonnet-4-6" },
+  });
+  expect(props.onChange).toHaveBeenCalledWith(
+    expect.objectContaining({ model: "claude-sonnet-4-6" }),
+  );
+});

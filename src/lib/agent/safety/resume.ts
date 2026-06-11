@@ -24,7 +24,10 @@ export function buildResumeMessages(
       content: "",
       tool_calls: [{ function: { name: signed.name, arguments: signed.args } }],
     },
-    { role: "tool", content: JSON.stringify(result) },
+    // Nhãn [Kết quả <tool>] thay vì JSON trần: model (nhất là Claude — role:"tool"
+    // bị adapter map thành user text) biết blob này là gì để tường thuật đúng.
+    // JSON.stringify(undefined) là undefined → guard "null" (không rò content rỗng).
+    { role: "tool", content: `[Kết quả ${signed.name}]: ${JSON.stringify(result) ?? "null"}` },
   ];
 }
 

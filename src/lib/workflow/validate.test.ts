@@ -132,6 +132,42 @@ describe("validate v2 (assertRunnable — condition branch + foreach body)", () 
     expect(() => assertRunnable(g)).toThrow(/cycle|chu trình|merge|fan-in|cạnh vào/i);
   });
 
+  // ── B1: agent.format (structured output) phải là plain object nếu có ──
+  test("agent format là object JSON-schema → hợp lệ", () => {
+    const g: WorkflowGraph = {
+      nodes: [{ id: "j", kind: "agent", prompt: "x", format: { type: "object" } }],
+      edges: [],
+    };
+    expect(() => assertRunnable(g)).not.toThrow();
+  });
+
+  test("agent format là array → throw message rõ", () => {
+    const g = {
+      nodes: [{ id: "j", kind: "agent", prompt: "x", format: [1, 2] }],
+      edges: [],
+    } as unknown as WorkflowGraph;
+    expect(() => assertRunnable(g)).toThrow(/format.*object/i);
+  });
+
+  test("agent format là string → throw", () => {
+    const g = {
+      nodes: [{ id: "j", kind: "agent", prompt: "x", format: '{"type":"object"}' }],
+      edges: [],
+    } as unknown as WorkflowGraph;
+    expect(() => assertRunnable(g)).toThrow(/format.*object/i);
+  });
+
+  test("agent format hỏng trong foreach body cũng bị reject (đệ quy)", () => {
+    const g = {
+      nodes: [{
+        id: "loop", kind: "foreach", items: "{{steps.x.output}}",
+        body: { nodes: [{ id: "j", kind: "agent", prompt: "x", format: "bad" }], edges: [] },
+      }],
+      edges: [],
+    } as unknown as WorkflowGraph;
+    expect(() => assertRunnable(g)).toThrow(/format.*object/i);
+  });
+
   test("foreach body có thể nhận condition (đệ quy)", () => {
     const g: WorkflowGraph = {
       nodes: [{

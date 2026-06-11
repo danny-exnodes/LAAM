@@ -17,6 +17,18 @@ export const settingsDict: Dict = {
     en: "Test, evaluate and report on agents.",
     zh: "测试、评估和代理报告。",
   },
+  "settings.monitoring.label": { vi: "Giám sát", en: "Monitoring", zh: "监控" },
+  "settings.monitoring.desc": {
+    vi: "Phiên agent real-time theo nguồn.",
+    en: "Real-time agent runs by source.",
+    zh: "按来源实时查看 agent 运行。",
+  },
+  "settings.graph.label": { vi: "Sơ đồ agent", en: "Agent graph", zh: "智能体关系图" },
+  "settings.graph.desc": {
+    vi: "Đồ thị điều phối orchestrator → sub-agent.",
+    en: "Orchestrator → sub-agent graph.",
+    zh: "协调器 → 子代理关系图。",
+  },
   "settings.display": { vi: "Hiển thị", en: "Display", zh: "显示" },
   "settings.appearance": { vi: "Giao diện", en: "Appearance", zh: "外观" },
   "settings.language": { vi: "Ngôn ngữ", en: "Language", zh: "语言" },

@@ -82,6 +82,54 @@ describe("AgentForm", () => {
   });
 });
 
+// ─── Agent form — format JSON schema (B1 structured output) ────────────────
+
+describe("AgentForm — format JSON schema (B1)", () => {
+  const agentNode: WfAgentNode = { id: "a1", kind: "agent", prompt: "p" };
+  // The format textarea's placeholder shows a judge-style schema example (verdict).
+  const formatArea = () => screen.getByPlaceholderText(/verdict/) as HTMLTextAreaElement;
+
+  test("renders the optional format textarea, pre-filled from node.format", () => {
+    const withFmt: WfAgentNode = { ...agentNode, format: { type: "object" } };
+    renderPanel(<NodeConfigPanel node={withFmt} onChange={vi.fn()} />);
+    expect(formatArea().value).toContain('"type"');
+  });
+
+  test("valid JSON object → onChange with parsed format", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} />);
+    fireEvent.change(formatArea(), { target: { value: '{"type":"object"}' } });
+    const updated = onChange.mock.calls[0][0] as WfAgentNode;
+    expect(updated.format).toEqual({ type: "object" });
+  });
+
+  test("invalid JSON → inline error, node NOT updated", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} />);
+    fireEvent.change(formatArea(), { target: { value: "{ bad json" } });
+    expect(screen.getByText(/JSON không hợp lệ/)).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("JSON array → 'phải là object' error, node NOT updated", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} />);
+    fireEvent.change(formatArea(), { target: { value: "[1,2]" } });
+    expect(screen.getByText(/Schema phải là.*object/i)).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  test("clearing the textarea → format undefined (node trả text như cũ)", () => {
+    const onChange = vi.fn();
+    const withFmt: WfAgentNode = { ...agentNode, format: { type: "object" } };
+    renderPanel(<NodeConfigPanel node={withFmt} onChange={onChange} />);
+    fireEvent.change(formatArea(), { target: { value: "" } });
+    const updated = onChange.mock.calls[0][0] as WfAgentNode;
+    expect(updated.format).toBeUndefined();
+    expect(screen.queryByText(/JSON không hợp lệ/)).not.toBeInTheDocument();
+  });
+});
+
 // ─── Connector form ───────────────────────────────────────────────────────
 
 describe("ConnectorForm", () => {

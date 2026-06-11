@@ -67,6 +67,12 @@ export function assertRunnable(graph: WorkflowGraph): void {
   for (const [id, c] of inCount) if (c > 1) throw new Error(`validate: merge tại "${id}" (>1 cạnh vào) — không hỗ trợ fan-in`);
   const byId = new Map(graph.nodes.map((n) => [n.id, n]));
   for (const node of graph.nodes) {
+    // B1: agent.format (structured output) nếu có phải là plain object (JSON-schema).
+    if (node.kind === "agent" && node.format !== undefined) {
+      if (typeof node.format !== "object" || node.format === null || Array.isArray(node.format)) {
+        throw new Error(`validate: agent "${node.id}" — format phải là object JSON-schema (không nhận array/string)`);
+      }
+    }
     const outs = out.get(node.id) ?? [];
     if (node.kind === "condition") {
       const labels = outs.map((o) => o.label).sort();

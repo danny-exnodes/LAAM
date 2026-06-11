@@ -119,6 +119,34 @@ describe("generationSystem + GRAPH_FORMAT", () => {
   });
 });
 
+// ── B1: structured output — AI-builder biết field `format` trên agent node ──
+describe("agent format field (B1 structured output)", () => {
+  test("coerceGraph giữ format object trên agent node", () => {
+    const g = coerceGraph({
+      nodes: [{ id: "j", kind: "agent", prompt: "judge", format: { type: "object", properties: { verdict: {} } } }],
+      edges: [],
+    });
+    expect(g.nodes[0]).toMatchObject({ kind: "agent", format: { type: "object", properties: { verdict: {} } } });
+  });
+
+  test("coerceGraph bỏ format không phải plain object (Rule 13)", () => {
+    const g = coerceGraph({
+      nodes: [
+        { id: "a", kind: "agent", prompt: "x", format: "not-an-object" },
+        { id: "b", kind: "agent", prompt: "y", format: [1] },
+      ],
+      edges: [{ from: "a", to: "b" }],
+    });
+    expect("format" in g.nodes[0]).toBe(false);
+    expect("format" in g.nodes[1]).toBe(false);
+  });
+
+  test("GRAPH_FORMAT cho phép field format; system prompt nhắc tới nó", () => {
+    expect(GRAPH_FORMAT.properties.nodes.items.properties).toHaveProperty("format");
+    expect(generationSystem("(none)")).toContain("format");
+  });
+});
+
 describe("buildUserMessage (refine — #3 stretch)", () => {
   test("plain prompt when there's no current graph (or it's empty)", () => {
     expect(buildUserMessage("make a flow")).toBe("make a flow");

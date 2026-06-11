@@ -913,7 +913,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
       {/* Top bar — two rows: (1) back+name+save, (2) palette scrollable on mobile */}
       <div className="border-b border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900">
         {/* Row 1 */}
-        <div className="flex items-center gap-2 px-3 py-2">
+        <div className="flex items-center gap-2 overflow-x-auto px-3 py-2">
           <button
             type="button"
             onClick={() => {
@@ -976,38 +976,48 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             type="button"
             onClick={() => setAiOpen(true)}
             title={t("wf.ai.title")}
+            aria-label={t("wf.ai.button")}
             className="shrink-0 rounded-lg border border-[var(--color-accent)]/40 px-2.5 py-1.5 text-sm font-semibold text-[var(--color-accent)] transition hover:bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)]"
           >
-            ✨ {t("wf.ai.button")}
+            ✨ <span className="hidden sm:inline">{t("wf.ai.button")}</span>
           </button>
           <button
             type="button"
             onClick={() => setReviewOpen(true)}
             title={t("wf.ai.reviewTitle")}
+            aria-label={t("wf.ai.review")}
             className="shrink-0 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-sm font-semibold text-neutral-600 transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] dark:border-neutral-700 dark:text-neutral-300"
           >
-            <ClipboardCheck size={14} className="-mt-0.5 mr-1 inline" aria-hidden /> {t("wf.ai.review")}
+            <ClipboardCheck size={14} className="-mt-0.5 mr-1 inline" aria-hidden /> <span className="hidden sm:inline">{t("wf.ai.review")}</span>
           </button>
           <button
             type="button"
             onClick={() => void handleTest()}
             disabled={testing || saveStatus === "saving"}
             title={t("wf.editor.testHint")}
+            aria-label={testing ? t("wf.editor.testing") : t("wf.editor.test")}
             className="shrink-0 rounded-lg border border-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--color-accent)] transition hover:bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)] disabled:opacity-50"
           >
-            {testing ? t("wf.editor.testing") : `▶ ${t("wf.editor.test")}`}
+            {testing ? (
+              <span className="hidden sm:inline">{t("wf.editor.testing")}</span>
+            ) : (
+              <>▶ <span className="hidden sm:inline">{t("wf.editor.test")}</span></>
+            )}
           </button>
           <button
             type="button"
             onClick={() => void handleSave()}
             disabled={saveStatus === "saving"}
+            aria-label={saveStatus === "saving" ? t("wf.editor.saving") : t("wf.editor.save")}
             className="shrink-0 rounded-lg bg-[var(--accent-fill)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           >
-            {saveStatus === "saving"
-              ? t("wf.editor.saving")
-              : isDirty
-                ? `● ${t("wf.editor.save")}`
-                : t("wf.editor.save")}
+            {saveStatus === "saving" ? (
+              <span className="hidden sm:inline">{t("wf.editor.saving")}</span>
+            ) : isDirty ? (
+              <>● <span className="hidden sm:inline">{t("wf.editor.save")}</span></>
+            ) : (
+              <span className="hidden sm:inline">{t("wf.editor.save")}</span>
+            )}
           </button>
           {saveStatus === "saved" && (
             <span className="hidden shrink-0 text-xs font-semibold text-green-600 sm:inline">
@@ -1238,7 +1248,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             role="dialog"
             aria-modal="true"
             aria-label={t("wf.editor.configTitle")}
-            className={`fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl border-t border-neutral-200 bg-white shadow-2xl transition-transform duration-300 ease-out md:hidden dark:border-neutral-700 dark:bg-neutral-900 ${sheetOpen ? "translate-y-0" : "translate-y-full"}`}
+            className={`fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-2xl border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] shadow-2xl transition-transform duration-300 ease-out md:hidden dark:border-neutral-700 dark:bg-neutral-900 ${sheetOpen ? "translate-y-0" : "translate-y-full"}`}
             style={{ maxHeight: "65dvh" }}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-4 py-3 dark:border-neutral-800">
