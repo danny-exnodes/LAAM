@@ -130,8 +130,8 @@
 .heroCtas { margin-top: 34px; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
 .scrollcue { margin-top: 44px; display: flex; flex-direction: column; align-items: center; gap: 9px; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; color: var(--faint); }
 .scrollBar { width: 1px; height: 40px; background: linear-gradient(180deg, transparent, var(--faint)); position: relative; overflow: hidden; }
-.scrollBar::after { content: ""; position: absolute; top: -50%; left: 0; width: 100%; height: 50%; background: linear-gradient(180deg, transparent, #bfe3ff); animation: cue 2.2s ease-in-out infinite; }
-@keyframes cue { 0% { top: -50%; } 60%, 100% { top: 100%; } }
+.scrollBar::after { content: ""; position: absolute; top: 0; left: 0; width: 100%; height: 50%; transform: translateY(-100%); background: linear-gradient(180deg, transparent, #bfe3ff); animation: cue 2.2s ease-in-out infinite; }
+@keyframes cue { 0% { transform: translateY(-100%); } 60%, 100% { transform: translateY(200%); } }
 
 /* ── Section heading ────────────────────────────────────────────────────── */
 .secHead { max-width: 60ch; margin: 0 auto 40px; text-align: center; }
@@ -168,8 +168,11 @@
 .shotTop { position: relative; z-index: 1; height: 20px; background: rgba(120, 180, 230, 0.08); border-bottom: 1px solid rgba(120, 180, 230, 0.16); display: flex; align-items: center; gap: 5px; padding: 0 8px; }
 .shotDot { width: 7px; height: 7px; border-radius: 50%; background: rgba(120, 200, 240, 0.5); }
 .shotPath { margin-left: auto; font-size: 9px; letter-spacing: 0.12em; color: var(--faint); font-family: monospace; }
-.scanline { position: absolute; left: 0; right: 0; height: 50%; top: -50%; background: linear-gradient(180deg, transparent, rgba(127, 224, 255, 0.14), transparent); animation: scan 3.4s linear infinite; }
-@keyframes scan { to { top: 100%; } }
+/* transform-only (compositor) — animating `top` re-layouts every frame (perf-2). */
+.scanline { position: absolute; left: 0; right: 0; top: 0; height: 50%; transform: translateY(-100%); background: linear-gradient(180deg, transparent, rgba(127, 224, 255, 0.14), transparent); animation: scan 3.4s linear infinite; }
+@keyframes scan { to { transform: translateY(300%); } }
+/* Panels not yet revealed don't pay for a scanline nobody sees. */
+.coHidden .scanline { animation-play-state: paused; }
 .shotGrid { position: absolute; inset: 20px 0 0 0; opacity: 0.22; background-image: linear-gradient(rgba(120, 180, 230, 0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(120, 180, 230, 0.25) 1px, transparent 1px); background-size: 22px 22px; }
 .shotIco { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(127, 224, 255, 0.5); }
 .shotImg { object-fit: cover; object-position: top left; }
