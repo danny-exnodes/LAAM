@@ -17,6 +17,8 @@ export function I18nProvider({ lang, children }: { lang: Lang; children: React.R
   const setLang = useCallback((l: Lang) => {
     setActive(l);
     writeLangCookie(l);
+    // Keep the SSR-set <html lang> in sync so screen readers switch voices (WCAG 3.1.1).
+    if (typeof document !== 'undefined') document.documentElement.lang = l;
   }, []);
   const value = useMemo<LangCtx>(() => ({ lang: active, setLang }), [active, setLang]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
