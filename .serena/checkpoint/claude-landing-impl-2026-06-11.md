@@ -36,3 +36,14 @@
 ## Blockers / Risks
 - Visual verify chặn bởi rule không tự chạy server (chờ user).
 - 2 fix-agent chết giữa chừng (đã phát hiện qua git status, hoàn tất tay) — pattern cần để ý.
+
+## UPDATE — cùng phiên: MERGED + VERIFIED (user duyệt "merge về main")
+- ✅ Merge no-ff `eac5ddb` (0 conflict) · verify TRÊN MAIN: **1492/1492 test + tsc 0**
+  (baseline main trước merge 1481/1481 — zero regression). Docs commit `eaa497d` (CHANGELOG + serena + plan).
+- ✅ Worktree removed an toàn (junction rmdir trước), branch deleted, node_modules nguyên vẹn.
+- ✅ Visual verify trên :3100 (Turbopack hot-reload): mobile 390 đi nhánh GRID (explode=false), panel đọc rõ
+  + ảnh thật + badge minh hoạ; hamburger aria-expanded/hidden hoạt động; 6 anchor đủ; desktop 280vh OK.
+- ✅ **Lighthouse mobile: 100/100/100/100 (50/50 audit)** — từ 89/100/91/67. 2 fix chót trên main `7d8f1a9`:
+  label-in-name nút zh (WCAG 2.5.3) + `userScalable: true` tường minh (viewport MERGE từ layout — đúng cảnh
+  báo reviewer B6; bài học: page-level viewport export phải set tường minh field muốn override).
+- Screenshots before/after: `.claude/tmp/landing-eval-shots/` (after-* + lh-final/). CHƯA push origin (chờ user).
