@@ -1,0 +1,24 @@
+# RBAC lỗ hổng đang sống + quyết định batch2 (2026-06-12)
+
+**Nguồn:** workflow nghiên cứu + 3 phản biện (security/architect/product), verified file:line. Digest: `.claude/tmp/batch2-digest.txt`. Plan: `docs/superpowers/plans/2026-06-12-batch2-security-monitoring-notifications.md`.
+
+## ⚠️ LỖ HỔNG ĐANG SỐNG (vá TRƯỚC mọi feature)
+1. **RBAC trang trí** — `auth.config.ts authorized()` chỉ check logged-in; role-403 CHỈ ở /api/machines. viewer/member chạy được MỌI mutation kể cả `POST /api/workflows/[id]/run` (dryRun=false → connector write THẬT, cred live). Vá: `src/lib/auth/rbac.ts` requireMutator/requireRole + gate mọi mutation route.
+2. **SSE rò** — `/api/events snapshot()` không WHERE → broadcast mọi agent_session cho mọi client; session api|mcp mang userId thật → user B thấy hoạt động MCP của user A. Vá: snapshot áp visibility (api|mcp per-principal, local/claude org-shared); SseClient mang userId; kênh sessions GIỮ org fan-out (đừng thu hẹp /agents).
+3. **Off-boarding rò** — xoá user → access_token set-null userId nhưng revokedAt=null → token sống; + legacy machines.tokenHash chưa drop; + user KHÔNG có cột disabled. Vá: disable user = transaction revoke-all-token (cả legacy) + block login; thêm user.disabledAt.
+4. **Scopes không enforce** (defer cứng) — verifyAccessToken bỏ qua scopes; phòng tuyến write = 1 dòng filter kind==='read'. Backlog: enforce scope ở callTool TRƯỚC MCP-write GA.
+
+## Quyết định feature
+- **Câu local-file (user hỏi):** GIỮ local-parse cho dev/host (nguồn DUY NHẤT của log timeline + tool waterfall; DB chỉ summary). Prod container KHÔNG mount ~/.claude/projects → local-parse đã chết trên prod; waterfall cho session collector cần events-push (mới, defer). KHÔNG bỏ local-parse.
+- **Gộp Agents/Monitoring:** tab Local = AgentsClient live; redirect /agents→/monitoring?tab=local; detail adapter per-source (chat=message timeline, workflow=node-waterfall từ workflow_run_step). KHÔNG ép chat/workflow giống agent. Giữ tên "Machines" filter (LOCKED).
+- **Notification:** in-app bell ONLY (workflow-terminal + write-gate-pending); model channel-extensible (cột audience) chỉ implement in-app; per-user SSE = kênh RIÊNG (không đụng sessions broadcast — đây là chặn cứng, dễ vô tình thu hẹp /agents). Defer email/Slack/org-broadcast/eval-emit.
+- **User-mgmt:** UI tối thiểu (list + role owner-only + access self-service). Team <50: KHÔNG state-machine role/nhiều-owner.
+- **claude-runtime:** CHỈ Phase 0 parser augment (parentToolUseId + outputText, fail-loud version guard, redact outputText). DROP todos/Desktop-parity.
+
+## Ràng buộc LOCKED giữ nguyên (machines-decomposition)
+token=H3 unified; ingest visibility PER-SOURCE (KHÔNG per-user isolation cho monitoring — phá value-prop team); Q2 isVisible; MCP write defer qua scope. userId trên access_token: provenance cho ingest NHƯNG isolation key cho MCP (mcp/route.ts ctx.userId lọc data) — tách rõ 2 nghĩa, đừng "dọn theo khẩu hiệu".
+
+## Đính chính nghiên cứu (phản biện bắt)
+- proactive dedupe ĐÃ persist (proactiveState jsonb on conversation), KHÔNG phải pure in-memory.
+- crater write-selection ĐÃ bị bác (chat-tool-selection 06-11) — KHÔNG còn chặn connector-write GA.
+- prod ≠ main: verify image prod (/api/chat/info) trước khi xây trên giả định runtime.
