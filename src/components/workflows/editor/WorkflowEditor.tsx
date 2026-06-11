@@ -995,7 +995,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             onClick={() => void handleTest()}
             disabled={testing || saveStatus === "saving"}
             title={t("wf.editor.testHint")}
-            aria-label={t("wf.editor.test")}
+            aria-label={testing ? t("wf.editor.testing") : t("wf.editor.test")}
             className="shrink-0 rounded-lg border border-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-[var(--color-accent)] transition hover:bg-[color-mix(in_srgb,var(--color-accent)_10%,transparent)] disabled:opacity-50"
           >
             {testing ? (
@@ -1008,7 +1008,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             type="button"
             onClick={() => void handleSave()}
             disabled={saveStatus === "saving"}
-            aria-label={t("wf.editor.save")}
+            aria-label={saveStatus === "saving" ? t("wf.editor.saving") : t("wf.editor.save")}
             className="shrink-0 rounded-lg bg-[var(--accent-fill)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           >
             {saveStatus === "saving" ? (

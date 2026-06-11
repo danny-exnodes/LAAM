@@ -10,7 +10,7 @@ import { RunList } from "./RunList";
 export function EvalClient({ dashboard }: { dashboard: EvalDashboard }) {
   const t = useT(evalDict);
   if (!dashboard.headline) {
-    return <div className="p-4 sm:p-6"><p className="text-sm text-neutral-500">{t("eval.empty")}</p></div>;
+    return <div className="px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8"><p className="text-sm text-neutral-500">{t("eval.empty")}</p></div>;
   }
   return (
     <div className="space-y-4 px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
