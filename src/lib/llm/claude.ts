@@ -72,6 +72,13 @@ function toAnthropic(msgs: ChatMessage[]): { system: string; messages: Anthropic
       content: [{ type: "text", text }],
     });
   }
+  // Messages API trả 400 nếu message đầu là assistant. planHistory (SP-3) có thể
+  // cắt cửa sổ replay ngay TRƯỚC một lượt assistant — và vì watermark đứng yên,
+  // 400 đó LẶP LẠI MỌI LƯỢT tới lần summarize kế. Chèn stub user; GIỮ assistant
+  // (ngữ cảnh thật, không drop).
+  if (messages[0]?.role === "assistant") {
+    messages.unshift({ role: "user", content: [{ type: "text", text: "(bối cảnh tiếp diễn)" }] });
+  }
   return { system: sys.join("\n\n"), messages };
 }
 
@@ -83,18 +90,24 @@ export async function* claudeStream(opts: {
   model: string;
   messages: ChatMessage[];
   maxTokens?: number;
+  // Abort của request gốc (user bấm Stop) — forward cho SDK để hủy LUÔN call
+  // Anthropic đang tính phí (0.104.1: request option thứ 2 {signal}).
+  signal?: AbortSignal;
 }): AsyncGenerator<{ delta?: string; usage?: { in: number; out: number } }> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new ClaudeUnavailableError("auth", "ANTHROPIC_API_KEY chưa được đặt");
   const client = new Anthropic({ apiKey: key });
   const { system, messages } = toAnthropic(opts.messages);
   try {
-    const stream = client.messages.stream({
-      model: opts.model,
-      max_tokens: opts.maxTokens ?? CLAUDE_MAX_TOKENS,
-      ...(system ? { system } : {}),
-      messages,
-    });
+    const stream = client.messages.stream(
+      {
+        model: opts.model,
+        max_tokens: opts.maxTokens ?? CLAUDE_MAX_TOKENS,
+        ...(system ? { system } : {}),
+        messages,
+      },
+      { signal: opts.signal },
+    );
     for await (const event of stream) {
       if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
         yield { delta: event.delta.text };

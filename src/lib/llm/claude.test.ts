@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 const h = vi.hoisted(() => ({
   streamImpl: null as null | ((params: unknown) => unknown),
   streamCalls: [] as Record<string, unknown>[],
+  // Request options (arg thứ 2 của messages.stream — 0.104.1: {signal?: AbortSignal}).
+  streamOpts: [] as ({ signal?: AbortSignal } | undefined)[],
 }));
 
 vi.mock("@anthropic-ai/sdk", () => {
@@ -32,8 +34,9 @@ vi.mock("@anthropic-ai/sdk", () => {
   }
   class MockAnthropic {
     messages = {
-      stream: (params: Record<string, unknown>) => {
+      stream: (params: Record<string, unknown>, options?: { signal?: AbortSignal }) => {
         h.streamCalls.push(params);
+        h.streamOpts.push(options);
         if (!h.streamImpl) throw new Error("test: no streamImpl configured");
         return h.streamImpl(params);
       },
@@ -79,6 +82,7 @@ beforeEach(() => {
   vi.stubEnv("ANTHROPIC_API_KEY", "sk-test");
   h.streamImpl = null;
   h.streamCalls.length = 0;
+  h.streamOpts.length = 0;
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -159,14 +163,53 @@ describe("claudeStream — dịch ChatMessage[] sang Messages API", () => {
           { role: "system", content: "SYS" },
           { role: "user", content: "tạo card" },
           { role: "assistant", content: "", tool_calls: [{ function: { name: "trello_create_card", arguments: {} } }] },
-          { role: "tool", content: '{"card":{"id":"c9"}}' },
+          // Mirror buildResumeMessages (MINOR 5): tool result CÓ NHÃN, không JSON trần.
+          { role: "tool", content: '[Kết quả trello_create_card]: {"card":{"id":"c9"}}' },
         ],
       }),
     );
     expect(h.streamCalls[0].messages).toEqual([
       { role: "user", content: [{ type: "text", text: "tạo card" }] },
-      { role: "user", content: [{ type: "text", text: '{"card":{"id":"c9"}}' }] },
+      { role: "user", content: [{ type: "text", text: '[Kết quả trello_create_card]: {"card":{"id":"c9"}}' }] },
     ]);
+  });
+
+  // CRITICAL 1a: Messages API trả 400 nếu message đầu (sau khi gập system) là
+  // assistant. planHistory (SP-3) có thể cắt cửa sổ replay ngay TRƯỚC một lượt
+  // assistant — và watermark đứng yên nên 400 sẽ LẶP LẠI MỌI LƯỢT tới lần
+  // summarize kế. Adapter phải chèn stub user, GIỮ NGUYÊN assistant (ngữ cảnh thật).
+  test("cửa sổ replay bắt đầu bằng assistant → chèn stub user trước, assistant GIỮ NGUYÊN tại [1]", async () => {
+    h.streamImpl = () => sdkStream([]);
+    await collect(
+      claudeStream({
+        model: "claude-sonnet-4-6",
+        messages: [
+          { role: "system", content: "SYS" },
+          { role: "assistant", content: "đoạn trả lời cũ đầu cửa sổ" },
+          { role: "user", content: "câu hỏi mới" },
+        ],
+      }),
+    );
+    expect(h.streamCalls[0].messages).toEqual([
+      { role: "user", content: [{ type: "text", text: "(bối cảnh tiếp diễn)" }] },
+      { role: "assistant", content: [{ type: "text", text: "đoạn trả lời cũ đầu cửa sổ" }] },
+      { role: "user", content: [{ type: "text", text: "câu hỏi mới" }] },
+    ]);
+  });
+
+  // IMPORTANT 3: bấm Stop phải hủy LUÔN request Anthropic đang tính phí — adapter
+  // forward AbortSignal nguyên vẹn làm request option (0.104.1: stream(params, {signal})).
+  test("forward AbortSignal làm request option {signal} cho SDK", async () => {
+    h.streamImpl = () => sdkStream([]);
+    const ctrl = new AbortController();
+    await collect(
+      claudeStream({
+        model: "claude-sonnet-4-6",
+        messages: [{ role: "user", content: "hi" }],
+        signal: ctrl.signal,
+      }),
+    );
+    expect(h.streamOpts[0]?.signal).toBe(ctrl.signal);
   });
 
   // Rule 13: KHÔNG tin LLM/transport reproduce text — mock trả delta với spacing/ký tự

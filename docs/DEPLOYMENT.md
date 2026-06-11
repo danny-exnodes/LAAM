@@ -62,7 +62,8 @@ xem `docker-compose.yml` service `app`.
 | `WORKFLOW_TICK_SECRET` | ✅ **BẮT BUỘC** (prod) | Auth máy-gọi cho `POST /api/workflows/tick`. Khi secret ĐƯỢC set: **chỉ** header `x-workflow-tick-secret` khớp mới qua (không còn fallback localhost) | `openssl rand -base64 32`; cài tick task bằng `scripts/install-tick-task.ps1` (mục 6.1) |
 | `WORKFLOW_RECIPIENT_ALLOWLIST` | Khi dùng `gmail_send` trong workflow | Allowlist domain/địa chỉ người nhận. **Rỗng = fail-closed: `gmail_send` không chạy được trong workflow** | Liệt kê hẹp nhất có thể, vd `exnodes.vn,alerts@partner.com`; đổi xong phải restart container (mục 4) |
 | `OLLAMA_URL` | ✅ | Endpoint Ollama | Compose override `host.docker.internal:11434` — không cần sửa |
-| `DEFAULT_CHAT_MODEL` | ✅ | Model chat mặc định | `gemma4:e4b` |
+| `DEFAULT_CHAT_MODEL` | ✅ | Model chat mặc định | `gemma4:e4b` — **không** đặt `claude-*` (summarize/proactive chạy local; Claude chỉ chọn per-request từ picker) |
+| `ANTHROPIC_API_KEY` | ⬜ | Key Anthropic (server-only, không bao giờ lộ xuống client) — đặt để bật model Claude trong picker chat (C1) | Tuỳ chọn; tính phí theo token vào key org (Sonnet 4.6 / Opus 4.8) — xem ghi chú `.env.example` |
 | `CHAT_NUM_CTX` | ⬜ | Cửa sổ ngữ cảnh chat | `16384` (an toàn FP16 trên 16GB VRAM — xem ghi chú trong `.env.example`) |
 | `CHAT_PRESENCE_PENALTY` | ⬜ | Sampler chống lặp từ | `0.2` |
 | `PROACTIVE_STUCK_MIN` / `PROACTIVE_COST_USD` | ⬜ | Ngưỡng cảnh báo chủ động | Mặc định (kẹt 10′ / $1) |

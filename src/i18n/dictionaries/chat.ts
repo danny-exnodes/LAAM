@@ -250,9 +250,9 @@ export const chat: Dict = {
   // Inline note shown near the composer when a Claude model is selected.
   // Clarifies: API key = org cost, NOT the user's personal Claude subscription.
   'chat.claudeNote': {
-    vi: 'Claude API: tính phí theo token vào key chung của org — không ảnh hưởng subscription Claude cá nhân của bạn. Phiên bản này Claude chưa dùng được công cụ/dữ liệu LAAM.',
-    en: 'Claude API: billed per token against the shared org key — does not affect your personal Claude subscription. This version of Claude cannot use LAAM tools or data.',
-    zh: 'Claude API：按 token 计费，使用组织共享密钥 — 不影响您个人的 Claude 订阅。当前版本 Claude 无法使用 LAAM 工具或数据。',
+    vi: 'Claude API: tính phí theo token vào key chung của org — không ảnh hưởng subscription Claude cá nhân của bạn. Phiên bản này Claude chưa dùng được công cụ/dữ liệu LAAM; ảnh đính kèm cũng chưa gửi cho Claude — dùng model local cho vision.',
+    en: 'Claude API: billed per token against the shared org key — does not affect your personal Claude subscription. This version of Claude cannot use LAAM tools or data; image attachments are not sent to Claude — use a local model for vision.',
+    zh: 'Claude API：按 token 计费，使用组织共享密钥 — 不影响您个人的 Claude 订阅。当前版本 Claude 无法使用 LAAM 工具或数据；附加图片也不会发送给 Claude — 视觉任务请使用本地模型。',
   },
   // Header token total when Claude model is active — append an estimated $ cost.
   // Pricing source: claude-api skill cache 2026-05-26 (USD per MTok in/out).

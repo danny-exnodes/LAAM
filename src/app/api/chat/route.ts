@@ -43,8 +43,9 @@ const TOOL_LOOP_ERR: Record<"vi" | "en" | "zh", string> = {
   zh: `调用工具时无法连接 Ollama（${OLLAMA_URL}）。请重试。`,
 };
 // C1: Claude (Anthropic API, org key) rớt TRƯỚC khi có delta nào → notice 3 thứ
-// tiếng kèm code lỗi ('auth'|'rate_limit'|'overloaded'|'connection'); KHÔNG tự
-// fallback Ollama (quyết định MVS — user chủ động đổi model). Pattern TOOL_LOOP_ERR.
+// tiếng kèm code lỗi ('auth'|'rate_limit'|'overloaded'|'connection'; lỗi bất ngờ
+// ngoài 4 loại — vd 400 schema — hiển thị 'api'); KHÔNG tự fallback Ollama
+// (quyết định MVS — user chủ động đổi model). Pattern TOOL_LOOP_ERR.
 const CLAUDE_ERR: Record<"vi" | "en" | "zh", string> = {
   vi: "Không gọi được Claude API ({code}). Vui lòng thử lại hoặc chuyển về model local.",
   en: "Could not reach the Claude API ({code}). Please retry or switch back to the local model.",
@@ -320,7 +321,10 @@ export async function POST(req: Request) {
         lang,
         now,
         // QW-1: truyền {name, kind} để prompt render CÓ NHÓM đọc/ghi (tools = ConnectorTool[]).
-        tools: tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+        // C1: Claude KHÔNG có tool nào ở MVS → render TOOL-LESS (tools:[], như
+        // handleConfirm) — liệt kê tool + "BẮT BUỘC gọi công cụ" cho model không
+        // có tool sẽ làm nó bịa cú pháp tool / claim sai.
+        tools: isClaudeModel(model) ? [] : tools.map((t) => ({ name: t.function.name, kind: t.kind })),
       });
   let proactiveSurfaced: ProactiveAlert[] = [];
   if (!hasSystemOverride) {
@@ -407,8 +411,10 @@ function streamMainTurn(opts: {
         let full = "";
         let tokensIn = 0;
         let tokensOut = 0;
+        let gotUsage = false; // usage chỉ tới từ finalMessage — đứt giữa stream thì KHÔNG
         try {
-          for await (const ev of claudeStream({ model: payload.model, messages: payload.messages })) {
+          // IMPORTANT 3: forward req.signal — bấm Stop hủy luôn call Anthropic đang tính phí.
+          for await (const ev of claudeStream({ model: payload.model, messages: payload.messages, signal: reqSignal })) {
             if (ev.delta) {
               full += ev.delta;
               if (!guardWrites) {
@@ -420,16 +426,21 @@ function streamMainTurn(opts: {
               }
             }
             if (ev.usage) {
+              gotUsage = true;
               tokensIn = ev.usage.in;
               tokensOut = ev.usage.out;
             }
           }
         } catch (e) {
-          if (!full && e instanceof ClaudeUnavailableError) {
-            // Rớt TRƯỚC delta đầu tiên → notice tri-lingual + persist rồi đóng SẠCH
-            // (pattern TOOL_LOOP_ERR). KHÔNG retry Ollama tự động (quyết định MVS).
-            console.error(`[chat] claude unavailable (conv=${convId}, code=${e.code})`, e);
-            const errText = claudeErrText(lang, e.code);
+          // CRITICAL 1b: rớt TRƯỚC delta đầu tiên — unavailable CÓ KIỂU *hoặc* lỗi
+          // bất ngờ (vd 400 schema) — đều phải fail loud: notice tri-lingual + persist
+          // rồi đóng SẠCH (Rule 12 — không bao giờ đóng stream 0 byte im lặng; watermark
+          // SP-3 đứng yên nên lỗi câm sẽ lặp lại MỌI lượt). KHÔNG retry Ollama (MVS).
+          // Ngoại lệ: user chủ động bấm Stop (reqSignal aborted) → không phải lỗi server.
+          if (!full && !reqSignal?.aborted) {
+            const code = e instanceof ClaudeUnavailableError ? e.code : "api";
+            console.error(`[chat] claude failed before first delta (conv=${convId}, code=${code})`, e);
+            const errText = claudeErrText(lang, code);
             try {
               controller.enqueue(enc.encode(errText));
             } catch {
@@ -444,7 +455,7 @@ function streamMainTurn(opts: {
             controller.close();
             return;
           }
-          // Đứt GIỮA stream (đã có delta) / lỗi bất ngờ: log + đóng sạch với phần đã có.
+          // Đứt GIỮA stream (đã có delta) / user abort: log + đóng sạch với phần đã có.
           console.error(`[chat] claude stream failed (conv=${convId})`, e);
         }
         if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
@@ -466,8 +477,9 @@ function streamMainTurn(opts: {
               conversationId: convId,
               role: "assistant",
               content: outText,
-              tokensIn,
-              tokensOut,
+              // MINOR 4: usage chưa tới (đứt giữa stream) → KHÔNG ghi 0/0 — lượt này
+              // CÓ tính phí thật ở Anthropic, 0/0 là $0 giả (để null).
+              ...(gotUsage ? { tokensIn, tokensOut } : {}),
             });
           } catch (e) {
             console.error("[chat] persist assistant failed (fail-soft)", e);
@@ -475,7 +487,8 @@ function streamMainTurn(opts: {
           // Trailing frames: không cite (không tool); proactive → tokens (FE contract y hệt).
           try {
             if (proactive.length) emit(proactiveFrame(proactive));
-            emit({ t: "tokens", i: tokensIn, o: tokensOut });
+            // MINOR 4: OMIT frame tokens khi usage chưa tới — không hiện $0 giả.
+            if (gotUsage) emit({ t: "tokens", i: tokensIn, o: tokensOut });
           } catch {
             /* aborted */
           }
@@ -917,7 +930,7 @@ async function handleConfirm(
   // không tools — đúng PIN MVS); còn lại → Ollama như cũ.
   const confirmModel = typeof signed.model === "string" && signed.model.trim() ? signed.model : MODEL;
   if (isClaudeModel(confirmModel)) {
-    return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang);
+    return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal);
   }
   let ollamaRes: Response;
   try {
@@ -954,6 +967,7 @@ function streamClaudeCompletion(
   messages: ChatMessage[],
   frames: ChatFrame[],
   lang: string,
+  signal?: AbortSignal,
 ): Response {
   const enc = new TextEncoder();
   const stream = new ReadableStream({
@@ -961,8 +975,10 @@ function streamClaudeCompletion(
       let full = "";
       let tokensIn = 0;
       let tokensOut = 0;
+      let gotUsage = false; // usage chỉ tới từ finalMessage — đứt giữa stream thì KHÔNG
       try {
-        for await (const ev of claudeStream({ model, messages })) {
+        // IMPORTANT 3: forward signal — bấm Stop hủy luôn call Anthropic đang tính phí.
+        for await (const ev of claudeStream({ model, messages, signal })) {
           if (ev.delta) {
             full += ev.delta;
             try {
@@ -972,14 +988,19 @@ function streamClaudeCompletion(
             }
           }
           if (ev.usage) {
+            gotUsage = true;
             tokensIn = ev.usage.in;
             tokensOut = ev.usage.out;
           }
         }
       } catch (e) {
-        if (!full && e instanceof ClaudeUnavailableError) {
-          console.error(`[chat] claude resume unavailable (conv=${convId}, code=${e.code})`, e);
-          full = `Đã thực hiện hành động nhưng không tạo được phản hồi. ${claudeErrText(lang, e.code)}`;
+        // CRITICAL 1b: rớt TRƯỚC delta — unavailable CÓ KIỂU *hoặc* lỗi bất ngờ —
+        // write ĐÃ thực thi nên user PHẢI biết (mất tường thuật ≠ mất hành động);
+        // không bao giờ đóng stream 0 byte im lặng (Rule 12).
+        if (!full) {
+          const code = e instanceof ClaudeUnavailableError ? e.code : "api";
+          console.error(`[chat] claude resume failed before first delta (conv=${convId}, code=${code})`, e);
+          full = `Đã thực hiện hành động nhưng không tạo được phản hồi. ${claudeErrText(lang, code)}`;
           try {
             controller.enqueue(enc.encode(full));
           } catch {
@@ -991,12 +1012,20 @@ function streamClaudeCompletion(
       }
       if (full) {
         try {
-          await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: full, tokensIn, tokensOut });
+          await db.insert(chatMessages).values({
+            conversationId: convId,
+            role: "assistant",
+            content: full,
+            // MINOR 4: usage chưa tới → KHÔNG ghi 0/0 (để null — không $0 giả).
+            ...(gotUsage ? { tokensIn, tokensOut } : {}),
+          });
         } catch (e) {
           console.error("[chat] persist assistant failed (fail-soft)", e);
         }
         try {
-          const trailing: ChatFrame[] = [...frames, { t: "tokens", i: tokensIn, o: tokensOut }];
+          // MINOR 4: OMIT frame tokens khi usage chưa tới; tool frame của write đã
+          // confirm vẫn phát (hành động ĐÃ xảy ra).
+          const trailing: ChatFrame[] = [...frames, ...(gotUsage ? [{ t: "tokens", i: tokensIn, o: tokensOut } as ChatFrame] : [])];
           for (const f of trailing) controller.enqueue(enc.encode(encodeFrame(f)));
         } catch {
           /* aborted */
