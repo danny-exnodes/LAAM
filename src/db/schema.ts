@@ -38,6 +38,9 @@ export const users = pgTable("user", {
   // Credentials login (bcrypt hash). Null for OAuth-only accounts.
   passwordHash: text("passwordHash"),
   role: roleEnum("role").notNull().default("member"),
+  // Off-boarding (soft-disable). When set, login is blocked and the user's tokens
+  // are revoked (see api/users/[id] PATCH {disabled}). Nullable = active by default.
+  disabledAt: timestamp("disabled_at", { mode: "date" }),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
 
