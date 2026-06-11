@@ -42,31 +42,17 @@ export function buildSystemPrompt(input: {
   const toolList = input.tools.map((t) =>
     typeof t === "string" ? { name: t, kind: "read" as ToolKind } : t,
   );
-  // QW-1: render CÓ NHÓM — tách họ ĐỌC khỏi họ GHI để chống position-bias + làm rõ
-  // tool nào an toàn gọi tự do, tool nào phải đợi người dùng yêu cầu (write).
-  const readNames = toolList.filter((t) => t.kind === "read").map((t) => t.name);
-  const writeNames = toolList.filter((t) => t.kind === "write").map((t) => t.name);
-  const groups = [
-    readNames.length
-      ? `Công cụ ĐỌC (gọi tự do khi cần dữ liệu thật): ${readNames.join(", ")}.`
-      : "",
-    writeNames.length
-      ? "Công cụ GHI (chỉ gọi khi người dùng yêu cầu tạo/gửi/sửa/xoá, kết quả sẽ cần xác nhận): " +
-        `${writeNames.join(", ")}.`
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  // Render PHẲNG (baseline đã chứng minh). Đã thử QW-1 grouping (ĐỌC/GHI) + QW-5 few-shot
+  // và đo k=6: reads giữ 6/6 nhưng write-selection KHÔNG cải thiện trên probe write-intent-trello
+  // (noisy 20-100% — đo ra 3/3 → 2/6 → 0/6, không kết luận được) → BỎ restructuring chưa chứng
+  // minh, giữ imperative GHI mạnh. `kind` vẫn nhận trong signature cho tương lai (eval/scale).
+  const names = toolList.map((t) => t.name).join(", ");
   const tools = toolList.length
-    ? `${groups} ` +
+    ? `Bạn có thể gọi các công cụ sau khi cần dữ liệu thực: ${names}. ` +
       "Chỉ gọi công cụ khi câu hỏi cần dữ liệu thật; nếu không, trả lời trực tiếp. " +
-      // F1: write-intent MUST go through a tool call; the model must never narrate a
-      // write as done without a real tool result (Rule 13 — code blocks unbacked claims).
+      // F1: write-intent MUST go through a tool call (Rule 13 — code blocks unbacked claims).
       "Khi người dùng yêu cầu tạo/gửi/sửa/xoá/cập nhật, BẮT BUỘC gọi công cụ tương ứng. " +
-      "TUYỆT ĐỐI KHÔNG nói đã tạo/gửi/xoá/cập nhật thành công nếu bạn chưa thực sự gọi công cụ và nhận được kết quả. " +
-      // QW-5: few-shot ngắn minh hoạ luồng ghi — dùng tool demo (KHÔNG dùng connector
-      // thật) để mẫu không bao giờ kích hoạt ghi tài khoản thật.
-      'Ví dụ: người dùng nói "tạo task X" → gọi demo_create_task rồi báo lại kết quả thật.'
+      "TUYỆT ĐỐI KHÔNG nói đã tạo/gửi/xoá/cập nhật thành công nếu bạn chưa thực sự gọi công cụ và nhận được kết quả."
     : "";
   return [base, `Hôm nay là ${date}.`, langHint, tools, RENDER_GUIDE].filter(Boolean).join(" ");
 }

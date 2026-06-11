@@ -18,14 +18,9 @@ export function modelToolSchemas(internal: Tool[], connectorTools: ConnectorTool
     kind: t.kind,
     function: { name: t.name, description: t.description, parameters: t.parameters },
   }));
-  // QW-1: stable-sort kind="write" LÊN TRƯỚC kind="read" (chống position-bias — model
-  // hay bỏ qua tool nằm cuối prompt phẳng ~47 tool). Stable → giữ nguyên thứ tự tương đối
-  // trong từng nhóm; nội dung schema không đổi. Dispatch theo tên nên thứ tự không ảnh hưởng.
-  const ranked = (t: ConnectorTool) => (t.kind === "write" ? 0 : 1);
-  return [...internalSchemas, ...connectorTools]
-    .map((t, i) => [t, i] as const)
-    .sort((a, b) => ranked(a[0]) - ranked(b[0]) || a[1] - b[1])
-    .map(([t]) => t);
+  // (Đã thử QW-1 write-first sort — bỏ: benefit chỉ ở scale, chưa đo được; reverted về
+  // thứ tự gốc để tránh thay đổi chưa chứng minh. Dispatch theo tên nên thứ tự vô hại.)
+  return [...internalSchemas, ...connectorTools];
 }
 
 export function makeDispatch(

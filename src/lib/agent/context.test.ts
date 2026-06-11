@@ -3,7 +3,7 @@ import { buildSystemPrompt } from "./context";
 
 describe("buildSystemPrompt", () => {
   const now = Date.UTC(2026, 5, 4); // 2026-06-04
-  test("có ngày, render CÓ NHÓM đọc/ghi với tên đúng nhóm, chỉ dẫn ngôn ngữ", () => {
+  test("có ngày, liệt kê tool (render phẳng), chỉ dẫn ngôn ngữ", () => {
     const p = buildSystemPrompt({
       lang: "vi",
       now,
@@ -14,14 +14,13 @@ describe("buildSystemPrompt", () => {
     });
     expect(p).toContain("2026-06-04");
     expect(p).toContain("tiếng Việt");
-    // QW-1: hai tiêu đề nhóm xuất hiện, tên tool nằm ĐÚNG nhóm của nó.
-    expect(p).toContain("Công cụ ĐỌC");
-    expect(p).toContain("Công cụ GHI");
-    // read tool đứng sau tiêu đề ĐỌC, trước tiêu đề GHI (tách nhóm thật sự, không trộn).
-    expect(p.indexOf("laam_list_agents")).toBeGreaterThan(p.indexOf("Công cụ ĐỌC"));
-    expect(p.indexOf("laam_list_agents")).toBeLessThan(p.indexOf("Công cụ GHI"));
-    // write tool nằm sau tiêu đề GHI.
-    expect(p.indexOf("demo_create_task")).toBeGreaterThan(p.indexOf("Công cụ GHI"));
+    // Render phẳng: cả 2 tool liệt kê trong câu "có thể gọi các công cụ sau".
+    expect(p).toContain("các công cụ sau");
+    expect(p).toContain("laam_list_agents");
+    expect(p).toContain("demo_create_task");
+    // QW-1 grouping ĐÃ REVERT (chưa chứng minh + write-probe noisy) — không còn tiêu đề nhóm.
+    expect(p).not.toContain("Công cụ ĐỌC");
+    expect(p).not.toContain("Công cụ GHI");
   });
   test("không có tool → không có cụm gọi công cụ; tiếng Anh", () => {
     const p = buildSystemPrompt({ lang: "en", now, tools: [] });
@@ -35,19 +34,16 @@ describe("buildSystemPrompt", () => {
     expect(p).toContain("TUYỆT ĐỐI"); // hard prohibition
     expect(p).toContain("thành công"); // ...on claiming a write succeeded without a tool result
   });
-  test("QW-5: few-shot luồng ghi CHỈ nhắc demo_create_task (không dùng connector thật)", () => {
-    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "demo_create_task", kind: "write" }] });
-    expect(p).toContain("Ví dụ:");
-    expect(p).toContain("demo_create_task");
-    // mẫu không được trỏ tới bất kỳ connector ghi thật nào (an toàn write-test).
-    expect(p).not.toContain("trello_create_card");
-    expect(p).not.toContain("gmail_send");
+  test("KHÔNG few-shot neo tool cụ thể (QW-5 đã gỡ — neo demo_create_task làm tụt write-selection 8B)", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "trello_create_card", kind: "write" }] });
+    expect(p).not.toContain("Ví dụ:"); // không few-shot
+    expect(p).not.toContain("demo_create_task"); // không neo tool ngoài danh sách thật của lượt
+    expect(p).toContain("trello_create_card"); // tool thật vẫn được liệt kê
   });
-  test("tương thích ngược: vẫn nhận string[] (coi là tool ĐỌC)", () => {
+  test("tương thích ngược: vẫn nhận string[] (caller chưa cập nhật)", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: ["laam_list_agents"] });
-    expect(p).toContain("Công cụ ĐỌC");
+    expect(p).toContain("các công cụ sau");
     expect(p).toContain("laam_list_agents");
-    expect(p).not.toContain("Công cụ GHI"); // không có write → không render tiêu đề GHI
   });
   test("dạy hợp đồng khối ```chart và ```map (rich-render) — kể cả khi không có tool", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [] });
