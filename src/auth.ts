@@ -11,6 +11,7 @@ import { authConfig } from "@/auth.config";
 import { db } from "@/db";
 import { users, accounts, sessions, verificationTokens } from "@/db/schema";
 import { createLoginLockout } from "@/lib/auth/rate-limit";
+import { isUserDisabled } from "@/lib/auth/disabled";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -62,6 +63,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           lockout.recordFailure(email);
           return null;
         }
+        // Off-boarding: a soft-disabled user cannot sign in even with the right
+        // password. Checked AFTER the password so the response is indistinguishable
+        // from a wrong password (no account-state leak).
+        if (isUserDisabled(user)) return null;
         lockout.recordSuccess(email);
 
         return {

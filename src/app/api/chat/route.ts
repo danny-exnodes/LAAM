@@ -19,6 +19,7 @@ import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
 import { extractToolTurns } from "@/lib/agent/persist";
+import { notifyWritePending } from "@/lib/notifications";
 import { stripNul } from "@/lib/chat/attach";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
 import {
@@ -570,6 +571,12 @@ function streamMainTurn(opts: {
             /* aborted */
           }
           emit({ t: "pending_write", token, tool: e.tool, title: preview.title, summary: preview.summary, fields: preview.fields });
+          // F2: surface the pending write in the bell too. Fire-and-forget — the
+          // in-chat confirm card (the pending_write frame above) is the primary
+          // signal and the single source; a notify failure must NOT break the turn.
+          void notifyWritePending({ userId, conversationId: convId, tool: e.tool, title: preview.title }).catch((err) =>
+            console.error("[chat] write-pending notify failed (fail-soft)", err),
+          );
           try {
             await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: preview.summary });
             await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));

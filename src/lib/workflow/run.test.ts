@@ -140,6 +140,38 @@ describe("executeRun", () => {
     expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: "workflow_run", runId: "r1", status: "succeeded" }));
   });
 
+  test("F2: workflow-terminal calls notify() with run-derived shape (userId+workflowId+runId+status)", async () => {
+    // The bell wires this to notifications.create — the SINGLE notification source.
+    // It must fire at the SAME terminal chokepoint as the workflow_run publish, with
+    // code ground-truth fields (Rule 13: not a caller/LLM guess).
+    const db = {
+      insert: () => ({ values: async () => {} }),
+      update: () => ({ set: () => ({ where: async () => {} }) }),
+    };
+    const notify = vi.fn();
+    const buildRunNode = () => vi.fn(async (node: { id: string }) => (node.id === "n1" ? { count: 3 } : "ok"));
+    await executeRunRow(
+      { id: "r1", workflowId: "w1", userId: "u1", graphSnapshot: graph, trigger: "schedule" },
+      { db: db as never, publish: vi.fn(), buildRunNode, notify },
+    );
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith({ userId: "u1", workflowId: "w1", runId: "r1", status: "succeeded" });
+  });
+
+  test("F2: notify failure does NOT fail the run (fire-and-forget)", async () => {
+    const db = {
+      insert: () => ({ values: async () => {} }),
+      update: () => ({ set: () => ({ where: async () => {} }) }),
+    };
+    const notify = vi.fn(() => Promise.reject(new Error("bus down")));
+    const buildRunNode = () => vi.fn(async () => "ok");
+    const { status } = await executeRunRow(
+      { id: "r1", workflowId: "w1", userId: "u1", graphSnapshot: graph, trigger: "schedule" },
+      { db: db as never, publish: vi.fn(), buildRunNode, notify },
+    );
+    expect(status).toBe("succeeded"); // run still finalizes despite notify throwing
+  });
+
   test("executeRunRow finalize FAILED khi engine throw (budget)", async () => {
     const g: WorkflowGraph = {
       nodes: [

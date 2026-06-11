@@ -15,6 +15,9 @@
 - **User-mgmt:** UI tối thiểu (list + role owner-only + access self-service). Team <50: KHÔNG state-machine role/nhiều-owner.
 - **claude-runtime:** CHỈ Phase 0 parser augment (parentToolUseId + outputText, fail-loud version guard, redact outputText). DROP todos/Desktop-parity.
 
+## F1 ĐÃ IMPLEMENT (2026-06-12, feat/batch2 `9b79cb1` backend + `c8c2085` UI)
+Off-boarding GỘP vào F1 xong. migration **0012** `user.disabled_at` (`drizzle-kit generate` CHẠY ĐƯỢC trong worktree — **host phải `npm run db:migrate`**). `GET /api/users` (owner/admin, whitelist cột, no secret); `PATCH /api/users/[id]` {role} owner-only (guard self + owner-cuối; audit role_change target=JSON{actor,subject,from,to}) / {disabled} owner/admin tx = set disabledAt + revoke MỌI access_token + clear legacy `machines.tokenHash WHERE ownerUserId` + audit user_disabled/enabled (guard self + owner-cuối). auth.ts chặn login disabled (sau bcrypt → no leak; helper `lib/auth/disabled.ts`). `access-tokens/[id]` DELETE: owner/admin thu hồi token bất kỳ, self-revoke mọi người, 404 khi WHERE rỗng. UI `/settings/users` (owner/admin) + `/settings/access` (mọi user) + SettingsMenu rows + i18n vi/en/zh. **1702 test, tsc sạch.** machines owner-col = `ownerUserId`. audit_log.target = JSON string (cột text).
+
 ## Ràng buộc LOCKED giữ nguyên (machines-decomposition)
 token=H3 unified; ingest visibility PER-SOURCE (KHÔNG per-user isolation cho monitoring — phá value-prop team); Q2 isVisible; MCP write defer qua scope. userId trên access_token: provenance cho ingest NHƯNG isolation key cho MCP (mcp/route.ts ctx.userId lọc data) — tách rõ 2 nghĩa, đừng "dọn theo khẩu hiệu".
 

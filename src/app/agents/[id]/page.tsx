@@ -54,10 +54,12 @@ export default async function SessionDetailPage({
 
   return (
     <div>
-      <AppHeader current="/agents" role={session.user.role} />
+      {/* The Agents list is now a Monitoring tab (F3) — highlight Monitoring in
+          the nav and link back there, not to the redirect-only /agents route. */}
+      <AppHeader current="/monitoring" role={session.user.role} />
       <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
         <Link
-          href="/agents"
+          href="/monitoring?tab=agents"
           className="text-sm text-[var(--color-accent)] hover:underline"
         >
           ← Agents
@@ -115,9 +117,14 @@ export default async function SessionDetailPage({
                   className="flex items-center gap-3 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs dark:border-neutral-800"
                 >
                   <span
+                    title={a.isError ? "Sub-agent lỗi" : undefined}
                     className={
                       "inline-block h-2 w-2 shrink-0 rounded-full " +
-                      (a.status === "running" ? "bg-green-500" : "bg-neutral-400")
+                      (a.status === "running"
+                        ? "bg-green-500"
+                        : a.isError
+                          ? "bg-red-500"
+                          : "bg-neutral-400")
                     }
                   />
                   <span className="font-mono font-semibold text-[var(--color-accent)]">
@@ -140,7 +147,7 @@ export default async function SessionDetailPage({
         <p className="mt-6 text-xs text-neutral-400">
           Log tin nhắn hiển thị ở drawer khi mở agent từ trang{" "}
           <Link
-            href="/agents"
+            href="/monitoring?tab=agents"
             className="text-[var(--color-accent)] hover:underline"
           >
             Agents

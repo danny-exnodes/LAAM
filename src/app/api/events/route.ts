@@ -127,6 +127,19 @@ async function broadcastSessions() {
 }
 
 function onBusEvent(evt: BusEvent) {
+  if (evt.type === "notification") {
+    // F2 — per-user notification channel. SEPARATE from the org-shared `sessions`
+    // broadcast: a notification reaches ONLY the recipient's connected clients
+    // (client.userId === evt.userId). Never re-pushes the session snapshot, so this
+    // path cannot narrow /agents. Drop the recipient userId from the wire payload
+    // (it's the routing key, not client data).
+    const { userId, notification } = evt as unknown as { userId: string; notification: unknown };
+    const chunk = `event: notification\ndata: ${JSON.stringify({ type: "notification", notification })}\n\n`;
+    for (const c of [...clients]) {
+      if (c.userId === userId) c.send(chunk);
+    }
+    return; // notification events do NOT trigger a sessions re-push
+  }
   if (evt.type === "workflow_run_step" || evt.type === "workflow_run") {
     // Forward the raw event payload under its own SSE event name so the UI
     // can update workflow status without polling.

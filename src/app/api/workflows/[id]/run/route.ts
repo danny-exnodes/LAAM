@@ -4,6 +4,7 @@ import { publish } from "@/lib/events-bus";
 import { executeRun } from "@/lib/workflow/run";
 import { buildRunNode } from "@/lib/workflow/runtime";
 import { requireMutator } from "@/lib/auth/rbac";
+import { notifyWorkflowTerminal } from "@/lib/notifications";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -21,7 +22,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } catch {
     /* no/invalid body → real run */
   }
-  const result = await executeRun({ workflowId: id, userId: session.user.id, trigger: "manual", dryRun }, { db, publish, buildRunNode });
+  const result = await executeRun({ workflowId: id, userId: session.user.id, trigger: "manual", dryRun }, { db, publish, buildRunNode, notify: notifyWorkflowTerminal });
   if (!result.ok) return new Response(JSON.stringify({ error: result.error }), { status: result.status });
   return new Response(JSON.stringify(result), { headers: { "content-type": "application/json" } });
 }

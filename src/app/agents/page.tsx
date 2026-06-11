@@ -1,18 +1,10 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { AppHeader } from "@/components/app-header";
-import { AgentsClient } from "@/components/agents/AgentsClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function AgentsPage() {
-  const session = await auth();
-  if (!session?.user) redirect("/login");
-
-  return (
-    <div>
-      <AppHeader current="/agents" role={session.user.role} />
-      <AgentsClient />
-    </div>
-  );
+// The Agents LIST is now the default "Agents" tab of the unified Monitoring home
+// (F3). This route redirects there. The rich live view lives in AgentsClient,
+// mounted by /monitoring; the per-session waterfall stays at /agents/[id].
+export default function AgentsPage() {
+  redirect("/monitoring?tab=agents");
 }

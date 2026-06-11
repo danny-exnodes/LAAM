@@ -7,6 +7,7 @@
 // The user/account/session/verificationToken tables follow the @auth/drizzle-adapter
 // PostgreSQL convention so Auth.js can manage them directly.
 
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
@@ -17,6 +18,7 @@ import {
   timestamp,
   primaryKey,
   unique,
+  uniqueIndex,
   boolean,
   index,
 } from "drizzle-orm/pg-core";
@@ -38,6 +40,9 @@ export const users = pgTable("user", {
   // Credentials login (bcrypt hash). Null for OAuth-only accounts.
   passwordHash: text("passwordHash"),
   role: roleEnum("role").notNull().default("member"),
+  // Off-boarding (soft-disable). When set, login is blocked and the user's tokens
+  // are revoked (see api/users/[id] PATCH {disabled}). Nullable = active by default.
+  disabledAt: timestamp("disabled_at", { mode: "date" }),
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
 
@@ -310,6 +315,11 @@ export type SubAgentJson = {
   description: string;
   status: string;
   durationMs: number | null;
+  // F4: optional — only present on rows parsed after the F4 augment. The detail
+  // page surfaces `isError` (red dot); rich `outputText` rendering is deferred
+  // (see .serena/memories/backlog/subagent-parent-link.md).
+  isError?: boolean;
+  outputText?: string | null;
 };
 export type ToolJson = {
   name: string;
@@ -463,3 +473,42 @@ export type WorkflowRun = typeof workflowRuns.$inferSelect;
 export type WorkflowRunStep = typeof workflowRunSteps.$inferSelect;
 export type WorkflowSchedule = typeof workflowSchedules.$inferSelect;
 export type WorkflowNodeIdempotency = typeof workflowNodeIdempotency.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// Notifications (F2) — in-app bell. Per-user delivery NOW; the `audience` column
+// is reserved for a future role-broadcast channel (e.g. "role:admin") without a
+// second migration — only per-user is implemented this round. `userId` is the
+// recipient (notnull while delivery is per-user). `create()` (src/lib/notifications)
+// is the SINGLE write chokepoint: insert + dedupe + publish a per-user SSE event.
+// `dedupeKey` collapses repeats (e.g. one workflow-terminal notif per run); the
+// partial-unique index enforces it only when set. readAt null = unread.
+// ---------------------------------------------------------------------------
+export const notifications = pgTable(
+  "notification",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    // Recipient. notnull for now (per-user delivery). Reserved `audience` is for a
+    // later role-broadcast fan-out, NOT implemented this round.
+    userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    audience: text("audience"), // future: "role:admin" etc. — unused now
+    type: text("type").notNull(), // workflow_run | write_pending | system | ...
+    severity: text("severity").notNull().default("info"), // info | warn | error
+    title: text("title").notNull(),
+    body: text("body"),
+    link: text("link"), // deep-link path, e.g. /workflows/<id>?run=<runId>
+    source: text("source").notNull(), // workflow | chat | system
+    readAt: timestamp("readAt", { mode: "date" }),
+    dedupeKey: text("dedupeKey"),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Bell query: a user's notifications, unread-first window, newest-first.
+    index("notification_user_read_created_idx").on(t.userId, t.readAt, t.createdAt),
+    // Dedupe: at most one live notification per (user, dedupeKey) — only when set.
+    uniqueIndex("notification_user_dedupe_key")
+      .on(t.userId, t.dedupeKey)
+      .where(sql`${t.dedupeKey} is not null`),
+  ],
+);
+
+export type Notification = typeof notifications.$inferSelect;

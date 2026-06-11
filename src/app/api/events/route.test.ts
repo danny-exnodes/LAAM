@@ -343,6 +343,69 @@ describe("GET /api/events — shared snapshot broadcast (perf M2)", () => {
     await rB.cancel();
   });
 
+  // Shared row factory for the notification tests below.
+  const mk = (id: string, source: string, userId: string | null) => ({
+    ...row,
+    id,
+    source,
+    userId,
+  });
+
+  test("notification event reaches ONLY the recipient; sessions broadcast unaffected (F2)", async () => {
+    // F2 per-user channel. Two clients of DIFFERENT users connect. A notification
+    // bus event for userA must reach userA's stream ONLY — userB must not see it.
+    // And the org-shared `sessions` fan-out (the team value-prop) must keep
+    // reaching BOTH clients: the notification path is SEPARATE, never narrowing it.
+    h.rows = [mk("local-1", "local", null)];
+
+    h.authResult = { user: { id: "userA" } };
+    const resA = await GET();
+    h.authResult = { user: { id: "userB" } };
+    const resB = await GET();
+    const rA = resA.body!.getReader();
+    const rB = resB.body!.getReader();
+    await rA.read(); // drain initial snapshots
+    await rB.read();
+    expect(clientCount()).toBe(2);
+    expect(h.busCbs).toHaveLength(1);
+
+    // Fire a notification for userA.
+    h.busCbs[0]({ type: "notification", userId: "userA", notification: { id: "n1", title: "hi" } } as { type: string });
+
+    const a = dec.decode((await rA.read()).value);
+    expect(a).toContain("event: notification");
+    expect(a).toContain('"id":"n1"');
+    // The recipient userId is the routing key — it must NOT reach the wire.
+    expect(a).not.toContain("userA");
+
+    // userB must NOT receive userA's notification. The next thing userB reads is a
+    // sessions broadcast (org-shared), NEVER the notification frame.
+    h.busCbs[0]({ type: "sync" });
+    const b = dec.decode((await rB.read()).value);
+    expect(b).not.toContain("event: notification");
+    expect(b).toContain("event: sessions");
+    expect(b).toContain('"id":"local-1"'); // org-shared row still reaches userB
+
+    await rA.cancel();
+    await rB.cancel();
+  });
+
+  test("notification event does NOT trigger a sessions re-query (separate channel)", async () => {
+    // A notification must not cost a DB snapshot — it's a targeted send, not a
+    // session change. Guards against accidentally routing it through broadcastSessions.
+    h.authResult = { user: { id: "userA" } };
+    h.rows = [];
+    const res = await GET();
+    const r = res.body!.getReader();
+    await r.read(); // initial snapshot (1 query)
+
+    const before = h.selectCalls;
+    h.busCbs[0]({ type: "notification", userId: "userA", notification: { id: "n1" } } as { type: string });
+    expect(h.selectCalls).toBe(before); // ZERO extra queries for a notification
+
+    await r.cancel();
+  });
+
   test("a closed client leaves the registry; the last close releases the bus", async () => {
     // Disconnected dashboards must not keep costing broadcasts, and with no
     // clients left the route must not keep querying the DB on bus events.

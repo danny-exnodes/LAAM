@@ -7,6 +7,23 @@ import path from 'node:path';
 import os from 'node:os';
 import { costUSD } from './pricing.js';
 
+// Sub-agent output text limit before storing in agent_sessions.subAgents jsonb.
+// subAgents is org-broadcast via SSE — unbounded output could leak large secrets or PII.
+const OUTPUT_TEXT_MAX = 500;
+
+// Redact credential-looking substrings from sub-agent outputText before it is
+// stored in agent_sessions.subAgents jsonb (org-broadcast via SSE).
+// Mirrors the patterns in src/lib/agent/safety/redact.ts — kept inline so
+// parser.js stays a zero-external-import server module.
+const REDACT_PLACEHOLDER = '‹redacted›';
+function redactOutputText(s) {
+  return s
+    .replace(/([?&](?:key|token|api_key|access_token|password|secret)=)[^&\s"']+/gi,
+      (_m, p1) => `${p1}${REDACT_PLACEHOLDER}`)
+    .replace(/(Bearer\s+)[\w.\-]+/gi, (_m, p1) => `${p1}${REDACT_PLACEHOLDER}`)
+    .replace(/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, () => REDACT_PLACEHOLDER);
+}
+
 // A session counts as "running" if its file changed within this window.
 export const RUNNING_WINDOW_MS = 60 * 1000;
 // Older than this and we treat it as finished rather than just idle.
@@ -105,6 +122,7 @@ export function parseSession(file, now = Date.now()) {
   const taskCalls = new Map(); // tool_use id -> sub-agent record
   const resultTimes = new Map(); // tool_use_id -> timestamp of result
   const resultErrors = new Set(); // tool_use_id of results flagged is_error
+  const resultOutputs = new Map(); // tool_use_id -> bounded+redacted output text
   const toolUseById = new Map(); // tool_use id -> { name, ts } (every tool, for leaderboard)
   const histo = {}; // "<dow>_<hour>" -> count of timestamped entries (heatmap)
 
@@ -171,6 +189,20 @@ export function parseSession(file, now = Date.now()) {
           if (b && b.type === 'tool_result' && b.tool_use_id) {
             resultTimes.set(b.tool_use_id, ts);
             if (b.is_error === true) resultErrors.add(b.tool_use_id);
+            // F4: capture bounded+redacted output for Task results.
+            // outputText flows into agent_sessions.subAgents jsonb (org-broadcast via SSE).
+            // Redact FIRST (full string), then bound — ensures secrets near the 500-char
+            // boundary are not truncated before being scrubbed.
+            if (taskCalls.has(b.tool_use_id)) {
+              const raw = typeof b.content === 'string'
+                ? b.content
+                : Array.isArray(b.content)
+                  ? b.content.map((x) => (x && typeof x.text === 'string' ? x.text : '')).join(' ')
+                  : '';
+              if (raw) {
+                resultOutputs.set(b.tool_use_id, redactOutputText(raw).slice(0, OUTPUT_TEXT_MAX));
+              }
+            }
           }
         }
       }
@@ -199,6 +231,13 @@ export function parseSession(file, now = Date.now()) {
       endTime,
       durationMs: t.startTime && endTime ? endTime - t.startTime : (t.startTime ? now - t.startTime : null),
       status: running ? 'running' : 'done',
+      isError: resultErrors.has(t.id),
+      // F4: bounded (≤500 chars) + redacted output from the Task tool_result.
+      // null when the sub-agent is still running or produced no text output.
+      // Note: parent→child tree link (parentToolUseId) was dropped — parent_tool_use_id
+      // does NOT exist on real sidechain entries; real field is parentUuid/agentId.
+      // See backlog: .serena/memories/backlog/subagent-parent-link.md
+      outputText: resultOutputs.get(t.id) ?? null,
     });
   }
   subAgents.sort((a, b) => (a.startTime || 0) - (b.startTime || 0));

@@ -29,6 +29,19 @@ export const settingsDict: Dict = {
     en: "Orchestrator → sub-agent graph.",
     zh: "协调器 → 子代理关系图。",
   },
+  "settings.users.label": { vi: "Người dùng", en: "Users", zh: "用户" },
+  "settings.users.desc": {
+    vi: "Quản lý thành viên · vai trò · vô hiệu hoá",
+    en: "Manage members · roles · off-boarding",
+    zh: "管理成员 · 角色 · 停用",
+  },
+  "settings.access.label": { vi: "Token truy cập", en: "Access tokens", zh: "访问令牌" },
+  "settings.access.desc": {
+    vi: "Token cá nhân cho API / MCP",
+    en: "Personal tokens for API / MCP",
+    zh: "用于 API / MCP 的个人令牌",
+  },
+
   "settings.display": { vi: "Hiển thị", en: "Display", zh: "显示" },
   "settings.appearance": { vi: "Giao diện", en: "Appearance", zh: "外观" },
   "settings.language": { vi: "Ngôn ngữ", en: "Language", zh: "语言" },

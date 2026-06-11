@@ -150,7 +150,7 @@ const MAX_RESUME_PER_TICK = 25;
 // 'running' (F2: flip-all-then-slice would orphan #26+). Resume each from its journal.
 export async function tickResume(
   db: typeof Db,
-  deps: Pick<ResumeDeps, "publish" | "buildRunNode"> & { resumeRunRow?: typeof resumeRunRowImpl },
+  deps: Pick<ResumeDeps, "publish" | "buildRunNode" | "notify"> & { resumeRunRow?: typeof resumeRunRowImpl },
 ): Promise<number> {
   const resume = deps.resumeRunRow ?? resumeRunRowImpl;
   const sub = db
@@ -165,7 +165,7 @@ export async function tickResume(
     .where(inArray(workflowRuns.id, sub))
     .returning({ id: workflowRuns.id })) as { id: string }[];
   for (const r of claimed) {
-    await resume(r.id, { db, publish: deps.publish, buildRunNode: deps.buildRunNode });
+    await resume(r.id, { db, publish: deps.publish, buildRunNode: deps.buildRunNode, notify: deps.notify });
   }
   return claimed.length;
 }
