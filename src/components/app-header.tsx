@@ -2,7 +2,6 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   MessageSquare,
-  Bot,
   Network,
   Plug,
   Settings,
@@ -20,11 +19,13 @@ import { UserAvatar } from "@/components/user-avatar";
 import { NotificationBell } from "@/components/notification-bell";
 import { BottomNav } from "@/components/bottom-nav";
 
+// "Agents" is no longer a separate destination — it is the default tab of
+// Monitoring (F3). /agents redirects to /monitoring?tab=agents, so a dedicated
+// nav link would be dead; the Monitoring entry covers it.
 const NAV = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/chat", label: "Chat", Icon: MessageSquare },
   { href: "/monitoring", label: "Monitoring", Icon: Activity },
-  { href: "/agents", label: "Agents", Icon: Bot },
   { href: "/workflows", label: "Workflows", Icon: GitBranch },
   { href: "/eval", label: "Reliability", Icon: Gauge },
   { href: "/graph", label: "Graph", Icon: Network },

@@ -35,7 +35,12 @@ function options(list: LiveSession[], pick: (s: LiveSession) => string | null): 
   return [...set].sort();
 }
 
-export function AgentsClient() {
+// `embedded` = rendered inside the Monitoring "Agents" tab (which already owns the
+// page <main> + heading). In that mode we drop our own <main> wrapper and the
+// "Agents" <h1>, keeping the live-status dot + the X/Y count inline. Standalone
+// (`embedded` false) keeps the full page chrome — but the /agents route now
+// redirects to /monitoring, so standalone is only used by tests/back-compat.
+export function AgentsClient({ embedded = false }: { embedded?: boolean } = {}) {
   const t = useT(agents);
   const { sessions, connected, stuckIds, stuckMin } = useLiveSessions();
   const [filters, setFilters] = useState<AgentFilters>(EMPTY_FILTERS);
@@ -88,17 +93,26 @@ export function AgentsClient() {
   const exportCsv = () =>
     downloadCsv("agents.csv", filtered.map(toCsvRow), [...AGENT_CSV_COLUMNS]);
 
-  return (
+  const liveDot = (
+    <span
+      title={connected ? "live" : "offline"}
+      className={"h-2 w-2 rounded-full " + (connected ? "bg-green-500" : "bg-neutral-400")}
+    />
+  );
+
+  const body = (
     <>
-      <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">
       <div className="mb-4 flex items-center justify-between">
-        <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
-          Agents
-          <span
-            title={connected ? "live" : "offline"}
-            className={"h-2 w-2 rounded-full " + (connected ? "bg-green-500" : "bg-neutral-400")}
-          />
-        </h1>
+        {embedded ? (
+          // Inside the Monitoring "Agents" tab the page heading lives in the tab
+          // chrome — render just the live-status dot, no second <h1>.
+          <span className="flex items-center gap-2 text-sm text-neutral-500">{liveDot}</span>
+        ) : (
+          <h1 className="flex items-center gap-2 text-xl font-bold tracking-tight">
+            Agents
+            {liveDot}
+          </h1>
+        )}
         <span className="text-sm text-neutral-500">
           {t("agents.count", { shown: filtered.length, total: sessions.length })}
         </span>
@@ -145,7 +159,16 @@ export function AgentsClient() {
           </section>
         ))
       )}
-      </main>
+    </>
+  );
+
+  return (
+    <>
+      {embedded ? (
+        body
+      ) : (
+        <main className="w-full px-4 pt-4 pb-24 sm:px-6 sm:pt-6 md:pb-8">{body}</main>
+      )}
       <AgentDrawer session={selected} onClose={() => setSelected(null)} />
     </>
   );

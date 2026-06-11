@@ -7,7 +7,7 @@
 // Client component: the aria-label resolves through the i18n provider.
 
 import Link from "next/link";
-import { LayoutDashboard, Bot, MessageSquare, Plug, Settings, GitBranch, Search } from "lucide-react";
+import { LayoutDashboard, Activity, MessageSquare, Plug, Settings, GitBranch, Search } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { common } from "@/i18n/dictionaries/common";
 
@@ -18,7 +18,7 @@ const ITEMS: {
   center?: boolean;
 }[] = [
   { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
-  { href: "/agents", label: "Agents", Icon: Bot },
+  { href: "/monitoring", label: "Monitoring", Icon: Activity },
   { href: "/workflows", label: "Workflows", Icon: GitBranch },
   { href: "/chat", label: "Chat", Icon: MessageSquare, center: true },
   { href: "/search", label: "Search", Icon: Search },

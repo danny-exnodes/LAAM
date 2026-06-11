@@ -66,9 +66,9 @@ export const dashboard: Dict = {
   'dash.axis.tokens': { vi: 'Tokens', en: 'Tokens', zh: 'Token' },
   // stuck
   'dash.stuck.banner': {
-    vi: '<b>{n}</b> agent nghi bị kẹt (chưa hoàn tất, lâu không ghi transcript) — <a href="/agents">xem ở Agents →</a>',
-    en: '<b>{n}</b> agents likely stuck (not finished, no transcript writes for a while) — <a href="/agents">view in Agents →</a>',
-    zh: '<b>{n}</b> 个智能体疑似卡住（未完成，长时间未写入 transcript）— <a href="/agents">在智能体页查看 →</a>',
+    vi: '<b>{n}</b> agent nghi bị kẹt (chưa hoàn tất, lâu không ghi transcript) — <a href="/monitoring?tab=agents">xem ở Agents →</a>',
+    en: '<b>{n}</b> agents likely stuck (not finished, no transcript writes for a while) — <a href="/monitoring?tab=agents">view in Agents →</a>',
+    zh: '<b>{n}</b> 个智能体疑似卡住（未完成，长时间未写入 transcript）— <a href="/monitoring?tab=agents">在智能体页查看 →</a>',
   },
   'dash.stuck.notifyTitle': { vi: 'Agent nghi bị kẹt', en: 'Agent likely stuck', zh: '智能体疑似卡住' },
   'dash.stuck.notifyBody': { vi: '{project} · {model} — {ago} chưa ghi transcript.', en: '{project} · {model} — no transcript writes for {ago}.', zh: '{project} · {model} — 已 {ago} 未写入 transcript。' },

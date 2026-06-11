@@ -12,6 +12,7 @@ export default function robots(): MetadataRoute.Robots {
         disallow: [
           "/api/",
           "/dashboard",
+          "/monitoring",
           "/agents",
           "/chat",
           "/connectors",

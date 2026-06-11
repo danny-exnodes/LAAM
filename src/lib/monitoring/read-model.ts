@@ -41,6 +41,10 @@ export type MonitoredRun = {
   tokensOut: number;
   costUsd: number;
   machineId: string | null;
+  // Parent workflow id for `source==="workflow"` rows — the UI click-through
+  // targets /workflows/[workflowId] (this row's `id` is the RUN id). Absent on
+  // other sources.
+  workflowId?: string | null;
 };
 
 export type Viewer = { userId: string; role: string };
@@ -99,6 +103,7 @@ export function normalizeChatConversation(
 export function normalizeWorkflowRun(r: {
   id: string;
   userId: string;
+  workflowId?: string | null;
   workflowName: string | null;
   status: string | null;
   startedAt: Date | null;
@@ -120,6 +125,7 @@ export function normalizeWorkflowRun(r: {
     tokensOut: r.tokensOut,
     costUsd: r.costUsd,
     machineId: null,
+    workflowId: r.workflowId ?? null,
   };
 }
 
@@ -209,6 +215,7 @@ export async function getMonitoredRuns(
         .select({
           id: workflowRuns.id,
           userId: workflowRuns.userId,
+          workflowId: workflowRuns.workflowId,
           workflowName: workflows.name,
           status: workflowRuns.status,
           startedAt: workflowRuns.startedAt,

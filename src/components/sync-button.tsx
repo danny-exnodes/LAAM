@@ -7,8 +7,10 @@ import { useT } from "@/i18n/provider";
 import { common } from "@/i18n/dictionaries/common";
 
 // Icon-only sync action (matches the header's icon row). Spins while syncing;
-// the result count / error surfaces via the tooltip.
-export function SyncButton() {
+// the result count / error surfaces via the tooltip. `onSynced` lets a host page
+// (e.g. Monitoring) re-fetch its own client-side data after a successful sync —
+// router.refresh() only re-runs server components, not client fetches.
+export function SyncButton({ onSynced }: { onSynced?: () => void } = {}) {
   const t = useT(common);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -26,6 +28,7 @@ export function SyncButton() {
       }
       setMsg(t("sync.result", { n: data.sessions ?? 0 }));
       router.refresh();
+      onSynced?.();
       setTimeout(() => setMsg(null), 3000);
     } finally {
       setLoading(false);
