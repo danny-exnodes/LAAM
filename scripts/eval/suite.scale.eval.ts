@@ -9,7 +9,7 @@ import { curveTable, wilson, type CurvePoint } from "./scale/curve";
 import type { Scenario } from "./types";
 
 const K = Math.max(1, Number(process.env.EVAL_K) || 5);
-const SIZES = [4, 6, 8, 10, 12, 16]; // #1a′: thêm N=4,6 (<8) tìm nơi bare-write ≥90% = capK THẬT (CTO). 16 = neo trên.
+const SIZES = [4, 8, 12, 16]; // 4 mốc đủ thấy đường cong (capK@4 → prod-scale@16); bỏ 6/10 để giảm runtime khi tăng #write-probe.
 const cfg = ollamaCfgFromEnv();
 const callOllama = makeRealOllama(cfg);
 const at = new Date().toISOString().slice(0, 10);
@@ -46,6 +46,16 @@ const PROBES: { id: string; correct: string | string[]; scn: Scenario }[] = [
     id: "scale-write-gcal", capability: "tool-selection",
     input: "Tạo sự kiện Google Calendar tiêu đề 'Họp sprint', bắt đầu 2026-06-10T15:00:00, kết thúc 2026-06-10T16:00:00.",
     toolStubs: { gcal_create_event: { status: "pending_write" } }, expect: { callsTool: "gcal_create_event" } } },
+  // bare-write #4 (github, args đủ owner/repo/title — github.ts:169) — mở write-class ra ngoài trello/gmail/gcal.
+  { id: "write-github", correct: "github_create_issue", scn: {
+    id: "scale-write-github", capability: "tool-selection",
+    input: "Tạo issue trên repo 'web' của owner 'acme', tiêu đề 'Login bug'.",
+    toolStubs: { github_create_issue: { status: "pending_write" } }, expect: { callsTool: "github_create_issue" } } },
+  // bare-write #5 (demo, chỉ required title — demo.ts:45) — write tool đơn-arg, baseline dễ nhất; tách "khó vì nhiều arg" khỏi "khó vì là write".
+  { id: "write-demo", correct: "demo_create_task", scn: {
+    id: "scale-write-demo", capability: "tool-selection",
+    input: "Tạo task tên 'Review PR #42'.",
+    toolStubs: { demo_create_task: { status: "pending_write" } }, expect: { callsTool: "demo_create_task" } } },
   // T4 — multi-tool (read+write cùng lượt): cả hai phải lọt ≤ capK (callsTool[] = tất-cả-phải-gọi, types.ts:11).
   { id: "multi-read-write", correct: ["laam_find_stuck", "trello_create_card"], scn: {
     id: "scale-multi", capability: "tool-selection", input: "Xem agent nào đang kẹt rồi tạo card Trello nhắc tôi xử lý.",
