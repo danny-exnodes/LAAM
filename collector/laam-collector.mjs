@@ -18,15 +18,14 @@
 import { pathToFileURL } from "node:url";
 import { scanAll } from "../src/lib/monitoring/parser.js";
 import { scanLocal } from "../src/lib/monitoring/localParser.js";
+// Pure retry helpers live in retry.mjs (no shebang) so the test suite can import
+// them; re-exported here so existing importers of this module keep working.
+import { RETRY_BACKOFF_MS, sleep, pushWithRetry, makeCycle } from "./retry.mjs";
+export { RETRY_BACKOFF_MS, pushWithRetry, makeCycle };
 
 const LAAM_URL = (process.env.LAAM_URL || "http://localhost:3000").replace(/\/$/, "");
 const TOKEN = process.env.LAAM_MACHINE_TOKEN;
 const INTERVAL = Number(process.env.LAAM_INTERVAL_SEC || 0);
-
-/** Backoff trước lần retry duy nhất sau khi push fail. */
-export const RETRY_BACKOFF_MS = 2000;
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function pushOnce() {
   const claude = scanAll();
@@ -52,48 +51,7 @@ async function pushOnce() {
   );
 }
 
-/**
- * Chạy `push` với tối đa 1 retry sau backoff. KHÔNG bao giờ throw — trả về
- * true (thành công) / false (cả hai lần đều fail) để vòng setInterval không
- * chết vì một lần mạng/server lỗi. `sleep`/`log` inject được cho test.
- */
-export async function pushWithRetry(push, { backoffMs = RETRY_BACKOFF_MS, sleep: wait = sleep, log = console.error } = {}) {
-  try {
-    await push();
-    return true;
-  } catch (err) {
-    log(`[${new Date().toISOString()}] ✗ Push lỗi (${err?.message ?? err}) — retry sau ${backoffMs / 1000}s…`);
-    await wait(backoffMs);
-  }
-  try {
-    await push();
-    return true;
-  } catch (err) {
-    log(`[${new Date().toISOString()}] ✗ Retry vẫn lỗi: ${err?.message ?? err}`);
-    return false;
-  }
-}
-
-/**
- * Tạo 1 chu kỳ push có đếm thất bại liên tiếp: fail (cả retry) → tăng
- * consecutiveFailures + log; thành công → reset về 0. Trả về số đếm hiện tại
- * (0 = chu kỳ này thành công). Không throw.
- */
-export function makeCycle(push, { log = console.error, ...retryOpts } = {}) {
-  let consecutiveFailures = 0;
-  return async function cycle() {
-    const ok = await pushWithRetry(push, { log, ...retryOpts });
-    if (ok) {
-      consecutiveFailures = 0;
-    } else {
-      consecutiveFailures += 1;
-      log(
-        `[${new Date().toISOString()}] ✗ Push thất bại (consecutiveFailures=${consecutiveFailures}) — chờ chu kỳ sau.`,
-      );
-    }
-    return consecutiveFailures;
-  };
-}
+// pushWithRetry + makeCycle: see ./retry.mjs (imported + re-exported above).
 
 // Phần CLI chỉ chạy khi file được thực thi trực tiếp (node collector/laam-collector.mjs),
 // để test import được các hàm ở trên mà không kích hoạt push / process.exit.

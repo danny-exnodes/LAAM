@@ -3,7 +3,9 @@
 // crash vòng setInterval — pushWithRetry/makeCycle phải nuốt lỗi, log có
 // timestamp và đếm consecutiveFailures để vận hành thấy được mức độ sự cố.
 import { describe, expect, test, vi } from "vitest";
-import { pushWithRetry, makeCycle, RETRY_BACKOFF_MS } from "./laam-collector.mjs";
+// Import from retry.mjs (shebang-free) — laam-collector.mjs carries a #! shebang the
+// test bundler (rolldown) can't parse. The CLI re-exports these same symbols.
+import { pushWithRetry, makeCycle, RETRY_BACKOFF_MS } from "./retry.mjs";
 
 const noSleep = vi.fn(async () => {});
 
