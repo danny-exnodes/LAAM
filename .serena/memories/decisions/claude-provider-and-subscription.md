@@ -13,6 +13,10 @@
 - MVS = chat thường + stream, KHÔNG tools/vision. **Summarize SP-3 PIN Ollama trong MVS** (nếu không: fetch Ollama với model claude-* → lỗi mỗi lượt dài). Cost-labeling UX trong MVS (không đụng subscription cá nhân + quy đổi $).
 - Tools-trên-Claude (FULL) chặn bởi: eval k≥6 re-run trên Claude (~$2-3) — KHÔNG phải gate write-subsetting (đã RESOLVED 06-11, đừng cite lại).
 
+## Ghi chú implement (final review 06-11)
+- `provider.ts` (interface ChatProvider) **bỏ có chủ đích** — Rule 2: mới 1 implementation (`claude.ts` adapter function); thêm interface khi có provider thứ 3.
+- **Điều kiện C3 (FULL — tools/vision trên Claude):** (1) eval k≥6 re-run trên Claude (~$2-3); (2) contract test "PendingWriteSignal thoát orchestrator với Claude+write tool"; (3) contract test "tools body gửi Anthropic không chứa field `kind`"; (4) vision cần mime channel (client đang giữ mime trong state, chỉ body-build vứt).
+
 ## PIN mới: workflow/scheduled = LOCAL MODEL ONLY
 Cloud model không bao giờ chạy trong workflow/schedule (cost-runaway unattended) cho tới khi có decision riêng + budget. Field `model` trên WfAgentNode tiếp tục ngủ.
 
