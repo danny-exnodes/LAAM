@@ -12,6 +12,7 @@ export const landing: Dict = {
   'nav.signin': { vi: 'Đăng nhập', en: 'Sign in', zh: '登录' },
   'nav.getstarted': { vi: 'Bắt đầu', en: 'Get started', zh: '开始使用' },
   'nav.dashboard': { vi: 'Vào bảng điều khiển', en: 'Go to dashboard', zh: '进入仪表盘' },
+  'nav.menu': { vi: 'Menu', en: 'Menu', zh: '菜单' },
 
   // ── Hero ─────────────────────────────────────────────────────────────
   'hero.eyebrow': { vi: 'Giám sát AI Agent cục bộ', en: 'Local AI Agent Monitoring', zh: '本地 AI 智能体监控' },
