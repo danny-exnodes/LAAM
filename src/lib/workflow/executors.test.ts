@@ -63,6 +63,15 @@ describe("runAgentNode — structured output (format)", () => {
     expect(callOllama).toHaveBeenLastCalledWith(expect.any(Array), [], FORMAT);
   });
 
+  test("JSON bọc ```json fence (qwen quirk) → vẫn parse được KHÔNG tốn retry (Rule 13)", async () => {
+    const callOllama = vi.fn(async () => ({
+      message: { content: '```json\n{"verdict":"PASS","reason":"fence"}\n```' },
+    }));
+    const out = await runAgentNode(node, emptyContext({}), deps(callOllama));
+    expect(out).toEqual({ verdict: "PASS", reason: "fence" });
+    expect(callOllama).toHaveBeenCalledTimes(1);
+  });
+
   test("JSON rác → 1 self-repair retry (re-ask kèm parse error) rồi parse được", async () => {
     const callOllama = vi
       .fn()

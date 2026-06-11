@@ -39,6 +39,12 @@ export type AgentDeps = {
   tools: ConnectorTool[];
 };
 
+// qwen đôi khi bọc JSON trong ```json fence kể cả khi có format-constraint (Ollama
+// version/quant phụ thuộc) — strip trước khi parse, đừng để SyntaxError khó hiểu.
+export function stripJsonFence(s: string): string {
+  return s.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");
+}
+
 export async function runAgentNode(node: WfAgentNode, ctx: RunContext, deps: AgentDeps): Promise<unknown> {
   // resolveTemplate(text) là total→string (PIN-D3a, CTO 06-05) → dùng thẳng, KHÔNG branch type.
   const userPrompt = resolveTemplate(node.prompt, ctx, "text") as string;
@@ -57,7 +63,7 @@ export async function runAgentNode(node: WfAgentNode, ctx: RunContext, deps: Age
   // (re-ask kèm parse error — pattern coerceGraph/generate route) rồi fail-loud.
   let content = (await deps.callOllama(convo, [], node.format))?.message?.content ?? "";
   try {
-    return JSON.parse(content);
+    return JSON.parse(stripJsonFence(content));
   } catch (e) {
     const parseErr = e instanceof Error ? e.message : String(e);
     const repair: ChatMessage[] = [
@@ -67,7 +73,7 @@ export async function runAgentNode(node: WfAgentNode, ctx: RunContext, deps: Age
     ];
     content = (await deps.callOllama(repair, [], node.format))?.message?.content ?? "";
     try {
-      return JSON.parse(content);
+      return JSON.parse(stripJsonFence(content));
     } catch (e2) {
       const err2 = e2 instanceof Error ? e2.message : String(e2);
       throw new Error(`agent "${node.id}": structured output không phải JSON hợp lệ sau 1 lần tự sửa — ${err2}`);
