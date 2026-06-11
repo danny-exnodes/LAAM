@@ -81,16 +81,14 @@ export function LandingNav({ isAuthed }: { isAuthed: boolean }) {
         </button>
       </div>
 
-      {open && (
-        <div id="landing-menu" className={styles.mobileMenu}>
-          <a href="#features" className={styles.mobileLink} onClick={() => setOpen(false)}>{t('nav.features')}</a>
-          <a href="#how" className={styles.mobileLink} onClick={() => setOpen(false)}>{t('nav.howItWorks')}</a>
-          <a href="#stack" className={styles.mobileLink} onClick={() => setOpen(false)}>{t('nav.stack')}</a>
-          {!isAuthed && (
-            <a href="/login" className={styles.mobileLink} onClick={() => setOpen(false)}>{t('nav.signin')}</a>
-          )}
-        </div>
-      )}
+      <div id="landing-menu" className={styles.mobileMenu} hidden={!open}>
+        <a href="#features" className={styles.mobileLink} onClick={() => setOpen(false)}>{t('nav.features')}</a>
+        <a href="#how" className={styles.mobileLink} onClick={() => setOpen(false)}>{t('nav.howItWorks')}</a>
+        <a href="#stack" className={styles.mobileLink} onClick={() => setOpen(false)}>{t('nav.stack')}</a>
+        {!isAuthed && (
+          <a href="/login" className={styles.mobileLink} onClick={() => setOpen(false)}>{t('nav.signin')}</a>
+        )}
+      </div>
     </header>
   );
 }

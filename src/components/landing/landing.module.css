@@ -105,6 +105,10 @@
 }
 .mobileLink { color: var(--muted); text-decoration: none; font-size: 15px; padding: 12px 4px; }
 .mobileLink:hover { color: var(--text); }
+/* Hamburger menu is a ≤768px-only surface — never show it on desktop even if left open. */
+@media (min-width: 769px) {
+  .mobileMenu { display: none; }
+}
 @media (max-width: 768px) {
   .navLinks { display: none; }
   .navRight .btnGhost { display: none; } /* Sign in moves into the hamburger menu (A3) */

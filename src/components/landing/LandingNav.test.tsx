@@ -13,7 +13,8 @@ describe('LandingNav', () => {
   it('shows Get started + Sign in when logged out', () => {
     render(ui(false));
     expect(screen.getByText('Get started')).toBeInTheDocument();
-    expect(screen.getByText('Sign in')).toBeInTheDocument();
+    // "Sign in" appears in both the desktop nav and the always-in-DOM mobile menu
+    expect(screen.getAllByText('Sign in').length).toBeGreaterThan(0);
     expect(screen.queryByText('Go to dashboard')).toBeNull();
   });
 
@@ -34,11 +35,12 @@ describe('LandingNav', () => {
     render(ui(false));
     const toggle = screen.getByRole('button', { name: 'Menu' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(document.getElementById('landing-menu')!.hidden).toBe(true);
     fireEvent.click(toggle);
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     const menu = document.getElementById('landing-menu')!;
     expect(menu.querySelectorAll('a[href^="#"]')).toHaveLength(3);
     fireEvent.click(menu.querySelector('a[href="#features"]')!);
-    expect(document.getElementById('landing-menu')).toBeNull(); // closes after choosing
+    expect(document.getElementById('landing-menu')!.hidden).toBe(true); // closes after choosing
   });
 });
