@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { workflows } from "@/db/schema";
 import { TEMPLATES } from "@/lib/workflow/templates";
 import { assertRunnable } from "@/lib/workflow/validate";
+import { requireMutator } from "@/lib/auth/rbac";
 
 export async function GET() {
   const session = await auth();
@@ -22,6 +23,9 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  // viewer is read-only — instantiating a template inserts a new workflow row. Gate first.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const body = ((await req.json().catch(() => null)) ?? {}) as { templateId?: string };
   if (!body.templateId) {
     return new Response(JSON.stringify({ error: "templateId bắt buộc" }), { status: 400 });

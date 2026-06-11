@@ -58,15 +58,30 @@ describe("POST /api/workflows/[id]/clone", () => {
   });
 
   test("404 khi workflow không tồn tại", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb(null);
     _db = db as never;
     const res = await POST(new Request("http://x"), { params: Promise.resolve({ id: "no-such-wf" }) });
     expect(res.status).toBe(404);
   });
 
+  test("viewer → 403, no workflow row inserted", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const { db, insertedRows } = fakeDb({
+      id: "wf1",
+      userId: "u1",
+      isTemplate: false,
+      graph: baseGraph,
+      name: "Workflow gốc",
+    });
+    _db = db as never;
+    const res = await POST(new Request("http://x"), { params: Promise.resolve({ id: "wf1" }) });
+    expect(res.status).toBe(403);
+    expect(insertedRows).toHaveLength(0);
+  });
+
   test("404 khi workflow thuộc user khác VÀ không phải template", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb({ id: "wf-other", userId: "u2", isTemplate: false, graph: baseGraph, name: "Wf khác" });
     _db = db as never;
     const res = await POST(new Request("http://x"), { params: Promise.resolve({ id: "wf-other" }) });
@@ -74,7 +89,7 @@ describe("POST /api/workflows/[id]/clone", () => {
   });
 
   test("clone workflow của mình thành công", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db, insertedRows } = fakeDb({
       id: "wf1",
       userId: "u1",
@@ -108,7 +123,7 @@ describe("POST /api/workflows/[id]/clone", () => {
   });
 
   test("clone template-flagged workflow của user khác — được phép", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db, insertedRows } = fakeDb({
       id: "wf-tmpl",
       userId: "u99",
@@ -126,7 +141,7 @@ describe("POST /api/workflows/[id]/clone", () => {
   });
 
   test("graph được deep-copy (mutating clone không ảnh hưởng original)", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const original = { nodes: [{ id: "a", kind: "agent", prompt: "x" }], edges: [] };
     const { db, insertedRows } = fakeDb({
       id: "wf1",

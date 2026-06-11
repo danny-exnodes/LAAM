@@ -77,15 +77,24 @@ describe("DELETE /api/workflows/schedules/[id]", () => {
   });
 
   test("404 khi schedule không tồn tại", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb(null);
     _db = db as never;
     const res = await DELETE(new Request("http://x"), { params: Promise.resolve({ id: "s1" }) });
     expect(res.status).toBe(404);
   });
 
+  test("viewer → 403, schedule NOT deleted", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const { db, deletedCount } = fakeDb({ ...baseSchedule });
+    _db = db as never;
+    const res = await DELETE(new Request("http://x"), { params: Promise.resolve({ id: "s1" }) });
+    expect(res.status).toBe(403);
+    expect(deletedCount.n).toBe(0);
+  });
+
   test("404 khi schedule thuộc user khác", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb({ ...baseSchedule, userId: "u2" });
     _db = db as never;
     const res = await DELETE(new Request("http://x"), { params: Promise.resolve({ id: "s1" }) });
@@ -93,7 +102,7 @@ describe("DELETE /api/workflows/schedules/[id]", () => {
   });
 
   test("204 xoá thành công", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db, deletedCount } = fakeDb({ ...baseSchedule });
     _db = db as never;
     const res = await DELETE(new Request("http://x"), { params: Promise.resolve({ id: "s1" }) });
@@ -117,7 +126,7 @@ describe("PATCH /api/workflows/schedules/[id]", () => {
   });
 
   test("404 khi schedule của user khác", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb({ ...baseSchedule, userId: "u2" });
     _db = db as never;
     const res = await PATCH(
@@ -127,8 +136,21 @@ describe("PATCH /api/workflows/schedules/[id]", () => {
     expect(res.status).toBe(404);
   });
 
+  test("viewer → 403, schedule NOT re-enabled (no DB update)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const { db, updatedSets } = fakeDb({ ...baseSchedule, enabled: false });
+    _db = db as never;
+    const res = await PATCH(
+      new Request("http://x", { method: "PATCH", body: JSON.stringify({ enabled: true }) }),
+      { params: Promise.resolve({ id: "s1" }) },
+    );
+    expect(res.status).toBe(403);
+    // Load-bearing: arming an autonomous-write schedule must not be possible for a viewer.
+    expect(updatedSets).toHaveLength(0);
+  });
+
   test("toggle enabled → cập nhật enabled, KHÔNG gọi parseCron", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db, updatedSets } = fakeDb({ ...baseSchedule });
     _db = db as never;
     const res = await PATCH(
@@ -142,7 +164,7 @@ describe("PATCH /api/workflows/schedules/[id]", () => {
   });
 
   test("đổi cron hợp lệ → gọi parseCron + tính lại nextRunAt", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     mockParseCron.mockReturnValue(undefined as never);
     mockCronNext.mockReturnValue(new Date("2026-07-01T00:00:00Z") as never);
     const { db, updatedSets } = fakeDb({ ...baseSchedule });
@@ -159,7 +181,7 @@ describe("PATCH /api/workflows/schedules/[id]", () => {
   });
 
   test("cron không hợp lệ → 400", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     mockParseCron.mockImplementation(() => { throw new Error("invalid cron"); });
     const { db } = fakeDb({ ...baseSchedule });
     _db = db as never;
@@ -173,7 +195,7 @@ describe("PATCH /api/workflows/schedules/[id]", () => {
   });
 
   test("400 khi body rỗng (không có trường nào)", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb({ ...baseSchedule });
     _db = db as never;
     const res = await PATCH(
@@ -184,7 +206,7 @@ describe("PATCH /api/workflows/schedules/[id]", () => {
   });
 
   test("cron hợp lệ cú pháp nhưng cronNext ném → 400", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     mockParseCron.mockReturnValue(undefined as never); // parseCron passes
     mockCronNext.mockImplementation(() => { throw new Error("cannot find next run"); });
     const { db } = fakeDb({ ...baseSchedule });

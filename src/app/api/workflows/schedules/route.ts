@@ -3,12 +3,17 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { workflows, workflowSchedules } from "@/db/schema";
 import { parseCron, nextRunAt as cronNext } from "@/lib/workflow/cron";
+import { requireMutator } from "@/lib/auth/rbac";
 
 // POST /api/workflows/schedules (session) — tạo schedule cho 1 workflow user sở hữu.
 // Validate cron (parseCron); nextRunAt = mốc cron đầu tiên sau now.
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  // viewer is read-only — a schedule fires AUTONOMOUS connector writes on every tick,
+  // bypassing the gated /run endpoint. Gate before any DB write.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const body = ((await req.json().catch(() => null)) ?? {}) as {
     workflowId?: string;
     cron?: string;

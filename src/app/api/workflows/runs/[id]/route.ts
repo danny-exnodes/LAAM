@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { workflowRuns, workflowRunSteps } from "@/db/schema";
 import { publish } from "@/lib/events-bus";
+import { requireMutator } from "@/lib/auth/rbac";
 
 // GET /api/workflows/runs/[id] (session) — chi tiết 1 run + các step (theo seq).
 // Ownership: run phải thuộc user (404 nếu không) → KHÔNG lộ run người khác.
@@ -34,6 +35,9 @@ const CANCELLABLE = ["queued", "running", "resumable"] as const;
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  // viewer is read-only — cancelling a run mutates run state (status/finishedAt). Gate first.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const { id } = await params;
 
   const rows = await db.select().from(workflowRuns).where(eq(workflowRuns.id, id)).limit(1);

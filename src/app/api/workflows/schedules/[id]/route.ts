@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { workflowSchedules } from "@/db/schema";
 import { parseCron, nextRunAt as cronNext } from "@/lib/workflow/cron";
+import { requireMutator } from "@/lib/auth/rbac";
 
 export async function DELETE(
   _req: Request,
@@ -11,6 +12,9 @@ export async function DELETE(
   const session = await auth();
   if (!session?.user?.id)
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  // viewer is read-only — deleting a schedule mutates state. Gate before DB write.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
 
   const { id } = await params;
   const rows = await db.select().from(workflowSchedules).where(eq(workflowSchedules.id, id)).limit(1);
@@ -29,6 +33,10 @@ export async function PATCH(
   const session = await auth();
   if (!session?.user?.id)
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  // viewer is read-only — enabling/modifying a schedule arms autonomous connector
+  // writes (re-enable a disabled tick). Gate before DB write.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
 
   const { id } = await params;
   const rows = await db.select().from(workflowSchedules).where(eq(workflowSchedules.id, id)).limit(1);

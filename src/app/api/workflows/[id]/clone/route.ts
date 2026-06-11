@@ -2,10 +2,14 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { workflows } from "@/db/schema";
+import { requireMutator } from "@/lib/auth/rbac";
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  // viewer is read-only — cloning inserts a new workflow row. Gate before DB write.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
 
   const { id } = await params;
 

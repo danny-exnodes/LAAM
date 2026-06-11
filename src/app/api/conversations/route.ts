@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages } from "@/db/schema";
 import { retitleFromMessage } from "@/lib/chat/title";
+import { requireMutator } from "@/lib/auth/rbac";
 
 // GET /api/conversations — the current user's conversations (newest first).
 // FEAT-1: ?q= filters by title OR message content (so a search finds a
@@ -73,6 +74,9 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // viewer is read-only — retitle/backfill-titles UPDATE conversation rows. Gate before DB write.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const userId = session.user.id;
   const body = (await req.json().catch(() => null)) as { action?: string; id?: string } | null;
 
