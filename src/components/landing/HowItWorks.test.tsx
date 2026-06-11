@@ -15,5 +15,6 @@ describe('HowItWorks', () => {
     expect(screen.getByText('Sign in')).toBeInTheDocument();
     expect(screen.getByText('Watch live')).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(3);
   });
 });

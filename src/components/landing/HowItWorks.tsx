@@ -22,9 +22,9 @@ export function HowItWorks() {
         <ol className={styles.howGrid}>
           {STEPS.map((s, i) => (
             <li key={s} className={styles.howStep}>
-              <span className={styles.hudNum} aria-hidden="true">{i + 1}</span>
+              <span className={styles.howNum}>{i + 1}</span>
               <h3 className={styles.howTitle}>{t(`how.${s}.title`)}</h3>
-              <p className={styles.fcardDesc}>{t(`how.${s}.desc`)}</p>
+              <p className={styles.howDesc}>{t(`how.${s}.desc`)}</p>
             </li>
           ))}
         </ol>
