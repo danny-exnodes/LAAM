@@ -207,6 +207,12 @@
 .fcardTitle { font-size: 1.24rem; font-weight: 550; margin-bottom: 8px; letter-spacing: -0.01em; }
 .fcardDesc { color: var(--muted); font-size: 0.96rem; line-height: 1.6; font-weight: 300; }
 
+/* ── How it works ───────────────────────────────────────────────────────── */
+.howGrid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.howStep { background: var(--card); border: 1px solid var(--card-edge); border-radius: 18px; padding: 26px 24px; }
+.howTitle { font-size: 1.15rem; font-weight: 550; margin: 12px 0 8px; letter-spacing: -0.01em; }
+@media (max-width: 768px) { .howGrid { grid-template-columns: 1fr; } }
+
 /* ── Footer ─────────────────────────────────────────────────────────────── */
 .footer { text-align: center; padding: 14vh 0 16vh; }
 .footerTitle { font-size: clamp(1.8rem, 3.6vw, 2.6rem); font-weight: 300; margin-bottom: 14px; }

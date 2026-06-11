@@ -6,6 +6,7 @@ import { LandingNav } from './LandingNav';
 import { Hero } from './Hero';
 import { MechShowcase } from './MechShowcase';
 import { FeatureGrid } from './FeatureGrid';
+import { HowItWorks } from './HowItWorks';
 import { Footer } from './Footer';
 
 // Public landing page composition. `isAuthed` comes from the server page (auth())
@@ -19,6 +20,7 @@ export function Landing({ isAuthed }: { isAuthed: boolean }) {
         <main>
           <Hero />
           <MechShowcase />
+          <HowItWorks />
           <FeatureGrid />
         </main>
         <Footer />
