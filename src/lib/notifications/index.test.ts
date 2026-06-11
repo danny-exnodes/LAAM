@@ -38,6 +38,7 @@ vi.mock("drizzle-orm", () => ({
   isNull: (a: unknown) => ({ _isNull: a }),
   lt: (a: unknown, b: unknown) => ({ _lt: [a, b] }),
   count: () => ({ _count: true }),
+  sql: (strings: TemplateStringsArray, ...v: unknown[]) => ({ _sql: strings.join("?"), _v: v }),
 }));
 
 vi.mock("@/db", () => ({
