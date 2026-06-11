@@ -29,7 +29,15 @@ Mở rộng `suite.scale.eval.ts` (commit `5270949`): +2 bare-write probe (githu
 - **Gap THẬT duy nhất: `ctx-web-write` (web_search→trello) @16 = 30%** (Wilson [11–60%]); @8=90, @12=100. Model search xong **bỏ bước write** — lỗi CHUỖI MULTI-STEP (cùng họ web_search→web_read mà QW-3 vá), KHÔNG phải write-capability. `ctx-audit-write` (query_audit→trello) 100% mọi N → chỉ chuỗi-sau-web_search dễ đứt. `multi-read-write`@16=90% (nhẹ).
 - ⇒ **KHÔNG cần embedding/subsetting** (bare-write đã 100%@16). Nếu muốn vá ctx-web-write: mở rộng nudge QW-3 "sau web_search, hoàn tất ý định gốc (kể cả write)" — NHƯNG cần ≥2 probe loại này trước khi tune (đừng lặp lỗi 1-probe).
 
+## TRUNCATION + chain fix (2026-06-11) — bug prod "Dữ liệu bị cắt ngắn"
+Ca prod: "top 5 agents tốn tiền nhất → gửi mail" → agent gọi `laam_list_agents` (list ALL done) → tràn → cắt → càng tăng limit càng tệ.
+- **Lỗi gốc:** `boundOutput` ([guardrails.ts](src/lib/agent/guardrails.ts)) khi >8192 ký tự trả `json.slice(0,8192)` = **JSON HỎNG** → model không parse được → "Dữ liệu bị cắt ngắn" + đứt chuỗi. Dùng chung MỌI tool (guard) + connector (withSafety→boundOutput).
+- **Fix 1 (deterministic, commit `b78f78c`):** `boundOutput` phục-hồi-được — giữ **mẫu hợp lệ** (phần tử đầu của mảng lớn nhất) + tổng số + note bảo model thu hẹp (limit/filter/sort/search). Vá mọi connector.
+- **Fix 2 (deterministic):** `laam_list_agents` thêm param `sort` (recent|cost|tokens) — không có đường query "top-N theo cost" trước đó. Eval k=6: top-agents-cost **6/6** (model dùng sort=cost đúng).
+- **⚠️ BÀI HỌC LẶP LẠI (lần 2/3):** mọi chữ trong **description tool** = empirical. Câu "đừng list tất cả / top N thì sort=cost" ở **cấp-tool** làm model né list → agent-detail 6/6→0/6→2/6. Fix (commit `fe80615`): để description tool **nguyên gốc**, guidance chỉ nằm trong **mô tả param enum** ("cost (tốn tiền nhất)"). Eval: agent-detail **6/6** + top-agents-cost **6/6**. → Quy tắc: guidance ở **param description**, KHÔNG ở tool description.
+
 ## Còn lại (backlog)
 - `trello_create_card` name→idList resolution (QW-4, cần Trello creds test) — gap UX production thật (KHÁC selection — production user nói tên board).
 - (tùy chọn) vá `web_search → write` chain @scale: cần ≥2 probe + đo trước khi tune.
-- Redeploy prod QW-2+QW-3 (chờ user).
+- **Audit "list-vs-query gaps" cho 7 connector** (như github thiếu search-repo, list-agents vừa thêm sort) — user đề xuất test các connector khác.
+- Redeploy prod (QW-2+QW-3 + boundOutput + sort) — chờ user.
