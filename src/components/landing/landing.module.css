@@ -164,14 +164,15 @@
 .hudNum { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: #03171b; font-weight: 800; font-size: 14px; display: grid; place-items: center; flex: 0 0 auto; box-shadow: 0 0 14px rgba(54, 166, 214, 0.5); }
 .hudTitle h3 { font-size: 1.08rem; font-weight: 650; letter-spacing: -0.01em; }
 .shot { position: relative; margin: 0 4px 12px 10px; border: 1px solid rgba(120, 180, 230, 0.22); border-radius: 9px; background: linear-gradient(160deg, #06182c, #03101e); height: 116px; overflow: hidden; }
-.shotTop { height: 20px; background: rgba(120, 180, 230, 0.08); border-bottom: 1px solid rgba(120, 180, 230, 0.16); display: flex; align-items: center; gap: 5px; padding: 0 8px; }
+/* relative+z-index: stays above the absolutely-positioned real screenshot (next/image fill). */
+.shotTop { position: relative; z-index: 1; height: 20px; background: rgba(120, 180, 230, 0.08); border-bottom: 1px solid rgba(120, 180, 230, 0.16); display: flex; align-items: center; gap: 5px; padding: 0 8px; }
 .shotDot { width: 7px; height: 7px; border-radius: 50%; background: rgba(120, 200, 240, 0.5); }
 .shotPath { margin-left: auto; font-size: 9px; letter-spacing: 0.12em; color: var(--faint); font-family: monospace; }
 .scanline { position: absolute; left: 0; right: 0; height: 50%; top: -50%; background: linear-gradient(180deg, transparent, rgba(127, 224, 255, 0.14), transparent); animation: scan 3.4s linear infinite; }
 @keyframes scan { to { top: 100%; } }
 .shotGrid { position: absolute; inset: 20px 0 0 0; opacity: 0.22; background-image: linear-gradient(rgba(120, 180, 230, 0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(120, 180, 230, 0.25) 1px, transparent 1px); background-size: 22px 22px; }
 .shotIco { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(127, 224, 255, 0.5); }
-.shotImg { object-fit: cover; object-position: top left; margin-top: 20px; }
+.shotImg { object-fit: cover; object-position: top left; }
 .demoNote { margin: -4px 4px 8px 10px; font-size: 9px; letter-spacing: 0.14em; color: var(--muted); font-family: monospace; }
 .telem { display: flex; gap: 7px; margin: 0 4px 10px 10px; }
 .stat { flex: 1; border: 1px solid rgba(120, 180, 230, 0.16); border-radius: 8px; padding: 7px 8px; background: rgba(120, 180, 230, 0.04); }
