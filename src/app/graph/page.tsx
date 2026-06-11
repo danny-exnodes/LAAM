@@ -83,7 +83,7 @@ export default async function GraphPage() {
     <div className="flex h-dvh flex-col">
       <AppHeader current="/graph" role={session.user.role} />
       {orchestrators.length === 0 ? (
-        <main className="w-full p-6">
+        <main className="w-full p-4 sm:p-6">
           <h1 className="text-xl font-bold tracking-tight">Graph</h1>
           <p className="mt-3 text-sm text-neutral-500">{resolve(common, lang, "graph.empty")}</p>
         </main>

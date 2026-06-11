@@ -215,6 +215,16 @@ body::after {
 .anim-float-2 { animation: laam-float-2 9s ease-in-out infinite; }
 .anim-glow { animation: laam-glow 4s ease-in-out infinite; }
 
+/* ── React Flow controls — clear fixed bottom-nav on mobile ──────────────── */
+/* Bottom-nav is fixed, ~56–64 px (3.5rem), z-40, md:hidden. Lift the RF     */
+/* controls above it on narrow viewports. Applied globally so both the        */
+/* workflow editor and /graph share the fix without duplicating the rule.     */
+@media (max-width: 767px) {
+  .react-flow__controls {
+    bottom: calc(3.5rem + env(safe-area-inset-bottom)) !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   body::after,
   .laam-bar,
