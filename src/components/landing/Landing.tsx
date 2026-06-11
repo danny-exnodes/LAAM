@@ -19,13 +19,13 @@ export function Landing({ isAuthed }: { isAuthed: boolean }) {
       <div className={styles.content}>
         <LandingNav isAuthed={isAuthed} />
         <main>
-          <Hero />
+          <Hero isAuthed={isAuthed} />
           <MechShowcase />
           <HowItWorks />
           <SecuritySection />
           <FeatureGrid />
         </main>
-        <Footer />
+        <Footer isAuthed={isAuthed} />
       </div>
     </div>
   );
