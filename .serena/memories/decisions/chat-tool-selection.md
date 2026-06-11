@@ -23,6 +23,13 @@ Merge QW `86dc753`; revert một phần `7443918`. 1479 test + tsc sạch. Đo *
 - Embedding local bge-m3 subsetting (+1.5GB VRAM, nghịch ethos $0). Spec archived: `docs/superpowers/specs/2026-06-08-tool-subsetting-design.md`.
 - Dual-model / đổi model text-tool (Hermes-3/Hammer): qwen3-vl text-grounding ngang flagship + vision bắt buộc (OCR/ảnh) → giữ single model.
 
+## SCALE EVAL ĐỊNH LƯỢNG (k=10, 2026-06-11) — write-selection ĐÁNG TIN, crater CHẾT HẲN
+Mở rộng `suite.scale.eval.ts` (commit `5270949`): +2 bare-write probe (github/demo, args hợp lệ) → **5 họ tool** × N=4/8/12/16 × k=10. Evidence: `.serena/qa/eval-scale-2026-06-11.md`.
+- **Bare write (trello-idList/gmail/gcal/github/demo): 100% MỌI N tới 16 tool.** Crater "write 0%@16+" confirm là artifact-probe-args, nay bác bằng 5 họ tool độc lập. **8B chọn write hoàn hảo ở prod-scale.**
+- **Gap THẬT duy nhất: `ctx-web-write` (web_search→trello) @16 = 30%** (Wilson [11–60%]); @8=90, @12=100. Model search xong **bỏ bước write** — lỗi CHUỖI MULTI-STEP (cùng họ web_search→web_read mà QW-3 vá), KHÔNG phải write-capability. `ctx-audit-write` (query_audit→trello) 100% mọi N → chỉ chuỗi-sau-web_search dễ đứt. `multi-read-write`@16=90% (nhẹ).
+- ⇒ **KHÔNG cần embedding/subsetting** (bare-write đã 100%@16). Nếu muốn vá ctx-web-write: mở rộng nudge QW-3 "sau web_search, hoàn tất ý định gốc (kể cả write)" — NHƯNG cần ≥2 probe loại này trước khi tune (đừng lặp lỗi 1-probe).
+
 ## Còn lại (backlog)
-- `trello_create_card` name→idList resolution (QW-4, cần Trello creds test) — gap UX production thật.
-- Đo `eval:scale` với probe-args HỢP LỆ trước/sau để khoá (host run).
+- `trello_create_card` name→idList resolution (QW-4, cần Trello creds test) — gap UX production thật (KHÁC selection — production user nói tên board).
+- (tùy chọn) vá `web_search → write` chain @scale: cần ≥2 probe + đo trước khi tune.
+- Redeploy prod QW-2+QW-3 (chờ user).
