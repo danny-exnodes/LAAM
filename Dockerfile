@@ -35,6 +35,7 @@ ENV HOSTNAME=0.0.0.0
 # must be listed explicitly or every default OCR call fails.
 RUN apk add --no-cache \
       poppler-utils \
+      unzip \
       tesseract-ocr \
       tesseract-ocr-data-eng \
       tesseract-ocr-data-vie \

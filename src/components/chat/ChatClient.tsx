@@ -25,7 +25,7 @@ import {
   type PendingWrite,
 } from "./types";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
-import { isPdfFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
+import { isPdfFile, isDocxFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
 import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
 import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
 import type { ToolTraceItem } from "./toolLabel";
@@ -552,6 +552,23 @@ export function ChatClient() {
             if (!pushed) pushAttachment(file.name, "file", `[${t("chat.ocrPdfEmpty")}]`, undefined, pdfExtra);
           } else {
             pushAttachment(file.name, "file", `[${t("chat.ingPdfNoText")}]`, undefined, pdfExtra);
+          }
+        } else if (isDocxFile(file.name, file.type)) {
+          // .docx: bóc text Ở SERVER (unzip + parse word/document.xml, xem /api/docx)
+          // — KHÔNG đọc nhị phân phía client (ra rác NUL).
+          const fd = new FormData();
+          fd.append("file", file);
+          const r = await fetch("/api/docx", { method: "POST", body: fd });
+          const res = await r.json().catch(() => ({}) as Record<string, unknown>);
+          const docxExtra = {
+            mime: file.type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            size: file.size,
+          };
+          if (!r.ok) {
+            pushAttachment(file.name, "file", `[${String(res.error ?? t("chat.errServer"))}]`, undefined, docxExtra);
+          } else {
+            const text = stripNul(String(res.text ?? "")).trim();
+            pushAttachment(file.name, "file", text || `[${t("chat.docxNoText")}]`, undefined, docxExtra);
           }
         } else {
           const raw = await file.text();

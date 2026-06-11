@@ -11,6 +11,14 @@ export function isPdfFile(name: string, type: string): boolean {
   return type === "application/pdf" || /\.pdf$/i.test(name);
 }
 
+/** File là Word .docx? (.doc nhị phân cũ KHÔNG tính — không phải zip, server không bóc được). */
+export function isDocxFile(name: string, type: string): boolean {
+  return (
+    type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    /\.docx$/i.test(name)
+  );
+}
+
 /** Văn bản đọc-được KHÔNG chứa NUL; nội dung nhị phân đọc-nhầm-thành-text thì có. */
 export function looksBinaryText(s: string): boolean {
   return s.includes(NUL);

@@ -217,6 +217,7 @@ export const chat: Dict = {
   'chat.pdfUnsupported': { vi: 'Chưa hỗ trợ trích văn bản từ PDF — hãy dán nội dung, hoặc chuyển trang PDF thành ảnh để OCR.', en: "Extracting text from PDF isn't supported yet — paste the content, or upload the page as an image for OCR.", zh: '暂不支持从 PDF 提取文本 — 请粘贴内容，或将 PDF 页面转为图片以进行 OCR。' },
   'chat.pdfVisionNote': { vi: 'Trang PDF scan đính kèm dưới dạng ảnh — hãy đọc nội dung trực tiếp từ ảnh.', en: 'Scanned PDF page attached as an image — read its content directly from the image.', zh: '扫描版 PDF 页面以图片形式附上 — 请直接从图片读取其内容。' },
   'chat.fileBinaryUnsupported': { vi: 'Tệp nhị phân — không đọc được dạng văn bản.', en: "Binary file — can't read it as text.", zh: '二进制文件 — 无法按文本读取。' },
+  'chat.docxNoText': { vi: 'Tệp .docx không có nội dung văn bản.', en: 'The .docx has no text content.', zh: '该 .docx 没有文本内容。' },
   'chat.ingUnsupported': { vi: 'Định dạng không hỗ trợ: {fmt}', en: 'Unsupported format: {fmt}', zh: '不支持的格式：{fmt}' },
   'chat.ingUrlFail': { vi: 'Không tải được URL: {msg}', en: 'Could not load the URL: {msg}', zh: '无法加载 URL：{msg}' },
   'chat.ocrRunning': { vi: 'Đang nhận dạng chữ (OCR)…', en: 'Reading text (OCR)…', zh: '正在识别文字（OCR）…' },
