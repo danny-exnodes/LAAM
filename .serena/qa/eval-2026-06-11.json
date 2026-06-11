@@ -1,0 +1,394 @@
+{
+  "meta": {
+    "k": 6,
+    "model": "qwen3-vl:8b-instruct-q8_0",
+    "at": "2026-06-11"
+  },
+  "scores": [
+    {
+      "id": "stuck-basic",
+      "capability": "tool-selection",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 3540,
+      "noCall": 0
+    },
+    {
+      "id": "tokens-today",
+      "capability": "tool-selection",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 2609,
+      "noCall": 0
+    },
+    {
+      "id": "agent-detail",
+      "capability": "args",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "args": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 4454,
+      "noCall": 0
+    },
+    {
+      "id": "machines-online",
+      "capability": "tool-selection",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 2275,
+      "noCall": 0
+    },
+    {
+      "id": "greeting-restraint",
+      "capability": "restraint",
+      "runs": 6,
+      "perDim": {
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 1437,
+      "noCall": 6
+    },
+    {
+      "id": "chitchat-restraint",
+      "capability": "restraint",
+      "runs": 6,
+      "perDim": {
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 8371,
+      "noCall": 6
+    },
+    {
+      "id": "geo-directions",
+      "capability": "rich-block",
+      "runs": 6,
+      "perDim": {
+        "rich-block": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 1687,
+      "noCall": 6
+    },
+    {
+      "id": "chart-render",
+      "capability": "rich-block",
+      "runs": 6,
+      "perDim": {
+        "rich-block": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 4783,
+      "noCall": 6
+    },
+    {
+      "id": "write-intent-trello",
+      "capability": "write-intent",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "args": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 3,
+          "total": 6
+        },
+        "write-intent": {
+          "passed": 3,
+          "total": 6
+        }
+      },
+      "fails": [
+        "[write-intent-trello#2] grounding: bịa/không nên có: đã tạo",
+        "[write-intent-trello#2] write-intent: bịa đã-hoàn tất khi chưa confirm",
+        "[write-intent-trello#4] grounding: bịa/không nên có: đã tạo",
+        "[write-intent-trello#4] write-intent: bịa đã-hoàn tất khi chưa confirm",
+        "[write-intent-trello#5] grounding: bịa/không nên có: đã tạo",
+        "[write-intent-trello#5] write-intent: bịa đã-hoàn tất khi chưa confirm"
+      ],
+      "avgMs": 2845,
+      "noCall": 0
+    },
+    {
+      "id": "loop-guard",
+      "capability": "termination",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 2082,
+      "noCall": 0
+    },
+    {
+      "id": "web-research-loop",
+      "capability": "tool-selection",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 12,
+          "total": 12
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 6483,
+      "noCall": 0
+    },
+    {
+      "id": "web-restraint",
+      "capability": "tool-selection",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 1928,
+      "noCall": 0
+    },
+    {
+      "id": "util-calc-sum",
+      "capability": "tool-selection",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "args": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 2176,
+      "noCall": 0
+    },
+    {
+      "id": "laam-search-sessions",
+      "capability": "tool-selection",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "args": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 3043,
+      "noCall": 0
+    },
+    {
+      "id": "laam-get-timeline",
+      "capability": "args",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "args": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 4655,
+      "noCall": 0
+    },
+    {
+      "id": "laam-query-audit",
+      "capability": "tool-selection",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "restraint": {
+          "passed": 6,
+          "total": 6
+        },
+        "grounding": {
+          "passed": 1,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [
+        "[laam-query-audit#1] grounding: thiếu: connector.write",
+        "[laam-query-audit#2] grounding: thiếu: connector.write",
+        "[laam-query-audit#3] grounding: thiếu: connector.write",
+        "[laam-query-audit#4] grounding: thiếu: connector.write",
+        "[laam-query-audit#5] grounding: thiếu: connector.write"
+      ],
+      "avgMs": 3151,
+      "noCall": 0
+    }
+  ]
+}

@@ -1,33 +1,13 @@
-# Harness — write-tool subsetting before connector-write GA (DECISION GATE)
+# Harness — write-tool subsetting (RESOLVED / SUPERSEDED 2026-06-11)
 
-Flagged by QA E2E 2026-06-08 (eval P2). For harness / connector roadmap owners.
-Source: `.serena/qa/eval-2026-06-08.md` + `eval-scale-2026-06-08.md` (gitSha 75bea85, qwen3-vl:8b-instruct-q8_0, k=5).
+> ⚠️ **ĐÃ ĐÓNG.** Con số "write 100%@8 → 0%@16+" dưới đây là **ARTIFACT eval-probe thiếu required-arg**, đã bị CTO BÁC 2026-06-08 (`comms/active/consultant-to-cto-1a-prime-result.md`) và re-confirm 2026-06-11. KHÔNG dựng embedding-subsetting cho nó. Quyết định + giải pháp đã ship: [[chat-tool-selection]].
+>
+> **Tóm tắt:** probe gmail thiếu recipient, probe trello đưa TÊN "board Sprint" thay idList=ID → model no-call ĐÚNG (restraint). Probe args hợp lệ → gmail/gcal/multi-write 100% mọi N, reads 100%@40. Crater THẬT còn lại = `trello_create_card` name→idList (gap UX connector, không phải write-class). Embedding slice (bge-m3) HỦY/archive; connector-write-GA GỠ CHẶN.
+>
+> **Đã làm thay (merge `86dc753`):** QW-1 prompt nhóm read/write + write-first sort · QW-2 trigger-cue 11 write tool · QW-3 web_read nudge · QW-5 few-shot demo. Bài học eval-methodology: write-probe phải đủ required-arg + ≥2 tool đa dạng.
+>
+> **Còn mở:** `trello_create_card` name→idList resolution; đo eval:scale probe-sạch (host).
 
-## The signal (quantified)
-Selection-at-scale curve (probe selection pass-rate vs # tools exposed):
-
-| probe \ #tools | 8 | 16 | 24 | 40 |
-|---|---|---|---|---|
-| stuck | 100% | 100% | 100% | 100% |
-| web   | 100% | 100% | 100% | 100% |
-| calc  | 100% | 100% | 100% | 100% |
-| **write** | **100%** | **0%** | **0%** | **0%** |
-
-- **write craters 100%@8 → 0%@16+** (Wilson 95% CI [0–43%] at 16/24/40). `no-call` (model calls NO tool):
-  write 8→0/5, **16→5/5** (total no-call), 24→1/5, 40→3/5.
-- Read/util/web selection is flat at 100% across scale — the crater is **write-specific**, not general.
-- Base scorecard write-intent **2/5 (40%)**: failures are "bịa đã-hoàn-tất khi chưa confirm" (model
-  confabulates "đã tạo" pre-confirm). Other dims 95–100%.
-
-## Why it matters
-Prod exposes the full union (internal world-tools + 11 connector write tools + reads) ≫ 16. At that scale
-the local 8B essentially **never** correctly selects a write tool. Runtime `write-claim-guard` + Confirm
-Card neutralize the *confabulation* (QA verified live, both paths) — but they do NOT fix *selection*.
-
-## Action (gate)
-- **Subset tools to ≤ ~8 relevant** for any turn that may write (retrieval/router that narrows the exposed
-  schema set before dispatch), OR keep write tools out of the default union and surface them only on explicit
-  intent. Re-measure the curve after subsetting.
-- Secondary (base eval): `web-research-loop` misses the `web_read` follow-up after `web_search` (3/5) —
-  tool-selection gap worth a prompt/loop nudge.
-- Do **not** ship connector-write GA on the full-union exposure until the curve recovers.
+---
+## (LƯU SỬ — số liệu run đầu, đã chứng minh là artifact)
+Selection-at-scale (run đầu 06-08, k=5): write 100%@8 / 0%@16 / 0%@24 / 0%@40 — **probe-args artifact**, KHÔNG phản ánh năng lực model. Read/util/web 100% mọi N.
