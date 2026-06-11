@@ -26,6 +26,7 @@ import {
 } from "./types";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
 import { isPdfFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
+import { ingestPdfFile } from "@/lib/chat/pdf";
 import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
 import type { ToolTraceItem } from "./toolLabel";
 
@@ -493,9 +494,40 @@ export function ChatClient() {
           const text = r.ok ? (d.text ?? "") : `[OCR: ${d.error ?? "lỗi"}]`;
           pushAttachment(file.name, "image", text, keepB64);
         } else if (isPdfFile(file.name, file.type)) {
-          // Chưa hỗ trợ trích văn bản PDF (chỉ có jspdf để XUẤT, không có lib đọc). Đọc
-          // file.text() trên PDF ra rác nhị phân + NUL → vỡ persist server ("Lỗi server").
-          pushAttachment(file.name, "file", `[${t("chat.pdfUnsupported")}]`);
+          // PDF: chuỗi 3 tầng — text-layer → OCR scan → vision (qwen3-vl đọc ảnh trang).
+          // Xem lib/chat/pdf.ts. ocr=undefined khi tesseract off → bỏ qua thẳng tới vision.
+          const ocrFn = ocrAvailable
+            ? async (img: string) => {
+                const r = await fetch("/api/ocr", {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ image: img }),
+                });
+                const d = await r.json().catch(() => ({}));
+                return r.ok ? String(d.text ?? "") : "";
+              }
+            : undefined;
+          const res = await ingestPdfFile(file, { ocr: ocrFn, visionMax: Math.max(0, MAX_RAW_IMAGES - rawCount) });
+          if (res.via === "text" || res.via === "ocr") {
+            pushAttachment(file.name, "file", stripNul(res.text));
+          } else if (res.via === "vision") {
+            // Chốt chặn cuối: đẩy ảnh trang vào kênh vision để model ĐỌC TRỰC TIẾP (cap 2×2MB).
+            let pushed = 0;
+            for (const img of res.images) {
+              const b64 = img.slice(img.indexOf(",") + 1);
+              const verdict = rawImageVerdict(rawCount, b64.length);
+              if (verdict === "ok") {
+                pushAttachment(file.name, "image", `[${t("chat.pdfVisionNote")}]`, b64);
+                rawCount++;
+                pushed++;
+              } else {
+                setImgNotice(t(verdict === "count" ? "chat.imgCapCount" : "chat.imgCapSize", { name: file.name }));
+              }
+            }
+            if (!pushed) pushAttachment(file.name, "file", `[${t("chat.ocrPdfEmpty")}]`);
+          } else {
+            pushAttachment(file.name, "file", `[${t("chat.ingPdfNoText")}]`);
+          }
         } else {
           const raw = await file.text();
           // File nhị phân khác (docx/zip/ảnh sai-mime) cũng ra rác có NUL → báo rõ thay vì gửi.
