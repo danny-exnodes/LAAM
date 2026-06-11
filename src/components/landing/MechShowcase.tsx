@@ -43,10 +43,25 @@ export function MechShowcase() {
   const [active, setActive] = useState(false);
   const [enable3D, setEnable3D] = useState(false);
 
-  // Decide 3D vs static fallback after mount (needs browser APIs).
+  // Decide 3D vs static fallback after mount (needs browser APIs). The exploded
+  // view is desktop-only: below 1100px the absolute HUD placements collide
+  // (landing-eval ux-1/rsp-1/a11y-1), so narrow viewports get the same readable
+  // grid as no-WebGL / reduced-motion.
   useEffect(() => {
-    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-    setEnable3D(!reduce && supportsWebGL());
+    if (typeof matchMedia !== 'function') {
+      setEnable3D(supportsWebGL());
+      return;
+    }
+    const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+    const wide = matchMedia('(min-width: 1100px)');
+    const decide = () => setEnable3D(!reduce.matches && wide.matches && supportsWebGL());
+    decide();
+    wide.addEventListener('change', decide);
+    reduce.addEventListener('change', decide);
+    return () => {
+      wide.removeEventListener('change', decide);
+      reduce.removeEventListener('change', decide);
+    };
   }, []);
 
   // Mouse parallax for the mech.
@@ -101,7 +116,7 @@ export function MechShowcase() {
       </div>
       <div ref={sectionRef} className={styles.explode}>
         <div className={styles.sticky}>
-          <div className={styles.stageWrap}>
+          <div className={styles.stageWrap} aria-hidden="true">
             {active && <Mech3D progressRef={progressRef} pointerRef={pointerRef} active={active} />}
           </div>
           {CORE_FEATURES.map((f) => {

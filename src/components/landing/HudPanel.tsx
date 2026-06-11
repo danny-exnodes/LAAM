@@ -1,14 +1,17 @@
 'use client';
 
-import type { CSSProperties } from 'react';
+import { memo, type CSSProperties } from 'react';
+import Image from 'next/image';
 import styles from './landing.module.css';
 import type { CoreFeature } from './features';
 import type { Translator } from '@/i18n/types';
 
 // Sci-fi HUD feature panel (no corner reticle brackets, per design feedback):
-// angular clip-path frame, MOD header, faux feature screenshot, telemetry row,
+// angular clip-path frame, MOD header, feature screenshot (real image when
+// `feature.shot` is provided, stylized frame otherwise), telemetry row,
 // description, mono tags, conic gauge. Pure presentation — `t` is passed in.
-export function HudPanel({ feature, t }: { feature: CoreFeature; t: Translator }) {
+// Memoized: MechShowcase re-renders on every quantized scroll step (perf-5).
+export const HudPanel = memo(function HudPanel({ feature, t }: { feature: CoreFeature; t: Translator }) {
   const Icon = feature.icon;
   return (
     <div className={styles.hudFrame}>
@@ -35,11 +38,17 @@ export function HudPanel({ feature, t }: { feature: CoreFeature; t: Translator }
             <span className={styles.shotDot} />
             <span className={styles.shotPath}>laam // {feature.id}</span>
           </div>
-          <div className={styles.scanline} />
-          <div className={styles.shotGrid} />
-          <div className={styles.shotIco}>
-            <Icon size={40} strokeWidth={1.4} />
-          </div>
+          {feature.shot ? (
+            <Image src={feature.shot} alt="" fill sizes="340px" className={styles.shotImg} />
+          ) : (
+            <>
+              <div className={styles.scanline} />
+              <div className={styles.shotGrid} />
+              <div className={styles.shotIco}>
+                <Icon size={40} strokeWidth={1.4} />
+              </div>
+            </>
+          )}
         </div>
 
         <div className={styles.telem}>
@@ -50,6 +59,7 @@ export function HudPanel({ feature, t }: { feature: CoreFeature; t: Translator }
             </div>
           ))}
         </div>
+        {feature.illustrative && <div className={styles.demoNote}>{t('hud.demo')}</div>}
 
         <p className={styles.desc}>{t(`${feature.keyPrefix}.desc`)}</p>
 
@@ -65,4 +75,4 @@ export function HudPanel({ feature, t }: { feature: CoreFeature; t: Translator }
       </div>
     </div>
   );
-}
+});

@@ -47,3 +47,19 @@ test('useLang throws a clear error outside a provider', () => {
   }
   expect(() => render(<Bare />)).toThrow(/I18nProvider/);
 });
+
+function LangProbe() {
+  const { setLang } = useLang();
+  return <button onClick={() => setLang('zh')}>switch</button>;
+}
+
+test('updates <html lang> when the language changes (WCAG 3.1.1)', () => {
+  document.documentElement.lang = 'vi';
+  render(
+    <I18nProvider lang="vi">
+      <LangProbe />
+    </I18nProvider>,
+  );
+  fireEvent.click(screen.getByText('switch'));
+  expect(document.documentElement.lang).toBe('zh');
+});

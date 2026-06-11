@@ -17,6 +17,8 @@ describe('FeatureGrid', () => {
       'Audit log',
       'Three languages',
       'World tools',
+      'Full-text search',
+      'Maps & geo tools',
     ]) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }

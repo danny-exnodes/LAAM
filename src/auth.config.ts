@@ -17,6 +17,7 @@ export const authConfig = {
       const p = nextUrl.pathname;
       const isPublic =
         p === "/" || // public marketing landing page (shown to everyone)
+        p === "/robots.txt" || // metadata route must be reachable by crawlers
         p === "/login" ||
         p === "/register" ||
         p === "/api/register" || // signup endpoint must be reachable when logged out

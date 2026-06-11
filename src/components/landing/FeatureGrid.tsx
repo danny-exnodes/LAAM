@@ -9,7 +9,7 @@ import { FeatureCard } from './FeatureCard';
 export function FeatureGrid() {
   const t = useT(landing);
   return (
-    <section id="how" className={styles.section}>
+    <section id="more" className={styles.section}>
       <div className={styles.wrap}>
         <div className={styles.secHead}>
           <div className={styles.secK}>{t('grid.k')}</div>
