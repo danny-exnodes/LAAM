@@ -46,6 +46,10 @@ export type ResumeDeps = {
   db: DB;
   publish: (e: { type: string; runId: string; nodeId?: string; seq?: number; status?: string }) => void;
   buildRunNode: (userId: string, opts?: { dryRun?: boolean }) => (node: WfNode, ctx: RunContext) => Promise<unknown>;
+  // F2: same workflow-terminal notification chokepoint as run.ts (optional → tests
+  // stay DB-decoupled; route wires notifications.create). Both terminal exits here
+  // (truncated-write abort + normal finalize) emit through it — no 2nd detector.
+  notify?: (n: { userId: string; workflowId: string; runId: string; status: "succeeded" | "failed" | "cancelled" }) => void | Promise<unknown>;
 };
 
 // Continue a crashed run from its journal. Returns the final status.
@@ -54,8 +58,15 @@ export async function resumeRunRow(
   deps: ResumeDeps,
 ): Promise<{ status: "succeeded" | "failed" | "cancelled"; error?: string }> {
   const runs = await deps.db.select().from(workflowRuns).where(eq(workflowRuns.id, runId)).limit(1);
-  const run = runs[0] as { id: string; userId: string; trigger: string; graphSnapshot: WorkflowGraph } | undefined;
+  const run = runs[0] as { id: string; userId: string; workflowId: string; trigger: string; graphSnapshot: WorkflowGraph } | undefined;
   if (!run) return { status: "failed", error: "run not found" };
+
+  // F2: fire-and-forget terminal notification (never fails the resume). Both exits
+  // below call this — code ground-truth fields (Rule 13).
+  const notifyTerminal = (status: "succeeded" | "failed" | "cancelled") =>
+    void Promise.resolve(
+      deps.notify?.({ userId: run.userId, workflowId: run.workflowId, runId, status }),
+    ).catch((e) => console.error(`[workflow] resume notify failed run=${runId}`, e));
 
   // W4 cancel: flip có điều kiện — không lật ngược run vừa bị PATCH 'cancelled' về running.
   await deps.db
@@ -111,6 +122,7 @@ export async function resumeRunRow(
       `context cannot be reconstructed to resume safely. Re-run from scratch or intervene manually.`;
     await deps.db.update(workflowRuns).set({ status: "failed", error, finishedAt: new Date() }).where(eq(workflowRuns.id, runId));
     deps.publish({ type: "workflow_run", runId, status: "failed" });
+    notifyTerminal("failed");
     return { status: "failed", error };
   }
   if (hazards.length > 0) {
@@ -192,5 +204,6 @@ export async function resumeRunRow(
     .set({ status, error, context: capForPersist(ctx), finishedAt: new Date() })
     .where(eq(workflowRuns.id, runId));
   deps.publish({ type: "workflow_run", runId, status });
+  notifyTerminal(status);
   return { status, error };
 }

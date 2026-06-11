@@ -37,6 +37,19 @@ export type ExecuteRunDeps = {
   publish: (e: BusEvent) => void;
   buildRunNode: (userId: string, opts?: { dryRun?: boolean }) => (node: WfNode, ctx: RunContext) => Promise<unknown>;
   budget?: Budget; // G1: cận chạy (mặc định DEFAULT_BUDGET)
+  // F2: emit an in-app notification at the workflow-terminal chokepoint. Optional so
+  // unit tests stay decoupled from the DB-backed notifications lib; the route wires
+  // it to notifications.create() (the single notification source — no 2nd detector).
+  notify?: (n: WorkflowTerminalNotice) => void | Promise<unknown>;
+};
+
+// Shape the workflow-terminal chokepoint hands to deps.notify (F2). Kept minimal +
+// run-derived (Rule 13: code ground-truth, not LLM/caller text).
+export type WorkflowTerminalNotice = {
+  userId: string;
+  workflowId: string;
+  runId: string;
+  status: "succeeded" | "failed" | "cancelled";
 };
 
 export type ExecuteRunResult =
@@ -155,6 +168,13 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
     })
     .where(finalStatus === "cancelled" ? idFilter : and(idFilter, ne(workflowRuns.status, "cancelled")));
   deps.publish({ type: "workflow_run", runId, status: finalStatus });
+
+  // F2: notify the run's owner at this single terminal chokepoint (same place the
+  // workflow_run event is published). Fire-and-forget: a notification failure must
+  // never fail the run. runRow.userId/workflowId are code ground-truth (Rule 13).
+  void Promise.resolve(
+    deps.notify?.({ userId: runRow.userId, workflowId: runRow.workflowId, runId, status: finalStatus }),
+  ).catch((e) => console.error(`[workflow] notify failed run=${runId}`, e));
 
   return { status: finalStatus, steps };
 }
