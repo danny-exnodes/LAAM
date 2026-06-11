@@ -30,6 +30,14 @@ import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
 import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
 import type { ToolTraceItem } from "./toolLabel";
 
+// C2: Estimated pricing for Claude models (USD per million tokens in/out).
+// Source: claude-api skill cache 2026-05-26. Used for header cost hint ONLY —
+// NOT per-message (chat_message has no model column in MVS; Rule 12 fail-loud).
+const CLAUDE_PRICING: Record<string, { in: number; out: number }> = {
+  "claude-sonnet-4-6": { in: 3, out: 15 },
+  "claude-opus-4-8": { in: 5, out: 25 },
+};
+
 const uid = () =>
   typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
@@ -59,6 +67,7 @@ export function ChatClient() {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [imgNotice, setImgNotice] = useState<string | null>(null); // W3 vision: cap ảnh raw → notice
   const [models, setModels] = useState<string[]>([]);
+  const [claudeModels, setClaudeModels] = useState<string[]>([]); // C2: from /api/chat/info
   const [ocrAvailable, setOcrAvailable] = useState(true); // F3/FEAT-4: degrade if tesseract missing
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Conv[]>([]); // FEAT-1: content-search hits
@@ -80,8 +89,10 @@ export function ChatClient() {
       .catch(() => {});
     fetch("/api/chat/info")
       .then((r) => r.json())
-      .then((d: { model?: string }) => {
+      .then((d: { model?: string; claudeModels?: string[] }) => {
         if (d.model) setSettings((s) => ({ ...s, model: d.model! }));
+        // C2: expose Claude model whitelist to the picker; empty array = no Claude key.
+        if (Array.isArray(d.claudeModels)) setClaudeModels(d.claudeModels);
       })
       .catch(() => {});
     // Probe OCR once so the composer can warn up front instead of failing an
@@ -631,6 +642,21 @@ export function ChatClient() {
   const sidebarConvs = searching ? searchResults : convs;
   // S7: running token total for the active conversation (local model → free).
   const totalTokens = messages.reduce((s, m) => s + (m.tokensIn ?? 0) + (m.tokensOut ?? 0), 0);
+  // C2: whether the currently-selected model is a Claude API model.
+  const isCurrentClaude = claudeModels.includes(settings.model);
+  // C2: estimated cost for the current conversation when a Claude model is selected.
+  // totalTokens attribution per-message is impossible (no model column in chat_message
+  // for MVS) — Rule 12: only show the number when we have the data (i.e. current model).
+  const estUsd: string | null = (() => {
+    if (!isCurrentClaude || totalTokens === 0) return null;
+    const pricing = CLAUDE_PRICING[settings.model];
+    if (!pricing) return null;
+    // Rough split: assume ~40% in, ~60% out (conservative; exact split not tracked).
+    const inTok = totalTokens * 0.4;
+    const outTok = totalTokens * 0.6;
+    const cost = (inTok * pricing.in + outTok * pricing.out) / 1_000_000;
+    return cost.toFixed(4);
+  })();
 
   return (
     <div className="flex h-[calc(100dvh-var(--header-h,56px))]">
@@ -715,9 +741,15 @@ export function ChatClient() {
           {totalTokens > 0 && (
             <span
               className="hidden shrink-0 text-xs text-neutral-400 sm:inline"
-              title={t("chat.expTotalTokens", { n: totalTokens })}
+              title={
+                estUsd
+                  ? t("chat.expTotalTokensClaude", { n: totalTokens, usd: estUsd })
+                  : t("chat.expTotalTokens", { n: totalTokens })
+              }
             >
-              {t("chat.expTotalTokens", { n: totalTokens })}
+              {estUsd
+                ? t("chat.expTotalTokensClaude", { n: totalTokens, usd: estUsd })
+                : t("chat.expTotalTokens", { n: totalTokens })}
             </span>
           )}
           <ChatExport messages={messages} title={activeTitle} open={exportOpen} onOpenChange={setExportOpen} />
@@ -737,7 +769,7 @@ export function ChatClient() {
 
         {settingsOpen && (
           <div className="anim-slide-down p-4">
-            <SettingsPanel settings={settings} models={models} onChange={setSettings} />
+            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} onChange={setSettings} />
           </div>
         )}
 
@@ -812,6 +844,16 @@ export function ChatClient() {
                 >
                   <ArrowDown size={16} aria-hidden />
                 </button>
+              )}
+              {/* C2: Claude API cost/scope notice — shown only when a Claude model is active.
+                  Positioned directly above the Composer, same visual zone as image cap notices. */}
+              {isCurrentClaude && (
+                <p
+                  role="note"
+                  className="mb-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-500"
+                >
+                  {t("chat.claudeNote")}
+                </p>
               )}
               <Composer
                 value={input}

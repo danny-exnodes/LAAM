@@ -17,10 +17,13 @@ const FIELD_CLS =
 export function SettingsPanel({
   settings,
   models,
+  claudeModels = [],
   onChange,
 }: {
   settings: ChatSettings;
   models: string[];
+  /** C2: Claude API model whitelist from /api/chat/info. Empty = no Claude optgroup. */
+  claudeModels?: string[];
   onChange(next: ChatSettings): void;
 }) {
   const t = useT(chat);
@@ -31,6 +34,12 @@ export function SettingsPanel({
   const list = (models.includes(settings.model) ? models : [settings.model, ...models]).filter(
     Boolean,
   );
+
+  // C2: when claudeModels is non-empty, split the <select> into two optgroups.
+  // When empty, render the flat list exactly as before (tests pass unchanged).
+  const hasGroups = claudeModels.length > 0;
+  // Ollama list: exclude any Claude models that somehow appear in the Ollama list.
+  const ollamaList = hasGroups ? list.filter((m) => !claudeModels.includes(m)) : list;
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -48,11 +57,26 @@ export function SettingsPanel({
           onChange={(e) => onChange({ ...settings, model: e.target.value })}
           className={FIELD_CLS}
         >
-          {list.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
+          {hasGroups ? (
+            <>
+              <optgroup label={t("chat.grpLocal")}>
+                {ollamaList.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </optgroup>
+              <optgroup label={t("chat.grpClaude")}>
+                {claudeModels.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </optgroup>
+            </>
+          ) : (
+            list.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))
+          )}
         </select>
       </label>
 
