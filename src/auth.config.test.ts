@@ -27,6 +27,12 @@ describe('route protection', () => {
     expect(can('/dashboard', true)).toBe(true);
   });
 
+  it('allows /robots.txt without a session (must not 307 to /login)', () => {
+    // Lighthouse flags robots.txt as invalid when it receives a redirect.
+    // The metadata route at app/robots.ts only works if middleware lets it through.
+    expect(can('/robots.txt', false)).toBe(true);
+  });
+
   it('keeps token-authed endpoints reachable without a session', () => {
     // These routes do their own auth: collector machine-token (/api/ingest),
     // access_token bearer (/api/mcp), localhost/secret (/api/workflows/tick).
