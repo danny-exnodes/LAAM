@@ -645,16 +645,17 @@ export function ChatClient() {
   // C2: whether the currently-selected model is a Claude API model.
   const isCurrentClaude = claudeModels.includes(settings.model);
   // C2: estimated cost for the current conversation when a Claude model is selected.
-  // totalTokens attribution per-message is impossible (no model column in chat_message
-  // for MVS) — Rule 12: only show the number when we have the data (i.e. current model).
+  // In/out ARE tracked per message (tokensIn/tokensOut from the {t:"tokens"} frame +
+  // DB columns) — use the real split. "Ước tính" remains because MODEL attribution is
+  // approximate (no model column in chat_message for MVS): older turns may have run
+  // on a different/local model.
   const estUsd: string | null = (() => {
     if (!isCurrentClaude || totalTokens === 0) return null;
     const pricing = CLAUDE_PRICING[settings.model];
     if (!pricing) return null;
-    // Rough split: assume ~40% in, ~60% out (conservative; exact split not tracked).
-    const inTok = totalTokens * 0.4;
-    const outTok = totalTokens * 0.6;
-    const cost = (inTok * pricing.in + outTok * pricing.out) / 1_000_000;
+    const totalIn = messages.reduce((s, m) => s + (m.tokensIn ?? 0), 0);
+    const totalOut = messages.reduce((s, m) => s + (m.tokensOut ?? 0), 0);
+    const cost = (totalIn * pricing.in + totalOut * pricing.out) / 1_000_000;
     return cost.toFixed(4);
   })();
 
