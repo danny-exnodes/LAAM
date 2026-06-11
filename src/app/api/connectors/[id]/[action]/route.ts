@@ -75,6 +75,12 @@ export async function GET(
   if (!session?.user?.id) {
     return NextResponse.redirect(appUrl("/login", req.url));
   }
+  // viewer is read-only — the OAuth flow saves live Google credentials, so it
+  // must be gated too (the POST gate alone is bypassable via this GET). Redirect
+  // style (this handler returns redirects, not JSON) so a viewer lands on a page.
+  if (session.user.role === "viewer") {
+    return NextResponse.redirect(appUrl("/connectors?error=forbidden", req.url));
+  }
   const userId = session.user.id;
   const { id, action } = await params;
 

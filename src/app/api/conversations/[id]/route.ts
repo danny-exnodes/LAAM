@@ -53,6 +53,8 @@ export async function PATCH(
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const gate = requireMutator(session); // viewer is read-only
+  if (gate instanceof Response) return gate;
   const { id } = await params;
   const conv = await ownedConversation(id, session.user.id);
   if (!conv) return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -5,11 +5,22 @@ vi.mock("@/lib/connectors", () => ({
   connect: vi.fn(),
   disconnect: vi.fn(),
   testConnector: vi.fn(),
+  isOAuthConnector: vi.fn(() => true),
+  oauthScopes: vi.fn(() => []),
+  saveGoogleTokens: vi.fn(),
+}));
+vi.mock("@/lib/connectors/google-oauth", () => ({
+  googleOAuthConfig: vi.fn(() => ({})),
+  buildAuthUrl: vi.fn(() => "https://accounts.google.com/o/oauth2/v2/auth"),
+  exchangeCode: vi.fn(),
+  randomState: vi.fn(() => "st"),
+  pkcePair: vi.fn(() => ({ verifier: "v", challenge: "c" })),
+  parseIdTokenEmail: vi.fn(),
 }));
 
 import { auth } from "@/auth";
-import { connect, disconnect, testConnector } from "@/lib/connectors";
-import { POST } from "./route";
+import { connect, disconnect, testConnector, saveGoogleTokens } from "@/lib/connectors";
+import { POST, GET } from "./route";
 
 const mockAuth = vi.mocked(auth);
 const mockConnect = vi.mocked(connect);
@@ -93,5 +104,32 @@ describe("POST /api/connectors/:id/:action", () => {
     expect(mockConnect).not.toHaveBeenCalled();
     expect(mockDisconnect).not.toHaveBeenCalled();
     expect(mockTest).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /api/connectors/:id/:action — OAuth flow gated for viewer", () => {
+  function getReq(action: string) {
+    return new Request(`http://localhost/api/connectors/google-drive/${action}`, { method: "GET" });
+  }
+  const mockSave = vi.mocked(saveGoogleTokens);
+
+  test("viewer authorize → redirect to forbidden, never starts OAuth (live creds bypass closed)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const res = await GET(getReq("authorize"), ctx("google-drive", "authorize"));
+    expect(res.status).toBe(307); // NextResponse.redirect
+    expect(res.headers.get("location")).toContain("/connectors?error=forbidden");
+  });
+
+  test("viewer callback → redirect to forbidden, tokens never saved", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const res = await GET(getReq("callback"), ctx("google-drive", "callback"));
+    expect(res.headers.get("location")).toContain("/connectors?error=forbidden");
+    expect(mockSave).not.toHaveBeenCalled();
+  });
+
+  test("member authorize proceeds past the gate (not redirected to forbidden)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
+    const res = await GET(getReq("authorize"), ctx("google-drive", "authorize"));
+    expect(res.headers.get("location") ?? "").not.toContain("forbidden");
   });
 });
