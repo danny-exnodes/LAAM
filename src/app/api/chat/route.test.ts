@@ -153,7 +153,7 @@ describe("W3 vision: images vào payload Ollama", () => {
   // tới server = client phi chuẩn/bug; strip im lặng sẽ giấu bug (Rule 12).
   // Validate TRƯỚC mọi I/O: không gọi Ollama, không đụng DB.
   test("POST 3 ảnh → 400 REJECT, không gọi Ollama", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     try {
@@ -179,6 +179,42 @@ describe("harness wiring", () => {
     expect(names).toContain("laam_list_agents");
     expect(names).toContain("laam_find_stuck");
     expect(names.every((n) => typeof n === "string")).toBe(true);
+  });
+});
+
+describe("RBAC — viewer is read-only (chat creates conversations + runs tools)", () => {
+  test("401 when unauthenticated", async () => {
+    mockAuth.mockResolvedValueOnce(null as never);
+    const res = await POST(
+      new Request("http://x/api/chat", { method: "POST", body: JSON.stringify({ message: "hi" }) }),
+    );
+    expect(res.status).toBe(401);
+  });
+
+  test("viewer message POST → 403, never reaches Ollama (gate before any I/O)", async () => {
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "viewer" } } as never);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", { method: "POST", body: JSON.stringify({ message: "hi" }) }),
+      );
+      expect(res.status).toBe(403);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  test("viewer confirm POST → 403 (gate fires before the confirm-body branch executes a sealed write)", async () => {
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "viewer" } } as never);
+    const res = await POST(
+      new Request("http://x/api/chat", {
+        method: "POST",
+        body: JSON.stringify({ confirm: { token: "anything", approve: true } }),
+      }),
+    );
+    expect(res.status).toBe(403);
   });
 });
 
@@ -223,7 +259,7 @@ describe("R0 tool-loop robustness", () => {
   test("Ollama rớt ở round 2 → stream phát lỗi thân thiện, đóng SẠCH, không fail-soft sang completion", async () => {
     const captured = { values: [] as unknown[] };
     _db = fakeChainDb(captured);
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     // Round 1: model yêu cầu gọi tool (read nội bộ → loop sang round 2).
     // Round 2: Ollama rớt. Mock KHÔNG echo input — reply round 1 là tool_calls thuần.
@@ -274,7 +310,7 @@ describe("R0 tool-loop robustness", () => {
     const NUL = String.fromCharCode(0);
     const captured = { values: [] as unknown[] };
     _db = fakeChainDb(captured);
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     // Ollama không phải trọng tâm — reject để lượt kết thúc nhanh; điểm test = user msg đã persist.
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("down")));
@@ -309,7 +345,7 @@ describe("R0 tool-loop robustness", () => {
 // ---------------------------------------------------------------------------
 describe("C1 Claude provider MVS", () => {
   test("model bắt đầu 'claude' nhưng NGOÀI whitelist → 400, không silent fallback, không đụng DB/Ollama", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const captured = { values: [] as unknown[] };
     _db = fakeChainDb(captured);
     const fetchMock = vi.fn();
@@ -335,7 +371,7 @@ describe("C1 Claude provider MVS", () => {
 
   test("model claude hợp lệ nhưng server KHÔNG có ANTHROPIC_API_KEY → notice tri-lingual (persist), KHÔNG gọi Ollama, KHÔNG token frame", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const captured = { values: [] as unknown[] };
     _db = fakeChainDb(captured);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -371,7 +407,7 @@ describe("C1 Claude provider MVS", () => {
   // MỌI lượt dài. Summarize phải chạy model local (MODEL env) bất kể chat model.
   test("SP-3 summarize được PIN về MODEL env (Ollama) kể cả khi chat model là Claude", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const big = "x".repeat(10_000);
     const longHistory = [
       { id: "m1", role: "user", content: big },
@@ -421,7 +457,7 @@ describe("C1 Claude provider MVS", () => {
     // --- nhánh Claude ---
     orch.runToolRounds.mockClear();
     vi.stubEnv("ANTHROPIC_API_KEY", "");
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     _db = fakeChainDb({ values: [] });
     vi.stubGlobal("fetch", vi.fn());
     try {
@@ -440,7 +476,7 @@ describe("C1 Claude provider MVS", () => {
     }
     // --- nhánh Ollama ---
     orch.runToolRounds.mockClear();
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     _db = fakeChainDb({ values: [] });
     const ndjson = JSON.stringify({ message: { content: "chào" }, done: true, prompt_eval_count: 1, eval_count: 2 }) + "\n";
     const fetchMock = vi
@@ -504,7 +540,7 @@ describe("C1 review hardening", () => {
   // bịa cú pháp tool / claim sai. (handleConfirm đã dùng tools:[] — main turn phải vậy.)
   test("IMPORTANT 2: system prompt cho Claude KHÔNG chứa tên tool / 'BẮT BUỘC' (tool-less render)", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     llm.claudeStream.mockClear();
     _db = fakeChainDb({ values: [] });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -531,7 +567,7 @@ describe("C1 review hardening", () => {
   // request Anthropic đang tính phí (adapter forward tiếp cho SDK — test ở claude.test.ts).
   test("IMPORTANT 3: route truyền req.signal vào claudeStream", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     llm.claudeStream.mockClear();
     _db = fakeChainDb({ values: [] });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -554,7 +590,7 @@ describe("C1 review hardening", () => {
   // stream 0 BYTE, không persist gì ⇒ user thấy bong bóng rỗng LẶP LẠI MỌI LƯỢT
   // (watermark đứng yên). Phải fail loud: notice code 'api' + persist (Rule 12).
   test("CRITICAL 1b: lỗi bất ngờ TRƯỚC delta đầu → notice 'api' trong body + persist assistant, không 0-byte", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const captured = { values: [] as unknown[] };
     _db = fakeChainDb(captured);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -583,7 +619,7 @@ describe("C1 review hardening", () => {
   // Anthropic; phát {t:"tokens"} 0/0 là $0 GIẢ. Phải: giữ partial (persist + đã stream
   // live), OMIT frame tokens, persist KHÔNG kèm tokensIn/Out 0/0.
   test("MINOR 4: lỗi giữa stream → partial giữ nguyên, OMIT frame tokens, persist không tokens 0/0", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const captured = { values: [] as unknown[] };
     _db = fakeChainDb(captured);
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -614,7 +650,7 @@ describe("C1 review hardening", () => {
   // TRƯỚC delta (kể cả lỗi bất ngờ, không chỉ unavailable) thì user vẫn PHẢI biết
   // hành động đã chạy (mất tường thuật ≠ mất hành động) + notice được persist.
   test("CRITICAL 1b (resume): streamClaudeCompletion rớt trước delta → 'Đã thực hiện hành động' + notice 'api' + persist", async () => {
-    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const captured = { values: [] as unknown[] };
     // select #1 = history (handleConfirm); các select sau (audit nonce window) → [].
     _db = fakeChainDb(captured, [

@@ -3,10 +3,14 @@ import { db } from "@/db";
 import { publish } from "@/lib/events-bus";
 import { executeRun } from "@/lib/workflow/run";
 import { buildRunNode } from "@/lib/workflow/runtime";
+import { requireMutator } from "@/lib/auth/rbac";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.id) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  // viewer is read-only — a real run (dryRun=false) fires live connector writes.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const { id } = await params;
   // Optional { dryRun: true } body → Test run: connector writes are mocked (no real
   // side-effects). Body may be absent (e.g. "Run now" from the list) → real run.

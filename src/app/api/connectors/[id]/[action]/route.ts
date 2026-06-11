@@ -18,6 +18,7 @@ import {
   parseIdTokenEmail,
 } from "@/lib/connectors/google-oauth";
 import { encryptJson, decryptJson } from "@/lib/connectors/crypto";
+import { requireMutator } from "@/lib/auth/rbac";
 
 const OAUTH_COOKIE = "laam_oauth";
 const OAUTH_TTL_MS = 600_000; // 10 minutes
@@ -42,6 +43,9 @@ export async function POST(
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // viewer is read-only — connect/disconnect/test all touch live credentials.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const userId = session.user.id;
   const { id, action } = await params;
 

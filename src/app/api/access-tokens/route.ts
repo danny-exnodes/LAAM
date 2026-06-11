@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { accessTokens } from "@/db/schema";
 import { generateAccessToken, formatTokenDisplay, hashToken } from "@/lib/access-token";
+import { requireMutator } from "@/lib/auth/rbac";
 
 // Personal API / MCP access tokens. Per-user: a user manages their OWN tokens
 // (the credential a programmatic client or external MCP agent presents). Collector
@@ -47,6 +48,8 @@ export async function POST(req: Request) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  const gate = requireMutator(session); // viewer is read-only — cannot mint tokens
+  if (gate instanceof Response) return gate;
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
     return NextResponse.json({ error: "Tham số không hợp lệ" }, { status: 400 });

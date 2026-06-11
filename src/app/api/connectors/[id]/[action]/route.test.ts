@@ -29,7 +29,7 @@ function ctx(id: string, action: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+  mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
 });
 
 describe("POST /api/connectors/:id/:action", () => {
@@ -38,6 +38,16 @@ describe("POST /api/connectors/:id/:action", () => {
     const res = await POST(req(), ctx("github", "connect"));
     expect(res.status).toBe(401);
     expect(mockConnect).not.toHaveBeenCalled();
+  });
+
+  test("viewer → 403, connector never touched (real creds: connect/disconnect/test)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const res = await POST(req({ fields: { token: "ghp_x" } }), ctx("github", "connect"));
+    expect(res.status).toBe(403);
+    // No side effect: a read-only viewer cannot connect/disconnect/test live creds.
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mockDisconnect).not.toHaveBeenCalled();
+    expect(mockTest).not.toHaveBeenCalled();
   });
 
   test("connect dispatches to connect() with userId, id, fields", async () => {

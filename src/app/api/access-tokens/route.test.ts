@@ -31,6 +31,13 @@ describe("POST /api/access-tokens", () => {
     expect(res.status).toBe(401);
   });
 
+  test("viewer → 403, no token issued (read-only cannot mint api/mcp tokens)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const res = await POST(new Request("http://x", { method: "POST", body: JSON.stringify({ name: "k", kind: "mcp" }) }));
+    expect(res.status).toBe(403);
+    expect(inserts).toHaveLength(0);
+  });
+
   test("400 for a non api/mcp kind (collector not issuable here)", async () => {
     mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const res = await POST(new Request("http://x", { method: "POST", body: JSON.stringify({ name: "k", kind: "collector" }) }));

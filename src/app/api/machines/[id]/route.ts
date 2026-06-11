@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { machines, accessTokens } from "@/db/schema";
+import { requireRole } from "@/lib/auth/rbac";
 
 // DELETE /api/machines/:id — REVOKE the machine's collector token (keeps the
 // machine + its sessions; the collector can no longer push). Owner/admin only.
@@ -16,13 +17,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const role = session.user.role;
-  if (role !== "owner" && role !== "admin") {
-    return NextResponse.json({ error: "Cần quyền owner/admin" }, { status: 403 });
-  }
+  const gate = requireRole(session, ["owner", "admin"]);
+  if (gate instanceof Response) return gate;
   const { id } = await params;
   // Atomic dual-revoke: close BOTH paths in one transaction so a concurrent
   // ingest can't slip through the window between the two updates.
