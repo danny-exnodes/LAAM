@@ -36,6 +36,42 @@ export function validateArgs(
   return { ok: true, value: obj };
 }
 
+// Chỉ dẫn cho MODEL khi kết quả bị rút gọn — bảo nó thu hẹp truy vấn rồi gọi lại,
+// thay vì bó tay/bịa. (Đây là instruction tới model trong tool-result, không hiển thị
+// trực tiếp cho người dùng.)
+const TRUNCATE_NOTE =
+  "Kết quả quá lớn nên đã RÚT GỌN — đây KHÔNG phải dữ liệu đầy đủ. Để lấy ĐÚNG dữ liệu cần, " +
+  "hãy gọi LẠI công cụ với phạm vi hẹp hơn: giảm 'limit', thêm bộ lọc (vd status/sort/owner/repo/query), " +
+  "hoặc dùng công cụ tổng hợp/tìm kiếm chuyên biệt. TUYỆT ĐỐI không suy đoán phần đã bị rút gọn.";
+
+// Lấy các phần tử ĐẦU của mảng sao cho JSON gói gọn trong `budget` ký tự (giữ ít nhất 1
+// nếu vừa). Mỗi phần tử giữ NGUYÊN VẸN (JSON hợp lệ) — khác hẳn slice-giữa-chuỗi.
+function headWithinBudget(arr: unknown[], budget: number): unknown[] {
+  const out: unknown[] = [];
+  let used = 2; // dấu []
+  for (const item of arr) {
+    let len: number;
+    try { len = JSON.stringify(item)?.length ?? 0; } catch { continue; }
+    if (out.length > 0 && used + len + 1 > budget) break;
+    out.push(item);
+    used += len + 1;
+  }
+  return out;
+}
+
+function largestArrayKey(obj: Record<string, unknown>): string | null {
+  let key: string | null = null;
+  let best = -1;
+  for (const [k, v] of Object.entries(obj)) {
+    if (Array.isArray(v) && v.length > best) { key = k; best = v.length; }
+  }
+  return key;
+}
+
+// Giới hạn kích thước tool-result trước khi vào ngữ cảnh model. KHI VƯỢT NGƯỠNG: KHÔNG
+// slice chuỗi JSON (tạo JSON HỎNG model không parse được → bó tay → "Dữ liệu bị cắt ngắn"),
+// mà trả một MẪU hợp lệ (vài phần tử đầu của mảng lớn nhất) + tổng số + chỉ dẫn thu hẹp —
+// để model gọi lại đúng phạm vi và hoàn tất chuỗi.
 export function boundOutput(result: unknown, maxBytes = 8192): unknown {
   if (result === undefined) return { error: "handler không trả về dữ liệu" };
   let json: string;
@@ -45,7 +81,35 @@ export function boundOutput(result: unknown, maxBytes = 8192): unknown {
     return { error: "kết quả không serialize được" };
   }
   if (json.length <= maxBytes) return result;
-  return { _truncated: true, preview: json.slice(0, maxBytes) };
+
+  // (a) result là mảng → giữ phần tử đầu.
+  if (Array.isArray(result)) {
+    const sample = headWithinBudget(result, maxBytes - 320);
+    return { _truncated: true, total: result.length, shown: sample.length, sample, note: TRUNCATE_NOTE };
+  }
+  // (b) result là object có field mảng → cắt mảng DÀI NHẤT, GIỮ các field khác (vd totals).
+  if (result && typeof result === "object") {
+    const obj = result as Record<string, unknown>;
+    const key = largestArrayKey(obj);
+    if (key) {
+      const arr = obj[key] as unknown[];
+      const rest = { ...obj };
+      delete rest[key];
+      let restLen = 0;
+      try { restLen = JSON.stringify(rest).length; } catch { restLen = 0; }
+      const sample = headWithinBudget(arr, Math.max(400, maxBytes - restLen - 320));
+      return {
+        ...rest,
+        _truncated: true,
+        [`${key}__total`]: arr.length,
+        [`${key}__shown`]: sample.length,
+        [key]: sample,
+        note: TRUNCATE_NOTE,
+      };
+    }
+  }
+  // (c) object/chuỗi khổng lồ không có mảng để cắt → preview text, ĐÁNH DẤU rõ là không đầy đủ.
+  return { _truncated: true, bytes: json.length, note: TRUNCATE_NOTE, previewText: json.slice(0, 1200) };
 }
 
 export function guard(tool: Tool): Tool {

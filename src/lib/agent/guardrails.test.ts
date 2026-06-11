@@ -38,6 +38,36 @@ describe("boundOutput", () => {
     const out = boundOutput(undefined) as { error?: string };
     expect(out.error).toBeTruthy();
   });
+
+  // INTENT (Rule 9): khi list-result quá lớn, model PHẢI nhận được mẫu JSON HỢP LỆ + tổng số
+  // + chỉ dẫn thu hẹp — KHÔNG phải slice-JSON-hỏng. Đây chính là cái cứu "Dữ liệu bị cắt ngắn".
+  test("object có mảng lớn → giữ field khác, mẫu HỢP LỆ (phần tử nguyên vẹn), kèm total + note", () => {
+    const agents = Array.from({ length: 200 }, (_, i) => ({ id: "a" + i, costUsd: i, latestActivity: "x".repeat(40) }));
+    const out = boundOutput({ totals: { count: 200 }, agents }, 2000) as Record<string, unknown>;
+    expect(out._truncated).toBe(true);
+    expect(out.totals).toEqual({ count: 200 }); // field không-mảng giữ nguyên
+    expect(out.agents__total).toBe(200); // model biết tổng thật để quyết thu hẹp
+    const sample = out.agents as Array<{ id: string }>;
+    expect(Array.isArray(sample)).toBe(true);
+    expect(sample.length).toBeGreaterThan(0);
+    expect(sample.length).toBeLessThan(200); // đã cắt
+    expect(sample[0].id).toBe("a0"); // phần tử ĐẦU nguyên vẹn (không bị xén giữa chừng)
+    expect(String(out.note)).toContain("RÚT GỌN");
+    // Toàn bộ kết quả vẫn là JSON hợp lệ + trong ngân sách (không thể "hỏng" như slice cũ).
+    expect(() => JSON.stringify(out)).not.toThrow();
+    expect(JSON.stringify(out).length).toBeLessThanOrEqual(2400);
+  });
+
+  test("mảng trần lớn → { sample, total, shown } hợp lệ", () => {
+    const arr = Array.from({ length: 100 }, (_, i) => ({ n: i, pad: "y".repeat(30) }));
+    const out = boundOutput(arr, 500) as Record<string, unknown>;
+    expect(out._truncated).toBe(true);
+    expect(out.total).toBe(100);
+    const sample = out.sample as unknown[];
+    expect(sample.length).toBeGreaterThan(0);
+    expect(sample.length).toBeLessThan(100);
+    expect(out.shown).toBe(sample.length);
+  });
 });
 
 describe("guard", () => {
