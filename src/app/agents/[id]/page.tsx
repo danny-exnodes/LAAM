@@ -117,9 +117,14 @@ export default async function SessionDetailPage({
                   className="flex items-center gap-3 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs dark:border-neutral-800"
                 >
                   <span
+                    title={a.isError ? "Sub-agent lỗi" : undefined}
                     className={
                       "inline-block h-2 w-2 shrink-0 rounded-full " +
-                      (a.status === "running" ? "bg-green-500" : "bg-neutral-400")
+                      (a.status === "running"
+                        ? "bg-green-500"
+                        : a.isError
+                          ? "bg-red-500"
+                          : "bg-neutral-400")
                     }
                   />
                   <span className="font-mono font-semibold text-[var(--color-accent)]">

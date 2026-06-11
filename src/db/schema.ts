@@ -315,6 +315,11 @@ export type SubAgentJson = {
   description: string;
   status: string;
   durationMs: number | null;
+  // F4: optional — only present on rows parsed after the F4 augment. The detail
+  // page surfaces `isError` (red dot); rich `outputText` rendering is deferred
+  // (see .serena/memories/backlog/subagent-parent-link.md).
+  isError?: boolean;
+  outputText?: string | null;
 };
 export type ToolJson = {
   name: string;
