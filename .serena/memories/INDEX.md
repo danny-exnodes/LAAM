@@ -70,10 +70,12 @@
 - [matte-dark-qa-ui-bugs](backlog/matte-dark-qa-ui-bugs.md) — A1🟠 contrast accent light **2.77:1** (fail AA+floor) · A2🟠 `backdrop-blur` còn ở header/mobile-nav · A3🟠 recharts /eval `#111827` tàng hình + Y-axis "00%" · A4🟢 doc-drift WCAG.
 - [harness-write-tool-subsetting](backlog/harness-write-tool-subsetting.md) — 🔴 **CỔNG:** write-tool selection crater **100%@8 → 0%@16+** → subset tool trước connector-write GA. **Unexercised:** Access-spine behavior (0 token), P0a resume (user skip).
 
-## Trạng thái R0 release (2026-06-11)
-- **CTO audit toàn dự án 7 hạng mục** + chiến lược 3 đợt (R0 code-gate → R1 host → R2 post-release). Checkpoint: `checkpoint/cto-2026-06-11.md`.
-- **R0 hardening ĐÃ MERGE VÀO MAIN = `8614ecd`** (46 file, **1380 test + tsc sạch verify trên main**; chưa push origin): REGISTER_MODE+rate-limit+lockout+bcrypt12+headers · drizzle 0010 indexes (cần `db:migrate` trên host) · A1/A2/A3 · chat tool-loop error wrap · i18n auth 28 key · `docs/DEPLOYMENT.md` + scripts tick/backup.
-- ⚠️ Prod container :3900 (PUBLIC qua Funnel, register mở) vẫn chạy IMAGE CŨ — cần rebuild+restart theo `docs/DEPLOYMENT.md` (hoặc tắt Funnel tạm). Tick task chưa cài → schedule prod không chạy.
+## Trạng thái RELEASE (2026-06-11) — R0+R1+R2 XONG, ĐANG CHẠY PROD
+- **CTO audit 7 hạng mục** + chiến lược 3 đợt. Checkpoint: `checkpoint/cto-2026-06-11.md`. HEAD main = `a0f99c4` (chưa push origin).
+- **R0 hardening MERGE `8614ecd`**: REGISTER_MODE+rate-limit+lockout+bcrypt12+headers · drizzle 0010 indexes · A1/A2/A3 · chat tool-loop error wrap · i18n auth · `docs/DEPLOYMENT.md`+scripts.
+- **R1 host/deploy XONG**: migrate 0010 (6 index live) · `.env` prod (REGISTER_MODE=invite + WORKFLOW_TICK_SECRET) · **prod container :3900 rebuild → chạy R2 image, healthy** (register gate 403, headers, **gmail_send active**) · Task **LAAM-workflow-tick** (mỗi phút) + **LAAM-db-backup** (02:00, retention 14) + **LAAM-host-metrics** (:47600 logon-trigger) — đều Running.
+- **R2 post-release MERGE `fa69046`** (+ collector-fix `a0f99c4`): perf scan-cache+SSE shared-snapshot · ingest 5MB stream-cap + collector retry · chat **vision** (ảnh→qwen3-vl) · workflow **cancel/picker/toast** · **/search** + `/api/config` (LAAM_STUCK_MIN) + lọc Agents theo máy · UI residual contrast. 8 review-finding xử lý hết. **1470 test + tsc sạch verify trên main.**
+- ⚠️ Còn lại: chưa push origin (chờ user) · Funnel :3900 vẫn public (đã an toàn nhờ register-gate) · OAuth Google cần operator setup (checklist trong DEPLOYMENT.md) · worktree `workflow-high-blast-mechanism` (PR#8 cũ) prunable.
 
 ## Trạng thái hiện tại (2026-06-03)
 - v2: P1 auth/RBAC ✅ · P2 monitoring ✅ · P3 collector đa máy (đơn giản) ✅ · P4 Chat Gemma 4 đã build, **chờ test runtime**. Verified live P1+P2+P3.
