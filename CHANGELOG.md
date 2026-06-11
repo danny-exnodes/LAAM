@@ -9,6 +9,33 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-06-12
+
+> ⚠️ **Triển khai:** bản này vá 2 lỗ hổng đang sống (RBAC enforce + SSE rò chéo người dùng). Container production **phải rebuild image** để có hiệu lực — image cũ đang chạy vẫn hở.
+
+### Bảo mật — Nền RBAC + cách ly SSE + off-boarding (Phase S)
+- **RBAC giờ thực thi thật (trước đây trang trí):** `auth.config.ts authorized()` chỉ kiểm tra đã-đăng-nhập; role-403 trước đó **chỉ** có ở `/api/machines` — viewer/member chạy được **mọi** mutation, kể cả `POST /api/workflows/[id]/run` (dryRun=false → connector ghi **THẬT** với cred live). Thêm `src/lib/auth/rbac.ts` (`requireRole`/`requireMutator`, fail-closed: không session → 401, viewer/role-thiếu → 403) và **gate mọi route mutation**: workflows (POST/PATCH/DELETE/run/schedules/runs-cancel/clone/templates/instantiate), connectors (connect/disconnect/test + OAuth-GET authorize/callback → viewer redirect `/connectors?error=forbidden` + mcp POST/DELETE), conversations (POST/PATCH/DELETE), access-tokens POST, chat POST, sync POST. **viewer = read-only** toàn hệ. Để ngỏ có chủ đích: access-tokens/[id] DELETE (self-revoke = giảm quyền), generate/review/ocr/pdf/docx/fetch-url (không ghi DB/ngoài), route token-auth ingest/mcp/tick.
+- **SSE hết rò chéo người dùng:** `/api/events` trước đó snapshot **không WHERE** → broadcast mọi `agent_session` cho mọi client; session `api`/`mcp` mang `userId` thật → user B thấy hoạt động MCP của user A. Nay `visibleForClient` lọc `api|mcp` **per-principal** (chỉ chủ sở hữu thấy), `local`/`claude` **giữ org-shared** (đúng value-prop team — không thu hẹp `/agents`); áp ở cả lúc connect lẫn mỗi lần re-push; `userId` không bao giờ lên wire.
+- **Off-boarding (gộp vào F1):** disable một user là **một transaction** = set `user.disabledAt` (migration **0012**) + thu hồi **mọi** `access_token` + xoá legacy `machines.tokenHash WHERE ownerUserId` + ghi audit — đóng cả 2 đường token sống. Đăng nhập bị chặn **sau** bcrypt (không lộ trạng thái tài khoản).
+
+### Đã thêm — Quản lý người dùng & RBAC UI (F1 + F1b)
+- **API:** `GET /api/users` (owner/admin, whitelist cột — không lộ passwordHash); `PATCH /api/users/[id]` `{role}` **owner-only** (guard: không tự đổi, không hạ owner cuối cùng còn hoạt động, ghi audit `role_change`); `{disabled}` owner/admin (transaction off-boarding ở trên, guard tự-disable + owner-cuối); `DELETE /api/access-tokens/[id]` mở rộng: owner/admin thu hồi token bất kỳ (off-boarding), member vẫn chỉ self-scope, 404 khi không khớp (không "thành công ngầm").
+- **UI:** trang **`/settings/users`** (owner/admin, redirect-gated) quản lý vai trò + bật/tắt; **`/settings/access`** (mọi user) tự quản access-key; hàng mới trong SettingsMenu; i18n vi/en/zh đầy đủ (`users.*`, `access.*`).
+- **F1b — đổi role/disable có hiệu lực ngay request kế:** jwt-callback đọc lại user khi token refresh → disabled/đã xoá → trả `null` (huỷ phiên ngay), role thay đổi → cập nhật; **fail-open** khi DB lỗi (không tự khoá toàn bộ user vì sự cố tạm thời).
+
+### Đã thêm — Thông báo trong ứng dụng (F2)
+- **Chuông thông báo per-user:** bảng `notification` (migration **0013**) + **chokepoint duy nhất** `create()` (insert dedupe-aware → publish sự kiện SSE `notification` **per-user**); kênh SSE **riêng** với `c.userId === userId` — **tách hẳn** broadcast `sessions` org-shared (chặn cứng, tránh vô tình thu hẹp `/agents`). Dropdown ở header + badge số chưa đọc + trang **`/notifications`** (đánh dấu đọc / đọc tất cả); housekeeping `pruneOld`.
+- **Nguồn sự kiện:** workflow chạy xong/thất bại/huỷ (`notifyWorkflowTerminal`, deep-link tới run, dedupe `wfrun:<id>`) và chat write-gate chờ xác nhận (`notifyWritePending`, dedupe theo conversation+tool). Dedupe qua **partial-unique index** `(userId, dedupeKey) WHERE dedupeKey IS NOT NULL` + `onConflictDoUpdate` với `targetWhere` tường minh (re-surface, không nhân bản). Model mở rộng kênh (cột `audience`) nhưng **chỉ** triển khai in-app — email/Slack/org-broadcast defer.
+
+### Đã thêm — Hợp nhất Agents vào Monitoring (F3)
+- Trang **Monitoring** giờ là một mặt với 3 tab (agents / chat / workflow); tab **agents** render lại đúng UX/UI giàu của AgentsClient (mặc định); `/agents` → `redirect("/monitoring?tab=agents")` (giữ `/agents/[id]` chi tiết, cập nhật back-link + nav); thêm chỉ báo **độ tươi** dữ liệu + nút Sync. Link `/agents` chết bị gỡ khỏi header + bottom-nav. Tab chat/workflow scope **per-user** (`getMonitoredRuns`) + `isVisible` phòng thủ tầng hai.
+
+### Đã sửa — Parser monitoring đọc output sub-agent (F4)
+- Parser transcript bắt thêm **`outputText`** (redact credential **trước** rồi mới bound ≤500 ký tự — không để lộ secret gần ranh giới cắt) + **`isError`** từ `tool_result.content` của Task; chảy vào `agent_sessions.subAgents` jsonb. `SubAgentJson` type 2 field này (optional, tương thích ngược row cũ); trang chi tiết hiện **chấm đỏ** khi sub-agent lỗi. **Bỏ** `parentToolUseId` đã thử ban đầu — `parent_tool_use_id` **không tồn tại** trên sidechain thật (field thật là `parentUuid`/`agentId`); panel output đầy đủ + cây cha→con defer (`backlog/subagent-parent-link.md`).
+
+### Câu trả lời kiến trúc (user hỏi: log local còn ý nghĩa khi mọi thứ đã vào DB?)
+- **GIỮ** local-parse cho dev/host: đây là **nguồn duy nhất** của log timeline + tool-call waterfall (DB chỉ lưu summary). Container production **không mount** `~/.claude/projects` → local-parse **đã chết** trên prod; waterfall cho session collector từ xa cần cơ chế events-push (mới, defer).
+
 ## [2.3.0] — 2026-06-12
 
 ### Đã thêm — Claude trong chat (MVS, tuỳ chọn) (2026-06-11)
