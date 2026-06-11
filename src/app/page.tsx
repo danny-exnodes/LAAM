@@ -15,6 +15,9 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  // Must be EXPLICIT: unset keys merge from the layout export, which sets
+  // userScalable:false — Lighthouse still flagged the page until this line.
+  userScalable: true,
   viewportFit: "cover",
 };
 

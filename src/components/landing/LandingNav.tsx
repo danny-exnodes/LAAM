@@ -52,7 +52,9 @@ export function LandingNav({ isAuthed }: { isAuthed: boolean }) {
               type="button"
               className={`${styles.langBtn} ${l === lang ? styles.langActive : ''}`}
               aria-pressed={l === lang}
-              aria-label={LANG_NAMES[l]}
+              // Label-in-Name (WCAG 2.5.3): the visible 2-letter code must be part
+              // of the accessible name — "中文" alone doesn't contain "zh".
+              aria-label={`${LANG_NAMES[l]} (${l})`}
               onClick={() => setLang(l)}
             >
               {l}

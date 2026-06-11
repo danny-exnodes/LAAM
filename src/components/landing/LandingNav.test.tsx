@@ -26,7 +26,8 @@ describe('LandingNav', () => {
 
   it('renders the three language buttons with full accessible names', () => {
     render(ui(false));
-    for (const name of ['Tiếng Việt', 'English', '中文']) {
+    // Label-in-Name (WCAG 2.5.3): name = native name + the visible 2-letter code.
+    for (const name of ['Tiếng Việt (vi)', 'English (en)', '中文 (zh)']) {
       expect(screen.getByRole('button', { name })).toBeInTheDocument();
     }
   });
