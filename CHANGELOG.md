@@ -9,6 +9,8 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-06-12
+
 ### Đã thêm — Claude trong chat (MVS, tuỳ chọn) (2026-06-11)
 - **Switch model Qwen ↔ Claude:** đặt `ANTHROPIC_API_KEY` (key org, server-only) → picker model có thêm optgroup **Claude API** với đúng 2 model `claude-sonnet-4-6` / `claude-opus-4-8` (whitelist chặt, model claude khác → 400). Adapter Messages API (`src/lib/llm/claude.ts`): gộp system messages → param `system`, chỉ gửi `max_tokens` (không sampling params — Opus 4.7+ reject), stream qua frame protocol U+001E sẵn có, usage → frame `{t:"tokens"}`. MVS: **chat thường + stream, CHƯA tools/vision** (tool-loop bị bỏ qua có chủ đích — bật tools cần re-run eval k≥6 trên Claude trước).
 - **An toàn & trung thực chi phí:** note cố định khi chọn Claude (tính phí token vào key org — KHÔNG ảnh hưởng subscription Claude cá nhân; ảnh đính kèm không gửi Claude); quy đổi **≈$ (ước tính)** trên tổng token; summarize/proactive **ghim model local** (không bao giờ gọi Claude cho việc nền); guard cửa-sổ-replay (prepend stub user khi window mở đầu bằng assistant — chống 400 lặp trên hội thoại dài); lỗi pre-delta fail-loud trilingual (không bao giờ trả lời rỗng im lặng); Stop huỷ cả request Anthropic (abort signal xuyên SDK — không rò phí); system prompt cho Claude render **không tool** (không dụ model bịa tool).
