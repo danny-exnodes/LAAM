@@ -10,7 +10,7 @@ describe('SecuritySection', () => {
         <SecuritySection />
       </I18nProvider>,
     );
-    for (const title of ['Local-first', 'Per-user encryption', 'Gated writes', 'Four-role RBAC']) {
+    for (const title of ['Local-first', 'Encrypted at rest', 'Gated writes', 'Four-role RBAC']) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
     expect(screen.getByText('$0')).toBeInTheDocument(); // model-cost stat

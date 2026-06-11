@@ -190,7 +190,7 @@ export const landing: Dict = {
     en: 'Transcripts, chats and metrics live in Postgres on your own hardware — nothing leaves.',
     zh: '记录、对话与指标都存放在你硬件上的 Postgres 中 —— 不外发任何数据。',
   },
-  'security.b2.title': { vi: 'Mã hoá theo từng người', en: 'Per-user encryption', zh: '按用户加密' },
+  'security.b2.title': { vi: 'Mã hoá khi lưu trữ', en: 'Encrypted at rest', zh: '加密存储' },
   'security.b2.desc': {
     vi: 'Credential connector được mã hoá AES-256-GCM khi lưu trữ — cách ly theo từng người dùng trong database.',
     en: 'Connector credentials are AES-256-GCM encrypted at rest — isolated per user in the database.',
