@@ -1,6 +1,11 @@
 # Backlog: Landing page (`/`) — cải tiến theo đánh giá 6-lens 2026-06-11
 
-**Trạng thái:** ĐÃ CÓ PLAN, CHƯA IMPLEMENT (chờ user duyệt).
+**Trạng thái:** ✅ **MERGED vào main `eac5ddb`** (2026-06-11, no-ff, 0 conflict; user duyệt).
+Verify TRÊN MAIN sau merge: **1492/1492 test + tsc 0** (baseline main trước merge 1481/1481 — không regression).
+Worktree đã remove an toàn (junction rmdir trước), branch đã xoá. CHANGELOG đã ghi mục [Unreleased].
+Mọi task qua 2 vòng review + final whole-branch review (CRITICAL copy per-user-encryption fix ở 3 vị trí).
+Checkpoint: `checkpoint/claude-landing-impl-2026-06-11.md`.
+Còn theo dõi: Android userScalable merge behavior (real device) · star halo ~30% sáng hơn (sprite trade-off, có comment) · key `a11y.bg/a11y.mech` orphan (pre-existing, dọn sau) · visual verify đã làm trên :3100 sau merge (xem checkpoint).
 
 - **Báo cáo đánh giá đầy đủ:** `.serena/qa/landing-eval-2026-06-11.md` (22 finding confirmed / 2 refuted; điểm UX 5.5 · Vis 6.5 · Rsp 4 · A11y 6 · Cnt 6 · Perf 7).
 - **Plan thực thi:** `docs/superpowers/plans/2026-06-11-landing-page-improvements.md` (Task 0 worktree → A1-A3 responsive → B1-B7 content → C1-C4 a11y/perf → D verify).
