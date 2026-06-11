@@ -18,6 +18,7 @@ import {
   primaryKey,
   unique,
   boolean,
+  index,
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 import type { WorkflowGraph } from "@/lib/workflow/types";
@@ -118,40 +119,52 @@ export const projects = pgTable("project", {
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
 });
 
-export const agentSessions = pgTable("agent_session", {
-  id: text("id").primaryKey(), // Claude sessionId (stable across re-syncs)
-  machineId: text("machineId").references(() => machines.id, {
-    onDelete: "cascade",
-  }),
-  projectId: text("projectId").references(() => projects.id, {
-    onDelete: "set null",
-  }),
-  source: text("source").notNull().default("claude"), // claude | local | api | mcp
-  // Principal for externally-driven sessions (source api|mcp): the access_token's
-  // owner. NULL for transcript-derived rows (claude|local) — those are org-shared
-  // anyway (provenance, NOT a visibility key; see machines-decomposition Q2).
-  userId: text("userId").references(() => users.id, { onDelete: "set null" }),
-  model: text("model"),
-  gitBranch: text("gitBranch"),
-  status: text("status"), // running | idle | done
-  startedAt: timestamp("startedAt", { mode: "date" }),
-  lastActivity: timestamp("lastActivity", { mode: "date" }),
-  messageCount: integer("messageCount").notNull().default(0),
-  toolCount: integer("toolCount").notNull().default(0),
-  subAgentCount: integer("subAgentCount").notNull().default(0),
-  costUsd: doublePrecision("costUsd").notNull().default(0),
-  latestActivity: text("latestActivity"),
-  tokensIn: integer("tokensIn").notNull().default(0),
-  tokensOut: integer("tokensOut").notNull().default(0),
-  // Rich per-session data for Graph / charts (populated from the parser).
-  subAgents: jsonb("subAgents").$type<SubAgentJson[]>(),
-  tools: jsonb("tools").$type<ToolJson[]>(),
-  histo: jsonb("histo").$type<Record<string, number>>(), // "<dow>_<hour>" -> count
-  // Host path to the source .jsonl — lets the Session-detail page re-read the
-  // live timeline (single-host Phase 2; the collector will push events later).
-  transcriptPath: text("transcriptPath"),
-  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
-});
+export const agentSessions = pgTable(
+  "agent_session",
+  {
+    id: text("id").primaryKey(), // Claude sessionId (stable across re-syncs)
+    machineId: text("machineId").references(() => machines.id, {
+      onDelete: "cascade",
+    }),
+    projectId: text("projectId").references(() => projects.id, {
+      onDelete: "set null",
+    }),
+    source: text("source").notNull().default("claude"), // claude | local | api | mcp
+    // Principal for externally-driven sessions (source api|mcp): the access_token's
+    // owner. NULL for transcript-derived rows (claude|local) — those are org-shared
+    // anyway (provenance, NOT a visibility key; see machines-decomposition Q2).
+    userId: text("userId").references(() => users.id, { onDelete: "set null" }),
+    model: text("model"),
+    gitBranch: text("gitBranch"),
+    status: text("status"), // running | idle | done
+    startedAt: timestamp("startedAt", { mode: "date" }),
+    lastActivity: timestamp("lastActivity", { mode: "date" }),
+    messageCount: integer("messageCount").notNull().default(0),
+    toolCount: integer("toolCount").notNull().default(0),
+    subAgentCount: integer("subAgentCount").notNull().default(0),
+    costUsd: doublePrecision("costUsd").notNull().default(0),
+    latestActivity: text("latestActivity"),
+    tokensIn: integer("tokensIn").notNull().default(0),
+    tokensOut: integer("tokensOut").notNull().default(0),
+    // Rich per-session data for Graph / charts (populated from the parser).
+    subAgents: jsonb("subAgents").$type<SubAgentJson[]>(),
+    tools: jsonb("tools").$type<ToolJson[]>(),
+    histo: jsonb("histo").$type<Record<string, number>>(), // "<dow>_<hour>" -> count
+    // Host path to the source .jsonl — lets the Session-detail page re-read the
+    // live timeline (single-host Phase 2; the collector will push events later).
+    transcriptPath: text("transcriptPath"),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  // Read paths: sync upsert + dashboard list (machine, recency), per-project /
+  // per-status / per-source filters, principal lookups (read-model visibility).
+  (t) => [
+    index("agent_session_machine_updated_idx").on(t.machineId, t.updatedAt),
+    index("agent_session_project_idx").on(t.projectId),
+    index("agent_session_status_idx").on(t.status),
+    index("agent_session_source_idx").on(t.source),
+    index("agent_session_user_idx").on(t.userId),
+  ],
+);
 
 // ---------------------------------------------------------------------------
 // Access tokens (P0 Access spine) — unified credential for non-interactive
@@ -215,21 +228,26 @@ export const chatConversations = pgTable("chat_conversation", {
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
 
-export const chatMessages = pgTable("chat_message", {
-  id: text("id")
-    .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
-  conversationId: text("conversationId")
-    .notNull()
-    .references(() => chatConversations.id, { onDelete: "cascade" }),
-  role: text("role").notNull(), // user | assistant
-  content: text("content").notNull(),
-  // Per-turn token usage from Ollama (prompt_eval_count / eval_count). Set on the
-  // assistant message; user rows stay 0. Default 0 so old rows read cleanly.
-  tokensIn: integer("tokensIn").notNull().default(0),
-  tokensOut: integer("tokensOut").notNull().default(0),
-  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
-});
+export const chatMessages = pgTable(
+  "chat_message",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    conversationId: text("conversationId")
+      .notNull()
+      .references(() => chatConversations.id, { onDelete: "cascade" }),
+    role: text("role").notNull(), // user | assistant
+    content: text("content").notNull(),
+    // Per-turn token usage from Ollama (prompt_eval_count / eval_count). Set on the
+    // assistant message; user rows stay 0. Default 0 so old rows read cleanly.
+    tokensIn: integer("tokensIn").notNull().default(0),
+    tokensOut: integer("tokensOut").notNull().default(0),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  // Read path: load a conversation's messages in order (/api/conversations/[id]).
+  (t) => [index("chat_message_conversation_created_idx").on(t.conversationId, t.createdAt)],
+);
 
 // SP-3 — lưu mỗi lượt tool (tool_call + result) mà orchestrator chạy trong 1 turn.
 // chat_message GIỮ NGUYÊN (role 'user'|'assistant'); bảng này tách riêng nên consumer

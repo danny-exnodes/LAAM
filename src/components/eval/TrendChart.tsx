@@ -18,6 +18,12 @@ export function trendLines(trend: TrendPoint[]): string[] {
   return ["overall", ...dims];
 }
 
+// Stroke per series: "overall" must follow the chart theme — a hardcoded
+// near-black was invisible on the dark card bg. Dimensions keep fixed hues.
+export function lineStroke(key: string, themeText: string): string {
+  return key === "overall" ? themeText : (DIM_COLORS[key] ?? "#888");
+}
+
 export function TrendChart({ trend }: { trend: TrendPoint[] }) {
   const t = useT(evalDict);
   const theme = useChartTheme();
@@ -30,10 +36,11 @@ export function TrendChart({ trend }: { trend: TrendPoint[] }) {
       <h3 className="text-sm font-medium text-neutral-700 dark:text-neutral-200">{t("eval.trend")}</h3>
       <div style={{ width: "100%", height: 300 }}>
         <ResponsiveContainer>
-          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={theme.grid} vertical={false} />
             <XAxis dataKey="run" tick={{ fontSize: 11, fill: theme.axis }} />
-            <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: theme.axis }} width={36} tickFormatter={(v) => `${v}%`} />
+            {/* width 44 + no negative margin: "100%" must not clip to "00%" */}
+            <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: theme.axis }} width={44} tickFormatter={(v) => `${v}%`} />
             <Tooltip formatter={(v) => (v == null ? "—" : `${v}%`)} contentStyle={theme.tooltip} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             {lines.map((key) => (
@@ -42,7 +49,7 @@ export function TrendChart({ trend }: { trend: TrendPoint[] }) {
                 type="monotone"
                 dataKey={key}
                 name={key === "overall" ? t("eval.overall") : t(`eval.dim.${key}`)}
-                stroke={key === "overall" ? "#111827" : (DIM_COLORS[key] ?? "#888")}
+                stroke={lineStroke(key, theme.text)}
                 strokeWidth={key === "overall" ? 3 : 1.5}
                 dot={false}
                 connectNulls

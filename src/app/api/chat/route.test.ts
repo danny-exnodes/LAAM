@@ -1,13 +1,23 @@
 import { describe, expect, test, vi } from "vitest";
 import { INTERNAL_TOOLS, modelToolSchemas } from "@/lib/agent/registry";
 
-// We only exercise the pure buildOllamaPayload helper here, but importing the
-// route module pulls in @/auth (next-auth) and @/db — stub both so the module
-// loads under vitest.
+// Importing the route module pulls in @/auth (next-auth) and @/db — stub both so
+// the module loads under vitest. _db is swappable (getter) so the POST tool-loop
+// test can install a chainable fake while the pure-helper tests keep {}.
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => null) }));
-vi.mock("@/db", () => ({ db: {} }));
+let _db: unknown = {};
+vi.mock("@/db", () => ({ get db() { return _db; } }));
+// Connector store hits Postgres; POST awaits mcpReadAllow without try/catch.
+vi.mock("@/lib/connectors", () => ({
+  chatTools: vi.fn(async () => []),
+  mcpReadAllow: vi.fn(async () => new Set<string>()),
+  execute: vi.fn(async () => ({})),
+}));
 
-import { buildOllamaPayload, isConfirmBody } from "./route";
+import { auth } from "@/auth";
+import { POST, buildOllamaPayload, isConfirmBody } from "./route";
+
+const mockAuth = vi.mocked(auth);
 
 const defaults = { model: "gemma4:e4b", system: "DEFAULT SYS" };
 const history = [
@@ -97,5 +107,77 @@ describe("SP-2 confirm body detection", () => {
     expect(isConfirmBody({ message: "hi" })).toBe(false);
     expect(isConfirmBody({})).toBe(false);
     expect(isConfirmBody({ confirm: null })).toBe(false);
+  });
+});
+
+// Drizzle-shaped chainable fake: mọi builder method trả về chính nó, await → [].
+// `values()` ghi lại row để assert phần đã persist.
+function fakeChainDb(captured: { values: unknown[] }) {
+  const make = () => {
+    const c: Record<string, unknown> = {};
+    for (const m of ["from", "where", "orderBy", "limit", "leftJoin", "set", "returning"]) {
+      c[m] = () => c;
+    }
+    c.values = (v: unknown) => {
+      captured.values.push(v);
+      return c;
+    };
+    c.then = (res?: (v: unknown[]) => unknown, rej?: (e: unknown) => unknown) =>
+      Promise.resolve([]).then(res, rej);
+    return c;
+  };
+  return { select: make, insert: make, update: make, delete: make };
+}
+
+describe("R0 tool-loop robustness", () => {
+  // INTENT: Ollama có thể chết GIỮA tool-loop (sau khi tool frames đã phát live).
+  // Trước fix, lỗi bị nuốt fail-soft → completion chạy lại từ messages gốc và
+  // thường chết lần nữa → user không có phản hồi, stream treo dở. Người dùng PHẢI
+  // nhận thông điệp lỗi và stream phải đóng sạch (persist lượt assistant lỗi).
+  test("Ollama rớt ở round 2 → stream phát lỗi thân thiện, đóng SẠCH, không fail-soft sang completion", async () => {
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Round 1: model yêu cầu gọi tool (read nội bộ → loop sang round 2).
+    // Round 2: Ollama rớt. Mock KHÔNG echo input — reply round 1 là tool_calls thuần.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: { content: "", tool_calls: [{ function: { name: "laam_list_agents", arguments: {} } }] },
+        }),
+      })
+      .mockRejectedValueOnce(new Error("fetch failed: ECONNREFUSED"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "liệt kê agent đang theo dõi" }),
+        }),
+      );
+      expect(res.headers.get("x-conversation-id")).toBeTruthy();
+      const text = await res.text(); // resolve ⇒ controller đã close (không treo, không unhandled rejection)
+      // Round 1 đã phát tool frame live; round 2 chết → lỗi phải tới user.
+      expect(text).toContain("laam_list_agents");
+      expect(text).toContain("Không kết nối được Ollama");
+      // KHÔNG fail-soft sang completion: đúng 2 lần gọi Ollama, không có lần 3.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      // Lượt assistant (text lỗi) được persist → mở lại hội thoại không mất lượt.
+      const assistantRows = captured.values.filter(
+        (v) => (v as { role?: string }).role === "assistant",
+      ) as { content?: string }[];
+      expect(assistantRows.some((v) => String(v.content).includes("Không kết nối được Ollama"))).toBe(true);
+      // Quan sát được trong log server (Rule 12 — fail loud).
+      expect(errSpy).toHaveBeenCalledWith(expect.stringContaining("tool-loop failed"), expect.anything());
+    } finally {
+      vi.unstubAllGlobals();
+      errSpy.mockRestore();
+      _db = {};
+    }
   });
 });

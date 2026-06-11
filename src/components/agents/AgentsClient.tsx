@@ -22,7 +22,8 @@ import {
 } from "./filters";
 import type { LiveSession } from "@/hooks/useLiveSessions";
 
-const OTHER = "Khác";
+// Internal sentinel for sessions without a project; displayed via t("agents.groupOther").
+const OTHER = "__other__";
 
 // Sorted unique non-empty values of a string field across sessions.
 function options(list: LiveSession[], pick: (s: LiveSession) => string | null): string[] {
@@ -47,7 +48,7 @@ export function AgentsClient() {
   const filtered = useMemo(() => applyFilters(sessions, filters), [sessions, filters]);
   const stuckSet = useMemo(() => new Set(stuckIds), [stuckIds]);
 
-  // Group filtered sessions by project; null → "Khác" sinks to the end.
+  // Group filtered sessions by project; null → the "Other" group sinks to the end.
   const groups = useMemo(() => {
     const map = new Map<string, LiveSession[]>();
     for (const s of filtered) {
@@ -105,7 +106,7 @@ export function AgentsClient() {
         groups.map(([name, items]) => (
           <section key={name} className="mb-8">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-bold">
-              {name}
+              {name === OTHER ? t("agents.groupOther") : name}
               <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-500 dark:bg-neutral-800">
                 {items.length}
               </span>

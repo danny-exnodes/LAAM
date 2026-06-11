@@ -64,6 +64,18 @@ test("groups by projectName, null → Khác", () => {
   expect(screen.getByRole("heading", { level: 2, name: /^Khác/ })).toBeTruthy();
 });
 
+test("the no-project group label is localized — en users see 'Other', never the vi text or the sentinel", () => {
+  hookState.sessions = [mk({ id: "b", projectName: null, latestActivity: "orphan" })];
+  render(
+    <I18nProvider lang="en">
+      <AgentsClient />
+    </I18nProvider>,
+  );
+  expect(screen.getByRole("heading", { level: 2, name: /^Other/ })).toBeTruthy();
+  expect(screen.queryByText(/Khác/)).toBeNull();
+  expect(screen.queryByText(/__other__/)).toBeNull(); // grouping sentinel must not leak to the DOM
+});
+
 test("CSV button exports the filtered rows via downloadCsv", () => {
   hookState.sessions = [mk({ id: "a", latestActivity: "alpha" }), mk({ id: "b", latestActivity: "beta" })];
   ui();

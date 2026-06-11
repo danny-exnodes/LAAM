@@ -10,6 +10,8 @@ import { useIsDark } from "./useIsDark";
 export type ChartTheme = {
   grid: string;
   axis: string;
+  /** Primary foreground — for an emphasized series that must read on the card bg. */
+  text: string;
   tooltip: {
     backgroundColor: string;
     border: string;
@@ -22,6 +24,7 @@ export type ChartTheme = {
 const LIGHT: ChartTheme = {
   grid: "#e5e5ea",
   axis: "#6b7280",
+  text: "#111827",
   tooltip: {
     backgroundColor: "#ffffff",
     border: "1px solid #e5e5ea",
@@ -34,6 +37,7 @@ const LIGHT: ChartTheme = {
 const DARK: ChartTheme = {
   grid: "#2a2a2a",
   axis: "#9ca3af",
+  text: "#f5f5f5",
   tooltip: {
     backgroundColor: "#171717",
     border: "1px solid #404040",

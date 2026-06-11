@@ -5,8 +5,11 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { useT } from "@/i18n/provider";
+import { authDict } from "@/i18n/dictionaries/auth";
 
 export default function LoginPage() {
+  const t = useT(authDict);
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -23,7 +26,7 @@ export default function LoginPage() {
     });
     setLoading(false);
     if (!res || res.error) {
-      setError("Email hoặc mật khẩu không đúng.");
+      setError(t("auth.login.err"));
       return;
     }
     router.push("/dashboard");
@@ -32,13 +35,13 @@ export default function LoginPage() {
 
   return (
     <AuthShell>
-      <div className="anim-scale-in rounded-2xl border border-neutral-200 bg-white/80 p-7 shadow-sm backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/70">
-        <h1 className="text-xl font-bold tracking-tight">Đăng nhập</h1>
-        <p className="mt-1 text-sm text-neutral-500">Chào mừng trở lại — đăng nhập để tiếp tục.</p>
+      <div className="anim-scale-in rounded-2xl border border-neutral-200 bg-white p-7 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <h1 className="text-xl font-bold tracking-tight">{t("auth.login.title")}</h1>
+        <p className="mt-1 text-sm text-neutral-500">{t("auth.login.sub")}</p>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
-          <Field label="Email" name="email" type="email" autoComplete="email" />
+          <Field label={t("auth.email")} name="email" type="email" autoComplete="email" />
           <Field
-            label="Mật khẩu"
+            label={t("auth.password")}
             name="password"
             type="password"
             autoComplete="current-password"
@@ -49,13 +52,13 @@ export default function LoginPage() {
             disabled={loading}
             className="w-full rounded-lg bg-[var(--color-accent)] px-4 py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           >
-            {loading ? "Đang đăng nhập…" : "Đăng nhập"}
+            {loading ? t("auth.login.submitting") : t("auth.login.submit")}
           </button>
         </form>
         <p className="mt-5 text-center text-sm text-neutral-500">
-          Chưa có tài khoản?{" "}
+          {t("auth.login.noAccount")}{" "}
           <Link href="/register" className="font-medium text-[var(--color-accent)] hover:underline">
-            Đăng ký
+            {t("auth.login.registerLink")}
           </Link>
         </p>
       </div>

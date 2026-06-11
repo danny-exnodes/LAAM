@@ -9,6 +9,25 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — R0 hardening: hạ tầng & tài liệu vận hành (2026-06-11)
+- **Index DB cho truy vấn nóng (migration `0010`, additive):** `agent_session` (`machineId+updatedAt`, `projectId`, `status`, `source`, `userId`) + `chat_message` (`conversationId+createdAt`). Snapshot drizzle viết tay đối chiếu serializer drizzle-kit đang cài — sau merge chạy `npm run db:generate` trên host để verify **"No schema changes"** (nếu sinh file thừa → snapshot drift, báo lại, đừng commit). **Bước host:** `npm run db:migrate` (áp `0010`).
+- **Runbook production `docs/DEPLOYMENT.md`** (kiến trúc Docker + Tailscale — cảnh báo Funnel = public, bảng env đầy đủ, deploy lần đầu/nâng cấp, checklist xác minh sau deploy, vận hành tick/backup/logs, troubleshooting, checklist OAuth Google 6 bước) + **`scripts/install-tick-task.ps1`** (Scheduled Task poke tick mỗi phút, secret từ `-Secret`/`.env` — không hardcode, idempotent) + **`scripts/backup-db.ps1`** (pg_dump → `backups/`, retention 14 ngày, kèm lệnh đăng ký task hằng ngày + restore). README: sửa drift port Postgres `5432→5434` + link runbook. `.env.example`: thêm `LAAM_PROJECTS_DIR`/`LAAM_LOCAL_LOGS` (optional, default `~/.claude/projects` · `~/.laam/local-logs`).
+- **i18n trang auth (vi/en/zh):** dict `auth.*` mới (26 key, export `authDict`) — `/login`, `/register`, `AuthShell` hết hardcode tiếng Việt; gỡ string lạc: aria-label bottom-nav, nhóm "Khác" ở Agents (sentinel nội bộ `__other__`, không lộ ra DOM), placeholder/empty-state Machines, empty-state Graph (resolve server-side theo cookie `laam_lang`).
+- **Test khoá hành vi (regression guards):** route-protection (`auth.config` — endpoint token-authed vẫn public, sub-path bị chặn vì allowlist match `===`), parser transcript (skip dòng torn mid-write, sub-agent running/done, ngưỡng status, lọc ghost session, error payload khi thiếu thư mục), register 3 mode + 429 + chống enumeration, rate-limit/lockout (clock giả), ChatClient prompt-mẫu auto-send (UX-1), AgentDrawer scrim không-blur.
+
+### Đã sửa — QA R0: giao diện & chat (2026-06-11)
+- **A1 — accent light-mode đạt WCAG AA:** `--color-accent` light `#36a6d6` (2.77:1) → **`#1f6f96`** (≥ 4.5:1 trên mọi nền light; trắng-trên-fill 5.57:1), dark giữ nguyên `#36a6d6` qua override `.dark`; `--accent-hover` light → `#1b6285` (6.70:1 — hover nút primary không còn rớt chuẩn). Hue cyan ~199° giữ nguyên; ratio tính bằng code (công thức relative-luminance WCAG).
+- **A2 — gỡ `backdrop-blur` còn sót sau Matte Dark:** app-header → bề mặt đặc (`bg-white`/`dark:bg-neutral-900`); scrim modal/drawer (WorkflowsClient template-modal, AgentDrawer) → `bg-black/40` thuần; login/register/AuthShell/bottom-nav → bề mặt đặc — khớp convention scrim không-blur sẵn có (AiReviewPanel/ChatClient).
+- **A3 — TrendChart `/eval`:** line "overall" lấy stroke từ theme thay vì hardcode `#111827` (tàng hình trên nền tối) — tách `lineStroke` pure + field `text` vào `ChartTheme`; YAxis 36→44px để nhãn "100%" không bị cụt.
+- **Chat — lỗi THẬT giữa tool-loop không còn bị nuốt:** Ollama rớt ở round ≥ 1 trước đây fail-soft chạy tiếp completion (thường chết thêm lần nữa → user không nhận phản hồi nào) → giờ stream thông điệp lỗi thân thiện (vi/en/zh theo cookie `laam_lang`), **persist** assistant message để history còn lượt này, đóng stream sạch (không gọi Ollama lần 3, không unhandled rejection). Thêm log `[chat] client aborted stream (conv=…)` phân biệt "user bấm Stop" với lỗi server.
+
+### Bảo mật — R0: register/login hardening + security headers (2026-06-11)
+- **`REGISTER_MODE`** cho `POST /api/register`: `open` (mặc định — hành vi cũ) / `invite` (body phải gửi `inviteCode === REGISTER_INVITE_CODE`; code rỗng/chưa đặt → **fail-closed** từ chối tất cả) / `closed` (chặn tất cả TRỪ khi bảng user rỗng — vẫn bootstrap owner đầu tiên); giá trị không nhận diện → coi như `closed` (fail-closed). Gate chạy **TRƯỚC** email-lookup → 403 không lộ email tồn tại (không có timing signal). Prod public qua Funnel: đặt `invite`/`closed` (xem `docs/DEPLOYMENT.md`).
+- **Rate-limit đăng ký:** 10 req/giờ/IP (fixed-window in-memory; IP = hop đầu `x-forwarded-for` → `x-real-ip`); module thuần `src/lib/auth/rate-limit.ts` (clock injectable, giả định single-process).
+- **Login lockout chống brute-force:** ≥ 5 fail/10 phút/email → khoá 15 phút; khi khoá `authorize()` trả `null` **y như sai mật khẩu** (không lộ trạng thái khoá); email không tồn tại cũng tính fail (chống probe danh sách email); đăng nhập thành công reset bộ đếm.
+- **bcrypt rounds 10 → 12** (hash lúc đăng ký; login chỉ `compare` nên không đổi).
+- **Security headers baseline** trên mọi route (`next.config.ts` `headers()`): `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy` (camera/micro tắt, `geolocation=(self)` cho chat), HSTS 180 ngày. **CSP hoãn chủ đích** (cần verify browser với inline styles / Leaflet / SSE trước khi enforce).
+
 ---
 
 ## [2.1.0] — 2026-06-09 — Durable AI Workflows, Gmail-send an toàn & World-Tools

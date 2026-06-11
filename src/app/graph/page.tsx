@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import type { Node, Edge } from "@xyflow/react";
 import { auth } from "@/auth";
 import { db } from "@/db";
@@ -6,6 +7,10 @@ import { agentSessions } from "@/db/schema";
 import { AppHeader } from "@/components/app-header";
 import { GraphCanvas } from "@/components/graph-canvas";
 import { shortModel } from "@/lib/format";
+import { resolve } from "@/i18n";
+import { common } from "@/i18n/dictionaries/common";
+import { LANG_COOKIE } from "@/i18n/cookie";
+import type { Lang } from "@/i18n/types";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +37,11 @@ function nodeStyle(status: string | null): React.CSSProperties {
 export default async function GraphPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
+
+  // Server component: read the persisted language like the root layout does
+  // (LangSelect calls router.refresh() so this re-renders on switch).
+  const rawLang = (await cookies()).get(LANG_COOKIE)?.value;
+  const lang: Lang = rawLang === "en" || rawLang === "zh" ? rawLang : "vi";
 
   const sessions = await db.select().from(agentSessions);
   const orchestrators = sessions.filter((s) => (s.subAgents?.length ?? 0) > 0);
@@ -75,11 +85,7 @@ export default async function GraphPage() {
       {orchestrators.length === 0 ? (
         <main className="w-full p-6">
           <h1 className="text-xl font-bold tracking-tight">Graph</h1>
-          <p className="mt-3 text-sm text-neutral-500">
-            Chưa có orchestrator nào gọi <b>sub-agent</b> (tool <code>Task</code>).
-            Bấm <b>Đồng bộ</b> ở Agents, hoặc khi có session dùng sub-agent thì sơ
-            đồ orchestrator → sub-agents sẽ hiện ở đây.
-          </p>
+          <p className="mt-3 text-sm text-neutral-500">{resolve(common, lang, "graph.empty")}</p>
         </main>
       ) : (
         <div className="min-h-0 flex-1">

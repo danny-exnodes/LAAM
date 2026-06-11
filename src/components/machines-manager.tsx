@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { fmtDateTime } from "@/lib/format";
+import { useT } from "@/i18n/provider";
+import { machinesDict } from "@/i18n/dictionaries/machines";
 
 type M = {
   id: string;
@@ -19,6 +21,7 @@ export function MachinesManager({
   initial: M[];
   canManage: boolean;
 }) {
+  const t = useT(machinesDict);
   const router = useRouter();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -69,7 +72,7 @@ export function MachinesManager({
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Tên máy (vd: máy của An)"
+              placeholder={t("machines.createPh")}
               className="flex-1 rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none focus:border-[var(--color-accent)] dark:border-neutral-700 dark:bg-neutral-950"
             />
             <button
@@ -103,7 +106,7 @@ export function MachinesManager({
 
       <div className="rounded-2xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
         {initial.length === 0 ? (
-          <p className="p-5 text-sm text-neutral-500">Chưa có máy nào.</p>
+          <p className="p-5 text-sm text-neutral-500">{t("machines.empty")}</p>
         ) : (
           <ul className="divide-y divide-neutral-100 dark:divide-neutral-800">
             {initial.map((m) => (
