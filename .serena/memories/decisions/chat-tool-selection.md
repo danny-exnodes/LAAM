@@ -36,8 +36,14 @@ Ca prod: "top 5 agents tốn tiền nhất → gửi mail" → agent gọi `laam
 - **Fix 2 (deterministic):** `laam_list_agents` thêm param `sort` (recent|cost|tokens) — không có đường query "top-N theo cost" trước đó. Eval k=6: top-agents-cost **6/6** (model dùng sort=cost đúng).
 - **⚠️ BÀI HỌC LẶP LẠI (lần 2/3):** mọi chữ trong **description tool** = empirical. Câu "đừng list tất cả / top N thì sort=cost" ở **cấp-tool** làm model né list → agent-detail 6/6→0/6→2/6. Fix (commit `fe80615`): để description tool **nguyên gốc**, guidance chỉ nằm trong **mô tả param enum** ("cost (tốn tiền nhất)"). Eval: agent-detail **6/6** + top-agents-cost **6/6**. → Quy tắc: guidance ở **param description**, KHÔNG ở tool description.
 
+## Bug "Lỗi server" khi upload PDF (FIXED `61caae7`)
+- Gốc: `ChatClient.onAddFiles` đọc mọi file không-phải-ảnh bằng `file.text()` → PDF (nhị phân) ra rác chứa **NUL** → message có NUL → `db.insert(chatMessages){content}` (route.ts:217, KHÔNG fail-soft) ném vì **Postgres TEXT không lưu NUL** → 500.
+- Fix (no dep): server `stripNul(message)` trước persist (defense); client phát hiện PDF/nhị phân → báo rõ thay vì gửi rác. Helper thuần `src/lib/chat/attach.ts` + test. 1499 test.
+- **CHƯA hỗ trợ trích văn bản PDF thật** — cần lib `pdfjs-dist` (= thêm dependency → `npm install`, gated bởi [[shared-workspace-no-branch-switch]] cần user OK). i18n `chat.ingPdf*`/`ocrPdf*` đã có sẵn (intent cũ). Khi làm: pdfjs client-side trích text-layer + OCR-fallback cho PDF scan.
+
 ## Còn lại (backlog)
 - `trello_create_card` name→idList resolution (QW-4, cần Trello creds test) — gap UX production thật (KHÁC selection — production user nói tên board).
+- **PDF text extraction thật** (pdfjs-dist + OCR-scan-fallback) — cần user duyệt thêm dep.
 - (tùy chọn) vá `web_search → write` chain @scale: cần ≥2 probe + đo trước khi tune.
 - **Audit "list-vs-query gaps" cho 7 connector** (như github thiếu search-repo, list-agents vừa thêm sort) — user đề xuất test các connector khác.
 - Redeploy prod (QW-2+QW-3 + boundOutput + sort) — chờ user.
