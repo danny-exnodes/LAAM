@@ -9,6 +9,9 @@ export type WfAgentNode = {
   prompt: string; // interpolated (sink:"text")
   system?: string; // system prompt riêng của node; thiếu → default
   model?: string; // SEAM D-RUNTIME — A0 bỏ qua (luôn dùng harness mặc định)
+  // B1: JSON-schema cho Ollama structured output (param `format`). Có → output node
+  // = object đã JSON.parse (judge-verify: condition eq trên {{steps.x.output.field}}).
+  format?: Record<string, unknown>;
 };
 
 export type WfConnectorNode = {

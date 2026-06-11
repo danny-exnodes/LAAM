@@ -33,7 +33,8 @@ export type AgentDeps = {
     tools: ConnectorTool[],
     deps: { callOllama: (m: ChatMessage[], t: ConnectorTool[]) => Promise<OllamaChatResponse>; dispatch: (n: string, a: unknown) => Promise<unknown> },
   ) => Promise<ChatMessage[]>;
-  callOllama: (messages: ChatMessage[], tools: ConnectorTool[]) => Promise<OllamaChatResponse>;
+  // format (B1): optional — CHỈ call cuối truyền (tool-rounds gọi 2-arg, không đổi).
+  callOllama: (messages: ChatMessage[], tools: ConnectorTool[], format?: Record<string, unknown>) => Promise<OllamaChatResponse>;
   dispatch: (name: string, args: unknown) => Promise<unknown>;
   tools: ConnectorTool[];
 };
@@ -47,6 +48,29 @@ export async function runAgentNode(node: WfAgentNode, ctx: RunContext, deps: Age
   ];
   const convo = await deps.runRounds(messages, deps.tools, { callOllama: deps.callOllama, dispatch: deps.dispatch });
   // runToolRounds break KHÔNG push câu trả lời cuối → 1 call no-tools lấy text (như /api/chat).
-  const final = await deps.callOllama(convo, []);
-  return final?.message?.content ?? "";
+  if (!node.format) {
+    const final = await deps.callOllama(convo, []);
+    return final?.message?.content ?? "";
+  }
+  // B1 structured output: format → Ollama constrain JSON; output node = object đã parse
+  // ({{steps.<id>.output.<field>}} nội suy được). Parse hỏng → 1 self-repair retry
+  // (re-ask kèm parse error — pattern coerceGraph/generate route) rồi fail-loud.
+  let content = (await deps.callOllama(convo, [], node.format))?.message?.content ?? "";
+  try {
+    return JSON.parse(content);
+  } catch (e) {
+    const parseErr = e instanceof Error ? e.message : String(e);
+    const repair: ChatMessage[] = [
+      ...convo,
+      { role: "assistant", content },
+      { role: "user", content: `Kết quả vừa rồi không phải JSON hợp lệ (${parseErr}). Sửa lại và CHỈ trả JSON đúng schema.` },
+    ];
+    content = (await deps.callOllama(repair, [], node.format))?.message?.content ?? "";
+    try {
+      return JSON.parse(content);
+    } catch (e2) {
+      const err2 = e2 instanceof Error ? e2.message : String(e2);
+      throw new Error(`agent "${node.id}": structured output không phải JSON hợp lệ sau 1 lần tự sửa — ${err2}`);
+    }
+  }
 }

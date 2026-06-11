@@ -253,6 +253,21 @@ export const workflows: Dict = {
     en: "Enter prompt — {{var}} for interpolation",
     zh: "输入 prompt — {{var}} 用于插值",
   },
+  "wf.node.agent.formatLabel": {
+    vi: "Định dạng JSON (schema)",
+    en: "JSON format (schema)",
+    zh: "JSON 格式（schema）",
+  },
+  "wf.node.agent.formatHint": {
+    vi: "Tuỳ chọn — JSON-schema cho structured output: node trả object thay vì text ({{steps.<id>.output.<field>}} dùng được). Để trống = trả text.",
+    en: "Optional — JSON-schema for structured output: the node returns an object instead of text ({{steps.<id>.output.<field>}} works). Empty = plain text.",
+    zh: "可选 — structured output 的 JSON-schema：节点返回对象而非文本（可用 {{steps.<id>.output.<field>}}）。留空 = 纯文本。",
+  },
+  "wf.node.agent.formatNotObject": {
+    vi: "Schema phải là một object JSON",
+    en: "Schema must be a JSON object",
+    zh: "Schema 必须是 JSON 对象",
+  },
 
   // Node config panel — connector
   "wf.node.connector.idLabel": { vi: "Connector ID *", en: "Connector ID *", zh: "Connector ID *" },
