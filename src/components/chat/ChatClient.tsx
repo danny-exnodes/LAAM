@@ -533,8 +533,13 @@ export function ChatClient() {
           // File nhị phân khác (docx/zip/ảnh sai-mime) cũng ra rác có NUL → báo rõ thay vì gửi.
           pushAttachment(file.name, "file", looksBinaryText(raw) ? `[${t("chat.fileBinaryUnsupported")}]` : stripNul(raw));
         }
-      } catch {
-        pushAttachment(file.name, "file", "[không đọc được tệp]");
+      } catch (err) {
+        // Fail loud (AGENTS.md Rule 12): surface the real reason instead of swallowing it,
+        // so PDF/canvas/worker failures are diagnosable from the model reply + browser console
+        // (e.g. pdfjs "PasswordException" on encrypted scans, render/canvas errors).
+        const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+        console.error("[chat] attach failed:", file.name, err);
+        pushAttachment(file.name, "file", `[không đọc được tệp: ${reason}]`);
       }
     }
   }

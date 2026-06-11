@@ -3,8 +3,8 @@
 //   2) scan → render từng trang → /api/ocr (tesseract).
 //   3) OCR thiếu/thất bại/rỗng → CHỐT CHẶN CUỐI: đẩy ảnh trang vào kênh vision để
 //      qwen3-vl tự đọc.
-// pdfjs nạp ĐỘNG (browser-only) để không vỡ SSR. Worker = static asset
-// /pdf.worker.min.mjs (copy từ pdfjs-dist@6 — re-copy khi nâng cấp; xem public/).
+// pdfjs nạp ĐỘNG (browser-only) để không vỡ SSR; dùng LEGACY build (polyfill cho
+// trình duyệt cũ — xem loadPdfjs). Worker emit qua `new URL(...,import.meta.url)`.
 
 export const PDF_MAX_PAGES = 20; // trần số trang xử lý (OCR/vision tốn token + thời gian)
 export const PDF_RENDER_SCALE = 2.0; // độ phân giải render (đủ nét cho OCR)
@@ -60,13 +60,18 @@ export async function runPdfTiers(opts: {
 
 let workerConfigured = false;
 async function loadPdfjs() {
-  const pdfjs = await import("pdfjs-dist");
+  // LEGACY build (Babel-transpiled + core-js polyfilled). Lý do production: bản
+  // modern hard-require `Promise.withResolvers` (Safari 17.4+/Chrome 119+) ở CẢ
+  // main-thread LẪN worker → ném ngay khi nạp trên iPhone Safari < 17.4 / trình
+  // duyệt cũ (lỗi "không đọc được tệp" thực chất là throw bị nuốt). Bản legacy tự
+  // polyfill withResolvers trong cả hai scope → upload PDF chạy mọi thiết bị.
+  // (Đã verify: xoá Promise.withResolvers rồi nạp legacy → nó tự thêm lại + getDocument vẫn chạy.)
+  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.min.mjs");
   if (!workerConfigured) {
-    // Worker qua `new URL(..., import.meta.url)` — pattern Next khuyến nghị: bundler
-    // (Turbopack/webpack) EMIT worker ra /_next/static → serve ở cả dev lẫn Docker
-    // standalone, LUÔN khớp version pdfjs đang cài (không copy thủ công vào public/).
+    // Worker qua `new URL(..., import.meta.url)`: bundler (Turbopack/webpack) EMIT
+    // ra /_next/static → serve ở cả dev lẫn Docker standalone, khớp version đang cài.
     pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-      "pdfjs-dist/build/pdf.worker.min.mjs",
+      "pdfjs-dist/legacy/build/pdf.worker.min.mjs",
       import.meta.url,
     ).href;
     workerConfigured = true;
