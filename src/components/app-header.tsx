@@ -17,6 +17,7 @@ import { SyncButton } from "@/components/sync-button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LangSelect } from "@/components/lang-select";
 import { UserAvatar } from "@/components/user-avatar";
+import { NotificationBell } from "@/components/notification-bell";
 import { BottomNav } from "@/components/bottom-nav";
 
 const NAV = [
@@ -86,6 +87,7 @@ export async function AppHeader({ current }: { current: string; role?: string })
             <LangSelect />
             <ThemeToggle />
             <SyncButton />
+            <NotificationBell />
             <UserAvatar avatarUrl={avatarUrl} role={user?.role} name={user?.name} />
           </div>
         </div>
