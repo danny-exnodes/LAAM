@@ -39,7 +39,8 @@ Ca prod: "top 5 agents tốn tiền nhất → gửi mail" → agent gọi `laam
 ## Bug "Lỗi server" khi upload PDF (FIXED `61caae7`)
 - Gốc: `ChatClient.onAddFiles` đọc mọi file không-phải-ảnh bằng `file.text()` → PDF (nhị phân) ra rác chứa **NUL** → message có NUL → `db.insert(chatMessages){content}` (route.ts:217, KHÔNG fail-soft) ném vì **Postgres TEXT không lưu NUL** → 500.
 - Fix (no dep): server `stripNul(message)` trước persist (defense); client phát hiện PDF/nhị phân → báo rõ thay vì gửi rác. Helper thuần `src/lib/chat/attach.ts` + test. 1499 test.
-- **CHƯA hỗ trợ trích văn bản PDF thật** — cần lib `pdfjs-dist` (= thêm dependency → `npm install`, gated bởi [[shared-workspace-no-branch-switch]] cần user OK). i18n `chat.ingPdf*`/`ocrPdf*` đã có sẵn (intent cũ). Khi làm: pdfjs client-side trích text-layer + OCR-fallback cho PDF scan.
+- **PDF support THẬT — ĐÃ IMPLEMENT (`72706df`, user duyệt dep):** `src/lib/chat/pdf.ts` chuỗi 3 tầng client-side: (1) text-layer (`pdfjs-dist@6` getTextContent) → (2) scan: render trang→JPEG→`/api/ocr` tesseract → (3) OCR fail/rỗng/off → **chốt cuối: đẩy ảnh trang vào kênh vision → qwen3-vl đọc**. Cap 20 trang, scale 2.0, JPEG q0.85 (vừa cap vision 2×2MB). Worker qua `new URL(...,import.meta.url)` (bundler emit /_next/static — KHÔNG dùng public/, đã thử public/ FAIL vì Next dev snapshot public lúc start). Logic 3-tầng (`runPdfTiers`) tách khỏi pdfjs (inject primitive) → unit-test đầy đủ. 1507 test + tsc sạch.
+  - ⚠️ **CHƯA verify-live browser** (worker load + canvas render): không drive được từ host (Chrome kết nối là macOS từ xa, dev là Windows-local). **Cần:** restart dev (nạp pdfjs-dist) → smoke-test PDF-text + PDF-scan; `next build` trước prod deploy (rủi ro bundler emit worker).
 
 ## Còn lại (backlog)
 - `trello_create_card` name→idList resolution (QW-4, cần Trello creds test) — gap UX production thật (KHÁC selection — production user nói tên board).
