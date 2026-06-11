@@ -11,7 +11,7 @@
 // Scope this round: per-user, in-app only. The schema reserves `audience` for a
 // future role-broadcast fan-out; it is not implemented here.
 
-import { and, count, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, isNull, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications } from "@/db/schema";
 import type { Notification } from "@/db/schema";
@@ -58,6 +58,11 @@ export async function create(n: CreateNotification): Promise<Notification> {
     // is null the index never matches, so this clause is a no-op (plain insert).
     .onConflictDoUpdate({
       target: [notifications.userId, notifications.dedupeKey],
+      // Match the PARTIAL unique index predicate explicitly so Postgres resolves
+      // the right constraint (future-proof if another (userId,dedupeKey) index is
+      // ever added). Without it the upsert relies on there being exactly one such
+      // index — correct today, fragile later (review I-1).
+      targetWhere: sql`${notifications.dedupeKey} is not null`,
       set: { createdAt: now, readAt: null, severity: n.severity ?? "info", title: n.title, body: n.body ?? null, link: n.link ?? null },
     })
     .returning();
