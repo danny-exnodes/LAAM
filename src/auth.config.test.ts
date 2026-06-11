@@ -1,4 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// Mock the session-refresh helper so jwt-callback tests don't hit Postgres.
+// This must be hoisted before the auth.config import.
+vi.mock('@/lib/auth/session-refresh', () => ({
+  refreshSessionFromDb: vi.fn(),
+}));
+
+import { refreshSessionFromDb } from '@/lib/auth/session-refresh';
 import { authConfig } from './auth.config';
 
 // The `authorized` callback is the edge route-guard. The public landing page
@@ -58,5 +66,63 @@ describe('route protection', () => {
     // startsWith would silently open everything nested under a public route.
     expect(can('/api/ingest/anything', false)).toBe(false);
     expect(can('/api/workflows', false)).toBe(false); // only /tick is public
+  });
+});
+
+// ------------------------------------------------------------------ jwt ----
+// Invoke the jwt callback directly. On sign-in `user` is present; on refresh
+// only `token` is present. The mocked refreshSessionFromDb lets us control DB
+// responses without a real Postgres connection.
+
+const jwtCb = authConfig.callbacks!.jwt!.bind(authConfig.callbacks) as (
+  params: Record<string, unknown>
+) => Promise<Record<string, unknown> | null>;
+
+describe('jwt callback — per-request session re-validation', () => {
+  it('sign-in path: sets token.role from user, no DB read', async () => {
+    const token = { sub: 'u1' };
+    const user = { role: 'admin' };
+    const result = await jwtCb({ token, user } as never);
+    expect(result).toMatchObject({ sub: 'u1', role: 'admin' });
+    expect(refreshSessionFromDb).not.toHaveBeenCalled();
+  });
+
+  it('refresh path: active user → keeps token, refreshes role', async () => {
+    vi.mocked(refreshSessionFromDb).mockResolvedValueOnce({ valid: true, role: 'owner' });
+    const token = { sub: 'u1', role: 'member' };
+    const result = await jwtCb({ token } as never);
+    expect(result).toMatchObject({ sub: 'u1', role: 'owner' });
+    expect(refreshSessionFromDb).toHaveBeenCalledWith('u1');
+  });
+
+  it('refresh path: disabled user → returns null (invalidates JWT cookie)', async () => {
+    vi.mocked(refreshSessionFromDb).mockResolvedValueOnce({ valid: false });
+    const token = { sub: 'u1', role: 'member' };
+    const result = await jwtCb({ token } as never);
+    expect(result).toBeNull();
+  });
+
+  it('refresh path: deleted user → returns null', async () => {
+    vi.mocked(refreshSessionFromDb).mockResolvedValueOnce({ valid: false });
+    const token = { sub: 'u99', role: 'member' };
+    const result = await jwtCb({ token } as never);
+    expect(result).toBeNull();
+  });
+
+  it('refresh path: DB error → fail-open, keeps existing role', async () => {
+    // refreshSessionFromDb swallows the error and returns { valid: true, role: undefined }
+    vi.mocked(refreshSessionFromDb).mockResolvedValueOnce({ valid: true, role: undefined });
+    const token = { sub: 'u1', role: 'admin' };
+    const result = await jwtCb({ token } as never);
+    // Role must be preserved from the original token.
+    expect(result).toMatchObject({ sub: 'u1', role: 'admin' });
+  });
+
+  it('refresh path: token with no sub → passes through untouched, no DB read', async () => {
+    vi.mocked(refreshSessionFromDb).mockClear();
+    const token = { role: 'member' }; // no sub
+    const result = await jwtCb({ token } as never);
+    expect(result).toEqual({ role: 'member' });
+    expect(refreshSessionFromDb).not.toHaveBeenCalled();
   });
 });
