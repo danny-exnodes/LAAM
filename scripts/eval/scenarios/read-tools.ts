@@ -41,3 +41,20 @@ export const machinesOnline: Scenario = {
   ] } },
   expect: { callsTool: "laam_list_machines", notCalls: ["laam_query_stats"], finalContains: ["gaming-pc"], maxRounds: 2 },
 };
+
+// "top N theo cost" PHẢI dùng sort=cost + limit (KHÔNG liệt kê tất cả rồi tự lọc → tràn/cắt).
+// Lặp lại đúng ca prod gãy: "top 5 agents tốn tiền nhất" + verify model dùng tham số sort mới.
+export const topAgentsByCost: Scenario = {
+  id: "top-agents-cost", capability: "args",
+  input: "Cho tôi 5 agent tốn tiền nhất.",
+  toolStubs: { laam_list_agents: { agents: [
+    { id: "a1", project: "billing", costUsd: 9.9, tokensOut: 80000 },
+    { id: "a2", project: "search", costUsd: 7.2, tokensOut: 61000 },
+  ] } },
+  expect: {
+    callsTool: "laam_list_agents",
+    // dùng sort=cost + limit nhỏ (≤10) → lấy đúng top, không list-all rồi bị rút gọn.
+    args: { laam_list_agents: (a) => a.sort === "cost" && Number(a.limit) > 0 && Number(a.limit) <= 10 },
+    maxRounds: 2,
+  },
+};

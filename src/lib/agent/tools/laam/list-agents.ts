@@ -44,9 +44,7 @@ export const listAgents: Tool = {
   name: "laam_list_agents",
   description:
     "Liệt kê các agent (phiên giám sát) cùng trạng thái, việc đang làm, token, chi phí. " +
-    "Lọc theo status (running/idle/done) hoặc machineId; SẮP XẾP theo sort (recent|cost|tokens); giới hạn limit. " +
-    "Cho câu hỏi kiểu 'top N tốn tiền/token nhất' → dùng sort=cost (hoặc tokens) + limit=N để lấy ĐÚNG, " +
-    "KHÔNG liệt kê toàn bộ rồi tự lọc (sẽ bị rút gọn vì quá lớn).",
+    "Có thể lọc theo status (running/idle/done) hoặc machineId, sắp xếp theo sort, giới hạn limit.",
   kind: "read",
   parameters: {
     type: "object",

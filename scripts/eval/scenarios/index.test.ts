@@ -2,9 +2,9 @@ import { describe, expect, test } from "vitest";
 import { ALL_SCENARIOS } from "./index";
 
 describe("ALL_SCENARIOS", () => {
-  test("đúng 16 ca, id duy nhất", () => {
-    expect(ALL_SCENARIOS).toHaveLength(16);
-    expect(new Set(ALL_SCENARIOS.map((s) => s.id)).size).toBe(16);
+  test("đúng 17 ca, id duy nhất", () => {
+    expect(ALL_SCENARIOS).toHaveLength(17); // +top-agents-cost (lặp ca prod 'top N theo cost')
+    expect(new Set(ALL_SCENARIOS.map((s) => s.id)).size).toBe(17);
   });
   test("mọi callsTool/notCalls dùng tên tool có tiền tố hợp lệ", () => {
     const KNOWN = /^(laam_|geo_|trello_|web_|util_)/;
