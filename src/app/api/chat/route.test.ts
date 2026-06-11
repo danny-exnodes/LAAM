@@ -245,4 +245,37 @@ describe("R0 tool-loop robustness", () => {
       _db = {};
     }
   });
+
+  // BUG prod: upload PDF → ChatClient đọc file.text() ra rác nhị phân chứa NUL → message
+  // có NUL → insert chatMessages (KHÔNG fail-soft, route.ts:217) ném vì Postgres TEXT không
+  // lưu NUL → 500 "Lỗi server". Server PHẢI strip NUL trước persist (defense-in-depth).
+  test("message chứa NUL (PDF đọc-nhầm-thành-text) → strip NUL trước persist, không crash", async () => {
+    const NUL = String.fromCharCode(0);
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Ollama không phải trọng tâm — reject để lượt kết thúc nhanh; điểm test = user msg đã persist.
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("down")));
+    try {
+      const dirty = "tóm tắt file này: " + NUL + "%PDF-1.7" + NUL + "rác-nhị-phân" + NUL;
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: dirty }),
+        }),
+      );
+      expect(res.status).not.toBe(500);
+      await res.text();
+      const userRows = captured.values.filter((v) => (v as { role?: string }).role === "user") as { content?: string }[];
+      expect(userRows.length).toBeGreaterThan(0);
+      for (const r of userRows) expect(String(r.content)).not.toContain(NUL); // Postgres lưu được
+      expect(userRows.some((r) => String(r.content).includes("%PDF-1.7"))).toBe(true); // giữ phần text
+    } finally {
+      vi.unstubAllGlobals();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
 });

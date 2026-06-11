@@ -17,6 +17,7 @@ import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
 import { extractToolTurns } from "@/lib/agent/persist";
+import { stripNul } from "@/lib/chat/attach";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
 import {
   detectAlerts,
@@ -174,7 +175,10 @@ export async function POST(req: Request) {
   if (isConfirmBody(rawBody)) return handleConfirm(req, rawBody.confirm, userId);
   const body = rawBody as ChatBody;
 
-  const message = (body.message ?? "").toString().trim();
+  // stripNul: nội dung đính kèm nhị phân (PDF đọc-nhầm-thành-text…) chứa NUL → Postgres
+  // TEXT không lưu được → insert message bên dưới (KHÔNG fail-soft) ném → 500 "Lỗi server".
+  // Defense-in-depth phía server (client cũng đã chặn) để KHÔNG bao giờ crash vì 1 file lạ.
+  const message = stripNul((body.message ?? "").toString()).trim();
   if (!message) {
     return new Response(JSON.stringify({ error: "Empty message" }), { status: 400 });
   }

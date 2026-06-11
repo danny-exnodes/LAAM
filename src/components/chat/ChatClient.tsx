@@ -25,6 +25,7 @@ import {
   type PendingWrite,
 } from "./types";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
+import { isPdfFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
 import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
 import type { ToolTraceItem } from "./toolLabel";
 
@@ -491,9 +492,14 @@ export function ChatClient() {
           const d = await r.json().catch(() => ({}));
           const text = r.ok ? (d.text ?? "") : `[OCR: ${d.error ?? "lỗi"}]`;
           pushAttachment(file.name, "image", text, keepB64);
+        } else if (isPdfFile(file.name, file.type)) {
+          // Chưa hỗ trợ trích văn bản PDF (chỉ có jspdf để XUẤT, không có lib đọc). Đọc
+          // file.text() trên PDF ra rác nhị phân + NUL → vỡ persist server ("Lỗi server").
+          pushAttachment(file.name, "file", `[${t("chat.pdfUnsupported")}]`);
         } else {
-          const text = await file.text();
-          pushAttachment(file.name, "file", text);
+          const raw = await file.text();
+          // File nhị phân khác (docx/zip/ảnh sai-mime) cũng ra rác có NUL → báo rõ thay vì gửi.
+          pushAttachment(file.name, "file", looksBinaryText(raw) ? `[${t("chat.fileBinaryUnsupported")}]` : stripNul(raw));
         }
       } catch {
         pushAttachment(file.name, "file", "[không đọc được tệp]");

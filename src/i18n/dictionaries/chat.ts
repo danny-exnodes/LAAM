@@ -214,6 +214,8 @@ export const chat: Dict = {
   'chat.ingPdfCorrupt': { vi: 'Tệp PDF hỏng hoặc không hợp lệ.', en: 'The PDF file is corrupt or invalid.', zh: 'PDF 文件已损坏或无效。' },
   'chat.ingPdfNoText': { vi: 'PDF không có lớp văn bản (có thể là ảnh scan) — không trích được chữ.', en: 'The PDF has no text layer (it may be a scanned image) — no text extracted.', zh: 'PDF 没有文本层（可能是扫描图片）——无法提取文字。' },
   'chat.ingPdfFail': { vi: 'Không đọc được PDF: {msg}', en: 'Could not read the PDF: {msg}', zh: '无法读取 PDF：{msg}' },
+  'chat.pdfUnsupported': { vi: 'Chưa hỗ trợ trích văn bản từ PDF — hãy dán nội dung, hoặc chuyển trang PDF thành ảnh để OCR.', en: "Extracting text from PDF isn't supported yet — paste the content, or upload the page as an image for OCR.", zh: '暂不支持从 PDF 提取文本 — 请粘贴内容，或将 PDF 页面转为图片以进行 OCR。' },
+  'chat.fileBinaryUnsupported': { vi: 'Tệp nhị phân — không đọc được dạng văn bản.', en: "Binary file — can't read it as text.", zh: '二进制文件 — 无法按文本读取。' },
   'chat.ingUnsupported': { vi: 'Định dạng không hỗ trợ: {fmt}', en: 'Unsupported format: {fmt}', zh: '不支持的格式：{fmt}' },
   'chat.ingUrlFail': { vi: 'Không tải được URL: {msg}', en: 'Could not load the URL: {msg}', zh: '无法加载 URL：{msg}' },
   'chat.ocrRunning': { vi: 'Đang nhận dạng chữ (OCR)…', en: 'Reading text (OCR)…', zh: '正在识别文字（OCR）…' },
