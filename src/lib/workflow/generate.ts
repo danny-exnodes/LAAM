@@ -52,6 +52,11 @@ export function generationSystem(catalog: string): string {
     '  { "id": "list", "kind": "connector", "connectorId": "demo", "action": "demo_list_tasks", "args": {} },',
     '  { "id": "sum", "kind": "agent", "prompt": "Summarize these tasks: {{steps.list.output}}" }',
     '], "edges": [ { "from": "list", "to": "sum" } ] }',
+    "",
+    "Common idioms:",
+    "  judge-verify: agent(prompt) → agent(format={verdict:enum[PASS,FAIL],reason}) → condition(eq, {{steps.judge.output.verdict}}, PASS) → true:action / false:skip",
+    "  binary-classify: chain of condition nodes on the same field with eq — each branch leads to a distinct action node; no switch node needed",
+    "  pipeline-per-item: connector(list) → foreach(items={{steps.list.output}}, body={agent(process {{vars.item}})})",
   ].join("\n");
 }
 
