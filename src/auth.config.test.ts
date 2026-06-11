@@ -26,4 +26,31 @@ describe('route protection', () => {
   it('allows gated pages when logged in', () => {
     expect(can('/dashboard', true)).toBe(true);
   });
+
+  it('keeps token-authed endpoints reachable without a session', () => {
+    // These routes do their own auth: collector machine-token (/api/ingest),
+    // access_token bearer (/api/mcp), localhost/secret (/api/workflows/tick).
+    // Gating them on a browser session would break every non-interactive caller.
+    expect(can('/api/ingest', false)).toBe(true);
+    expect(can('/api/mcp', false)).toBe(true);
+    expect(can('/api/workflows/tick', false)).toBe(true);
+  });
+
+  it('keeps signup and the Auth.js API reachable without a session', () => {
+    // Otherwise nobody could ever register or log in.
+    expect(can('/api/register', false)).toBe(true);
+    expect(can('/api/auth/callback/credentials', false)).toBe(true);
+  });
+
+  it('gates data APIs when logged out', () => {
+    expect(can('/api/stats', false)).toBe(false);
+    expect(can('/api/chat', false)).toBe(false);
+  });
+
+  it('matches public API paths exactly — sub-paths stay gated', () => {
+    // The allowlist uses `===` (only /api/auth is prefix-matched). A switch to
+    // startsWith would silently open everything nested under a public route.
+    expect(can('/api/ingest/anything', false)).toBe(false);
+    expect(can('/api/workflows', false)).toBe(false); // only /tick is public
+  });
 });

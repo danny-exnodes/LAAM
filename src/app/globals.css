@@ -12,7 +12,10 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --color-accent: #36a6d6;
+  /* Light default — 5.6:1 on white, ≥4.5:1 on every light surface incl. as a
+     white-text fill (WCAG AA; the old #36a6d6 measured 2.77:1). `.dark`
+     re-maps it back to the brighter cyan, which passes on dark surfaces. */
+  --color-accent: #1f6f96;
   --metric-gpu: #22d3ee; /* cyan-400 — graphics accent (GPU) */
   --metric-vram: #38bdf8; /* sky-400 — graphics memory accent (VRAM) */
 
@@ -60,8 +63,8 @@
   --text-primary: #15181f;
   --text-secondary: #474c57;
   --text-muted: #6b7180;
-  --accent: #2a8fbf; /* darkened for contrast on light surfaces */
-  --accent-hover: #2380ad;
+  --accent: #1f6f96; /* ≥4.5:1 vs all light surfaces AND as white-text fill (WCAG AA) */
+  --accent-hover: #1b6285; /* hover fill keeps white text ≥4.5:1 */
   --accent-fg: #ffffff;
   --accent-muted: rgba(54, 166, 214, 0.14);
   --accent-glow: rgba(54, 166, 214, 0.3);
@@ -70,6 +73,7 @@
   --bloom-sky: rgba(56, 130, 246, 0.07);
 }
 .dark {
+  --color-accent: #36a6d6; /* restore the @theme accent for dark — see @theme note */
   --bg-base: #0a0b0f;
   --surface-1: #14161b;
   --surface-2: #1c1e24;

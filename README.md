@@ -2,6 +2,8 @@
 
 Theo dõi real-time các Claude agent chạy local + trợ lý chat model-local + connectors — all local, model $0. **Next.js 16 + PostgreSQL + Auth.js + Drizzle.** Bản v1 (vanilla/Express) lưu ở branch `archive/v1`.
 
+Triển khai production (Docker + Tailscale): xem runbook [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
+
 ---
 
 # LAAM v2 (in development)
@@ -15,7 +17,7 @@ The app runs on the host via `npm run dev`; only Postgres (+ Adminer) runs in Do
 ```bash
 cd v2
 
-# 1) Start dev infra (Postgres :5432, Adminer :8080)
+# 1) Start dev infra (Postgres :5434, Adminer :8080)
 docker compose up -d
 
 # 2) Env: copy the template, then set a real AUTH_SECRET

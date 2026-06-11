@@ -1,9 +1,14 @@
+"use client";
+
 // Mobile bottom tab bar (md:hidden). Five destinations with Chat raised + ~30%
 // larger as the center focal point — the app-like pattern from the reference.
 // Desktop keeps the top nav instead. Fixed; pages add bottom padding to clear it.
+// Client component: the aria-label resolves through the i18n provider.
 
 import Link from "next/link";
 import { LayoutDashboard, Bot, MessageSquare, Plug, Settings, GitBranch } from "lucide-react";
+import { useT } from "@/i18n/provider";
+import { common } from "@/i18n/dictionaries/common";
 
 const ITEMS: {
   href: string;
@@ -20,10 +25,11 @@ const ITEMS: {
 ];
 
 export function BottomNav({ current }: { current: string }) {
+  const t = useT(common);
   return (
     <nav
-      aria-label="Điều hướng"
-      className="fixed inset-x-0 bottom-0 z-40 flex items-end justify-around border-t border-neutral-200 bg-white/95 px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] backdrop-blur-md md:hidden dark:border-neutral-800 dark:bg-neutral-900/95"
+      aria-label={t("nav.label")}
+      className="fixed inset-x-0 bottom-0 z-40 flex items-end justify-around border-t border-neutral-200 bg-white px-2 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] md:hidden dark:border-neutral-800 dark:bg-neutral-900"
     >
       {ITEMS.map(({ href, label, Icon, center }) => {
         const active = current === href || current.startsWith(href + "/");

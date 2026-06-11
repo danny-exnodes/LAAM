@@ -21,6 +21,25 @@ const nextConfig: NextConfig = {
   // imports `@/db` fails with "Module not found: Can't resolve 'pg'". Applies to
   // both `next dev` (Turbopack) and the standalone build.
   serverExternalPackages: ["pg"],
+
+  // Baseline security headers — the app is reachable publicly via Tailscale
+  // Funnel. CSP is intentionally deferred (needs browser verification against
+  // inline styles / Leaflet / SSE before it can be enforced). Chat uses the
+  // browser Geolocation API, hence geolocation=(self) instead of ().
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
+          { key: "Strict-Transport-Security", value: "max-age=15552000; includeSubDomains" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

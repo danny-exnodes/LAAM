@@ -187,6 +187,8 @@ describe("WorkflowsClient — button actions", () => {
     await waitFor(() => screen.getByText("Từ mẫu"));
     fireEvent.click(screen.getByText("Từ mẫu"));
     await waitFor(() => expect(screen.getByRole("dialog")).toBeTruthy());
+    // Matte Dark design: overlays dim, they never blur (no glassmorphism — QA A2).
+    expect(screen.getByRole("dialog").className).not.toMatch(/backdrop-blur/);
     expect(screen.getByText("Digest đêm")).toBeTruthy();
   });
 

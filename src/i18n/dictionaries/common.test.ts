@@ -2,10 +2,11 @@ import { expect, test } from 'vitest';
 import { common } from './common';
 import { resolve } from '../index';
 
-test('common has the expected key count (44) and all 3 langs each', () => {
-  // 34 v1 keys + 10 header-action keys (U3: theme/sync/account i18n).
+test('common has the expected key count (46) and all 3 langs each', () => {
+  // 34 v1 keys + 10 header-action keys (U3: theme/sync/account i18n)
+  // + 2 R0-hardening keys (nav.label aria, graph.empty server-rendered state).
   const keys = Object.keys(common);
-  expect(keys.length).toBe(44);
+  expect(keys.length).toBe(46);
   for (const k of keys) {
     expect(typeof common[k].vi).toBe('string');
     expect(typeof common[k].en).toBe('string');

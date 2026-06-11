@@ -32,6 +32,13 @@ const SYSTEM =
   "Bạn là LAAM, trợ lý nội bộ thân thiện. Trả lời ngắn gọn, chính xác, hữu ích. " +
   "Dùng tiếng Việt khi người dùng dùng tiếng Việt.";
 const PENDING_TTL_MS = 5 * 60_000; // §5: pending-write token expiry
+// R0: Ollama rớt GIỮA tool-loop (round ≥ 1) → user phải thấy lỗi thay vì im lặng.
+// Server stream không có dictionary client → tri-lingual const (pattern SAFE_UNBACKED_WRITE).
+const TOOL_LOOP_ERR: Record<"vi" | "en" | "zh", string> = {
+  vi: `Không kết nối được Ollama (${OLLAMA_URL}) khi đang chạy công cụ. Vui lòng thử lại.`,
+  en: `Lost connection to Ollama (${OLLAMA_URL}) while running tools. Please try again.`,
+  zh: `调用工具时无法连接 Ollama（${OLLAMA_URL}）。请重试。`,
+};
 // SP-4: tên internal tool — redact args theo set-membership (D-SP4-3) khi gom tool frames.
 const INTERNAL_NAMES = new Set(INTERNAL_TOOLS.map((t) => t.name));
 // Cửa sổ ngữ cảnh model phục vụ. Ollama mặc định num_ctx=4096 BẤT KỂ model hỗ trợ tới ~128k+ →
@@ -257,7 +264,7 @@ export async function POST(req: Request) {
   // which on attachment turns is prefixed with the extracted file content — avoids
   // buffering a summarize-turn just because an uploaded doc contains "tạo/create".
   const intentText = (typeof body.titleHint === "string" && body.titleHint.trim()) ? body.titleHint : message;
-  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow });
+  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow, reqSignal: req.signal });
 }
 
 // S3 — the main chat turn as a single live stream. Replaces the old "await the
@@ -276,8 +283,9 @@ function streamMainTurn(opts: {
   baseLen: number;
   proactive: ProactiveAlert[];
   readAllow: ReadonlySet<string>;
+  reqSignal?: AbortSignal;
 }): Response {
-  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow } = opts;
+  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow, reqSignal } = opts;
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -359,7 +367,25 @@ function streamMainTurn(opts: {
           controller.close();
           return;
         }
-        // Real tool-loop error → fail-soft: complete from the original messages.
+        // Lỗi THẬT giữa tool-loop (Ollama rớt / HTTP lỗi ở round ≥ 1). Fail-soft cũ
+        // (complete từ messages gốc) thường chết thêm lần nữa → user không nhận được
+        // phản hồi nào. Kết thúc SẠCH thay vì im lặng: text lỗi theo lang (pattern
+        // catch main-turn bên dưới) + persist để history còn lượt này + close.
+        console.error(`[chat] tool-loop failed (conv=${convId})`, e);
+        const errText = TOOL_LOOP_ERR[lang as keyof typeof TOOL_LOOP_ERR] ?? TOOL_LOOP_ERR.vi;
+        try {
+          controller.enqueue(enc.encode(errText));
+        } catch {
+          /* aborted */
+        }
+        try {
+          await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: errText });
+          await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+        } catch (err) {
+          console.error("[chat] tool-loop error persist failed (fail-soft)", err);
+        }
+        controller.close();
+        return;
       }
 
       // F1 (Rule 13): a write never executes in the main turn — it suspends above
@@ -432,6 +458,9 @@ function streamMainTurn(opts: {
           }
         }
       } finally {
+        // Abort observability: client hủy request giữa stream → 1 dòng warn có convId
+        // (đọc log phân biệt "user bấm Stop" với lỗi server).
+        if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
         const assistantMsgId = crypto.randomUUID();
         // F1: vet a buffered write-intent completion before persisting/emitting it.
         // Non-guarded turns already streamed live (outText === full, not re-emitted).

@@ -51,6 +51,7 @@ export const agents: Dict = {
   // project header
   'agents.sessionUnit': { vi: 'session', en: 'sessions', zh: '个会话' },
   'agents.runningPill': { vi: '{n} chạy', en: '{n} running', zh: '{n} 个运行中' },
+  'agents.groupOther': { vi: 'Khác', en: 'Other', zh: '其他' },
   // notifications
   'agents.notifyTitle': { vi: 'Agent nghi bị kẹt', en: 'Agent may be stuck', zh: '智能体疑似卡住' },
   'agents.notifyBody': { vi: '{project} · {model} — {ago} chưa ghi transcript.', en: '{project} · {model} — no transcript for {ago}.', zh: '{project} · {model} — 已 {ago} 未写入转录。' },

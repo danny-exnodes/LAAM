@@ -10,6 +10,7 @@ export const common: Dict = {
   'nav.office': { vi: 'Văn phòng', en: 'Office', zh: '办公室' },
   'nav.chat': { vi: 'Trò chuyện', en: 'Chat', zh: '对话' },
   'nav.connectors': { vi: 'Kết nối', en: 'Connectors', zh: '连接器' },
+  'nav.label': { vi: 'Điều hướng', en: 'Navigation', zh: '导航' },
 
   'brand.sub': { vi: 'Giám sát AI Agent cục bộ', en: 'Local AI Agent Monitoring', zh: '本地 AI 智能体监控' },
 
@@ -55,4 +56,11 @@ export const common: Dict = {
   'common.none': { vi: '—', en: '—', zh: '—' },
   'common.copy': { vi: 'Chép', en: 'Copy', zh: '复制' },
   'common.copied': { vi: 'Đã chép', en: 'Copied', zh: '已复制' },
+
+  // Graph page (server-rendered; resolved via the laam_lang cookie, no dict of its own).
+  'graph.empty': {
+    vi: 'Chưa có orchestrator nào gọi sub-agent (tool Task). Bấm Đồng bộ ở Agents, hoặc khi có session dùng sub-agent thì sơ đồ orchestrator → sub-agents sẽ hiện ở đây.',
+    en: 'No orchestrator has called a sub-agent (Task tool) yet. Click Sync on Agents, or once a session uses sub-agents the orchestrator → sub-agents graph will appear here.',
+    zh: '尚无 orchestrator 调用过 sub-agent（Task 工具）。请在 Agents 页面点击“同步”，或当有会话使用 sub-agent 时，orchestrator → sub-agents 关系图将显示在此处。',
+  },
 };

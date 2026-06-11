@@ -66,7 +66,7 @@ export async function AppHeader({ current }: { current: string; role?: string })
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white/95 px-4 py-3 backdrop-blur-md sm:px-6 dark:border-neutral-800 dark:bg-neutral-900/95">
+      <header className="sticky top-0 z-30 border-b border-neutral-200 bg-white px-4 py-3 sm:px-6 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-5">
             <Link href="/dashboard" className="text-base font-bold tracking-tight">
