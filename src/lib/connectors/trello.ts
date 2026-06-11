@@ -107,7 +107,8 @@ const trelloConnector: Connector = {
       kind: "write",
       function: {
         name: "trello_create_card",
-        description: "Tạo một thẻ (card) Trello mới trong một danh sách (list).",
+        description:
+          "Tạo một thẻ (card) Trello mới trong một danh sách (list). Gọi khi người dùng yêu cầu tạo/thêm card mới. idList là ID của list (KHÔNG phải tên hay ID board) — lấy bằng trello_list_lists nếu chưa có.",
         parameters: {
           type: "object",
           properties: {
@@ -154,7 +155,8 @@ const trelloConnector: Connector = {
       kind: "write",
       function: {
         name: "trello_update_card",
-        description: "Cập nhật một thẻ (card) Trello: đổi tên, mô tả, hoặc chuyển sang list khác.",
+        description:
+          "Cập nhật một thẻ (card) Trello: đổi tên, mô tả, hoặc chuyển sang list khác. Gọi khi người dùng yêu cầu sửa/cập nhật/di chuyển card. cardId là ID của card; idList (nếu chuyển card) là ID của list (KHÔNG phải tên hay ID board).",
         parameters: {
           type: "object",
           properties: {
@@ -172,7 +174,8 @@ const trelloConnector: Connector = {
       kind: "write",
       function: {
         name: "trello_comment_card",
-        description: "Thêm một bình luận (comment) vào một thẻ (card) Trello.",
+        description:
+          "Thêm một bình luận (comment) vào một thẻ (card) Trello. Gọi khi người dùng yêu cầu thêm/gửi bình luận vào card. cardId là ID của card (KHÔNG phải tên card).",
         parameters: {
           type: "object",
           properties: {

@@ -151,7 +151,7 @@ const gmail: Connector = {
       function: {
         name: "gmail_send",
         description:
-          "Gửi một email mới từ tài khoản Gmail của người dùng (nhập người nhận, tiêu đề và nội dung).",
+          "Gửi một email mới từ tài khoản Gmail của người dùng. Gọi khi người dùng yêu cầu gửi/soạn email. to là địa chỉ email người nhận; subject (tiêu đề) và body (nội dung) bắt buộc.",
         parameters: {
           type: "object",
           properties: {

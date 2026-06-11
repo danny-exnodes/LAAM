@@ -156,7 +156,8 @@ const github: Connector = {
       kind: "write",
       function: {
         name: "github_create_issue",
-        description: "Tạo một issue mới trong một repository GitHub.",
+        description:
+          "Tạo một issue mới trong một repository GitHub. Gọi khi người dùng yêu cầu tạo/mở issue mới. owner là chủ repo (user/org), repo là tên repository.",
         parameters: {
           type: "object",
           properties: {
@@ -174,7 +175,8 @@ const github: Connector = {
       kind: "write",
       function: {
         name: "github_comment_issue",
-        description: "Bình luận vào một issue (hoặc pull request) trên GitHub.",
+        description:
+          "Bình luận vào một issue (hoặc pull request) trên GitHub. Gọi khi người dùng yêu cầu thêm/gửi bình luận vào issue/PR. owner là chủ repo (user/org), repo là tên repository, number là số hiệu issue/PR.",
         parameters: {
           type: "object",
           properties: {
