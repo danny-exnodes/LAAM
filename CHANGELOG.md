@@ -9,6 +9,18 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-06-11
+
+### Đã thêm — Chat đọc tài liệu: PDF & DOCX parse server-side (2026-06-11)
+- **PDF thật, 3 tầng:** ưu tiên **text-layer** (PDF số) → **OCR** (PDF scan, poppler + tesseract vie/eng/chi_sim) → fallback **AI-vision** — parse **server-side** nên kết quả đồng nhất mọi thiết bị; upload từ iPhone/browser cũ hoạt động (pdfjs legacy build); upload nhị phân không còn 500 (strip NUL).
+- **DOCX server-side:** unzip + parse `word/document.xml` — đính kèm .docx đọc được nội dung như PDF/txt.
+- **Đính kèm preview + persist:** xem trước file đính kèm trong composer và **sống sót qua refresh** (persist).
+- **Build/Docker:** re-sync package-lock trong alpine (drift `@emnapi` musl lần 4) — `npm ci` trong image hết vỡ.
+
+### Đã sửa — Chat tool-selection & độ bền tool-output (2026-06-11)
+- **Tool-selection quick wins (QW-1/2/3/5):** system prompt nhóm tool read/write + sort write-first, trigger-cue cho 11 write tool, nudge `web_read`, few-shot demo — khắc phục nhầm lẫn chọn tool của model local (eval k=10: bare-write 100%@16 tool).
+- **Tool-output truncation phục hồi được** (`boundOutput` recoverable) + `laam_list_agents` hỗ trợ sort qua param enum (mô tả tool giữ tối giản).
+
 ### Đã thêm/sửa — Landing page `/`: responsive P0 + show điểm mạnh platform (đánh giá 6-lens, 2026-06-11)
 - **Responsive (P0):** mech exploded-view chỉ chạy desktop ≥ 1100px — mobile/tablet nhận lưới 6 panel đọc được (hết chồng đè, WCAG 1.4.10); hamburger nav 768px (disclosure always-in-DOM, `aria-controls` hợp lệ, guard desktop); nút CTA hết wrap; sticky `100svh` + safe-area; grid phụ 2 bước 1024/640; layout riêng cho desktop thấp (≤1000px height).
 - **Nội dung mới:** section **"Cách hoạt động"** thật (3 bước collector → đăng nhập → SSE live) nhận anchor `#how` (trước trỏ nhầm vào grid phụ — nay grid là `#more`); section **"Riêng tư & an toàn"** + dải số liệu ($0 · 6 connector · 3 ngôn ngữ · 4 vai trò · 0 dòng sửa agent); pitch zero-instrumentation vào hero; 2 card mới Tìm kiếm toàn văn + Bản đồ; **ảnh sản phẩm thật** trong HUD panel (dashboard + chat, `public/landing/`); badge "SỐ LIỆU MINH HOẠ" cho telemetry demo; CTA hero/footer auth-aware; metadata marketing + `robots.txt` hợp lệ (hết 307 → /login, thêm `/robots.txt` vào isPublic).
