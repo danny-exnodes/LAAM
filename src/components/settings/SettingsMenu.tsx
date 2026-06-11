@@ -1,6 +1,6 @@
 "use client";
 
-import { Server, Palette, Languages, Gauge } from "lucide-react";
+import { Server, Palette, Languages, Gauge, Activity, Network } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { settingsDict } from "@/i18n/dictionaries/settings";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -58,6 +58,20 @@ export function SettingsMenu({ user }: { user: SettingsUser }) {
           label={t("settings.reliability.label")}
           sub={t("settings.reliability.desc")}
           color="#16a34a"
+        />
+        <SettingsRow
+          href="/monitoring"
+          icon={<Activity size={18} />}
+          label={t("settings.monitoring.label")}
+          sub={t("settings.monitoring.desc")}
+          color="#0ea5e9"
+        />
+        <SettingsRow
+          href="/graph"
+          icon={<Network size={18} />}
+          label={t("settings.graph.label")}
+          sub={t("settings.graph.desc")}
+          color="#8b5cf6"
         />
       </SettingsCard>
 
