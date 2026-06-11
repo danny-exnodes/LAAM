@@ -9,6 +9,25 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Claude trong chat (MVS, tuỳ chọn) (2026-06-11)
+- **Switch model Qwen ↔ Claude:** đặt `ANTHROPIC_API_KEY` (key org, server-only) → picker model có thêm optgroup **Claude API** với đúng 2 model `claude-sonnet-4-6` / `claude-opus-4-8` (whitelist chặt, model claude khác → 400). Adapter Messages API (`src/lib/llm/claude.ts`): gộp system messages → param `system`, chỉ gửi `max_tokens` (không sampling params — Opus 4.7+ reject), stream qua frame protocol U+001E sẵn có, usage → frame `{t:"tokens"}`. MVS: **chat thường + stream, CHƯA tools/vision** (tool-loop bị bỏ qua có chủ đích — bật tools cần re-run eval k≥6 trên Claude trước).
+- **An toàn & trung thực chi phí:** note cố định khi chọn Claude (tính phí token vào key org — KHÔNG ảnh hưởng subscription Claude cá nhân; ảnh đính kèm không gửi Claude); quy đổi **≈$ (ước tính)** trên tổng token; summarize/proactive **ghim model local** (không bao giờ gọi Claude cho việc nền); guard cửa-sổ-replay (prepend stub user khi window mở đầu bằng assistant — chống 400 lặp trên hội thoại dài); lỗi pre-delta fail-loud trilingual (không bao giờ trả lời rỗng im lặng); Stop huỷ cả request Anthropic (abort signal xuyên SDK — không rò phí); system prompt cho Claude render **không tool** (không dụ model bịa tool).
+- **Verdict subscription (nghiên cứu + verify 4 nguồn):** subscription-OAuth bị Anthropic cấm dùng trong app thứ ba (ToS 19/02/2026) + chặn server-side (09/01/2026) → KHÔNG build "authorize tài khoản Claude subscription"; chi tiết `decisions/claude-provider-and-subscription.md`.
+
+### Đã thêm — Workflow patterns đợt 1 (2026-06-11)
+- **Structured output cho agent node:** field `format` (JSON-schema, optional, additive) — engine constrain JSON qua Ollama `format`, parse + 1 self-repair retry + strip ```json fence (qwen quirk), fail-loud kèm node id; output là OBJECT nên `{{steps.<id>.output.<field>}}` nội suy được; textarea schema trong NodeConfigPanel (validate inline, i18n vi/en/zh); AI-builder biết field mới + 3 idiom (judge-verify / classify nhị phân / pipeline per-item).
+- **2 seed template mới:** "Digest có kiểm chứng (judge-verify)" — summarize → judge `format {verdict: PASS|FAIL, reason}` → condition `eq` trên field enum (KHÔNG contains trên free-text) → Demo connector; "Triage theo lịch" — guard structured-output `{status: stuck|clear}` → tóm tắt → Demo task (dùng với schedule recurrence). Test khoá: không template nào tham chiếu biến `{{trigger.*}}` không tồn tại; mọi connector trong template chỉ Demo. **PIN mới: workflow/scheduled chỉ chạy model local.**
+- KHÔNG làm (có chủ đích, ghi plan): switch/loop node, parallel foreach, DAG/tournament/runtime-spawn.
+
+### Đã sửa — Responsive & điều hướng (2026-06-11)
+- **/monitoring và /graph vào được trên mobile** (rows mới trong Settings, pattern row /eval; i18n vi/en/zh); active-state desktop nav nhận prefix (`/settings/machines` sáng tab Settings).
+- **Bottom-nav hết che nội dung:** /eval (cả empty-state) pb-24; React-Flow Controls nâng đáy trên mobile (globals.css, phủ cả /graph lẫn editor); bottom-sheet editor + safe-area.
+- **Editor workflow hết tràn ngang ở 380px** (đo thật 597px→380px): nút top-bar icon-only dưới sm (aria-label động đúng trạng thái Testing…/Saving…), overflow-x-auto.
+- Xoá route throwaway `/ui-preview` (Matte Dark đã nghiệm thu).
+
+### Tài liệu — Google MCP & connectors (2026-06-11)
+- README: hướng dẫn **mount MCP server ngoài per-user** (tính năng P6 đã ship nhưng chưa truyền thông) + ghi chú Claude provider. Quyết định: **GIỮ Google REST connectors** (official Workspace MCP đang Developer Preview, Gmail MCP không có send → mất write đã gate); PoC official MCP có điều kiện kích hoạt ghi ở `backlog/google-mcp-official-poc.md`; backlog mới `connectors-crypto-hkdf.md` (per-user HKDF + SSRF DNS-pin).
+
 ## [2.2.0] — 2026-06-11
 
 ### Đã thêm — Chat đọc tài liệu: PDF & DOCX parse server-side (2026-06-11)
