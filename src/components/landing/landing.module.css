@@ -140,7 +140,7 @@
 .secSub { color: var(--muted); font-size: 1.02rem; line-height: 1.6; font-weight: 300; }
 
 /* ── Mech exploded section ──────────────────────────────────────────────── */
-.explode { position: relative; height: 380vh; }
+.explode { position: relative; height: 280vh; }
 .sticky { position: sticky; top: 0; height: 100vh; height: 100svh; overflow: hidden; }
 .stageWrap { position: absolute; inset: 0; }
 .prog { position: absolute; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 4; font-size: 11px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--faint); }
@@ -171,6 +171,8 @@
 @keyframes scan { to { top: 100%; } }
 .shotGrid { position: absolute; inset: 20px 0 0 0; opacity: 0.22; background-image: linear-gradient(rgba(120, 180, 230, 0.25) 1px, transparent 1px), linear-gradient(90deg, rgba(120, 180, 230, 0.25) 1px, transparent 1px); background-size: 22px 22px; }
 .shotIco { position: absolute; inset: 0; display: grid; place-items: center; color: rgba(127, 224, 255, 0.5); }
+.shotImg { object-fit: cover; object-position: top left; margin-top: 20px; }
+.demoNote { margin: -4px 4px 8px 10px; font-size: 9px; letter-spacing: 0.14em; color: var(--muted); font-family: monospace; }
 .telem { display: flex; gap: 7px; margin: 0 4px 10px 10px; }
 .stat { flex: 1; border: 1px solid rgba(120, 180, 230, 0.16); border-radius: 8px; padding: 7px 8px; background: rgba(120, 180, 230, 0.04); }
 .statK { font-size: 9px; letter-spacing: 0.1em; color: var(--faint); text-transform: uppercase; font-family: monospace; }
