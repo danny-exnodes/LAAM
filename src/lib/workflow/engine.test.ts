@@ -187,3 +187,43 @@ describe("runWorkflow (budget)", () => {
     ).rejects.toThrow(/budget/i);
   });
 });
+
+// W4 cancel — shouldStop (DI): re-check TRUOC moi node. Y nghia: user huy run dang chay
+// → node ke tiep KHONG duoc thuc thi (side-effect that!), run KHONG bi danh failed,
+// va cac step da xong van duoc emit du de persist.
+describe("runWorkflow (cancel — shouldStop W4)", () => {
+  test("shouldStop=true giữa 2 node → node sau KHÔNG chạy, status cancelled (không failed)", async () => {
+    let stop = false;
+    const steps: StepRecord[] = [];
+    const runNode = vi.fn(async (node: WfNode) => { stop = true; return node.id === "n1" ? { count: 1 } : "x"; });
+    const r = await runWorkflow(
+      chain,
+      { runNode, onStep: async (s) => { steps.push({ ...s }); }, evalPredicate, shouldStop: async () => stop },
+      emptyContext({}),
+    );
+    expect(r.status).toBe("cancelled");
+    expect(r.error).toBeUndefined();
+    expect(runNode.mock.calls.map((c) => (c[0] as WfNode).id)).toEqual(["n1"]); // n2 không chạy
+    // step n1 đã xong vẫn emit đủ running→succeeded (persist); KHÔNG có step failed.
+    expect(steps.map((s) => `${s.nodeId}:${s.status}`)).toEqual(["n1:running", "n1:succeeded"]);
+  });
+
+  test("shouldStop=true ngay từ đầu → không node nào chạy", async () => {
+    const runNode = vi.fn();
+    const r = await runWorkflow(chain, { runNode, onStep: noStep, evalPredicate, shouldStop: async () => true }, emptyContext({}));
+    expect(r.status).toBe("cancelled");
+    expect(runNode).not.toHaveBeenCalled();
+  });
+
+  test("shouldStop dừng cả TRONG body foreach (item sau không chạy)", async () => {
+    const g: WorkflowGraph = {
+      nodes: [{ id: "loop", kind: "foreach", items: "{{trigger.items}}", body: { nodes: [{ id: "b", kind: "agent", prompt: "x" }], edges: [] } }],
+      edges: [],
+    };
+    let stop = false;
+    const runNode = vi.fn(async () => { stop = true; return "y"; });
+    const r = await runWorkflow(g, { runNode, onStep: noStep, evalPredicate, shouldStop: async () => stop }, emptyContext({ items: [1, 2, 3] }));
+    expect(r.status).toBe("cancelled");
+    expect(runNode).toHaveBeenCalledTimes(1); // chỉ item đầu — item 2,3 bị dừng
+  });
+});

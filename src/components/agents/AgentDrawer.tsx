@@ -107,7 +107,7 @@ export function AgentDrawer({
           <div className="flex shrink-0 items-center gap-2">
             <Link
               href={`/agents/${session.id}`}
-              className="rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+              className="rounded-lg bg-[var(--accent-fill)] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
             >
               Chi tiết →
             </Link>

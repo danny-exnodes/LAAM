@@ -53,6 +53,15 @@ export const workflows: Dict = {
   "wf.runStatus.queued": { vi: "Đang chờ", en: "Queued", zh: "排队中" },
   "wf.runStatus.cancelled": { vi: "Đã hủy", en: "Cancelled", zh: "已取消" },
 
+  // Cancel run (W4)
+  "wf.run.cancel": { vi: "Huỷ run", en: "Cancel run", zh: "取消运行" },
+  "wf.run.cancelFailed": { vi: "Huỷ run thất bại.", en: "Cancel run failed.", zh: "取消运行失败。" },
+
+  // Run-finish toast (W4)
+  "wf.toast.succeeded": { vi: "Run hoàn tất thành công.", en: "Run completed successfully.", zh: "运行已成功完成。" },
+  "wf.toast.failed": { vi: "Run thất bại.", en: "Run failed.", zh: "运行失败。" },
+  "wf.toast.cancelled": { vi: "Run đã bị huỷ.", en: "Run was cancelled.", zh: "运行已取消。" },
+
   // Empty + error states
   "wf.emptyNone": { vi: "Chưa có workflow nào", en: "No workflows yet", zh: "暂无工作流" },
   "wf.emptyNoneSub": {

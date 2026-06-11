@@ -12,6 +12,7 @@ export const agents: Dict = {
   'agents.statusAll': { vi: 'Mọi trạng thái', en: 'All statuses', zh: '所有状态' },
   'agents.statusStuck': { vi: 'Nghi kẹt', en: 'Stuck', zh: '疑似卡住' },
   'agents.branchAll': { vi: 'Mọi branch', en: 'All branches', zh: '所有分支' },
+  'agents.machineAll': { vi: 'Mọi máy', en: 'All machines', zh: '所有机器' },
   'agents.timeAll': { vi: 'Mọi thời điểm', en: 'Any time', zh: '任意时间' },
   'agents.time1h': { vi: '1 giờ qua', en: 'Last 1 hour', zh: '最近 1 小时' },
   'agents.time6h': { vi: '6 giờ qua', en: 'Last 6 hours', zh: '最近 6 小时' },

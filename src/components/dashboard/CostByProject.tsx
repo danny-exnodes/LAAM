@@ -36,7 +36,6 @@ export function mapTokensByProject(
     .slice(0, topN);
 }
 
-const IN_COLOR = "#36a6d6";
 const OUT_COLOR = "#22c55e";
 
 export function CostByProject({
@@ -82,7 +81,7 @@ export function CostByProject({
                 dataKey="tokensIn"
                 stackId="tok"
                 name={t("dash.ds.input")}
-                fill={IN_COLOR}
+                fill={theme.series.accent}
               />
               <Bar
                 dataKey="tokensOut"

@@ -52,7 +52,8 @@ Done via a **token-level lever**, NOT 135 hand-edits (Rule 2/3):
 - **Left intentionally**: 10-hue categorical chart palettes (ChartBlock/
   Doughnut/TrendChart) keep warm hues — they're data encodings; forcing
   monochrome-cool hurts legibility. Surfaced to user.
-- a11y verified (WCAG): primary 17:1/14.6:1, secondary 11.4/6.7:1, muted-500
+- a11y verified (WCAG): primary 17:1/14.6:1, secondary 8.04/8.12:1 (light/dark —
+  numbers corrected 2026-06-11 per QA A4 live measurement; both pass), muted-500
   4.9:1 light / 3.47 dark-tertiary (≥ pre-redesign). 1125 tests green, tsc clean.
 
 ## Residual / future
@@ -61,6 +62,7 @@ Done via a **token-level lever**, NOT 135 hand-edits (Rule 2/3):
   light mode = 2.77:1 (accent is used as fills/inline chart colors, not body
   text, so low impact). The new primitives use mode-aware `--accent` (#2a8fbf
   in light) which is fine.
+- **2026-06-11 (QA A1):** FIXED — light accent darkened to `#1f6f96` (5.57:1 on white, ≥4.5:1 on all light surfaces); dark keeps `#36a6d6` via `.dark` override.
 - Optional polish later: sprinkle `<Bloom>` on hero areas (dashboard KPI/auth),
   recolor categorical chart palettes if desired, MatteCard adoption in new code.
 - Primitives are presentational → no i18n keys needed.

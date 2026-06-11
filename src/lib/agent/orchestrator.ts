@@ -2,7 +2,9 @@
 // execute→dispatch. onEvent phát ở makeDispatch (chokepoint), không lặp ở đây.
 import type { ConnectorTool } from "@/lib/connectors/types";
 
-export type ChatMessage = { role: string; content: string; tool_calls?: unknown[] };
+// W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
+// Ollama multimodal. Optional/additive: vắng mặt ⇒ wire-format y như cũ.
+export type ChatMessage = { role: string; content: string; images?: string[]; tool_calls?: unknown[] };
 type OllamaToolCall = { function?: { name?: string; arguments?: unknown } };
 type OllamaChatMessage = { role?: string; content?: string; tool_calls?: OllamaToolCall[] };
 export type OllamaChatResponse = { message?: OllamaChatMessage };

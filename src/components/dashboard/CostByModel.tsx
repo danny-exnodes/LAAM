@@ -29,8 +29,6 @@ export function mapCostByModel(
     .slice(0, topN);
 }
 
-const BAR_COLOR = "#36a6d6";
-
 export function CostByModel({
   modelComparison,
 }: {
@@ -69,7 +67,7 @@ export function CostByModel({
                 formatter={(value) => [usd(Number(value)), "USD"]}
                 contentStyle={theme.tooltip}
               />
-              <Bar dataKey="costUsd" fill={BAR_COLOR} radius={[4, 4, 0, 0]} />
+              <Bar dataKey="costUsd" fill={theme.series.accent} radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

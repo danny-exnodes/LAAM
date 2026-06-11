@@ -9,21 +9,26 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { useT } from "@/i18n/provider";
 import { dashboard } from "@/i18n/dictionaries/dashboard";
 import { num } from "@/lib/format";
-import { useChartTheme } from "@/hooks/useChartTheme";
+import { useChartTheme, type ChartTheme } from "@/hooks/useChartTheme";
 
-// Series palette (matches v1 palette().series order).
-export const SERIES = [
-  "#36a6d6",
-  "#16a34a",
-  "#0ea5e9",
-  "#f59e0b",
-  "#ec4899",
-  "#14b8a6",
-  "#a855f7",
-  "#ef4444",
-  "#84cc16",
-  "#64748b",
-];
+// Series palette (matches v1 palette().series order). The two cyans resolve
+// through the chart theme — light mode darkens them to hold ≥3:1 on the white
+// card (WCAG 1.4.11); the other hues stay fixed data encodings (see
+// decisions/matte-dark-redesign).
+export function seriesPalette(series: ChartTheme["series"]): string[] {
+  return [
+    series.accent,
+    "#16a34a",
+    series.sky,
+    "#f59e0b",
+    "#ec4899",
+    "#14b8a6",
+    "#a855f7",
+    "#ef4444",
+    "#84cc16",
+    "#64748b",
+  ];
+}
 
 export type Slice = { label: string; value: number; color?: string };
 
@@ -36,6 +41,7 @@ export function Doughnut({
 }) {
   const t = useT(dashboard);
   const theme = useChartTheme();
+  const palette = seriesPalette(theme.series);
   const data = slices.filter((s) => s.value > 0);
 
   return (
@@ -64,7 +70,7 @@ export function Doughnut({
                   {data.map((s, i) => (
                     <Cell
                       key={s.label}
-                      fill={s.color ?? SERIES[i % SERIES.length]}
+                      fill={s.color ?? palette[i % palette.length]}
                     />
                   ))}
                 </Pie>
@@ -86,7 +92,7 @@ export function Doughnut({
                 <span
                   aria-hidden
                   className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ background: s.color ?? SERIES[i % SERIES.length] }}
+                  style={{ background: s.color ?? palette[i % palette.length] }}
                 />
                 <span>{s.label}</span>
                 <span className="font-medium text-neutral-700 dark:text-neutral-300">

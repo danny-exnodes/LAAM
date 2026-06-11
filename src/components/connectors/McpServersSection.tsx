@@ -241,7 +241,7 @@ const inputCls =
 function btn(kind: "primary" | "danger") {
   const base =
     "inline-block rounded-lg px-3.5 py-1.5 text-sm font-semibold transition disabled:cursor-default disabled:opacity-50";
-  if (kind === "primary") return base + " bg-[var(--color-accent)] text-white hover:opacity-90";
+  if (kind === "primary") return base + " bg-[var(--accent-fill)] text-white hover:opacity-90";
   return (
     base +
     " border border-neutral-200 text-neutral-600 hover:border-red-500 hover:bg-red-500 hover:text-white dark:border-neutral-700 dark:text-neutral-300"

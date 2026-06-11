@@ -5,7 +5,7 @@
 // onStep DB write fail-soft (insert lỗi tạm thời KHÔNG abort run; node-fail vẫn fail-stop).
 // G2: tách executeRunRow (chạy engine trên 1 row CÓ SẴN — manual đã insert 'running',
 // scheduled tickClaim insert 'queued'; executeRunRow flip→running rồi finalize).
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import type { db as Db } from "@/db";
 import { workflows, workflowRuns, workflowRunSteps } from "@/db/schema";
 import type { BusEvent } from "@/lib/events-bus";
@@ -55,19 +55,36 @@ export type RunRow = {
   dryRun?: boolean;
 };
 
-export type ExecuteRunRowResult = { status: "succeeded" | "failed"; steps: StepRecord[] };
+export type ExecuteRunRowResult = { status: "succeeded" | "failed" | "cancelled"; steps: StepRecord[] };
 
 // Chạy engine trên 1 row CÓ SẴN: flip→running (idempotent cho manual) → engine →
-// persist steps → finalize (succeeded/failed) → SSE. Trả về status cuối + steps.
+// persist steps → finalize (succeeded/failed/cancelled) → SSE. Trả về status cuối + steps.
 export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promise<ExecuteRunRowResult> {
   const runId = runRow.id;
   const snapshot = runRow.graphSnapshot;
 
   // Chuyển queued→running (manual đã 'running' → no-op về mặt ngữ nghĩa). startedAt
   // set ở đây để cả 2 đường cùng có mốc bắt đầu khi engine thực sự chạy.
+  // W4 cancel: flip CÓ ĐIỀU KIỆN — run đã 'cancelled' (PATCH trước khi tickExecute kịp
+  // chạy) KHÔNG được lật ngược về running; shouldStop sẽ dừng trước node đầu tiên.
   await deps.db.update(workflowRuns)
     .set({ status: "running", startedAt: new Date() })
-    .where(eq(workflowRuns.id, runId));
+    .where(and(eq(workflowRuns.id, runId), inArray(workflowRuns.status, ["queued", "running"])));
+
+  // W4 cancel: engine hỏi TRƯỚC mỗi node — re-read status run từ DB. Fail-soft: lỗi đọc
+  // (DB transient) coi như KHÔNG cancel — lỗi tạm thời không được giết run đang chạy.
+  const shouldStop = async (): Promise<boolean> => {
+    try {
+      const rows = await deps.db
+        .select({ status: workflowRuns.status })
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, runId))
+        .limit(1);
+      return rows[0]?.status === "cancelled";
+    } catch {
+      return false;
+    }
+  };
 
   const steps: StepRecord[] = [];
   const stepRowId = new Map<string, string>(); // nodeId → row id (cập nhật tuần tự; foreach: ghi đè mỗi vòng, update bám row hiện tại)
@@ -108,11 +125,11 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
 
   // A1 follow-up: engine THROW (budget/validate/foreach-not-array) → finalize FAILED,
   // KHÔNG để run kẹt "running". Node-fail bình thường trả EngineResult.status="failed".
-  let finalStatus: "succeeded" | "failed";
+  let finalStatus: "succeeded" | "failed" | "cancelled";
   let finalError: string | undefined;
   let finalContext: unknown;
   try {
-    const result = await runWorkflow(snapshot, { runNode, onStep, evalPredicate }, emptyContext({ source: runRow.trigger }), budget);
+    const result = await runWorkflow(snapshot, { runNode, onStep, evalPredicate, shouldStop }, emptyContext({ source: runRow.trigger }), budget);
     finalStatus = result.status;
     finalError = result.error;
     finalContext = result.context;
@@ -122,6 +139,13 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
     finalContext = undefined;
   }
 
+  // Finalize. A concurrent PATCH-cancel can set 'cancelled' AFTER the engine's last
+  // shouldStop check (the check runs before each node, not after the final one), so a
+  // succeeded/failed finalize must NOT clobber it: write a non-cancelled result only
+  // while the row is still NOT cancelled. A genuinely-cancelled result writes
+  // unconditionally (idempotent — persists context of the steps that did run). The DB
+  // is the source of truth; PATCH already published 'cancelled' if it won the race.
+  const idFilter = eq(workflowRuns.id, runId);
   await deps.db.update(workflowRuns)
     .set({
       status: finalStatus,
@@ -129,7 +153,7 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
       context: capForPersist(finalContext),
       finishedAt: new Date(),
     })
-    .where(eq(workflowRuns.id, runId));
+    .where(finalStatus === "cancelled" ? idFilter : and(idFilter, ne(workflowRuns.status, "cancelled")));
   deps.publish({ type: "workflow_run", runId, status: finalStatus });
 
   return { status: finalStatus, steps };

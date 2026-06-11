@@ -5,12 +5,12 @@
 // grouped cards + filter bar. Port of v1 public/agents.js (the data layer; the
 // duration ticker lives per-card in AgentCard).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLiveSessions } from "@/hooks/useLiveSessions";
 import { downloadCsv } from "@/lib/export";
 import { useT } from "@/i18n/provider";
 import { agents } from "@/i18n/dictionaries/agents";
-import { FilterBar } from "./FilterBar";
+import { FilterBar, type MachineOption } from "./FilterBar";
 import { AgentCard } from "./AgentCard";
 import { AgentDrawer } from "./AgentDrawer";
 import {
@@ -37,15 +37,35 @@ function options(list: LiveSession[], pick: (s: LiveSession) => string | null): 
 
 export function AgentsClient() {
   const t = useT(agents);
-  const { sessions, connected, stuckIds } = useLiveSessions();
+  const { sessions, connected, stuckIds, stuckMin } = useLiveSessions();
   const [filters, setFilters] = useState<AgentFilters>(EMPTY_FILTERS);
   const [selected, setSelected] = useState<LiveSession | null>(null);
+  const [machines, setMachines] = useState<MachineOption[]>([]);
+
+  // Machine list for the machine filter — fetched once; on failure the
+  // dropdown just stays at "all machines" (filtering still works via "").
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/machines")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { machines?: { id: string; name: string | null; hostname: string | null }[] } | null) => {
+        if (cancelled || !Array.isArray(j?.machines)) return;
+        setMachines(j.machines.map((m) => ({ id: m.id, name: m.name ?? m.hostname ?? m.id })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const projects = useMemo(() => options(sessions, (s) => s.projectName), [sessions]);
   const models = useMemo(() => options(sessions, (s) => s.model), [sessions]);
   const branches = useMemo(() => options(sessions, (s) => s.gitBranch), [sessions]);
 
-  const filtered = useMemo(() => applyFilters(sessions, filters), [sessions, filters]);
+  const filtered = useMemo(
+    () => applyFilters(sessions, filters, Date.now(), stuckMin),
+    [sessions, filters, stuckMin],
+  );
   const stuckSet = useMemo(() => new Set(stuckIds), [stuckIds]);
 
   // Group filtered sessions by project; null → the "Other" group sinks to the end.
@@ -91,6 +111,7 @@ export function AgentsClient() {
         projects={projects}
         models={models}
         branches={branches}
+        machines={machines}
       />
 
       {filtered.length === 0 ? (

@@ -59,7 +59,7 @@ export default function NewWorkflowPage() {
         type="button"
         onClick={() => void handleCreate()}
         disabled={creating}
-        className="inline-flex items-center gap-2 rounded-xl bg-[var(--color-accent)] px-6 py-2.5 text-sm font-semibold text-white shadow hover:opacity-90 disabled:opacity-50 transition"
+        className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent-fill)] px-6 py-2.5 text-sm font-semibold text-white shadow hover:opacity-90 disabled:opacity-50 transition"
         autoFocus
       >
         {creating && <Loader2 size={14} className="animate-spin" aria-hidden />}

@@ -14,6 +14,7 @@ function setup(onChange = vi.fn(), onExport = vi.fn()) {
         projects={["LAAM", "Other"]}
         models={["m1"]}
         branches={["main"]}
+        machines={[{ id: "m:abc", name: "An's box" }]}
       />
     </I18nProvider>,
   );
@@ -32,6 +33,14 @@ test("selecting a project calls onChange with that project", () => {
   const { onChange } = setup();
   fireEvent.change(screen.getByLabelText("project-filter"), { target: { value: "Other" } });
   expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ project: "Other" }));
+});
+
+test("selecting a machine calls onChange with the machine ID, not the display name", () => {
+  // The filter compares against LiveSession.machineId — emitting the human
+  // name would silently match nothing.
+  const { onChange } = setup();
+  fireEvent.change(screen.getByLabelText("machine-filter"), { target: { value: "m:abc" } });
+  expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ machine: "m:abc" }));
 });
 
 test("CSV button calls onExport", () => {

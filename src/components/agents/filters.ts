@@ -12,6 +12,7 @@ export type AgentFilters = {
   status: string;
   branch: string;
   window: string;
+  machine: string; // machine id (from /api/machines), "" = all machines
 };
 
 export const EMPTY_FILTERS: AgentFilters = {
@@ -21,9 +22,12 @@ export const EMPTY_FILTERS: AgentFilters = {
   status: "",
   branch: "",
   window: "",
+  machine: "",
 };
 
-const STUCK_THRESHOLD_MIN = 10; // v1 default; v2 has no /api/config yet.
+// Fallback stuck threshold (minutes) when a caller doesn't pass one. The live value
+// comes from /api/config (LAAM_STUCK_MIN) via useLiveSessions → applyFilters(stuckMin).
+const DEFAULT_STUCK_MIN = 10;
 
 // Time-window option → milliseconds back from `now`.
 const WINDOW_MS: Record<string, number> = {
@@ -45,6 +49,7 @@ export function applyFilters(
   sessions: LiveSession[],
   f: AgentFilters,
   now: number = Date.now(),
+  stuckMin: number = DEFAULT_STUCK_MIN,
 ): LiveSession[] {
   const q = f.q.trim().toLowerCase();
   const winMs = f.window ? WINDOW_MS[f.window] : undefined;
@@ -53,9 +58,10 @@ export function applyFilters(
     if (f.project && s.projectName !== f.project) return false;
     if (f.model && s.model !== f.model) return false;
     if (f.branch && s.gitBranch !== f.branch) return false;
+    if (f.machine && s.machineId !== f.machine) return false;
     if (f.status) {
       if (f.status === "stuck") {
-        if (!isStuck(s, STUCK_THRESHOLD_MIN, now)) return false;
+        if (!isStuck(s, stuckMin, now)) return false;
       } else if (s.status !== f.status) {
         return false;
       }

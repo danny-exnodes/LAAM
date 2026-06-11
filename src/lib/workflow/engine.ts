@@ -12,10 +12,14 @@ export type EngineDeps = {
   runNode: (node: WfNode, ctx: RunContext) => Promise<unknown>;
   onStep: (step: StepRecord) => Promise<void>;
   evalPredicate: (pred: Predicate, ctx: RunContext) => boolean; // DI để test thuần
+  // W4 cancel (additive): hỏi TRƯỚC mỗi node (kể cả body foreach). true → dừng gọn:
+  // không chạy node kế, KHÔNG đánh failed; step đã xong đã persist qua onStep trước đó.
+  // DI để run.ts re-read status run từ DB.
+  shouldStop?: () => Promise<boolean>;
 };
 
 export type EngineResult = {
-  status: "succeeded" | "failed";
+  status: "succeeded" | "failed" | "cancelled";
   context: RunContext;
   failedNodeId?: string;
   error?: string;
@@ -23,7 +27,7 @@ export type EngineResult = {
 
 // Kết quả 1 lần walk (graph gốc hoặc 1 body foreach). terminalOutput = output node cuối.
 type WalkResult = {
-  status: "succeeded" | "failed";
+  status: "succeeded" | "failed" | "cancelled";
   failedNodeId?: string;
   error?: string;
   terminalOutput?: unknown;
@@ -65,6 +69,9 @@ function walkGraph(
     while (cur) {
       const node = byId.get(cur)!;
 
+      // W4 cancel: kiểm TRƯỚC mỗi node. Dừng gọn — không emit step nào cho node chưa chạy.
+      if (deps.shouldStop && (await deps.shouldStop())) return { status: "cancelled" };
+
       // Budget: mỗi node được xử lý = 1 (gồm condition/foreach + node body qua đệ quy).
       counter.steps++;
       if (counter.steps > budget.maxSteps) throw new Error(`budget: max steps exceeded (${budget.maxSteps})`);
@@ -83,6 +90,9 @@ function walkGraph(
           // Body isolation: steps RIÊNG mỗi vòng; vars kế thừa + {item,index}.
           const subCtx: RunContext = { trigger: ctx.trigger, vars: { ...ctx.vars, item, index }, steps: {} };
           const sub = await walkGraph(node.body, deps, subCtx, budget, counter, node.id);
+          // W4 cancel trong body: propagate gọn. Row 'running' của foreach để nguyên —
+          // status run-level 'cancelled' là nguồn sự thật (không có step-status cancelled).
+          if (sub.status === "cancelled") return { status: "cancelled" };
           if (sub.status === "failed") {
             await deps.onStep({ ...base, status: "failed", error: sub.error });
             return { status: "failed", failedNodeId: sub.failedNodeId, error: sub.error };
@@ -146,6 +156,7 @@ export async function runWorkflow(
   const ctx = ctx0;
   const counter: Counter = { steps: 0 };
   const r = await walkGraph(graph, deps, ctx, budget, counter, undefined);
+  if (r.status === "cancelled") return { status: "cancelled", context: ctx };
   if (r.status === "failed") return { status: "failed", context: ctx, failedNodeId: r.failedNodeId, error: r.error };
   return { status: "succeeded", context: ctx };
 }
