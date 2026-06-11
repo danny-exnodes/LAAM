@@ -126,12 +126,6 @@ export function parseSession(file, now = Date.now()) {
   const toolUseById = new Map(); // tool_use id -> { name, ts } (every tool, for leaderboard)
   const histo = {}; // "<dow>_<hour>" -> count of timestamped entries (heatmap)
 
-  // F4: track parent_tool_use_id links from sidechain entries.
-  // A sidechain entry with parent_tool_use_id links the sub-agent session to its
-  // spawning Task tool_use in the orchestrator.
-  const sidechainParentIds = new Set(); // non-null parent_tool_use_id values seen
-  let hasSidechainEntries = false; // did we see any isSidechain=true entries?
-
   let lastMainActivity = null; // {kind,text} from the latest non-sidechain entry
   let lastMainTs = null;
 
@@ -152,16 +146,6 @@ export function parseSession(file, now = Date.now()) {
 
     const msg = e.message;
     const isSidechain = e.isSidechain === true;
-
-    // F4: collect parent_tool_use_id from sidechain entries to link sub-agent sessions
-    // back to the orchestrator's Task tool_use that spawned them.
-    if (isSidechain) {
-      hasSidechainEntries = true;
-      const ptid = e.parent_tool_use_id;
-      if (ptid != null && typeof ptid === 'string' && ptid.length > 0) {
-        sidechainParentIds.add(ptid);
-      }
-    }
 
     if (e.type === 'assistant' && msg) {
       assistantCount++;
@@ -207,6 +191,8 @@ export function parseSession(file, now = Date.now()) {
             if (b.is_error === true) resultErrors.add(b.tool_use_id);
             // F4: capture bounded+redacted output for Task results.
             // outputText flows into agent_sessions.subAgents jsonb (org-broadcast via SSE).
+            // Redact FIRST (full string), then bound — ensures secrets near the 500-char
+            // boundary are not truncated before being scrubbed.
             if (taskCalls.has(b.tool_use_id)) {
               const raw = typeof b.content === 'string'
                 ? b.content
@@ -214,8 +200,7 @@ export function parseSession(file, now = Date.now()) {
                   ? b.content.map((x) => (x && typeof x.text === 'string' ? x.text : '')).join(' ')
                   : '';
               if (raw) {
-                const bounded = raw.slice(0, OUTPUT_TEXT_MAX);
-                resultOutputs.set(b.tool_use_id, redactOutputText(bounded));
+                resultOutputs.set(b.tool_use_id, redactOutputText(raw).slice(0, OUTPUT_TEXT_MAX));
               }
             }
           }
@@ -232,26 +217,11 @@ export function parseSession(file, now = Date.now()) {
     }
   }
 
-  // F4 fail-loud guard: if we saw Task calls AND sidechain entries but no entry had
-  // a recognizable parent_tool_use_id, Claude Code may have renamed the field.
-  // Emit ONE warn — do not throw (keep parsing). Rule 12: fail loud, not silently.
-  if (taskCalls.size > 0 && hasSidechainEntries && sidechainParentIds.size === 0) {
-    console.warn(
-      'parser: no parent_tool_use_id found on sidechain entries — ' +
-      'Claude Code transcript format may have changed'
-    );
-  }
-
   // Resolve sub-agent statuses.
   const subAgents = [];
   for (const t of taskCalls.values()) {
     const endTime = resultTimes.get(t.id) ?? null;
     const running = endTime == null;
-    // F4: parentToolUseId — the tool_use_id of the Task call that this sub-agent
-    // belongs to. Sourced from parent_tool_use_id on sidechain entries; if the
-    // sub-agent session emitted entries with this id, it is now in sidechainParentIds.
-    // If not found (format drift or null in transcript), falls back to null.
-    const parentToolUseId = sidechainParentIds.has(t.id) ? t.id : null;
     subAgents.push({
       id: t.id,
       type: t.type,
@@ -262,10 +232,11 @@ export function parseSession(file, now = Date.now()) {
       durationMs: t.startTime && endTime ? endTime - t.startTime : (t.startTime ? now - t.startTime : null),
       status: running ? 'running' : 'done',
       isError: resultErrors.has(t.id),
-      // F4: parentToolUseId links this sub-agent back to its spawning Task tool_use.
-      parentToolUseId,
       // F4: bounded (≤500 chars) + redacted output from the Task tool_result.
       // null when the sub-agent is still running or produced no text output.
+      // Note: parent→child tree link (parentToolUseId) was dropped — parent_tool_use_id
+      // does NOT exist on real sidechain entries; real field is parentUuid/agentId.
+      // See backlog: .serena/memories/backlog/subagent-parent-link.md
       outputText: resultOutputs.get(t.id) ?? null,
     });
   }
