@@ -14,6 +14,7 @@ import { runResume, buildResumeRequest } from "@/lib/agent/safety/resume";
 import { recordWrite, isNonceUsed } from "@/lib/agent/safety/audit";
 import { resolveKind } from "@/lib/agent/safety/policy";
 import { looksLikeWriteIntent, guardWriteClaim } from "@/lib/agent/safety/write-claim-guard";
+import { claudeStream, isClaudeModel, ClaudeUnavailableError } from "@/lib/llm/claude";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
@@ -41,6 +42,16 @@ const TOOL_LOOP_ERR: Record<"vi" | "en" | "zh", string> = {
   en: `Lost connection to Ollama (${OLLAMA_URL}) while running tools. Please try again.`,
   zh: `调用工具时无法连接 Ollama（${OLLAMA_URL}）。请重试。`,
 };
+// C1: Claude (Anthropic API, org key) rớt TRƯỚC khi có delta nào → notice 3 thứ
+// tiếng kèm code lỗi ('auth'|'rate_limit'|'overloaded'|'connection'); KHÔNG tự
+// fallback Ollama (quyết định MVS — user chủ động đổi model). Pattern TOOL_LOOP_ERR.
+const CLAUDE_ERR: Record<"vi" | "en" | "zh", string> = {
+  vi: "Không gọi được Claude API ({code}). Vui lòng thử lại hoặc chuyển về model local.",
+  en: "Could not reach the Claude API ({code}). Please retry or switch back to the local model.",
+  zh: "无法调用 Claude API（{code}）。请重试或切换回本地模型。",
+};
+const claudeErrText = (lang: string, code: string) =>
+  (CLAUDE_ERR[lang as keyof typeof CLAUDE_ERR] ?? CLAUDE_ERR.vi).replace("{code}", code);
 // SP-4: tên internal tool — redact args theo set-membership (D-SP4-3) khi gom tool frames.
 const INTERNAL_NAMES = new Set(INTERNAL_TOOLS.map((t) => t.name));
 // Cửa sổ ngữ cảnh model phục vụ. Ollama mặc định num_ctx=4096 BẤT KỂ model hỗ trợ tới ~128k+ →
@@ -148,6 +159,22 @@ export function buildOllamaPayload(
   };
 }
 
+// Map ProactiveAlert[] (số liệu code-derived, Rule 13) → frame payload. Dùng chung
+// nhánh Ollama + Claude trong streamMainTurn (C1) — 1 nguồn, không drift.
+function proactiveFrame(alerts: ProactiveAlert[]): ChatFrame {
+  return {
+    t: "proactive",
+    alerts: alerts.map((a) => ({
+      type: a.type,
+      key: a.key,
+      sessionId: a.sessionId,
+      project: a.project ?? a.sessionId,
+      minutesIdle: a.minutesIdle,
+      costUsd: a.costUsd,
+    })),
+  };
+}
+
 // Đọc ngôn ngữ từ cookie laam_lang (i18n) — không phụ thuộc API next/headers async.
 function readLang(req: Request): string {
   const m = (req.headers.get("cookie") ?? "").match(/(?:^|;\s*)laam_lang=([^;]+)/);
@@ -191,6 +218,11 @@ export async function POST(req: Request) {
     return new Response(JSON.stringify({ error: imgErr }), { status: 400 });
   }
   const model = typeof body.model === "string" && body.model.trim() ? body.model : MODEL;
+  // C1: model 'claude*' ngoài whitelist (chỉ Sonnet 4.6 + Opus 4.8) → 400 NGAY,
+  // không silent fallback về model local — trước mọi I/O DB/Ollama.
+  if (model.startsWith("claude") && !isClaudeModel(model)) {
+    return new Response(JSON.stringify({ error: `Unsupported Claude model: ${model}` }), { status: 400 });
+  }
 
   // Resolve/create conversation; giữ summary/watermark/proactiveState (SP-3).
   let conversationId = body.conversationId;
@@ -246,8 +278,11 @@ export async function POST(req: Request) {
   let effectiveSummary = convSummary;
   if (plan.needsSummary) {
     try {
+      // C1: summarize PIN về MODEL env (Ollama local) BẤT KỂ chat model — callModelText
+      // fetch OLLAMA_URL nên truyền model claude vào đây sẽ lỗi MỌI lượt dài; tóm tắt
+      // là việc rẻ, chạy local là đủ (và $0).
       effectiveSummary = await summarizeMessages(plan.toSummarize, convSummary, lang, {
-        callModel: (prompt) => callModelText(prompt, model),
+        callModel: (prompt) => callModelText(prompt, MODEL),
       });
       const through = plan.toSummarize[plan.toSummarize.length - 1]?.id ?? null;
       await db
@@ -362,6 +397,97 @@ function streamMainTurn(opts: {
           /* client aborted */
         }
       };
+      // --- C1: Claude provider MVS — chat + stream ONLY. Cùng messages đã compose
+      // (persona + summary SP-3 + history + user) nhưng KHÔNG options Ollama/images;
+      // BỎ QUA hẳn tool-loop (PIN: Claude không chạy tool ở MVS — contract test giữ
+      // anti-regression cho FULL). F1 write-claim-guard giữ nguyên mức text: không
+      // tool ⇒ writeBacked=false ⇒ lượt write-intent bị buffer + vet trước khi hiện.
+      if (isClaudeModel(payload.model)) {
+        const guardWrites = looksLikeWriteIntent(userText);
+        let full = "";
+        let tokensIn = 0;
+        let tokensOut = 0;
+        try {
+          for await (const ev of claudeStream({ model: payload.model, messages: payload.messages })) {
+            if (ev.delta) {
+              full += ev.delta;
+              if (!guardWrites) {
+                try {
+                  controller.enqueue(enc.encode(ev.delta));
+                } catch {
+                  /* client aborted */
+                }
+              }
+            }
+            if (ev.usage) {
+              tokensIn = ev.usage.in;
+              tokensOut = ev.usage.out;
+            }
+          }
+        } catch (e) {
+          if (!full && e instanceof ClaudeUnavailableError) {
+            // Rớt TRƯỚC delta đầu tiên → notice tri-lingual + persist rồi đóng SẠCH
+            // (pattern TOOL_LOOP_ERR). KHÔNG retry Ollama tự động (quyết định MVS).
+            console.error(`[chat] claude unavailable (conv=${convId}, code=${e.code})`, e);
+            const errText = claudeErrText(lang, e.code);
+            try {
+              controller.enqueue(enc.encode(errText));
+            } catch {
+              /* aborted */
+            }
+            try {
+              await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: errText });
+              await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+            } catch (err) {
+              console.error("[chat] claude notice persist failed (fail-soft)", err);
+            }
+            controller.close();
+            return;
+          }
+          // Đứt GIỮA stream (đã có delta) / lỗi bất ngờ: log + đóng sạch với phần đã có.
+          console.error(`[chat] claude stream failed (conv=${convId})`, e);
+        }
+        if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
+        // Finalize — mirror nhánh Ollama: F1 vet → persist (tokensIn/Out) → trailing frames.
+        let outText = full;
+        if (guardWrites && full) {
+          const g = guardWriteClaim(full, { writeBacked: false, lang });
+          outText = g.text;
+          if (g.blocked) console.warn("[chat] F1 guard: blocked unbacked write-success claim");
+          try {
+            controller.enqueue(enc.encode(outText));
+          } catch {
+            /* aborted */
+          }
+        }
+        if (full) {
+          try {
+            await db.insert(chatMessages).values({
+              conversationId: convId,
+              role: "assistant",
+              content: outText,
+              tokensIn,
+              tokensOut,
+            });
+          } catch (e) {
+            console.error("[chat] persist assistant failed (fail-soft)", e);
+          }
+          // Trailing frames: không cite (không tool); proactive → tokens (FE contract y hệt).
+          try {
+            if (proactive.length) emit(proactiveFrame(proactive));
+            emit({ t: "tokens", i: tokensIn, o: tokensOut });
+          } catch {
+            /* aborted */
+          }
+        }
+        try {
+          await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+        } catch {
+          /* ignore */
+        }
+        controller.close();
+        return;
+      }
       // LIVE tool frames: assign the call→result counter `c` + redact args, then
       // enqueue immediately (was collected and flushed only at the end).
       let c = -1;
@@ -417,6 +543,7 @@ function streamMainTurn(opts: {
             iat: now,
             exp: now + PENDING_TTL_MS,
             nonce: crypto.randomUUID(),
+            model: payload.model, // C1: confirm narrate bằng đúng model của lượt gốc
           });
           try {
             controller.enqueue(enc.encode(preview.summary));
@@ -557,19 +684,7 @@ function streamMainTurn(opts: {
           // Trailing frames (tool frames already emitted live): citations → proactive → tokens.
           try {
             if (cites.length) emit({ t: "cite", names: cites });
-            if (proactive.length) {
-              emit({
-                t: "proactive",
-                alerts: proactive.map((a) => ({
-                  type: a.type,
-                  key: a.key,
-                  sessionId: a.sessionId,
-                  project: a.project ?? a.sessionId,
-                  minutesIdle: a.minutesIdle,
-                  costUsd: a.costUsd,
-                })),
-              });
-            }
+            if (proactive.length) emit(proactiveFrame(proactive));
             emit({ t: "tokens", i: tokensIn, o: tokensOut });
           } catch {
             /* aborted */
@@ -797,12 +912,19 @@ async function handleConfirm(
   if (outcome.status === "rejected") return streamText(convId, `Không thực hiện được: ${outcome.reason}.`);
 
   // executed → a final TEXT-ONLY completion (no tools) narrating the result.
+  // C1: narrate bằng đúng model lượt gốc (đã seal trong token); token cũ không có
+  // field model → MODEL env như trước. Model claude → adapter stream (text-only,
+  // không tools — đúng PIN MVS); còn lại → Ollama như cũ.
+  const confirmModel = typeof signed.model === "string" && signed.model.trim() ? signed.model : MODEL;
+  if (isClaudeModel(confirmModel)) {
+    return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang);
+  }
   let ollamaRes: Response;
   try {
     ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(buildResumeRequest(MODEL, outcome.messages, { num_ctx: NUM_CTX })),
+      body: JSON.stringify(buildResumeRequest(confirmModel, outcome.messages, { num_ctx: NUM_CTX })),
     });
   } catch {
     return new Response("Đã thực hiện hành động nhưng không tạo được phản hồi (Ollama).", {
@@ -818,6 +940,83 @@ async function handleConfirm(
   }
   // SP-4: emit the confirmed write's tool frame (onEvent fired during runResume).
   return streamOllama(ollamaRes, convId, { frames: confirmFrames });
+}
+
+// C1 — confirm-resume hoàn tất bằng Claude: stream text-only qua adapter (resume
+// messages chứa role:"tool" → adapter map sang user để Claude tường thuật), persist
+// assistant + trailing frames (tool frame của write đã confirm + {t:"tokens"}).
+// Mirror streamOllama (nhánh không `persist`). Write ĐÃ thực thi trước khi tới đây
+// → Claude rớt trước delta chỉ mất phần tường thuật, không mất hành động: persist
+// thông điệp "đã thực hiện..." (pattern thông điệp 502 của nhánh Ollama).
+function streamClaudeCompletion(
+  convId: string,
+  model: string,
+  messages: ChatMessage[],
+  frames: ChatFrame[],
+  lang: string,
+): Response {
+  const enc = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      let full = "";
+      let tokensIn = 0;
+      let tokensOut = 0;
+      try {
+        for await (const ev of claudeStream({ model, messages })) {
+          if (ev.delta) {
+            full += ev.delta;
+            try {
+              controller.enqueue(enc.encode(ev.delta));
+            } catch {
+              /* client aborted */
+            }
+          }
+          if (ev.usage) {
+            tokensIn = ev.usage.in;
+            tokensOut = ev.usage.out;
+          }
+        }
+      } catch (e) {
+        if (!full && e instanceof ClaudeUnavailableError) {
+          console.error(`[chat] claude resume unavailable (conv=${convId}, code=${e.code})`, e);
+          full = `Đã thực hiện hành động nhưng không tạo được phản hồi. ${claudeErrText(lang, e.code)}`;
+          try {
+            controller.enqueue(enc.encode(full));
+          } catch {
+            /* aborted */
+          }
+        } else {
+          console.error(`[chat] claude resume stream failed (conv=${convId})`, e);
+        }
+      }
+      if (full) {
+        try {
+          await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: full, tokensIn, tokensOut });
+        } catch (e) {
+          console.error("[chat] persist assistant failed (fail-soft)", e);
+        }
+        try {
+          const trailing: ChatFrame[] = [...frames, { t: "tokens", i: tokensIn, o: tokensOut }];
+          for (const f of trailing) controller.enqueue(enc.encode(encodeFrame(f)));
+        } catch {
+          /* aborted */
+        }
+      }
+      try {
+        await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+      } catch {
+        /* ignore */
+      }
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "x-conversation-id": convId,
+      "cache-control": "no-cache",
+    },
+  });
 }
 
 // Helper SP-3: gọi model 1 lần non-streaming (cho summarize). Hoisted — đặt cuối file OK.

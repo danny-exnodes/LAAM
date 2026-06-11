@@ -19,6 +19,7 @@
     "eval:scale": "vitest run -c vitest.eval.config.ts scripts/eval/suite.scale.eval.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.104.1",
     "@auth/drizzle-adapter": "1.11.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@react-three/drei": "^10.7.7",

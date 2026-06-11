@@ -13,6 +13,9 @@ export type PendingWrite = {
   iat: number; // epoch ms
   exp: number; // epoch ms
   nonce: string;
+  // C1 (additive, optional): model của lượt gốc — confirm narrate bằng đúng model
+  // (claude → adapter, còn lại → Ollama). Token cũ không có field vẫn mở được.
+  model?: string;
 };
 
 export function sealPendingWrite(p: PendingWrite): string {

@@ -23,6 +23,16 @@ describe("token seal/open", () => {
       expect(r.value.nonce).toBe("n1");
     }
   });
+  // C1: field `model` optional (additive) — confirm narrate bằng đúng model lượt
+  // gốc. Token CŨ không có field vẫn mở được (semantics TTL/nonce không đổi).
+  test("round-trip giữ field model (optional); token không field model vẫn mở được", () => {
+    const withModel = openPendingWrite(sealPendingWrite({ ...base, model: "gemma4:e4b" }), 2000);
+    expect(withModel.ok).toBe(true);
+    if (withModel.ok) expect(withModel.value.model).toBe("gemma4:e4b");
+    const without = openPendingWrite(sealPendingWrite(base), 2000);
+    expect(without.ok).toBe(true);
+    if (without.ok) expect(without.value.model).toBeUndefined();
+  });
   test("token mờ — không lộ args/tool dạng plaintext", () => {
     const tok = sealPendingWrite(base);
     expect(tok).not.toContain("Mua sữa");

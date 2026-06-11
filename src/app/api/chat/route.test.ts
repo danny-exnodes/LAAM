@@ -13,6 +13,14 @@ vi.mock("@/lib/connectors", () => ({
   mcpReadAllow: vi.fn(async () => new Set<string>()),
   execute: vi.fn(async () => ({})),
 }));
+// C1 contract: spy PASS-THROUGH quanh runToolRounds (giữ behavior thật) để assert
+// "model claude KHÔNG vào tool-loop ở MVS / model Ollama CÓ" — anti-regression cho FULL.
+const orch = vi.hoisted(() => ({ runToolRounds: vi.fn() }));
+vi.mock("@/lib/agent/orchestrator", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/agent/orchestrator")>();
+  orch.runToolRounds.mockImplementation(actual.runToolRounds);
+  return { ...actual, runToolRounds: orch.runToolRounds };
+});
 
 import { auth } from "@/auth";
 import { POST, buildOllamaPayload, isConfirmBody, imagesError } from "./route";
@@ -176,9 +184,12 @@ describe("SP-2 confirm body detection", () => {
 });
 
 // Drizzle-shaped chainable fake: mọi builder method trả về chính nó, await → [].
-// `values()` ghi lại row để assert phần đã persist.
-function fakeChainDb(captured: { values: unknown[] }) {
-  const make = () => {
+// `values()` ghi lại row để assert phần đã persist. `selects` (optional): hàng đợi
+// kết quả cho từng lần db.select() theo THỨ TỰ gọi (thiếu → []) — cho test cần
+// conv row / history dài (C1 summarize-pin).
+function fakeChainDb(captured: { values: unknown[] }, selects: unknown[][] = []) {
+  let s = 0;
+  const make = (rows?: unknown[]) => {
     const c: Record<string, unknown> = {};
     for (const m of ["from", "where", "orderBy", "limit", "leftJoin", "set", "returning"]) {
       c[m] = () => c;
@@ -188,10 +199,10 @@ function fakeChainDb(captured: { values: unknown[] }) {
       return c;
     };
     c.then = (res?: (v: unknown[]) => unknown, rej?: (e: unknown) => unknown) =>
-      Promise.resolve([]).then(res, rej);
+      Promise.resolve(rows ?? []).then(res, rej);
     return c;
   };
-  return { select: make, insert: make, update: make, delete: make };
+  return { select: () => make(selects[s++]), insert: () => make(), update: () => make(), delete: () => make() };
 }
 
 describe("R0 tool-loop robustness", () => {
@@ -272,6 +283,187 @@ describe("R0 tool-loop robustness", () => {
       expect(userRows.length).toBeGreaterThan(0);
       for (const r of userRows) expect(String(r.content)).not.toContain(NUL); // Postgres lưu được
       expect(userRows.some((r) => String(r.content).includes("%PDF-1.7"))).toBe(true); // giữ phần text
+    } finally {
+      vi.unstubAllGlobals();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// C1 — Claude provider MVS (chat + stream only; KHÔNG tools/vision; KHÔNG tự
+// fallback Ollama). Các test dưới dùng adapter THẬT (src/lib/llm/claude) — không
+// network vì ANTHROPIC_API_KEY bị stub rỗng ⇒ ClaudeUnavailableError('auth')
+// TRƯỚC khi chạm SDK.
+// ---------------------------------------------------------------------------
+describe("C1 Claude provider MVS", () => {
+  test("model bắt đầu 'claude' nhưng NGOÀI whitelist → 400, không silent fallback, không đụng DB/Ollama", async () => {
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "hi", model: "claude-haiku-4-5" }),
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/claude/i);
+      expect(fetchMock).not.toHaveBeenCalled();
+      // 400 phải xảy ra TRƯỚC khi tạo conversation / persist message.
+      expect(captured.values).toHaveLength(0);
+    } finally {
+      vi.unstubAllGlobals();
+      _db = {};
+    }
+  });
+
+  test("model claude hợp lệ nhưng server KHÔNG có ANTHROPIC_API_KEY → notice tri-lingual (persist), KHÔNG gọi Ollama, KHÔNG token frame", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: "claude-sonnet-4-6" }),
+        }),
+      );
+      expect(res.headers.get("x-conversation-id")).toBeTruthy();
+      const text = await res.text(); // resolve ⇒ stream đóng SẠCH
+      expect(text).toContain("Không gọi được Claude API");
+      expect(text).toContain("auth"); // code lỗi hiển thị để user/ops phân biệt
+      expect(text).not.toContain('"t":"tokens"'); // không có completion → không token frame
+      expect(fetchMock).not.toHaveBeenCalled(); // QUYẾT ĐỊNH MVS: không retry Ollama tự động
+      const assistantRows = captured.values.filter(
+        (v) => (v as { role?: string }).role === "assistant",
+      ) as { content?: string }[];
+      expect(assistantRows.some((v) => String(v.content).includes("Không gọi được Claude API"))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  // PIN summarize: callModelText fetch OLLAMA — đưa model claude vào đó sẽ lỗi
+  // MỌI lượt dài. Summarize phải chạy model local (MODEL env) bất kể chat model.
+  test("SP-3 summarize được PIN về MODEL env (Ollama) kể cả khi chat model là Claude", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    const big = "x".repeat(10_000);
+    const longHistory = [
+      { id: "m1", role: "user", content: big },
+      { id: "m2", role: "assistant", content: big },
+      { id: "m3", role: "user", content: big },
+      { id: "m4", role: "assistant", content: big },
+      { id: "m5", role: "user", content: big },
+      { id: "m6", role: "user", content: "câu hỏi mới" },
+    ];
+    const convRow = { id: "c1", userId: "u1", summary: null, summarizedThroughId: null, proactiveState: null };
+    const captured = { values: [] as unknown[] };
+    // select #1 = conv lookup, select #2 = history, còn lại (proactive…) → [].
+    _db = fakeChainDb(captured, [[convRow], longHistory]);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // fetch #1 = summarize (Ollama, non-stream). Claude path sau đó KHÔNG fetch (auth notice).
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ message: { content: "tóm tắt cũ" } }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ conversationId: "c1", message: "câu hỏi mới", model: "claude-sonnet-4-6" }),
+        }),
+      );
+      await res.text();
+      // ĐÚNG 1 lần fetch (summarize) — và payload mang MODEL env, KHÔNG phải model claude.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const sumBody = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as { model: string };
+      expect(sumBody.model).toBe("gemma4:e4b");
+      expect(sumBody.model).not.toContain("claude");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  // Contract (anti-regression cho FULL sau này): MVS Claude KHÔNG vào tool-loop;
+  // đường Ollama giữ nguyên tool-loop.
+  test("contract: runToolRounds KHÔNG được gọi cho model claude; CÓ được gọi cho model Ollama", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // --- nhánh Claude ---
+    orch.runToolRounds.mockClear();
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    _db = fakeChainDb({ values: [] });
+    vi.stubGlobal("fetch", vi.fn());
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "hi", model: "claude-opus-4-8" }),
+        }),
+      );
+      await res.text();
+      expect(orch.runToolRounds).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+    // --- nhánh Ollama ---
+    orch.runToolRounds.mockClear();
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    _db = fakeChainDb({ values: [] });
+    const ndjson = JSON.stringify({ message: { content: "chào" }, done: true, prompt_eval_count: 1, eval_count: 2 }) + "\n";
+    const fetchMock = vi
+      .fn()
+      // round 1 tool-loop: không tool_calls → loop kết thúc
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ message: { content: "" } }) })
+      // completion cuối: NDJSON stream
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => {
+            let sent = false;
+            return {
+              read: async () => {
+                if (sent) return { done: true as const, value: undefined };
+                sent = true;
+                return { done: false as const, value: new TextEncoder().encode(ndjson) };
+              },
+            };
+          },
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "hi" }),
+        }),
+      );
+      await res.text();
+      expect(orch.runToolRounds).toHaveBeenCalledTimes(1);
     } finally {
       vi.unstubAllGlobals();
       errSpy.mockRestore();
