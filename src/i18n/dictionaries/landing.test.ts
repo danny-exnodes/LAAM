@@ -24,4 +24,19 @@ describe('landing dictionary', () => {
       expect(landing[k], k).toBeDefined();
     }
   });
+
+  it('covers how-it-works, security and the new grid cards', () => {
+    for (let i = 1; i <= 3; i++) {
+      expect(landing[`how.s${i}.title`], `how.s${i}.title`).toBeDefined();
+      expect(landing[`how.s${i}.desc`], `how.s${i}.desc`).toBeDefined();
+    }
+    for (let i = 1; i <= 4; i++) {
+      expect(landing[`security.b${i}.title`], `security.b${i}.title`).toBeDefined();
+      expect(landing[`security.b${i}.desc`], `security.b${i}.desc`).toBeDefined();
+    }
+    for (const k of ['how.k', 'how.title', 'how.sub', 'security.k', 'security.title',
+      'grid.search.title', 'grid.search.desc', 'grid.map.title', 'grid.map.desc', 'hud.demo']) {
+      expect(landing[k], k).toBeDefined();
+    }
+  });
 });

@@ -16,12 +16,12 @@ export const landing: Dict = {
 
   // ── Hero ─────────────────────────────────────────────────────────────
   'hero.eyebrow': { vi: 'Giám sát AI Agent cục bộ', en: 'Local AI Agent Monitoring', zh: '本地 AI 智能体监控' },
-  'hero.title': { vi: 'Theo dõi các agent của bạn', en: 'Watch your agents', zh: '看着你的智能体' },
-  'hero.titleAccent': { vi: 'sống động.', en: 'come alive.', zh: '活起来。' },
+  'hero.title': { vi: 'Nhìn đội agent của bạn', en: 'Watch your agents', zh: '看着你的智能体' },
+  'hero.titleAccent': { vi: 'vận hành sống động.', en: 'come alive.', zh: '活起来。' },
   'hero.sub': {
-    vi: 'LAAM theo dõi real-time các Claude agent trên máy bạn — kèm trợ lý AI cục bộ, connectors và workflow. Tất cả chạy local. Model miễn phí.',
-    en: 'LAAM watches the Claude agents on your machines in real time — plus a local AI assistant, connectors and workflows. All local. The model is free.',
-    zh: 'LAAM 实时监控你机器上的 Claude 智能体 —— 还有本地 AI 助手、连接器和工作流。全部本地运行，模型免费。',
+    vi: 'LAAM theo dõi real-time các Claude agent trên mọi máy của bạn — không cần sửa agent, chỉ đọc transcript có sẵn. Kèm trợ lý AI cục bộ, connectors và workflow. Tất cả chạy local, model $0.',
+    en: 'LAAM watches the Claude agents on all your machines in real time — no agent changes, it just reads the transcripts they already write. Plus a local AI assistant, connectors and workflows. All local, the model costs $0.',
+    zh: 'LAAM 实时监控你所有机器上的 Claude 智能体 —— 无需修改智能体，只读取已有记录。还有本地 AI 助手、连接器和工作流。全部本地运行，模型 $0。',
   },
   'hero.ctaPrimary': { vi: 'Bắt đầu', en: 'Get started', zh: '开始使用' },
   'hero.ctaSecondary': { vi: 'Đăng nhập', en: 'Sign in', zh: '登录' },
@@ -50,9 +50,9 @@ export const landing: Dict = {
   // ── Core feature 2 — Local AI chat (core) ────────────────────────────
   'feat.2.title': { vi: 'Trợ lý AI cục bộ · $0', en: 'Local AI chat · $0', zh: '本地 AI 对话 · $0' },
   'feat.2.desc': {
-    vi: 'Trợ lý đa phương thức chạy trên GPU của bạn — tìm web, OCR, thị giác và gọi tool. Không hoá đơn cloud.',
-    en: 'A multimodal assistant on your own GPU — web search, OCR, vision and tool-calling. No cloud bill.',
-    zh: '运行在你自己 GPU 上的多模态助手 —— 网页搜索、OCR、视觉和工具调用。没有云账单。',
+    vi: 'Trợ lý đa phương thức chạy trên GPU của bạn — tìm web, OCR ba ngôn ngữ (vie/eng/中文), thị giác và gọi tool. Không hoá đơn cloud.',
+    en: 'A multimodal assistant on your own GPU — web search, three-language OCR (vie/eng/中文), vision and tool-calling. No cloud bill.',
+    zh: '运行在你自己 GPU 上的多模态助手 —— 网页搜索、三语 OCR（越/英/中）、视觉与工具调用。没有云账单。',
   },
   'feat.2.t1': { vi: 'Mô hình', en: 'Model', zh: '模型' },
   'feat.2.t2': { vi: 'Chi phí', en: 'Cost', zh: '成本' },
@@ -72,9 +72,9 @@ export const landing: Dict = {
   // ── Core feature 4 — Workflow orchestration (right arm) ──────────────
   'feat.4.title': { vi: 'Điều phối workflow', en: 'Workflow orchestration', zh: '工作流编排' },
   'feat.4.desc': {
-    vi: 'Nối agent và connector thành các node và tự động hoá những phần lặp đi lặp lại trong ngày của bạn.',
-    en: 'Chain agents and connectors as nodes and automate the repetitive parts of your day.',
-    zh: '将智能体和连接器串联为节点，自动化你一天中重复的部分。',
+    vi: 'Nối agent và connector thành node, chạy theo lịch cron, theo dõi run waterfall và huỷ giữa chừng được.',
+    en: 'Chain agents and connectors as nodes, run them on a cron schedule, follow the run waterfall and cancel mid-flight.',
+    zh: '将智能体和连接器串联为节点，按 cron 调度运行，跟踪运行瀑布图，可中途取消。',
   },
   'feat.4.t1': { vi: 'Node', en: 'Nodes', zh: '节点' },
   'feat.4.t2': { vi: 'Lịch', en: 'Scheduler', zh: '调度器' },
@@ -135,12 +135,87 @@ export const landing: Dict = {
     en: 'Vietnamese, English and 中文 across the whole app.',
     zh: '整个应用支持 越南语、英语 和 中文。',
   },
-  'grid.world.title': { vi: 'World tools', en: 'World tools', zh: '世界工具' },
+  'grid.world.title': { vi: 'Công cụ thế giới thực', en: 'World tools', zh: '世界工具' },
   'grid.world.desc': {
     vi: 'Trợ lý tìm web, tính toán chính xác và tự soi các phiên của chính nó.',
     en: 'The assistant searches the web, does exact math, and inspects its own sessions.',
     zh: '助手搜索网页、进行精确计算，并检视自己的会话。',
   },
+  'grid.search.title': { vi: 'Tìm kiếm toàn văn', en: 'Full-text search', zh: '全文搜索' },
+  'grid.search.desc': {
+    vi: 'Một ô tìm kiếm xuyên phiên agent, hội thoại chat và workflow.',
+    en: 'One search box across agent sessions, chats and workflows.',
+    zh: '一个搜索框横跨智能体会话、聊天与工作流。',
+  },
+  'grid.map.title': { vi: 'Bản đồ & định vị', en: 'Maps & geo tools', zh: '地图与定位' },
+  'grid.map.desc': {
+    vi: 'Geocode, chỉ đường, tìm quanh đây — trợ lý trả lời kèm bản đồ tương tác.',
+    en: 'Geocoding, routing and nearby search — answers come with an interactive map.',
+    zh: '地理编码、路线与周边搜索 —— 回答附带交互式地图。',
+  },
+
+  // ── How it works ─────────────────────────────────────────────────────
+  'how.k': { vi: 'Cách hoạt động', en: 'How it works', zh: '工作原理' },
+  'how.title': { vi: 'Chạy trong ba bước', en: 'Up and running in three steps', zh: '三步即可运行' },
+  'how.sub': {
+    vi: 'Không cần sửa một dòng nào trong agent — LAAM đọc transcript mà Claude Code đã ghi sẵn trên máy bạn.',
+    en: 'No changes to your agents — LAAM reads the transcripts Claude Code already writes on your machines.',
+    zh: '无需修改任何智能体 —— LAAM 读取 Claude Code 已写好的本机记录。',
+  },
+  'how.s1.title': { vi: 'Cài collector', en: 'Install the collector', zh: '安装采集器' },
+  'how.s1.desc': {
+    vi: 'Một file .mjs không phụ thuộc gì chạy trên mỗi máy dev, push transcript về LAAM bằng machine token.',
+    en: 'A single zero-dependency .mjs file runs on each dev box and pushes transcripts with a machine token.',
+    zh: '一个零依赖的 .mjs 文件在每台开发机上运行，用机器令牌推送记录。',
+  },
+  'how.s2.title': { vi: 'Đăng nhập', en: 'Sign in', zh: '登录' },
+  'how.s2.desc': {
+    vi: 'Tài khoản đầu tiên là owner; bốn vai trò RBAC phủ cả đội.',
+    en: 'The first account becomes the owner; four RBAC roles cover the whole team.',
+    zh: '第一个账号成为所有者；四种 RBAC 角色覆盖整个团队。',
+  },
+  'how.s3.title': { vi: 'Xem live', en: 'Watch live', zh: '实时查看' },
+  'how.s3.desc': {
+    vi: 'Trạng thái, thời gian chạy và việc đang làm của từng agent — stream thẳng qua SSE.',
+    en: "Every agent's status, runtime and current task — streamed live over SSE.",
+    zh: '每个智能体的状态、运行时长和当前任务 —— 通过 SSE 实时推送。',
+  },
+
+  // ── Security / trust ─────────────────────────────────────────────────
+  'security.k': { vi: 'Riêng tư & an toàn', en: 'Private & safe', zh: '隐私与安全' },
+  'security.title': { vi: 'Dữ liệu của bạn ở lại với bạn', en: 'Your data stays yours', zh: '你的数据只属于你' },
+  'security.b1.title': { vi: 'Local-first', en: 'Local-first', zh: '本地优先' },
+  'security.b1.desc': {
+    vi: 'Transcript, hội thoại và số liệu nằm trong Postgres trên phần cứng của bạn — không gửi đi đâu.',
+    en: 'Transcripts, chats and metrics live in Postgres on your own hardware — nothing leaves.',
+    zh: '记录、对话与指标都存放在你硬件上的 Postgres 中 —— 不外发任何数据。',
+  },
+  'security.b2.title': { vi: 'Mã hoá theo từng người', en: 'Per-user encryption', zh: '按用户加密' },
+  'security.b2.desc': {
+    vi: 'Credential connector mã hoá AES-256 riêng cho mỗi người dùng.',
+    en: 'Connector credentials are AES-256 encrypted per user.',
+    zh: '连接器凭据按用户以 AES-256 加密。',
+  },
+  'security.b3.title': { vi: 'Write có cổng xác nhận', en: 'Gated writes', zh: '受控写操作' },
+  'security.b3.desc': {
+    vi: 'Mọi thao tác ghi ra dịch vụ ngoài phải được xác nhận và ghi vào audit log.',
+    en: 'Every write to an external service must be confirmed and lands in the audit log.',
+    zh: '对外部服务的每次写操作都需确认，并记入审计日志。',
+  },
+  'security.b4.title': { vi: 'RBAC bốn vai trò', en: 'Four-role RBAC', zh: '四级权限' },
+  'security.b4.desc': {
+    vi: 'owner / admin / member / viewer trên mọi trang, phiên JWT.',
+    en: 'Owner / admin / member / viewer on every page, JWT sessions.',
+    zh: '每个页面都有 所有者 / 管理员 / 成员 / 访客，JWT 会话。',
+  },
+  'stats.cost': { vi: 'Chi phí model', en: 'Model cost', zh: '模型成本' },
+  'stats.connectors': { vi: 'Connector', en: 'Connectors', zh: '连接器' },
+  'stats.langs': { vi: 'Ngôn ngữ', en: 'Languages', zh: '语言' },
+  'stats.roles': { vi: 'Vai trò', en: 'Roles', zh: '角色' },
+  'stats.agentchange': { vi: 'Dòng sửa agent', en: 'Agent changes', zh: '智能体改动' },
+
+  // ── HUD ──────────────────────────────────────────────────────────────
+  'hud.demo': { vi: 'SỐ LIỆU MINH HOẠ', en: 'ILLUSTRATIVE DATA', zh: '示例数据' },
 
   // ── Footer ───────────────────────────────────────────────────────────
   'footer.title': { vi: 'Để đội agent của bạn sống động.', en: 'Watch your fleet come alive.', zh: '让你的智能体团队活起来。' },
