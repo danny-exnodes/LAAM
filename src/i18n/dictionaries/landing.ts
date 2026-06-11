@@ -16,10 +16,10 @@ export const landing: Dict = {
 
   // ── Hero ─────────────────────────────────────────────────────────────
   'hero.eyebrow': { vi: 'Giám sát AI Agent cục bộ', en: 'Local AI Agent Monitoring', zh: '本地 AI 智能体监控' },
-  'hero.title': { vi: 'Nhìn đội agent của bạn', en: 'Watch your agents', zh: '看着你的智能体' },
-  'hero.titleAccent': { vi: 'vận hành sống động.', en: 'come alive.', zh: '活起来。' },
+  'hero.title': { vi: 'Theo dõi đội agent của bạn', en: 'Watch your agents', zh: '看着你的智能体' },
+  'hero.titleAccent': { vi: 'sống động.', en: 'come alive.', zh: '活起来。' },
   'hero.sub': {
-    vi: 'LAAM theo dõi real-time các Claude agent trên mọi máy của bạn — không cần sửa agent, chỉ đọc transcript có sẵn. Kèm trợ lý AI cục bộ, connectors và workflow. Tất cả chạy local, model $0.',
+    vi: 'LAAM theo dõi real-time các Claude agent trên mọi máy của bạn — không cần sửa agent, chỉ đọc transcript có sẵn. Cùng với đó: trợ lý AI cục bộ, connectors và workflow — tất cả chạy local, model $0.',
     en: 'LAAM watches the Claude agents on all your machines in real time — no agent changes, it just reads the transcripts they already write. Plus a local AI assistant, connectors and workflows. All local, the model costs $0.',
     zh: 'LAAM 实时监控你所有机器上的 Claude 智能体 —— 无需修改智能体，只读取已有记录。还有本地 AI 助手、连接器和工作流。全部本地运行，模型 $0。',
   },
@@ -50,8 +50,8 @@ export const landing: Dict = {
   // ── Core feature 2 — Local AI chat (core) ────────────────────────────
   'feat.2.title': { vi: 'Trợ lý AI cục bộ · $0', en: 'Local AI chat · $0', zh: '本地 AI 对话 · $0' },
   'feat.2.desc': {
-    vi: 'Trợ lý đa phương thức chạy trên GPU của bạn — tìm web, OCR ba ngôn ngữ (vie/eng/中文), thị giác và gọi tool. Không hoá đơn cloud.',
-    en: 'A multimodal assistant on your own GPU — web search, three-language OCR (vie/eng/中文), vision and tool-calling. No cloud bill.',
+    vi: 'Trợ lý đa phương thức chạy trên GPU của bạn — tìm web, OCR ba ngôn ngữ (Việt/Anh/Trung), thị giác và gọi tool. Không hoá đơn cloud.',
+    en: 'A multimodal assistant on your own GPU — web search, three-language OCR (Vietnamese/English/Chinese), vision and tool-calling. No cloud bill.',
     zh: '运行在你自己 GPU 上的多模态助手 —— 网页搜索、三语 OCR（越/英/中）、视觉与工具调用。没有云账单。',
   },
   'feat.2.t1': { vi: 'Mô hình', en: 'Model', zh: '模型' },
@@ -135,7 +135,7 @@ export const landing: Dict = {
     en: 'Vietnamese, English and 中文 across the whole app.',
     zh: '整个应用支持 越南语、英语 和 中文。',
   },
-  'grid.world.title': { vi: 'Công cụ thế giới thực', en: 'World tools', zh: '世界工具' },
+  'grid.world.title': { vi: 'Công cụ khám phá thế giới', en: 'World tools', zh: '世界工具' },
   'grid.world.desc': {
     vi: 'Trợ lý tìm web, tính toán chính xác và tự soi các phiên của chính nó.',
     en: 'The assistant searches the web, does exact math, and inspects its own sessions.',
@@ -170,9 +170,9 @@ export const landing: Dict = {
   },
   'how.s2.title': { vi: 'Đăng nhập', en: 'Sign in', zh: '登录' },
   'how.s2.desc': {
-    vi: 'Tài khoản đầu tiên là owner; bốn vai trò RBAC phủ cả đội.',
-    en: 'The first account becomes the owner; four RBAC roles cover the whole team.',
-    zh: '第一个账号成为所有者；四种 RBAC 角色覆盖整个团队。',
+    vi: 'Tài khoản đầu tiên trở thành owner, sau đó phân quyền cả đội với bốn vai trò RBAC.',
+    en: 'The first account becomes the owner, then four RBAC roles cover the rest of the team.',
+    zh: '第一个账号成为所有者，随后用四种 RBAC 角色为整个团队分配权限。',
   },
   'how.s3.title': { vi: 'Xem live', en: 'Watch live', zh: '实时查看' },
   'how.s3.desc': {
@@ -192,21 +192,21 @@ export const landing: Dict = {
   },
   'security.b2.title': { vi: 'Mã hoá theo từng người', en: 'Per-user encryption', zh: '按用户加密' },
   'security.b2.desc': {
-    vi: 'Credential connector mã hoá AES-256 riêng cho mỗi người dùng.',
-    en: 'Connector credentials are AES-256 encrypted per user.',
-    zh: '连接器凭据按用户以 AES-256 加密。',
+    vi: 'Credential connector được mã hoá AES-256-GCM khi lưu trữ — cách ly theo từng người dùng trong database.',
+    en: 'Connector credentials are AES-256-GCM encrypted at rest — isolated per user in the database.',
+    zh: '连接器凭据以 AES-256-GCM 加密存储，在数据库中按用户隔离。',
   },
   'security.b3.title': { vi: 'Write có cổng xác nhận', en: 'Gated writes', zh: '受控写操作' },
   'security.b3.desc': {
-    vi: 'Mọi thao tác ghi ra dịch vụ ngoài phải được xác nhận và ghi vào audit log.',
-    en: 'Every write to an external service must be confirmed and lands in the audit log.',
-    zh: '对外部服务的每次写操作都需确认，并记入审计日志。',
+    vi: 'Mọi thao tác ghi mà trợ lý AI thực hiện ra dịch vụ ngoài đều phải xác nhận và được ghi vào audit log.',
+    en: 'Every write the AI assistant makes to an external service must be confirmed and lands in the audit log.',
+    zh: 'AI 助手对外部服务的每次写操作都需确认，并记入审计日志。',
   },
   'security.b4.title': { vi: 'RBAC bốn vai trò', en: 'Four-role RBAC', zh: '四级权限' },
   'security.b4.desc': {
-    vi: 'owner / admin / member / viewer trên mọi trang, phiên JWT.',
-    en: 'Owner / admin / member / viewer on every page, JWT sessions.',
-    zh: '每个页面都有 所有者 / 管理员 / 成员 / 访客，JWT 会话。',
+    vi: 'owner / admin / member / viewer — ai thấy gì, làm gì đều theo vai trò, không dùng tài khoản chung.',
+    en: 'Owner / admin / member / viewer — what you see and do follows your role, no shared accounts.',
+    zh: '所有者 / 管理员 / 成员 / 访客 —— 所见所为均由角色决定，无需共享账号。',
   },
   'stats.cost': { vi: 'Chi phí model', en: 'Model cost', zh: '模型成本' },
   'stats.connectors': { vi: 'Connector', en: 'Connectors', zh: '连接器' },
