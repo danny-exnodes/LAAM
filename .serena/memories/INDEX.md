@@ -70,6 +70,11 @@
 - [matte-dark-qa-ui-bugs](backlog/matte-dark-qa-ui-bugs.md) — A1🟠 contrast accent light **2.77:1** (fail AA+floor) · A2🟠 `backdrop-blur` còn ở header/mobile-nav · A3🟠 recharts /eval `#111827` tàng hình + Y-axis "00%" · A4🟢 doc-drift WCAG.
 - [harness-write-tool-subsetting](backlog/harness-write-tool-subsetting.md) — 🔴 **CỔNG:** write-tool selection crater **100%@8 → 0%@16+** → subset tool trước connector-write GA. **Unexercised:** Access-spine behavior (0 token), P0a resume (user skip).
 
+## Trạng thái R0 release (2026-06-11)
+- **CTO audit toàn dự án 7 hạng mục** + chiến lược 3 đợt (R0 code-gate → R1 host → R2 post-release). Checkpoint: `checkpoint/cto-2026-06-11.md`.
+- **R0 hardening ĐÃ IMPLEMENT** trên branch **`release/r0-hardening`** (commit `3374a8f`, 46 file, **1380 test + tsc sạch**, CHỜ USER MERGE): REGISTER_MODE+rate-limit+lockout+bcrypt12+headers · drizzle 0010 indexes · A1/A2/A3 · chat tool-loop error wrap · i18n auth 28 key · `docs/DEPLOYMENT.md` + scripts tick/backup.
+- ⚠️ Prod container :3900 đang PUBLIC qua Funnel với register mở (chưa có R0) — chờ merge+deploy hoặc tắt Funnel. Tick task chưa cài → schedule prod không chạy.
+
 ## Trạng thái hiện tại (2026-06-03)
 - v2: P1 auth/RBAC ✅ · P2 monitoring ✅ · P3 collector đa máy (đơn giản) ✅ · P4 Chat Gemma 4 đã build, **chờ test runtime**. Verified live P1+P2+P3.
 - App cũ (vanilla, Docker :4317) vẫn chạy; Phase 0 fixes (gemma4 default + toolbar) chưa deploy.

@@ -1,5 +1,9 @@
 # Matte Dark QA — UI/a11y findings (E2E 2026-06-08, batch HEAD 00aba41)
 
+> **2026-06-11 — A1/A2/A3 ĐÃ FIX trên branch `release/r0-hardening` (commit 3374a8f, CHỜ MERGE):**
+> A1: `--color-accent` light → `#1f6f96` (5.57:1 trên trắng, ≥4.5 trên mọi surface; `.dark` override giữ `#36a6d6`); `--accent-hover` → `#1b6285`. A2: gỡ HẾT backdrop-blur (header, bottom-nav, WorkflowsClient, AgentDrawer, login/register/AuthShell — đều thành bề mặt đặc). A3: TrendChart lấy stroke từ `useChartTheme` (thêm field `text`), YAxis width 44. Có test guard chống tái phát.
+> **Residual MỚI (agent A phát hiện, CHƯA fix — P2):** ① `--accent-muted`/`--accent-glow` vẫn rgba của cyan sáng cũ (decorative). ② Màu series chart `#36a6d6` trên chart-card trắng ≈2.77:1 (non-text 1.4.11 cần 3:1). ③ Nút `bg-[--color-accent] text-white` ở **DARK** mode = 2.77:1 (A1 chỉ scope light). ④ A4 doc-drift WCAG chưa sửa số trong decision/CHANGELOG cũ.
+
 Live **verify-not-prose** on :8443 (logged-in Chrome): DOM `getComputedStyle` + in-page WCAG
 contrast calc, confirmed against offline hex math. All **P1** unless noted.
 

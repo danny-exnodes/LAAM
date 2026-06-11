@@ -23,3 +23,9 @@ Ngày: 2026-06-04. Tóm các thảo luận về môi trường host + vận hàn
 
 ## Setup
 `setup-poc.ps1` (root) — Ollama+model+Tesseract+Postgres+.env+migrate+build. Chạy Admin (winget/PATH/Program Files). Nghiệm thu 4 nhiệm vụ: chat vi / OCR ảnh Việt / connect GitHub / "liệt kê repo" → tool-call.
+
+## Ollama truy cập từ tailnet (2026-06-10)
+- Mặc định Ollama bind `127.0.0.1:11434` (chỉ loopback) → KHÔNG reachable từ ngoài (đo: LAN/Tailscale TIMEOUT).
+- Mở **tailnet-only** bằng `tailscale serve --bg --tcp=11434 tcp://127.0.0.1:11434` (raw-TCP passthrough). Không restart Ollama, không đổi firewall, không đụng serve 443-funnel/8443.
+- **Endpoint = `http://100.104.39.38:11434`** (IPv6 `[fd7a:115c:a1e0::8533:2726]`). PHẢI gọi bằng IP: Ollama chống DNS-rebinding → Host=hostname trả 403; `--tls-terminated-tcp` và `--https` proxy đều 403 (proxy giữ Host hostname). Revert: `tailscale serve --tcp=11434 off`.
+- Ollama KHÔNG auth → mọi thiết bị trong tailnet dùng được; siết bằng Tailscale ACL nếu cần.
