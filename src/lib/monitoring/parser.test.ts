@@ -210,6 +210,273 @@ describe("scanAll", () => {
   });
 });
 
+// ─── F4: sub-agent parentToolUseId + outputText ──────────────────────────────
+
+describe("parseSession — sub-agent parentToolUseId + outputText (F4)", () => {
+  const TA = "2026-06-01T10:00:00.000Z";
+  const TB = "2026-06-01T10:00:05.000Z";
+  const TC = "2026-06-01T10:00:08.000Z";
+  const TD = "2026-06-01T10:00:12.000Z";
+
+  test("(a) Task with parent_tool_use_id + successful tool_result → captures parentToolUseId and outputText", () => {
+    // This fixture mirrors a real transcript where:
+    //   - An orchestrator fires a Task tool_use (id: task_abc)
+    //   - A sub-agent session entry (isSidechain=true) has parent_tool_use_id set to task_abc
+    //   - The tool_result for task_abc carries the sub-agent's output
+    // parentToolUseId is how the dashboard links sub-agent rows to their spawning call.
+    const file = writeFixture(
+      "sess-f4a.jsonl",
+      jl([
+        // Orchestrator fires a Task
+        {
+          type: "assistant",
+          timestamp: TA,
+          cwd: "/dev/myproj",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "task_abc",
+                name: "Task",
+                input: { subagent_type: "worker", description: "do the thing" },
+              },
+            ],
+          },
+        },
+        // Sub-agent session entry: has parent_tool_use_id linking back to the Task
+        {
+          type: "user",
+          timestamp: TB,
+          isSidechain: true,
+          parent_tool_use_id: "task_abc",
+          message: { content: "sub-agent is starting" },
+        },
+        // Tool result (success): closes out the Task call with output
+        {
+          type: "user",
+          timestamp: TC,
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "task_abc",
+                is_error: false,
+                content: "Sub-agent completed the task successfully.",
+              },
+            ],
+          },
+        },
+      ]),
+    );
+
+    const s = parseSession(file);
+    expect(s.subAgentCount).toBe(1);
+    const sa = s.subAgents[0];
+    // parentToolUseId must be extracted so the UI can draw the orchestrator→sub-agent link
+    expect(sa.parentToolUseId).toBe("task_abc");
+    // outputText must be the bounded tool_result content
+    expect(sa.outputText).toBe("Sub-agent completed the task successfully.");
+    expect(sa.status).toBe("done");
+    expect(sa.isError).toBe(false);
+  });
+
+  test("(b) Task error case (is_error=true) → isError=true, outputText captures error detail", () => {
+    // Error output is still useful context; the dashboard can surface it as a failure reason.
+    const file = writeFixture(
+      "sess-f4b.jsonl",
+      jl([
+        {
+          type: "assistant",
+          timestamp: TA,
+          cwd: "/dev/myproj",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "task_err",
+                name: "Task",
+                input: { subagent_type: "builder", description: "build it" },
+              },
+            ],
+          },
+        },
+        {
+          type: "user",
+          timestamp: TB,
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "task_err",
+                is_error: true,
+                content: "Sub-agent crashed: permission denied.",
+              },
+            ],
+          },
+        },
+      ]),
+    );
+
+    const s = parseSession(file);
+    const sa = s.subAgents[0];
+    expect(sa.isError).toBe(true);
+    // Error text is still captured so the UI can show WHY the sub-agent failed
+    expect(sa.outputText).toContain("crashed");
+    expect(sa.status).toBe("done");
+  });
+
+  test("(c) transcript has Task calls and sidechain entries but no parent_tool_use_id → warn fires once, parsing continues", () => {
+    // Fail-loud guard: if Claude Code changes the field name, we surface it via console.warn
+    // rather than silently losing sub-agent links. Parsing must NOT throw.
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const file = writeFixture(
+      "sess-f4c.jsonl",
+      jl([
+        {
+          type: "assistant",
+          timestamp: TA,
+          cwd: "/dev/myproj",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "task_xyz",
+                name: "Task",
+                input: { subagent_type: "agent", description: "run analysis" },
+              },
+            ],
+          },
+        },
+        // Sidechain entry WITHOUT parent_tool_use_id (format drift scenario)
+        {
+          type: "user",
+          timestamp: TB,
+          isSidechain: true,
+          // deliberately no parent_tool_use_id field
+          message: { content: "sub-agent work" },
+        },
+        {
+          type: "user",
+          timestamp: TC,
+          message: {
+            content: [
+              { type: "tool_result", tool_use_id: "task_xyz", content: "done" },
+            ],
+          },
+        },
+      ]),
+    );
+
+    const s = parseSession(file);
+    // Parsing still works — guard must not throw
+    expect(s.subAgentCount).toBe(1);
+    // sub-agent still rendered with null parentToolUseId
+    expect(s.subAgents[0].parentToolUseId).toBeNull();
+    // But the guard fired exactly once to surface the potential format drift
+    const warnCalls = warnSpy.mock.calls.filter((args) =>
+      args.some((a) => typeof a === "string" && a.includes("parent_tool_use_id")),
+    );
+    expect(warnCalls.length).toBe(1);
+
+    warnSpy.mockRestore();
+  });
+
+  test("(d) outputText is bounded to 500 chars even for very long tool_result content", () => {
+    // outputText flows into agent_sessions.subAgents jsonb which is org-broadcast via SSE —
+    // unbounded output could leak large secrets or PII to all org members.
+    const longOutput = "x".repeat(1500);
+    const file = writeFixture(
+      "sess-f4d.jsonl",
+      jl([
+        {
+          type: "assistant",
+          timestamp: TA,
+          cwd: "/dev/myproj",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "task_long",
+                name: "Task",
+                input: { subagent_type: "analyzer", description: "analyze large data" },
+              },
+            ],
+          },
+        },
+        {
+          type: "user",
+          timestamp: TB,
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "task_long",
+                is_error: false,
+                content: longOutput,
+              },
+            ],
+          },
+        },
+      ]),
+    );
+
+    const s = parseSession(file);
+    const sa = s.subAgents[0];
+    // Must be bounded — 500 chars max protects against large data in SSE broadcast
+    expect(sa.outputText).not.toBeNull();
+    expect(sa.outputText!.length).toBeLessThanOrEqual(500);
+  });
+
+  test("(d2) outputText has credential-looking strings redacted", () => {
+    // outputText is org-broadcast via SSE; secrets in tool_result must be scrubbed
+    // before storing. Same patterns as src/lib/agent/safety/redact.ts.
+    const secretOutput =
+      "Fetched data from https://api.example.com?api_key=supersecretkey123&format=json";
+    const file = writeFixture(
+      "sess-f4d2.jsonl",
+      jl([
+        {
+          type: "assistant",
+          timestamp: TA,
+          cwd: "/dev/myproj",
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "task_secret",
+                name: "Task",
+                input: { subagent_type: "fetcher", description: "fetch data" },
+              },
+            ],
+          },
+        },
+        {
+          type: "user",
+          timestamp: TB,
+          message: {
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "task_secret",
+                is_error: false,
+                content: secretOutput,
+              },
+            ],
+          },
+        },
+      ]),
+    );
+
+    const s = parseSession(file);
+    const sa = s.subAgents[0];
+    expect(sa.outputText).not.toBeNull();
+    // The raw api_key value must not appear in outputText
+    expect(sa.outputText).not.toContain("supersecretkey123");
+    expect(sa.outputText).toContain("‹redacted›");
+  });
+});
+
 describe("scanAll cache", () => {
   // scanAll() runs on EVERY POST /api/sync; unchanged transcripts must be
   // served from the per-file cache instead of re-read + re-parsed (perf M1).

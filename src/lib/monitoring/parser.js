@@ -7,6 +7,23 @@ import path from 'node:path';
 import os from 'node:os';
 import { costUSD } from './pricing.js';
 
+// Sub-agent output text limit before storing in agent_sessions.subAgents jsonb.
+// subAgents is org-broadcast via SSE — unbounded output could leak large secrets or PII.
+const OUTPUT_TEXT_MAX = 500;
+
+// Redact credential-looking substrings from sub-agent outputText before it is
+// stored in agent_sessions.subAgents jsonb (org-broadcast via SSE).
+// Mirrors the patterns in src/lib/agent/safety/redact.ts — kept inline so
+// parser.js stays a zero-external-import server module.
+const REDACT_PLACEHOLDER = '‹redacted›';
+function redactOutputText(s) {
+  return s
+    .replace(/([?&](?:key|token|api_key|access_token|password|secret)=)[^&\s"']+/gi,
+      (_m, p1) => `${p1}${REDACT_PLACEHOLDER}`)
+    .replace(/(Bearer\s+)[\w.\-]+/gi, (_m, p1) => `${p1}${REDACT_PLACEHOLDER}`)
+    .replace(/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g, () => REDACT_PLACEHOLDER);
+}
+
 // A session counts as "running" if its file changed within this window.
 export const RUNNING_WINDOW_MS = 60 * 1000;
 // Older than this and we treat it as finished rather than just idle.
@@ -105,8 +122,15 @@ export function parseSession(file, now = Date.now()) {
   const taskCalls = new Map(); // tool_use id -> sub-agent record
   const resultTimes = new Map(); // tool_use_id -> timestamp of result
   const resultErrors = new Set(); // tool_use_id of results flagged is_error
+  const resultOutputs = new Map(); // tool_use_id -> bounded+redacted output text
   const toolUseById = new Map(); // tool_use id -> { name, ts } (every tool, for leaderboard)
   const histo = {}; // "<dow>_<hour>" -> count of timestamped entries (heatmap)
+
+  // F4: track parent_tool_use_id links from sidechain entries.
+  // A sidechain entry with parent_tool_use_id links the sub-agent session to its
+  // spawning Task tool_use in the orchestrator.
+  const sidechainParentIds = new Set(); // non-null parent_tool_use_id values seen
+  let hasSidechainEntries = false; // did we see any isSidechain=true entries?
 
   let lastMainActivity = null; // {kind,text} from the latest non-sidechain entry
   let lastMainTs = null;
@@ -128,6 +152,16 @@ export function parseSession(file, now = Date.now()) {
 
     const msg = e.message;
     const isSidechain = e.isSidechain === true;
+
+    // F4: collect parent_tool_use_id from sidechain entries to link sub-agent sessions
+    // back to the orchestrator's Task tool_use that spawned them.
+    if (isSidechain) {
+      hasSidechainEntries = true;
+      const ptid = e.parent_tool_use_id;
+      if (ptid != null && typeof ptid === 'string' && ptid.length > 0) {
+        sidechainParentIds.add(ptid);
+      }
+    }
 
     if (e.type === 'assistant' && msg) {
       assistantCount++;
@@ -171,6 +205,19 @@ export function parseSession(file, now = Date.now()) {
           if (b && b.type === 'tool_result' && b.tool_use_id) {
             resultTimes.set(b.tool_use_id, ts);
             if (b.is_error === true) resultErrors.add(b.tool_use_id);
+            // F4: capture bounded+redacted output for Task results.
+            // outputText flows into agent_sessions.subAgents jsonb (org-broadcast via SSE).
+            if (taskCalls.has(b.tool_use_id)) {
+              const raw = typeof b.content === 'string'
+                ? b.content
+                : Array.isArray(b.content)
+                  ? b.content.map((x) => (x && typeof x.text === 'string' ? x.text : '')).join(' ')
+                  : '';
+              if (raw) {
+                const bounded = raw.slice(0, OUTPUT_TEXT_MAX);
+                resultOutputs.set(b.tool_use_id, redactOutputText(bounded));
+              }
+            }
           }
         }
       }
@@ -185,11 +232,26 @@ export function parseSession(file, now = Date.now()) {
     }
   }
 
+  // F4 fail-loud guard: if we saw Task calls AND sidechain entries but no entry had
+  // a recognizable parent_tool_use_id, Claude Code may have renamed the field.
+  // Emit ONE warn — do not throw (keep parsing). Rule 12: fail loud, not silently.
+  if (taskCalls.size > 0 && hasSidechainEntries && sidechainParentIds.size === 0) {
+    console.warn(
+      'parser: no parent_tool_use_id found on sidechain entries — ' +
+      'Claude Code transcript format may have changed'
+    );
+  }
+
   // Resolve sub-agent statuses.
   const subAgents = [];
   for (const t of taskCalls.values()) {
     const endTime = resultTimes.get(t.id) ?? null;
     const running = endTime == null;
+    // F4: parentToolUseId — the tool_use_id of the Task call that this sub-agent
+    // belongs to. Sourced from parent_tool_use_id on sidechain entries; if the
+    // sub-agent session emitted entries with this id, it is now in sidechainParentIds.
+    // If not found (format drift or null in transcript), falls back to null.
+    const parentToolUseId = sidechainParentIds.has(t.id) ? t.id : null;
     subAgents.push({
       id: t.id,
       type: t.type,
@@ -199,6 +261,12 @@ export function parseSession(file, now = Date.now()) {
       endTime,
       durationMs: t.startTime && endTime ? endTime - t.startTime : (t.startTime ? now - t.startTime : null),
       status: running ? 'running' : 'done',
+      isError: resultErrors.has(t.id),
+      // F4: parentToolUseId links this sub-agent back to its spawning Task tool_use.
+      parentToolUseId,
+      // F4: bounded (≤500 chars) + redacted output from the Task tool_result.
+      // null when the sub-agent is still running or produced no text output.
+      outputText: resultOutputs.get(t.id) ?? null,
     });
   }
   subAgents.sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
