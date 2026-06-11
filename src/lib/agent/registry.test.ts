@@ -17,11 +17,21 @@ const internal: Tool[] = [
   },
 ];
 const connTool = { type: "function" as const, kind: "read" as const, function: { name: "github_list_repos", description: "", parameters: {} } };
+const connWrite = { type: "function" as const, kind: "write" as const, function: { name: "trello_create_card", description: "", parameters: {} } };
 
 describe("modelToolSchemas", () => {
-  test("ghép internal (đã map) + connector", () => {
+  test("ghép internal (đã map) + connector — không có write thì giữ nguyên thứ tự", () => {
     const out = modelToolSchemas(internal, [connTool]);
     expect(out.map((t) => t.function.name)).toEqual(["laam_ping", "github_list_repos"]);
+  });
+  test("QW-1: write LÊN TRƯỚC read (chống position-bias), stable trong từng nhóm", () => {
+    // internal read (laam_ping) + 1 connector read + 1 connector write, write khai báo CUỐI.
+    const out = modelToolSchemas(internal, [connTool, connWrite]);
+    const names = out.map((t) => t.function.name);
+    // write nổi lên đầu...
+    expect(names[0]).toBe("trello_create_card");
+    // ...read giữ nguyên thứ tự tương đối ban đầu (stable): laam_ping trước github_list_repos.
+    expect(names).toEqual(["trello_create_card", "laam_ping", "github_list_repos"]);
   });
 });
 

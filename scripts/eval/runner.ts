@@ -18,7 +18,12 @@ async function runOnce(s: Scenario, deps: RunnerDeps): Promise<RunTrace> {
   const t0 = Date.now();
   const tools = deps.buildTools(s);
   const { dispatch, calls } = makeStubDispatch(s.toolStubs);
-  const system = buildSystemPrompt({ lang: "vi", now: deps.now ?? t0, toolNames: tools.map((t) => t.function.name) });
+  const system = buildSystemPrompt({
+    lang: "vi",
+    now: deps.now ?? t0,
+    // QW-1: truyền {name, kind} để eval đo đúng prompt grouped đọc/ghi như prod.
+    tools: tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+  });
   const messages: ChatMessage[] = [{ role: "system", content: system }, { role: "user", content: s.input }];
   try {
     const convo = await runToolRounds(messages, tools, { callOllama: deps.callOllama, dispatch }, deps.maxRounds ?? 4);

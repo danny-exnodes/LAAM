@@ -34,7 +34,8 @@ const demo: Connector = {
       workflowSafe: true, // credential-free demo write — the one tool workflow-cleared in v1
       function: {
         name: "demo_create_task",
-        description: "Tạo một công việc/đầu việc mẫu mới. Dùng để minh hoạ luồng xác nhận trước khi ghi.",
+        description:
+          "Tạo một công việc/đầu việc mẫu mới. Gọi khi người dùng yêu cầu tạo/thêm công việc mới. title là tên công việc (bắt buộc); status là todo | doing | done (mặc định todo). Dùng để minh hoạ luồng xác nhận trước khi ghi.",
         parameters: {
           type: "object",
           properties: {

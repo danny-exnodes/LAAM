@@ -102,7 +102,8 @@ const googleCalendar: Connector = {
       kind: "write",
       function: {
         name: "gcal_create_event",
-        description: "Tạo một sự kiện mới trên Google Calendar chính của người dùng.",
+        description:
+          "Tạo một sự kiện mới trên Google Calendar chính của người dùng. Gọi khi người dùng yêu cầu tạo/thêm/đặt lịch sự kiện mới. start và end phải ở dạng ISO 8601 datetime (vd: 2026-06-12T14:00:00Z).",
         parameters: {
           type: "object",
           properties: {

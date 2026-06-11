@@ -1,4 +1,6 @@
 // L1 — dựng system prompt động (thuần). `now` inject để test ổn định.
+import type { ToolKind } from "./types";
+
 const BASE =
   "Bạn là LAAM, trợ lý nội bộ thân thiện. Trả lời ngắn gọn, chính xác, hữu ích.";
 
@@ -28,19 +30,43 @@ const RENDER_GUIDE =
 export function buildSystemPrompt(input: {
   lang: string;
   now: number;
-  toolNames: string[];
+  // QW-1: nhận tool kèm kind để render CÓ NHÓM (đọc/ghi). `string[]` cũ vẫn nhận để
+  // tương thích caller chưa cập nhật — mặc định coi là tool ĐỌC.
+  tools: { name: string; kind: ToolKind }[] | string[];
   base?: string;
 }): string {
   const base = input.base ?? BASE;
   const date = new Date(input.now).toISOString().slice(0, 10);
   const langHint = LANG_HINT[input.lang] ?? "";
-  const tools = input.toolNames.length
-    ? `Bạn có thể gọi các công cụ sau khi cần dữ liệu thực: ${input.toolNames.join(", ")}. ` +
+  // Chuẩn hoá về {name, kind}; string thuần → coi như "read" (tương thích ngược).
+  const toolList = input.tools.map((t) =>
+    typeof t === "string" ? { name: t, kind: "read" as ToolKind } : t,
+  );
+  // QW-1: render CÓ NHÓM — tách họ ĐỌC khỏi họ GHI để chống position-bias + làm rõ
+  // tool nào an toàn gọi tự do, tool nào phải đợi người dùng yêu cầu (write).
+  const readNames = toolList.filter((t) => t.kind === "read").map((t) => t.name);
+  const writeNames = toolList.filter((t) => t.kind === "write").map((t) => t.name);
+  const groups = [
+    readNames.length
+      ? `Công cụ ĐỌC (gọi tự do khi cần dữ liệu thật): ${readNames.join(", ")}.`
+      : "",
+    writeNames.length
+      ? "Công cụ GHI (chỉ gọi khi người dùng yêu cầu tạo/gửi/sửa/xoá, kết quả sẽ cần xác nhận): " +
+        `${writeNames.join(", ")}.`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const tools = toolList.length
+    ? `${groups} ` +
       "Chỉ gọi công cụ khi câu hỏi cần dữ liệu thật; nếu không, trả lời trực tiếp. " +
       // F1: write-intent MUST go through a tool call; the model must never narrate a
       // write as done without a real tool result (Rule 13 — code blocks unbacked claims).
       "Khi người dùng yêu cầu tạo/gửi/sửa/xoá/cập nhật, BẮT BUỘC gọi công cụ tương ứng. " +
-      "TUYỆT ĐỐI KHÔNG nói đã tạo/gửi/xoá/cập nhật thành công nếu bạn chưa thực sự gọi công cụ và nhận được kết quả."
+      "TUYỆT ĐỐI KHÔNG nói đã tạo/gửi/xoá/cập nhật thành công nếu bạn chưa thực sự gọi công cụ và nhận được kết quả. " +
+      // QW-5: few-shot ngắn minh hoạ luồng ghi — dùng tool demo (KHÔNG dùng connector
+      // thật) để mẫu không bao giờ kích hoạt ghi tài khoản thật.
+      'Ví dụ: người dùng nói "tạo task X" → gọi demo_create_task rồi báo lại kết quả thật.'
     : "";
   return [base, `Hôm nay là ${date}.`, langHint, tools, RENDER_GUIDE].filter(Boolean).join(" ");
 }

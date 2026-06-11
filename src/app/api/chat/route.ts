@@ -267,7 +267,12 @@ export async function POST(req: Request) {
   const hasSystemOverride = typeof body.system === "string" && body.system.trim().length > 0;
   let systemContent = hasSystemOverride
     ? (body.system as string)
-    : buildSystemPrompt({ lang, now, toolNames: tools.map((t) => t.function.name) });
+    : buildSystemPrompt({
+        lang,
+        now,
+        // QW-1: truyền {name, kind} để prompt render CÓ NHÓM đọc/ghi (tools = ConnectorTool[]).
+        tools: tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+      });
   let proactiveSurfaced: ProactiveAlert[] = [];
   if (!hasSystemOverride) {
     try {
@@ -753,7 +758,7 @@ async function handleConfirm(
     .where(eq(chatMessages.conversationId, convId))
     .orderBy(asc(chatMessages.createdAt));
   const lang = readLang(req); // tri-lingual: narrate the result in the user's language
-  const system = buildSystemPrompt({ lang, now, toolNames: [] });
+  const system = buildSystemPrompt({ lang, now, tools: [] });
 
   const { onEvent, frames: confirmFrames } = makeFrameCollector(INTERNAL_NAMES);
   const readAllow = await mcpReadAllow(userId);

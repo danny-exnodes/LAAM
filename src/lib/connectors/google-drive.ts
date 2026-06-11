@@ -129,7 +129,8 @@ const googleDrive: Connector = {
       kind: "write",
       function: {
         name: "gdrive_create_folder",
-        description: "Tạo một thư mục mới trên Google Drive (tuỳ chọn đặt trong thư mục cha).",
+        description:
+          "Tạo một thư mục mới trên Google Drive (tuỳ chọn đặt trong thư mục cha). Gọi khi người dùng yêu cầu tạo/thêm thư mục mới. name là tên thư mục; parentId (tuỳ chọn) là ID thư mục cha (KHÔNG phải tên thư mục).",
         parameters: {
           type: "object",
           properties: {

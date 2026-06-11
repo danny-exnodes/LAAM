@@ -136,7 +136,8 @@ const jiraConnector: Connector = {
       kind: "write",
       function: {
         name: "jira_add_comment",
-        description: "Thêm một bình luận vào issue Jira theo key. Cần key của issue và nội dung bình luận.",
+        description:
+          "Thêm một bình luận vào issue Jira theo key. Gọi khi người dùng yêu cầu thêm/gửi bình luận vào issue. key là key của issue (vd: ABC-123), body là nội dung bình luận.",
         parameters: {
           type: "object",
           properties: {
@@ -153,7 +154,7 @@ const jiraConnector: Connector = {
       function: {
         name: "jira_create_issue",
         description:
-          "Tạo một issue mới trên Jira. Cần key của project và tiêu đề; có thể kèm loại issue (mặc định Task) và mô tả.",
+          "Tạo một issue mới trên Jira. Gọi khi người dùng yêu cầu tạo/mở issue/task mới. projectKey là key của project (vd: ABC, không phải tên đầy đủ); summary là tiêu đề; issueType mặc định Task.",
         parameters: {
           type: "object",
           properties: {
