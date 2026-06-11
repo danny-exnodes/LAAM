@@ -29,6 +29,7 @@ export function Composer({
   onStop,
   streaming,
   attachments,
+  notice,
   onAddFiles,
   onAddUrl,
   onRemoveAttachment,
@@ -45,6 +46,7 @@ export function Composer({
   onStop(): void;
   streaming: boolean;
   attachments: Attachment[];
+  notice?: string | null; // W3 vision: thông báo cap ảnh raw (ChatClient sở hữu state)
   onAddFiles(files: FileList): void;
   onAddUrl(url: string): void;
   onRemoveAttachment(id: string): void;
@@ -152,6 +154,13 @@ export function Composer({
             </span>
           ))}
         </div>
+      )}
+
+      {/* W3 vision: cap ảnh raw vượt → degrade sang OCR-text, báo tại chỗ (style khớp ocrOffAttach) */}
+      {notice && (
+        <p role="status" className="text-[11px] text-amber-600 dark:text-amber-500">
+          {notice}
+        </p>
       )}
 
       {/* UX-2: inline URL input — styled, dark-mode aware, non-blocking (was window.prompt) */}

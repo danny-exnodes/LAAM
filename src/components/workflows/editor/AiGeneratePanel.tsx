@@ -85,7 +85,7 @@ export function AiGeneratePanel({
                 className={
                   "rounded-lg px-2.5 py-1 text-xs font-medium transition " +
                   (mode === m
-                    ? "bg-[var(--color-accent)] text-white"
+                    ? "bg-[var(--accent-fill)] text-white"
                     : "border border-neutral-200 text-neutral-500 dark:border-neutral-700")
                 }
               >
@@ -136,7 +136,7 @@ export function AiGeneratePanel({
             type="button"
             onClick={() => void generate()}
             disabled={!prompt.trim() || loading}
-            className="flex items-center gap-1.5 rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-[var(--accent-fill)] px-3 py-1.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
           >
             {loading ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Sparkles size={14} aria-hidden />}
             {loading ? t("wf.ai.generating") : t("wf.ai.generate")}

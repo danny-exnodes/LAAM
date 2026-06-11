@@ -7,6 +7,9 @@ import { EMPTY_FILTERS, type AgentFilters } from "./filters";
 const SELECT_CLS =
   "rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-sm text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200";
 
+// Machine option for the machine filter (id from /api/machines, name shown).
+export type MachineOption = { id: string; name: string };
+
 export function FilterBar({
   value,
   onChange,
@@ -14,6 +17,7 @@ export function FilterBar({
   projects,
   models,
   branches,
+  machines = [],
 }: {
   value: AgentFilters;
   onChange: (f: AgentFilters) => void;
@@ -21,6 +25,7 @@ export function FilterBar({
   projects: string[];
   models: string[];
   branches: string[];
+  machines?: MachineOption[];
 }) {
   const t = useT(agents);
   const set = (patch: Partial<AgentFilters>) => onChange({ ...value, ...patch });
@@ -56,6 +61,11 @@ export function FilterBar({
       <select aria-label="branch-filter" className={SELECT_CLS} value={value.branch} onChange={(e) => set({ branch: e.target.value })}>
         <option value="">{t("agents.branchAll")}</option>
         {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+      </select>
+
+      <select aria-label="machine-filter" className={SELECT_CLS} value={value.machine} onChange={(e) => set({ machine: e.target.value })}>
+        <option value="">{t("agents.machineAll")}</option>
+        {machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
       </select>
 
       <select aria-label="window-filter" className={SELECT_CLS} value={value.window} onChange={(e) => set({ window: e.target.value })}>

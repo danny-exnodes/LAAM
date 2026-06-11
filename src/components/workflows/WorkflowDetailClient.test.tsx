@@ -1,6 +1,6 @@
 // RTL behaviour tests for WorkflowDetailClient.
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, act } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import type { Workflow, WorkflowRun, WorkflowRunStep, WorkflowSchedule } from "@/db/schema";
 
@@ -82,12 +82,22 @@ type FetchSetup = {
   schedPatchOk?: boolean;
   schedPatchBody?: Partial<WorkflowSchedule>;
   schedDeleteOk?: boolean;
+  runPatchOk?: boolean;
+  runPatchRun?: WorkflowRun;
 };
 
 function mockFetch(setup: FetchSetup) {
   const { workflows = [], runs = [], schedules = [], runDetail } = setup;
   globalThis.fetch = vi.fn(async (url: RequestInfo, opts?: RequestInit) => {
     const u = String(url);
+    // PATCH runs/[id] (W4 cancel) — phải bắt TRƯỚC nhánh GET run-detail.
+    if (u.includes("/api/workflows/runs/") && opts?.method === "PATCH") {
+      const ok = setup.runPatchOk ?? true;
+      return {
+        ok,
+        json: async () => (ok ? { run: setup.runPatchRun ?? mkRun({ status: "cancelled" }) } : {}),
+      } as Response;
+    }
     if (u.includes("/api/workflows/runs/")) {
       return { ok: true, json: async () => runDetail ?? { run: runs[0], steps: [] } } as Response;
     }
@@ -411,5 +421,94 @@ describe("WorkflowDetailClient — schedule actions", () => {
     await waitFor(() => {
       expect(screen.getByText("Lưu cron thất bại.")).toBeTruthy();
     });
+  });
+});
+
+// ---- W4: cancel run + toast ----
+
+describe("WorkflowDetailClient — cancel run (W4)", () => {
+  test("run đang chạy có nút Huỷ run — PATCH {action:'cancel'} và badge đổi Đã hủy", async () => {
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [mkRun({ status: "running", finishedAt: null })],
+      runPatchRun: mkRun({ status: "cancelled" }),
+    });
+    ui();
+    await waitFor(() => screen.getByText("My WF"));
+    fireEvent.click(screen.getByRole("button", { name: "Huỷ run" }));
+    await waitFor(() => {
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls as [string, RequestInit][];
+      const patchCall = calls.find(([u, o]) => String(u).includes("/api/workflows/runs/run1") && o?.method === "PATCH");
+      expect(patchCall).toBeTruthy();
+      expect(JSON.parse(patchCall![1].body as string)).toEqual({ action: "cancel" });
+    });
+    // Row cập nhật từ run trả về → badge "Đã hủy", nút Huỷ biến mất.
+    await waitFor(() => expect(screen.getByText("Đã hủy")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Huỷ run" })).toBeNull();
+  });
+
+  test("run đã kết thúc KHÔNG có nút Huỷ run", async () => {
+    mockFetch({ workflows: [mkWorkflow()], runs: [mkRun({ status: "succeeded" })] });
+    ui();
+    await waitFor(() => screen.getByText("My WF"));
+    expect(screen.queryByRole("button", { name: "Huỷ run" })).toBeNull();
+  });
+
+  test("PATCH fail → hiện lỗi, badge giữ nguyên", async () => {
+    mockFetch({
+      workflows: [mkWorkflow()],
+      runs: [mkRun({ status: "running", finishedAt: null })],
+      runPatchOk: false,
+    });
+    ui();
+    await waitFor(() => screen.getByText("My WF"));
+    fireEvent.click(screen.getByRole("button", { name: "Huỷ run" }));
+    await waitFor(() => expect(screen.getByText("Huỷ run thất bại.")).toBeTruthy());
+    expect(screen.getByText("Đang chạy")).toBeTruthy();
+  });
+});
+
+describe("WorkflowDetailClient — run-finish toast (W4)", () => {
+  test("liveRunStatus=succeeded → toast hiện thông báo hoàn tất", async () => {
+    wfEventsState.runStatus = "succeeded";
+    wfEventsState.activeRunId = "run1";
+    mockFetch({ workflows: [mkWorkflow()], runs: [mkRun()] });
+    ui();
+    await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+    expect(screen.getByRole("status").textContent).toBe("Run hoàn tất thành công.");
+  });
+
+  test("liveRunStatus=cancelled → toast hiện thông báo huỷ", async () => {
+    wfEventsState.runStatus = "cancelled";
+    wfEventsState.activeRunId = "run1";
+    mockFetch({ workflows: [mkWorkflow()], runs: [mkRun({ status: "cancelled" })] });
+    ui();
+    await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+    expect(screen.getByRole("status").textContent).toBe("Run đã bị huỷ.");
+  });
+
+  test("liveRunStatus=running (chưa terminal) → KHÔNG toast", async () => {
+    wfEventsState.runStatus = "running";
+    wfEventsState.activeRunId = "run1";
+    mockFetch({ workflows: [mkWorkflow()], runs: [mkRun({ status: "running", finishedAt: null })] });
+    ui();
+    await waitFor(() => screen.getByText("My WF"));
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  test("toast failed tự ẩn sau 5s", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      wfEventsState.runStatus = "failed";
+      wfEventsState.activeRunId = "run1";
+      mockFetch({ workflows: [mkWorkflow()], runs: [mkRun({ status: "failed" })] });
+      ui();
+      await waitFor(() => expect(screen.getByRole("status")).toBeTruthy());
+      expect(screen.getByRole("status").textContent).toBe("Run thất bại.");
+      act(() => { vi.advanceTimersByTime(5100); });
+      expect(screen.queryByRole("status")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

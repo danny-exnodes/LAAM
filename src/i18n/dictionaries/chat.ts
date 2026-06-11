@@ -26,6 +26,9 @@ export const chat: Dict = {
   'chat.stopAria': { vi: 'Dừng tạo phản hồi', en: 'Stop generating', zh: '停止生成回复' },
   'chat.attachRemoveAria': { vi: 'Bỏ đính kèm', en: 'Remove attachment', zh: '移除附件' },
   'chat.attachChars': { vi: '{name} · {n} ký tự', en: '{name} · {n} chars', zh: '{name} · {n} 字符' },
+  // W3 vision: cap kênh ảnh raw (2 ảnh/lượt, ≤2MB sau mã hoá) — vượt → chỉ dùng OCR-text
+  'chat.imgCapCount': { vi: 'Tối đa 2 ảnh mỗi lượt — "{name}" sẽ chỉ dùng văn bản OCR.', en: 'Up to 2 images per message — "{name}" will use its OCR text only.', zh: '每条消息最多 2 张图片——“{name}”将仅使用 OCR 文本。' },
+  'chat.imgCapSize': { vi: 'Ảnh "{name}" vượt 2MB sau mã hoá — sẽ chỉ dùng văn bản OCR.', en: 'Image "{name}" exceeds 2MB after encoding — its OCR text only will be used.', zh: '图片“{name}”编码后超过 2MB——将仅使用 OCR 文本。' },
 
   // --- badge / model / stats ---
   'chat.badgeLocal': { vi: 'LOCAL', en: 'LOCAL', zh: '本地' },

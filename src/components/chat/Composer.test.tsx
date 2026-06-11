@@ -155,6 +155,13 @@ test("char counter renders for a non-empty value", () => {
   expect(screen.getByText(/5 ký tự/)).toBeInTheDocument();
 });
 
+// W3 vision: notice cap ảnh raw phải HIỂN THỊ trong composer (role=status) —
+// degrade sang OCR-text mà không cho user biết là degrade im lặng (Rule 12).
+test("notice (W3 vision image cap) renders inside the composer", () => {
+  setup({ notice: 'Tối đa 2 ảnh mỗi lượt — "c.png" sẽ chỉ dùng văn bản OCR.' });
+  expect(screen.getByRole("status")).toHaveTextContent("Tối đa 2 ảnh mỗi lượt");
+});
+
 test("dropping files calls onAddFiles", () => {
   const props = setup();
   const file = new File(["data"], "drop.txt", { type: "text/plain" });

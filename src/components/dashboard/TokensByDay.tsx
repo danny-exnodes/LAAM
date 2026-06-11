@@ -37,7 +37,6 @@ export function mapTokensByDay(
   });
 }
 
-const IN_COLOR = "#36a6d6";
 const OUT_COLOR = "#22c55e";
 
 export function TokensByDay({ activity }: { activity: Stats["activity"] }) {
@@ -70,8 +69,8 @@ export function TokensByDay({ activity }: { activity: Stats["activity"] }) {
                 dataKey="tokensIn"
                 stackId="tok"
                 name={t("dash.ds.input")}
-                stroke={IN_COLOR}
-                fill={IN_COLOR}
+                stroke={theme.series.accent}
+                fill={theme.series.accent}
                 fillOpacity={0.25}
               />
               <Area

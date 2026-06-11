@@ -35,6 +35,7 @@ function ui() {
 afterEach(() => {
   cleanup();
   downloadCsv.mockClear();
+  vi.unstubAllGlobals();
 });
 
 test("renders a card per session and the X/Y count", () => {
@@ -74,6 +75,37 @@ test("the no-project group label is localized — en users see 'Other', never th
   expect(screen.getByRole("heading", { level: 2, name: /^Other/ })).toBeTruthy();
   expect(screen.queryByText(/Khác/)).toBeNull();
   expect(screen.queryByText(/__other__/)).toBeNull(); // grouping sentinel must not leak to the DOM
+});
+
+test("machine dropdown lists /api/machines and narrows cards to that machine's sessions", async () => {
+  // Multi-machine ingest mixes every box's agents into one list; the machine
+  // filter is how a dev isolates their own machine (v1-unported gap, W6).
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        machines: [
+          { id: "m:abc", name: "An's box", hostname: null, hasToken: true },
+          { id: "local:dev", name: null, hostname: "devhost", hasToken: false },
+        ],
+      }),
+    })),
+  );
+  hookState.sessions = [
+    mk({ id: "a", machineId: "m:abc", latestActivity: "alpha" }),
+    mk({ id: "b", machineId: "local:dev", latestActivity: "beta" }),
+  ];
+  ui();
+
+  // Options come from /api/machines (async); name falls back to hostname.
+  expect(await screen.findByRole("option", { name: "An's box" })).toBeTruthy();
+  expect(screen.getByRole("option", { name: "devhost" })).toBeTruthy();
+
+  fireEvent.change(screen.getByLabelText("machine-filter"), { target: { value: "m:abc" } });
+  expect(screen.getByText("alpha")).toBeTruthy();
+  expect(screen.queryByText("beta")).toBeNull();
+  expect(screen.getByText("1/2 session")).toBeTruthy();
 });
 
 test("CSV button exports the filtered rows via downloadCsv", () => {

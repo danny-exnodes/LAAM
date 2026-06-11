@@ -324,7 +324,7 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
 function btn(kind: "primary" | "secondary" | "danger") {
   const base =
     "inline-block rounded-lg px-3.5 py-1.5 text-sm font-semibold transition disabled:cursor-default disabled:opacity-50";
-  if (kind === "primary") return base + " bg-[var(--color-accent)] text-white hover:opacity-90";
+  if (kind === "primary") return base + " bg-[var(--accent-fill)] text-white hover:opacity-90";
   if (kind === "danger")
     return (
       base +

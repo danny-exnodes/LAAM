@@ -9,6 +9,7 @@ import {
   Gauge,
   GitBranch,
   Activity,
+  Search,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { gravatarUrl } from "@/lib/gravatar";
@@ -26,6 +27,7 @@ const NAV = [
   { href: "/workflows", label: "Workflows", Icon: GitBranch },
   { href: "/eval", label: "Reliability", Icon: Gauge },
   { href: "/graph", label: "Graph", Icon: Network },
+  { href: "/search", label: "Search", Icon: Search },
   { href: "/connectors", label: "Connectors", Icon: Plug },
   { href: "/settings", label: "Settings", Icon: Settings },
 ];

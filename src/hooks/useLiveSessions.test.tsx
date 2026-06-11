@@ -48,8 +48,18 @@ function session(over: Partial<LiveSession>): Partial<LiveSession> {
 beforeEach(() => {
   MockEventSource.instances = [];
   vi.stubGlobal("EventSource", MockEventSource as unknown as typeof EventSource);
+  // Default: /api/config unreachable → the hook must fall back to 10 minutes.
+  vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new Error("offline"))));
   vi.setSystemTime(NOW);
 });
+
+// Point the fetch stub at a working /api/config returning the given threshold.
+function stubConfig(stuckMin: number) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({ ok: true, json: async () => ({ stuckMin }) })),
+  );
+}
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -154,5 +164,56 @@ describe("useLiveSessions", () => {
     const es = MockEventSource.instances[0];
     unmount();
     expect(es.closed).toBe(true);
+  });
+
+  // /api/config (LAAM_STUCK_MIN) drives the threshold — deployments can tune
+  // it without a rebuild, so the hook must not hardcode 10.
+  it("uses the stuckMin from /api/config instead of the hardcoded default", async () => {
+    vi.useFakeTimers();
+    stubConfig(30);
+    const { result } = renderHook(() => useLiveSessions());
+    const es = MockEventSource.instances[0];
+
+    await act(async () => {}); // flush the config fetch
+
+    act(() => {
+      es.emitSessions([
+        session({ id: "20min", lastActivity: NOW - 20 * MIN }), // stuck under 10', NOT under 30'
+        session({ id: "40min", lastActivity: NOW - 40 * MIN }),
+      ]);
+    });
+
+    expect(result.current.stuckIds).toEqual(["40min"]);
+  });
+
+  it("re-evaluates already-received sessions when /api/config answers late", async () => {
+    vi.useFakeTimers();
+    stubConfig(30);
+    const { result } = renderHook(() => useLiveSessions());
+    const es = MockEventSource.instances[0];
+
+    // Sessions arrive BEFORE the config answer → judged with the default (10').
+    act(() => {
+      es.emitSessions([session({ id: "20min", lastActivity: NOW - 20 * MIN })]);
+    });
+    expect(result.current.stuckIds).toEqual(["20min"]);
+
+    // Config answer (30') lands → the same session is no longer stuck.
+    await act(async () => {});
+    expect(result.current.stuckIds).toEqual([]);
+  });
+
+  it("falls back to the 10-minute default when /api/config fails", async () => {
+    vi.useFakeTimers();
+    // beforeEach default fetch stub rejects.
+    const { result } = renderHook(() => useLiveSessions());
+    const es = MockEventSource.instances[0];
+
+    await act(async () => {});
+
+    act(() => {
+      es.emitSessions([session({ id: "20min", lastActivity: NOW - 20 * MIN })]);
+    });
+    expect(result.current.stuckIds).toEqual(["20min"]);
   });
 });

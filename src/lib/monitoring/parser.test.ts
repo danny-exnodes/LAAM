@@ -1,10 +1,12 @@
-import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
   parseSession,
   scanAll,
+  clearScanCache,
+  scanCacheSize,
   RUNNING_WINDOW_MS,
   IDLE_WINDOW_MS,
 } from "./parser.js";
@@ -205,5 +207,118 @@ describe("scanAll", () => {
     expect("error" in r && r.error).toBeTruthy();
     expect(r.sessions).toEqual([]);
     expect(r.projects).toEqual([]);
+  });
+});
+
+describe("scanAll cache", () => {
+  // scanAll() runs on EVERY POST /api/sync; unchanged transcripts must be
+  // served from the per-file cache instead of re-read + re-parsed (perf M1).
+  let projectsDir: string;
+  let projDir: string;
+
+  beforeEach(() => {
+    clearScanCache();
+    projectsDir = path.join(tmpRoot, "projects");
+    projDir = path.join(projectsDir, "-Users-dev-demoproj");
+    fs.mkdirSync(projDir, { recursive: true });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    clearScanCache();
+  });
+
+  test("second scan serves unchanged files from cache without re-reading", () => {
+    fs.writeFileSync(path.join(projDir, "sess-1.jsonl"), jl([userEntry, assistantEntry]));
+
+    const spy = vi.spyOn(fs, "readFileSync");
+    const r1 = scanAll(projectsDir);
+    expect(r1.sessions).toHaveLength(1);
+    const readsAfterFirst = spy.mock.calls.length;
+    expect(readsAfterFirst).toBeGreaterThan(0); // first scan really read the file
+
+    const r2 = scanAll(projectsDir);
+    // Same mtime + size → no fs read at all; the parsed data is still served.
+    expect(spy.mock.calls.length).toBe(readsAfterFirst);
+    expect(r2.sessions[0]).toMatchObject({
+      id: "sess-1",
+      messageCount: 2,
+      model: "claude-sonnet-4-5",
+      projectPath: "/Users/dev/demoproj",
+    });
+    expect(r2.projects[0]).toMatchObject({ path: "/Users/dev/demoproj", sessionCount: 1 });
+  });
+
+  test("a changed file is re-parsed and the new content shows up", () => {
+    const file = path.join(projDir, "sess-1.jsonl");
+    fs.writeFileSync(file, jl([userEntry, assistantEntry]));
+    expect(scanAll(projectsDir).sessions[0].messageCount).toBe(2);
+
+    // Claude appends to transcripts while agents run — the next scan must
+    // pick the new entries up, not serve the stale cached parse. (The size
+    // change guarantees a cache miss even on coarse-mtime filesystems.)
+    fs.writeFileSync(file, jl([userEntry, assistantEntry, toolResultEntry]));
+    const r2 = scanAll(projectsDir);
+    expect(r2.sessions[0].messageCount).toBe(3);
+    expect(r2.sessions[0].lastActivity).toBe(Date.parse(T2));
+  });
+
+  test("a deleted file disappears from the results and is pruned from the cache", () => {
+    fs.writeFileSync(path.join(projDir, "sess-1.jsonl"), jl([userEntry, assistantEntry]));
+    fs.writeFileSync(path.join(projDir, "sess-2.jsonl"), jl([userEntry, assistantEntry]));
+    expect(scanAll(projectsDir).sessions).toHaveLength(2);
+    expect(scanCacheSize()).toBe(2);
+
+    fs.rmSync(path.join(projDir, "sess-2.jsonl"));
+    const r2 = scanAll(projectsDir);
+    expect(r2.sessions.map((s: { id: string }) => s.id)).toEqual(["sess-1"]);
+    // Pruned, not just filtered — a long-lived process must not leak entries
+    // (or serve stale data if the same path is later re-created).
+    expect(scanCacheSize()).toBe(1);
+  });
+
+  test("cache hits still recompute status and running sub-agent durations against now", () => {
+    // The cached parse is time-INdependent; status (running→idle→done) and
+    // open-Task durations are measured against `now`. If the cache froze
+    // them, a finished agent would stay "running" on the dashboard forever.
+    const base = Date.now();
+    fs.writeFileSync(
+      path.join(projDir, "sess-live.jsonl"),
+      jl([
+        {
+          type: "user",
+          timestamp: new Date(base).toISOString(),
+          cwd: "/Users/dev/demoproj",
+          message: { content: "do the thing" },
+        },
+        {
+          type: "assistant",
+          timestamp: new Date(base).toISOString(),
+          message: {
+            content: [
+              {
+                type: "tool_use",
+                id: "task_open",
+                name: "Task",
+                input: { subagent_type: "builder", description: "build" },
+              },
+            ],
+          },
+        },
+      ]),
+    );
+
+    const r1 = scanAll(projectsDir, base + 1000);
+    expect(r1.sessions[0].status).toBe("running");
+    expect(r1.sessions[0].subAgents[0]).toMatchObject({ status: "running", durationMs: 1000 });
+
+    const spy = vi.spyOn(fs, "readFileSync");
+    const later = base + RUNNING_WINDOW_MS + 1000;
+    const r2 = scanAll(projectsDir, later);
+    expect(spy.mock.calls.length).toBe(0); // served from cache…
+    expect(r2.sessions[0].status).toBe("idle"); // …but the status moved on
+    expect(r2.sessions[0].subAgents[0].durationMs).toBe(RUNNING_WINDOW_MS + 1000);
+
+    const r3 = scanAll(projectsDir, base + IDLE_WINDOW_MS + 1000);
+    expect(r3.sessions[0].status).toBe("done");
   });
 });

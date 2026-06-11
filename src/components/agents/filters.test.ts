@@ -67,6 +67,19 @@ describe("applyFilters", () => {
     expect(applyFilters(list, f({ status: "stuck" }), NOW).map((s) => s.id)).toEqual(["old"]);
   });
 
+  // The 'stuck' dropdown must honour the configured LAAM_STUCK_MIN (threaded from
+  // /api/config via useLiveSessions), not a hardcoded 10 — else the list disagrees
+  // with the per-row stuck badge.
+  test("'stuck' filter honours the stuckMin argument (not hardcoded 10)", () => {
+    const list = [
+      mk({ id: "5m", status: "running", lastActivity: NOW - 5 * 60_000 }),
+      mk({ id: "15m", status: "running", lastActivity: NOW - 15 * 60_000 }),
+    ];
+    // threshold 3' → both stuck; threshold 30' → neither.
+    expect(applyFilters(list, f({ status: "stuck" }), NOW, 3).map((s) => s.id)).toEqual(["5m", "15m"]);
+    expect(applyFilters(list, f({ status: "stuck" }), NOW, 30)).toHaveLength(0);
+  });
+
   test("time window filters on lastActivity", () => {
     const list = [
       mk({ id: "fresh", lastActivity: NOW - 30 * 60_000 }),
@@ -74,6 +87,18 @@ describe("applyFilters", () => {
     ];
     expect(applyFilters(list, f({ window: "1h" }), NOW).map((s) => s.id)).toEqual(["fresh"]);
     expect(applyFilters(list, f({ window: "6h" }), NOW).map((s) => s.id)).toEqual(["fresh", "old"]);
+  });
+
+  test("machine filter matches by machine id; sessions from other machines (or unattributed) are hidden", () => {
+    // Multi-machine monitoring (P3 ingest) lands every machine's sessions in
+    // one org-shared list — the machine filter is the only way to isolate one box.
+    const list = [
+      mk({ id: "host", machineId: "local:devbox" }),
+      mk({ id: "remote", machineId: "m:abc123" }),
+      mk({ id: "legacy", machineId: undefined }), // pre-W6 payloads carry no machineId
+    ];
+    expect(applyFilters(list, f({ machine: "m:abc123" }), NOW).map((s) => s.id)).toEqual(["remote"]);
+    expect(applyFilters(list, f({ machine: "" }), NOW)).toHaveLength(3); // "" = all
   });
 
   test("project / model / branch exact filters and combine (AND)", () => {

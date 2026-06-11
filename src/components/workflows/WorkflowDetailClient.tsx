@@ -69,7 +69,7 @@ function stepStatusIcon(status: string) {
 
 function btn(kind: "primary" | "secondary") {
   const base = "rounded-lg px-3 py-1.5 text-sm font-semibold transition disabled:cursor-default disabled:opacity-50";
-  if (kind === "primary") return base + " bg-[var(--color-accent)] text-white hover:opacity-90 flex items-center gap-1.5";
+  if (kind === "primary") return base + " bg-[var(--accent-fill)] text-white hover:opacity-90 flex items-center gap-1.5";
   return base + " border border-neutral-200 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800";
 }
 
@@ -90,6 +90,12 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
   // Run-now state + inline error feedback
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+
+  // Cancel-run state (W4)
+  const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
+
+  // Run-finish toast (W4): live status chuyển sang terminal → toast tự ẩn 5s.
+  const [toast, setToast] = useState<{ status: "succeeded" | "failed" | "cancelled" } | null>(null);
 
   // Delete state
   const [deleting, setDeleting] = useState(false);
@@ -149,6 +155,20 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
     );
   }, [activeRunId, liveRunStatus]);
 
+  // Toast khi run kết thúc (W4): chỉ trạng thái terminal mới hiện toast.
+  useEffect(() => {
+    if (!activeRunId || !liveRunStatus) return;
+    if (liveRunStatus !== "succeeded" && liveRunStatus !== "failed" && liveRunStatus !== "cancelled") return;
+    setToast({ status: liveRunStatus });
+  }, [activeRunId, liveRunStatus]);
+
+  // Tự ẩn toast sau 5s (clear timer khi toast đổi/unmount).
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 5000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setLoadErr(false);
@@ -198,6 +218,32 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
       setRunning(false);
     }
   }, [workflowId, load, t]);
+
+  // W4: hủy run queued|running — PATCH /api/workflows/runs/[id] { action: "cancel" }.
+  const handleCancelRun = useCallback(async (runId: string) => {
+    setCancellingRunId(runId);
+    setRunError(null);
+    try {
+      const res = await fetch(`/api/workflows/runs/${encodeURIComponent(runId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "cancel" }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setRunError(body.error ?? t("wf.run.cancelFailed"));
+        return;
+      }
+      const data = (await res.json()) as { run?: WorkflowRun };
+      if (data.run) {
+        setRuns((prev) => prev.map((r) => (r.id === runId ? { ...r, ...data.run } : r)));
+      }
+    } catch {
+      setRunError(t("wf.run.cancelFailed"));
+    } finally {
+      setCancellingRunId(null);
+    }
+  }, [t]);
 
   const handleDelete = useCallback(async () => {
     if (!workflow) return;
@@ -456,6 +502,18 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
                         <span className={"rounded-full px-2 py-0.5 text-xs font-bold " + runStatusClass(run.status)}>
                           {t(`wf.runStatus.${run.status}` as Parameters<typeof t>[0]) || run.status}
                         </span>
+                        {(run.status === "queued" || run.status === "running") && (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); void handleCancelRun(run.id); }}
+                            disabled={cancellingRunId === run.id}
+                            aria-label={t("wf.run.cancel")}
+                            title={t("wf.run.cancel")}
+                            className="ml-2 text-xs text-red-500 underline transition hover:text-red-600 disabled:opacity-50"
+                          >
+                            {t("wf.run.cancel")}
+                          </button>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-neutral-500">{fmtDate(run.startedAt, lang)}</td>
                       <td className="px-4 py-3 text-neutral-500">
@@ -677,6 +735,23 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
           )}
         </div>
       </section>
+
+      {/* ---- Run-finish toast (W4) — tự ẩn sau 5s ---- */}
+      {toast && (
+        <div
+          role="status"
+          className={
+            "fixed bottom-4 right-4 z-50 rounded-xl border px-4 py-3 text-sm font-semibold shadow-lg " +
+            (toast.status === "succeeded"
+              ? "border-green-200 bg-green-50 text-green-700 dark:border-green-900/50 dark:bg-green-950/90 dark:text-green-400"
+              : toast.status === "failed"
+                ? "border-red-200 bg-red-50 text-red-600 dark:border-red-900/50 dark:bg-red-950/90 dark:text-red-400"
+                : "border-neutral-200 bg-white text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300")
+          }
+        >
+          {t(`wf.toast.${toast.status}`)}
+        </div>
+      )}
     </main>
   );
 }

@@ -15,7 +15,7 @@ vi.mock("@/lib/connectors", () => ({
 }));
 
 import { auth } from "@/auth";
-import { POST, buildOllamaPayload, isConfirmBody } from "./route";
+import { POST, buildOllamaPayload, isConfirmBody, imagesError } from "./route";
 
 const mockAuth = vi.mocked(auth);
 
@@ -87,6 +87,71 @@ describe("buildOllamaPayload", () => {
     // body override (kể cả 0)
     expect(buildOllamaPayload({ presencePenalty: 0 }, history, defaults).options.presence_penalty).toBe(0);
     expect(buildOllamaPayload({ presencePenalty: 0.3 }, history, defaults).options.presence_penalty).toBe(0.3);
+  });
+});
+
+describe("W3 vision: images vào payload Ollama", () => {
+  // INTENT: ảnh raw phải tới ĐÚNG message user CUỐI (lượt hiện tại) theo format
+  // Ollama {role:'user', content, images}. Gắn nhầm message cũ = model "nhìn"
+  // ảnh ở sai lượt; system/assistant không bao giờ mang ảnh.
+  test("gắn images vào message user CUỐI, không đụng message trước đó", () => {
+    const hist = [
+      { role: "user", content: "lượt cũ" },
+      { role: "assistant", content: "ok" },
+      { role: "user", content: "ảnh này là gì?" },
+    ];
+    const p = buildOllamaPayload({ images: ["QUJD", "REVG"] }, hist, defaults);
+    expect(p.messages[3]).toEqual({
+      role: "user",
+      content: "ảnh này là gì?",
+      images: ["QUJD", "REVG"],
+    });
+    expect(p.messages[0]).not.toHaveProperty("images"); // system
+    expect(p.messages[1]).not.toHaveProperty("images"); // user lượt cũ
+    expect(p.messages[2]).not.toHaveProperty("images"); // assistant
+  });
+
+  // REGRESSION: không gửi ảnh (hoặc mảng rỗng) → payload Y HỆT trước W3 —
+  // không message nào mọc key `images` (wire-format bất biến khi vắng ảnh).
+  test("không ảnh / images:[] → payload y như cũ, không key images", () => {
+    const before = buildOllamaPayload({}, history, defaults);
+    expect(before.messages.every((m) => !("images" in m))).toBe(true);
+    expect(buildOllamaPayload({ images: [] }, history, defaults)).toEqual(before);
+  });
+
+  // Cap server (trần cứng, VRAM 16GB + CHAT_NUM_CTX=16384): >2 ảnh, ảnh > ~2.8MB
+  // base64, phần tử rỗng/không phải string, hoặc không phải mảng → lý do lỗi.
+  test("imagesError: hợp lệ/vắng → null; vượt cap hay sai kiểu → lý do lỗi", () => {
+    expect(imagesError(undefined)).toBeNull();
+    expect(imagesError(["YQ==", "Yg=="])).toBeNull();
+    expect(imagesError(["a", "b", "c"])).toMatch(/max 2/);
+    expect(imagesError(["x".repeat(2_800_001)])).toMatch(/base64 chars/);
+    expect(imagesError("not-an-array")).toMatch(/array/);
+    expect(imagesError([""])).toMatch(/non-empty/);
+  });
+
+  // INTENT (quyết định W3): server REJECT 400, KHÔNG strip — client đã degrade
+  // thân thiện (cap 2×2MB + notice i18n, rơi về OCR-text) nên request vượt cap
+  // tới server = client phi chuẩn/bug; strip im lặng sẽ giấu bug (Rule 12).
+  // Validate TRƯỚC mọi I/O: không gọi Ollama, không đụng DB.
+  test("POST 3 ảnh → 400 REJECT, không gọi Ollama", async () => {
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1" } } as never);
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ message: "đây là 3 ảnh", images: ["YQ==", "Yg==", "Yw=="] }),
+        }),
+      );
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toMatch(/max 2/);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

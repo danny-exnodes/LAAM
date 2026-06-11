@@ -25,6 +25,7 @@ import {
   type PendingWrite,
 } from "./types";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
+import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
 import type { ToolTraceItem } from "./toolLabel";
 
 const uid = () =>
@@ -54,6 +55,7 @@ export function ChatClient() {
   const [convOpen, setConvOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false); // F1: /xuat opens the export menu
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [imgNotice, setImgNotice] = useState<string | null>(null); // W3 vision: cap ảnh raw → notice
   const [models, setModels] = useState<string[]>([]);
   const [ocrAvailable, setOcrAvailable] = useState(true); // F3/FEAT-4: degrade if tesseract missing
   const [query, setQuery] = useState("");
@@ -355,13 +357,15 @@ export function ChatClient() {
   );
 
   const streamReply = useCallback(
-    (outgoing: string, titleHint?: string) =>
+    (outgoing: string, titleHint?: string, images?: string[]) =>
       streamFrom({
         conversationId: activeId ?? undefined,
         message: outgoing,
         // F4: the raw user text titles a new conversation, not the attachment-
         // prefixed `outgoing` (which can begin with a file's raw bytes).
         titleHint,
+        // W3 vision: kênh ảnh raw (base64) — additive; vắng → body y như cũ.
+        ...(images && images.length ? { images } : {}),
         model: settings.model,
         temperature: settings.temperature,
         topP: settings.topP,
@@ -390,15 +394,22 @@ export function ChatClient() {
     const text = rawText.trim();
     if (!text || streaming) return;
     const outgoing = withAttachments(text);
+    // W3 vision: thu ảnh raw TRƯỚC khi xoá attachments. slice = defense-in-depth
+    // (cap đã enforce lúc đính kèm) để không bao giờ vượt trần server (400).
+    const images = attachments
+      .filter((a): a is Attachment & { b64: string } => !!a.b64)
+      .slice(0, MAX_RAW_IMAGES)
+      .map((a) => a.b64);
     setInput("");
     setAttachments([]);
+    setImgNotice(null);
     stickRef.current = true; // gửi → luôn cuộn xuống cuối
     setMessages((p) => [
       ...p,
       { id: uid(), role: "user", content: text, createdAt: Date.now() },
       { id: uid(), role: "assistant", content: "", createdAt: Date.now() },
     ]);
-    await streamReply(outgoing, text);
+    await streamReply(outgoing, text, images);
   }
 
   function send() {
@@ -447,16 +458,31 @@ export function ChatClient() {
 
   // --- attachments ---
   async function onAddFiles(files: FileList) {
+    setImgNotice(null);
+    // W3 vision: đếm ảnh raw đã giữ b64 (state + ảnh thêm trong chính vòng này).
+    let rawCount = attachments.filter((a) => a.b64).length;
     for (const file of Array.from(files)) {
       const isImage = file.type.startsWith("image/");
       try {
         if (isImage) {
+          // W3 vision: giữ base64 (bỏ prefix data:) cho kênh ảnh raw, SONG SONG
+          // với OCR-text prefix như cũ. Vượt cap (2 ảnh × 2MB sau encode — VRAM
+          // 16GB, CHAT_NUM_CTX=16384, xem imageCap.ts) → notice i18n + chỉ dùng
+          // đường OCR-text (không giữ b64).
+          const dataUrl = await readAsDataUrl(file);
+          const b64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+          const verdict = rawImageVerdict(rawCount, b64.length);
+          if (verdict === "ok") rawCount++;
+          else
+            setImgNotice(
+              t(verdict === "count" ? "chat.imgCapCount" : "chat.imgCapSize", { name: file.name }),
+            );
+          const keepB64 = verdict === "ok" ? b64 : undefined;
           // OCR known-unavailable → attach with a clear note, skip the doomed call.
           if (!ocrAvailable) {
-            pushAttachment(file.name, "image", `[${t("chat.ocrOffAttach")}]`);
+            pushAttachment(file.name, "image", `[${t("chat.ocrOffAttach")}]`, keepB64);
             continue;
           }
-          const dataUrl = await readAsDataUrl(file);
           const r = await fetch("/api/ocr", {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -464,7 +490,7 @@ export function ChatClient() {
           });
           const d = await r.json().catch(() => ({}));
           const text = r.ok ? (d.text ?? "") : `[OCR: ${d.error ?? "lỗi"}]`;
-          pushAttachment(file.name, "image", text);
+          pushAttachment(file.name, "image", text, keepB64);
         } else {
           const text = await file.text();
           pushAttachment(file.name, "file", text);
@@ -488,8 +514,11 @@ export function ChatClient() {
       pushAttachment(url, "url", "[không tải được URL]");
     }
   }
-  function pushAttachment(name: string, kind: Attachment["kind"], text: string) {
-    setAttachments((a) => [...a, { id: uid(), name, kind, chars: text.length, text }]);
+  function pushAttachment(name: string, kind: Attachment["kind"], text: string, b64?: string) {
+    setAttachments((a) => [
+      ...a,
+      { id: uid(), name, kind, chars: text.length, text, ...(b64 ? { b64 } : {}) },
+    ]);
   }
   function onRemoveAttachment(id: string) {
     setAttachments((a) => a.filter((x) => x.id !== id));
@@ -694,6 +723,7 @@ export function ChatClient() {
                 onStop={stop}
                 streaming={streaming}
                 attachments={attachments}
+                notice={imgNotice}
                 onAddFiles={onAddFiles}
                 onAddUrl={onAddUrl}
                 onRemoveAttachment={onRemoveAttachment}

@@ -52,12 +52,16 @@ export type ResumeDeps = {
 export async function resumeRunRow(
   runId: string,
   deps: ResumeDeps,
-): Promise<{ status: "succeeded" | "failed"; error?: string }> {
+): Promise<{ status: "succeeded" | "failed" | "cancelled"; error?: string }> {
   const runs = await deps.db.select().from(workflowRuns).where(eq(workflowRuns.id, runId)).limit(1);
   const run = runs[0] as { id: string; userId: string; trigger: string; graphSnapshot: WorkflowGraph } | undefined;
   if (!run) return { status: "failed", error: "run not found" };
 
-  await deps.db.update(workflowRuns).set({ status: "running" }).where(eq(workflowRuns.id, runId));
+  // W4 cancel: flip có điều kiện — không lật ngược run vừa bị PATCH 'cancelled' về running.
+  await deps.db
+    .update(workflowRuns)
+    .set({ status: "running" })
+    .where(and(eq(workflowRuns.id, runId), inArray(workflowRuns.status, ["resumable", "running"])));
   // Clean stale step rows from the crashed attempt → no stuck 'running' row, no duplicate node.
   await deps.db
     .update(workflowRunSteps)
@@ -158,10 +162,25 @@ export async function resumeRunRow(
     deps.publish({ type: "workflow_run_step", runId, nodeId: s.nodeId, seq: s.seq, status: s.status });
   };
 
-  let status: "succeeded" | "failed";
+  // W4 cancel: run resume cũng đang 'running' → PATCH cancel phải có hiệu lực ở đây
+  // (re-read status trước mỗi node, giống run.ts). Fail-soft: lỗi đọc → không cancel.
+  const shouldStop = async (): Promise<boolean> => {
+    try {
+      const rows = await deps.db
+        .select({ status: workflowRuns.status })
+        .from(workflowRuns)
+        .where(eq(workflowRuns.id, runId))
+        .limit(1);
+      return rows[0]?.status === "cancelled";
+    } catch {
+      return false;
+    }
+  };
+
+  let status: "succeeded" | "failed" | "cancelled";
   let error: string | undefined;
   try {
-    const result = await runWorkflow(run.graphSnapshot, { runNode, onStep, evalPredicate }, ctx);
+    const result = await runWorkflow(run.graphSnapshot, { runNode, onStep, evalPredicate, shouldStop }, ctx);
     status = result.status;
     error = result.error;
   } catch (e) {

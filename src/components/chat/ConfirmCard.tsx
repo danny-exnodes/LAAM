@@ -45,7 +45,7 @@ export function ConfirmCard({
             type="button"
             disabled={status === "sending"}
             onClick={() => onConfirm(true)}
-            className="rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-default disabled:opacity-50"
+            className="rounded-lg bg-[var(--accent-fill)] px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:cursor-default disabled:opacity-50"
           >
             {status === "sending" ? t("chat.confirmSending") : t("chat.confirm")}
           </button>

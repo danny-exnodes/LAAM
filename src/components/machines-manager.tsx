@@ -78,7 +78,7 @@ export function MachinesManager({
             <button
               onClick={create}
               disabled={busy}
-              className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-[var(--accent-fill)] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               Tạo
             </button>

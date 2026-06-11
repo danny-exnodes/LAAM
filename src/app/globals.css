@@ -66,8 +66,14 @@
   --accent: #1f6f96; /* ≥4.5:1 vs all light surfaces AND as white-text fill (WCAG AA) */
   --accent-hover: #1b6285; /* hover fill keeps white text ≥4.5:1 */
   --accent-fg: #ffffff;
-  --accent-muted: rgba(54, 166, 214, 0.14);
-  --accent-glow: rgba(54, 166, 214, 0.3);
+  /* Solid CTA fill for `text-white` buttons. Mode-INVARIANT on purpose: the
+     bright dark accent #36a6d6 only gives white text 2.77:1, so dark mode
+     keeps this darker cyan too (white 5.57:1 — AA). Guarded by
+     src/app/globals-contrast.test.ts. */
+  --accent-fill: #1f6f96;
+  /* Decorative tints follow the darkened light accent (were the old bright cyan). */
+  --accent-muted: rgba(31, 111, 150, 0.14);
+  --accent-glow: rgba(31, 111, 150, 0.3);
   --bloom-cyan: rgba(54, 166, 214, 0.1);
   --bloom-aqua: rgba(64, 150, 235, 0.07);
   --bloom-sky: rgba(56, 130, 246, 0.07);
@@ -86,6 +92,7 @@
   --accent: #36a6d6;
   --accent-hover: #4fb6e0;
   --accent-fg: #051219;
+  --accent-fill: #1f6f96; /* NOT #36a6d6 — white text needs ≥4.5:1 (bright cyan = 2.77:1) */
   --accent-muted: rgba(54, 166, 214, 0.16);
   --accent-glow: rgba(54, 166, 214, 0.38);
   --bloom-cyan: rgba(54, 166, 214, 0.22);

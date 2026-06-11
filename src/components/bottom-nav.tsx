@@ -1,12 +1,13 @@
 "use client";
 
-// Mobile bottom tab bar (md:hidden). Five destinations with Chat raised + ~30%
+// Mobile bottom tab bar (md:hidden). Seven destinations with Chat raised + ~30%
 // larger as the center focal point — the app-like pattern from the reference.
+// Items use flex-1 (not a fixed w-1/5) so the row stays at 100% as destinations grow.
 // Desktop keeps the top nav instead. Fixed; pages add bottom padding to clear it.
 // Client component: the aria-label resolves through the i18n provider.
 
 import Link from "next/link";
-import { LayoutDashboard, Bot, MessageSquare, Plug, Settings, GitBranch } from "lucide-react";
+import { LayoutDashboard, Bot, MessageSquare, Plug, Settings, GitBranch, Search } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { common } from "@/i18n/dictionaries/common";
 
@@ -20,6 +21,7 @@ const ITEMS: {
   { href: "/agents", label: "Agents", Icon: Bot },
   { href: "/workflows", label: "Workflows", Icon: GitBranch },
   { href: "/chat", label: "Chat", Icon: MessageSquare, center: true },
+  { href: "/search", label: "Search", Icon: Search },
   { href: "/connectors", label: "Connectors", Icon: Plug },
   { href: "/settings", label: "Settings", Icon: Settings },
 ];
@@ -39,7 +41,7 @@ export function BottomNav({ current }: { current: string }) {
               key={href}
               href={href}
               aria-label={label}
-              className="-mt-6 flex w-1/5 flex-col items-center gap-0.5"
+              className="-mt-6 flex flex-1 min-w-0 flex-col items-center gap-0.5"
             >
               <span
                 className={
@@ -68,7 +70,7 @@ export function BottomNav({ current }: { current: string }) {
           <Link
             key={href}
             href={href}
-            className="flex w-1/5 flex-col items-center gap-0.5 py-1"
+            className="flex flex-1 min-w-0 flex-col items-center gap-0.5 py-1"
           >
             <Icon
               size={20}

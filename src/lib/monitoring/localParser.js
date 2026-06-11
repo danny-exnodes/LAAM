@@ -111,6 +111,27 @@ function parseLocalSession(file, now) {
   };
 }
 
+// Per-file parse cache, same pattern as parser.js scanCache: scanLocal() runs
+// on every POST /api/sync; unchanged log files (matching mtimeMs + size) are
+// served from cache with only `status` recomputed against `now`.
+const scanCache = new Map(); // file path -> { mtimeMs, size, parsed }
+
+/** Drop all cached parse results (tests / diagnostics). */
+export function clearLocalScanCache() {
+  scanCache.clear();
+}
+
+// Recompute the only `now`-dependent field of a cached local session: status.
+// Serving it stale would freeze a finished session as "running" forever.
+function withFreshStatus(parsed, now) {
+  const age = parsed.lastActivity != null ? now - parsed.lastActivity : Infinity;
+  let status;
+  if (age < RUNNING_WINDOW_MS) status = 'running';
+  else if (age < IDLE_WINDOW_MS) status = 'idle';
+  else status = 'done';
+  return { ...parsed, status };
+}
+
 // Scan the local-logs directory and return { dir, sessions, projects } where
 // `projects` holds the single grouped "Ollama (local)" project (or empty).
 export function scanLocal(dir = defaultLocalLogsDir(), now = Date.now()) {
@@ -122,10 +143,34 @@ export function scanLocal(dir = defaultLocalLogsDir(), now = Date.now()) {
   }
 
   const sessions = [];
+  const seen = new Set();
   for (const f of files) {
-    const s = parseLocalSession(path.join(dir, f), now);
+    const filePath = path.join(dir, f);
+    seen.add(filePath);
+    // Stat BEFORE parsing (see parser.js: a concurrent append then re-parses
+    // next scan instead of ever serving stale content).
+    let stat = null;
+    try {
+      stat = fs.statSync(filePath);
+    } catch {
+      // file disappeared between readdir and stat
+    }
+    const hit = stat ? scanCache.get(filePath) : null;
+    let s;
+    if (hit && hit.mtimeMs === stat.mtimeMs && hit.size === stat.size) {
+      s = hit.parsed ? withFreshStatus(hit.parsed, now) : null;
+    } else {
+      s = parseLocalSession(filePath, now);
+      if (stat) scanCache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, parsed: s });
+    }
     if (s && s.messageCount > 0) sessions.push(s);
   }
+
+  // Prune cache entries for files that disappeared from disk.
+  for (const key of scanCache.keys()) {
+    if (!seen.has(key)) scanCache.delete(key);
+  }
+
   if (!sessions.length) return { dir, sessions: [], projects: [] };
 
   sessions.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0));

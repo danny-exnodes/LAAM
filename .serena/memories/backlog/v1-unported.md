@@ -3,7 +3,7 @@
 **NGUỒN CHÂN LÝ: `docs/v1-to-v2-migration-handoff.md`** (user/handoff session ghi 2026-06-04). File Serena này chỉ tóm + thêm cross-link cho boot-read (backlog/ nằm trong chuỗi đọc đầu phiên; docs/ thì không).
 
 ## 4 phần v1 CHƯA có ở v2 (handoff §1)
-1. **Search** — `public/search.*` + `/api/search` + `lib/search.js`. Port rẻ: 1 lib + 1 endpoint + 1 page; nên dùng **tsvector/pg_trgm** (v2 có Postgres). **Khuyến nghị migrate.**
+1. ~~**Search**~~ — ✅ **ĐÃ PORT (W7, 2026-06-11, branch `feat/r2-postrelease`)**: `src/lib/search.ts` (searchAll ILIKE, escape %_, cap 20/nhóm) + `GET /api/search` + page `/search` + nav. pg_trgm GIN index = nâng cấp sau nếu chậm. Conversations link `/chat` thường (ChatClient chưa có deep-link param).
 2. **Office** — `public/office.js` (523 dòng, isometric 2.5D). Nặng; quyết theo mức dùng thật. Ưu tiên thấp.
 3. **Proxy log Ollama** (`proxy/server.js`) — **CÓ THỂ BỎ với v2** (v2 gọi thẳng Ollama; chat log Postgres). Chỉ giữ nếu cần giám sát Ollama từ công cụ NGOÀI v2 (handoff §2).
 4. **`/api/config` + `/api/health`** — nhỏ; v2 hardcode stuck=10' → đưa vào config (`LAAM_STUCK_MIN`).

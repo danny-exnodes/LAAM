@@ -44,6 +44,9 @@ export type Attachment = {
   kind: "file" | "url" | "image";
   chars: number;
   text: string;
+  // W3 vision: raw base64 (không prefix data:) — chỉ ảnh image/* TRONG cap
+  // (xem imageCap.ts); gửi lên /api/chat qua body.images song song OCR-text.
+  b64?: string;
 };
 
 export type Conv = {

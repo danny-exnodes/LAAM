@@ -70,7 +70,31 @@ type ChatBody = {
   topP?: number;
   presencePenalty?: number;
   system?: string;
+  images?: string[]; // W3 vision: raw base64 (không prefix data:), validate qua imagesError
 };
+
+// W3 vision caps (server, trần cứng): ≤2 ảnh/lượt, mỗi ảnh ≤ ~2.8MB base64
+// (~2MB nhị phân ×4/3). VRAM 16GB (RTX 5070 Ti) + CHAT_NUM_CTX=16384: mỗi ảnh
+// ngốn vision-token trong ctx LẪN VRAM decode cạnh KV-cache q8 — 2 ảnh là trần
+// an toàn. Client (imageCap.ts) tự cap CHẶT HƠN (2MB/ảnh) kèm thông báo i18n.
+const MAX_IMAGES_PER_TURN = 2;
+const MAX_IMAGE_B64_CHARS = 2_800_000;
+
+// W3 vision: validate body.images — optional/additive; null = hợp lệ (hoặc vắng),
+// string = lý do lỗi → POST trả 400. QUYẾT ĐỊNH W3: vượt cap → 400 REJECT, KHÔNG
+// strip — client đã degrade thân thiện (cap + notice, chỉ gửi OCR-text); request
+// vượt cap tới đây = client phi chuẩn/bug, strip im lặng sẽ giấu nó (Rule 12).
+// Pure để unit-test không cần dựng POST.
+export function imagesError(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  if (!Array.isArray(v)) return "images must be an array";
+  if (v.length > MAX_IMAGES_PER_TURN) return `images: max ${MAX_IMAGES_PER_TURN} per message`;
+  for (const s of v) {
+    if (typeof s !== "string" || !s) return "images: items must be non-empty base64 strings";
+    if (s.length > MAX_IMAGE_B64_CHARS) return `images: each item must be <= ${MAX_IMAGE_B64_CHARS} base64 chars`;
+  }
+  return null;
+}
 // Build the Ollama /api/chat request payload from the request body, the
 // conversation history, and the server defaults. Pure — no I/O — so the
 // option mapping (temperature/top_p, model + system overrides, defaults) is
@@ -96,9 +120,26 @@ export function buildOllamaPayload(
   // presence_penalty luôn được set: body override > default server-side (chống lặp Qwen3-Q8).
   options.presence_penalty = num(body.presencePenalty) ?? DEFAULT_PRESENCE_PENALTY;
 
+  const messages: ChatMessage[] = [{ role: "system", content: system }, ...historyMessages];
+  // W3 vision: gắn ảnh raw (base64, không prefix data:) vào message user CUỐI —
+  // đúng format Ollama {role:'user', content, images}. Ảnh KHÔNG persist: lượt
+  // sau replay chỉ còn OCR-text đã prefix trong content (flow cũ giữ nguyên).
+  // Không có ảnh → không thêm key nào ⇒ payload y hệt trước (regression-safe).
+  const imgs = Array.isArray(body.images)
+    ? body.images.filter((s): s is string => typeof s === "string" && s.length > 0)
+    : [];
+  if (imgs.length) {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        messages[i] = { ...messages[i], images: imgs };
+        break;
+      }
+    }
+  }
+
   return {
     model,
-    messages: [{ role: "system", content: system }, ...historyMessages],
+    messages,
     options,
     stream: true as const,
   };
@@ -136,6 +177,12 @@ export async function POST(req: Request) {
   const message = (body.message ?? "").toString().trim();
   if (!message) {
     return new Response(JSON.stringify({ error: "Empty message" }), { status: 400 });
+  }
+  // W3 vision: validate ảnh SỚM — trước mọi I/O DB/Ollama (xem imagesError về
+  // quyết định 400-reject thay vì strip).
+  const imgErr = imagesError(body.images);
+  if (imgErr) {
+    return new Response(JSON.stringify({ error: imgErr }), { status: 400 });
   }
   const model = typeof body.model === "string" && body.model.trim() ? body.model : MODEL;
 

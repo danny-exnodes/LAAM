@@ -201,3 +201,64 @@ describe("executeRun", () => {
     expect(runRow?.dryRun).toBe(true);
   });
 });
+
+// W4 cancel — executeRunRow re-read status từ DB TRƯỚC mỗi node (shouldStop). Ý nghĩa:
+// PATCH cancel phải dừng run GIỮA các node (side-effect node sau không được bắn),
+// run finalize 'cancelled' chứ KHÔNG 'failed', và tickResume không bao giờ nhặt lại
+// (claim chỉ status='resumable' — xem tick-resume.test.ts).
+describe("executeRunRow — cancel (W4)", () => {
+  test("PATCH set cancelled giữa 2 node → node sau không chạy, finalize cancelled (không failed)", async () => {
+    let dbStatus = "running"; // trạng thái run trong DB; PATCH đổi sau khi n1 xong
+    const updated: { status?: string }[] = [];
+    const db = {
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ status: dbStatus }] }) }) }),
+      insert: () => ({ values: async () => {} }),
+      update: () => ({ set: (v: { status?: string }) => ({ where: async () => { updated.push(v); } }) }),
+    };
+    const publish = vi.fn();
+    const runNode = vi.fn(async () => { dbStatus = "cancelled"; return { count: 1 }; }); // n1 xong → user cancel
+    const { status, steps } = await executeRunRow(
+      { id: "r1", workflowId: "w1", userId: "u1", trigger: "manual", graphSnapshot: graph },
+      { db: db as never, publish, buildRunNode: () => runNode },
+    );
+    expect(status).toBe("cancelled");
+    expect(runNode).toHaveBeenCalledTimes(1); // n2 KHÔNG chạy
+    expect(steps.map((s) => s.nodeId)).toEqual(["n1"]); // step đã xong vẫn persist
+    expect(updated.some((u) => u.status === "failed")).toBe(false); // không đánh failed
+    expect(updated.some((u) => u.status === "cancelled")).toBe(true); // finalize idempotent
+    expect(publish).toHaveBeenCalledWith(expect.objectContaining({ type: "workflow_run", runId: "r1", status: "cancelled" }));
+  });
+
+  test("run bị cancel khi còn queued → không node nào chạy", async () => {
+    const db = {
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => [{ status: "cancelled" }] }) }) }),
+      insert: () => ({ values: async () => {} }),
+      update: () => ({ set: () => ({ where: async () => {} }) }),
+    };
+    const runNode = vi.fn();
+    const { status, steps } = await executeRunRow(
+      { id: "r1", workflowId: "w1", userId: "u1", trigger: "schedule", graphSnapshot: graph },
+      { db: db as never, publish: vi.fn(), buildRunNode: () => runNode },
+    );
+    expect(status).toBe("cancelled");
+    expect(runNode).not.toHaveBeenCalled();
+    expect(steps).toEqual([]);
+  });
+
+  test("lỗi đọc status (shouldStop fail-soft) → KHÔNG cancel, run vẫn succeeded", async () => {
+    // db KHÔNG có select → shouldStop ném mỗi lần check. Lỗi DB tạm thời không được
+    // giết run đang chạy giữa chừng — run phải hoàn tất bình thường.
+    const updated: { status?: string }[] = [];
+    const db = {
+      insert: () => ({ values: async () => {} }),
+      update: () => ({ set: (v: { status?: string }) => ({ where: async () => { updated.push(v); } }) }),
+    };
+    const buildRunNode = () => vi.fn(async (node: { id: string }) => (node.id === "n1" ? { count: 3 } : "ok"));
+    const { status } = await executeRunRow(
+      { id: "r1", workflowId: "w1", userId: "u1", trigger: "schedule", graphSnapshot: graph },
+      { db: db as never, publish: vi.fn(), buildRunNode },
+    );
+    expect(status).toBe("succeeded");
+    expect(updated.some((u) => u.status === "succeeded")).toBe(true);
+  });
+});

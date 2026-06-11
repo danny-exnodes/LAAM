@@ -355,6 +355,44 @@ function decodeDirName(name) {
   return parts[parts.length - 1] || name;
 }
 
+// Per-file parse cache: scanAll() runs on every POST /api/sync, but most
+// transcripts are unchanged between scans — re-reading + re-parsing every
+// JSONL file each time is the dominant cost. A file whose mtimeMs AND size
+// both match the cached entry is served from cache with only the
+// time-dependent fields recomputed (see withFreshStatus). The cache is
+// module-level: one per process, pruned to the files seen by the last scan.
+const scanCache = new Map(); // file path -> { mtimeMs, size, parsed }
+
+/** Drop all cached parse results (tests / diagnostics). */
+export function clearScanCache() {
+  scanCache.clear();
+}
+
+/** Number of cached files (tests / diagnostics). */
+export function scanCacheSize() {
+  return scanCache.size;
+}
+
+// Recompute the `now`-dependent fields of a cached session. Everything else
+// only changes when the file changes, but status (running/idle/done) and the
+// durations of still-running sub-agents are measured against `now` — serving
+// them stale would freeze a finished agent as "running" forever.
+function withFreshStatus(parsed, mtimeMs, now) {
+  const subAgents = parsed.subAgents.map((s) =>
+    s.status === 'running' && s.startTime ? { ...s, durationMs: now - s.startTime } : s
+  );
+  const age = parsed.lastActivity != null ? now - parsed.lastActivity : Infinity;
+  const fileFresh = mtimeMs != null ? now - mtimeMs < RUNNING_WINDOW_MS : false;
+  const hasRunningSub = subAgents.some((s) => s.status === 'running');
+
+  let status;
+  if (age < RUNNING_WINDOW_MS || (fileFresh && hasRunningSub)) status = 'running';
+  else if (age < IDLE_WINDOW_MS) status = 'idle';
+  else status = 'done';
+
+  return { ...parsed, status, subAgents };
+}
+
 // Scan the whole projects directory and return all sessions, grouped by project.
 export function scanAll(projectsDir = defaultProjectsDir(), now = Date.now()) {
   const result = { projectsDir, scannedAt: now, projects: [], sessions: [] };
@@ -366,6 +404,7 @@ export function scanAll(projectsDir = defaultProjectsDir(), now = Date.now()) {
   }
 
   const sessions = [];
+  const seen = new Set();
   for (const d of dirs) {
     if (!d.isDirectory()) continue;
     const dirPath = path.join(projectsDir, d.name);
@@ -376,10 +415,33 @@ export function scanAll(projectsDir = defaultProjectsDir(), now = Date.now()) {
       continue;
     }
     for (const f of files) {
-      const s = parseSession(path.join(dirPath, f), now);
+      const filePath = path.join(dirPath, f);
+      seen.add(filePath);
+      // Stat BEFORE parsing: if the file is appended between stat and read we
+      // cache the new content under the old mtime, so the next scan re-parses
+      // (safe direction — never serve stale content).
+      let stat = null;
+      try {
+        stat = fs.statSync(filePath);
+      } catch {
+        // file disappeared between readdir and stat — parse below yields empty
+      }
+      const hit = stat ? scanCache.get(filePath) : null;
+      let s;
+      if (hit && hit.mtimeMs === stat.mtimeMs && hit.size === stat.size) {
+        s = withFreshStatus(hit.parsed, hit.mtimeMs, now);
+      } else {
+        s = parseSession(filePath, now);
+        if (stat) scanCache.set(filePath, { mtimeMs: stat.mtimeMs, size: stat.size, parsed: s });
+      }
       if (s.messageCount === 0 && s.subAgentCount === 0) continue;
       sessions.push(s);
     }
+  }
+
+  // Prune cache entries for files that disappeared from disk.
+  for (const key of scanCache.keys()) {
+    if (!seen.has(key)) scanCache.delete(key);
   }
 
   // Group by project path.
