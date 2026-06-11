@@ -31,3 +31,6 @@ connectors.json
 
 # superpowers brainstorming visual-companion mockups (local, throwaway)
 .superpowers/
+
+# DB backups (scripts/backup-db.ps1)
+backups/

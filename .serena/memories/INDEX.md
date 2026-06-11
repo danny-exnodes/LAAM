@@ -72,8 +72,8 @@
 
 ## Trạng thái R0 release (2026-06-11)
 - **CTO audit toàn dự án 7 hạng mục** + chiến lược 3 đợt (R0 code-gate → R1 host → R2 post-release). Checkpoint: `checkpoint/cto-2026-06-11.md`.
-- **R0 hardening ĐÃ IMPLEMENT** trên branch **`release/r0-hardening`** (commit `3374a8f`, 46 file, **1380 test + tsc sạch**, CHỜ USER MERGE): REGISTER_MODE+rate-limit+lockout+bcrypt12+headers · drizzle 0010 indexes · A1/A2/A3 · chat tool-loop error wrap · i18n auth 28 key · `docs/DEPLOYMENT.md` + scripts tick/backup.
-- ⚠️ Prod container :3900 đang PUBLIC qua Funnel với register mở (chưa có R0) — chờ merge+deploy hoặc tắt Funnel. Tick task chưa cài → schedule prod không chạy.
+- **R0 hardening ĐÃ MERGE VÀO MAIN = `8614ecd`** (46 file, **1380 test + tsc sạch verify trên main**; chưa push origin): REGISTER_MODE+rate-limit+lockout+bcrypt12+headers · drizzle 0010 indexes (cần `db:migrate` trên host) · A1/A2/A3 · chat tool-loop error wrap · i18n auth 28 key · `docs/DEPLOYMENT.md` + scripts tick/backup.
+- ⚠️ Prod container :3900 (PUBLIC qua Funnel, register mở) vẫn chạy IMAGE CŨ — cần rebuild+restart theo `docs/DEPLOYMENT.md` (hoặc tắt Funnel tạm). Tick task chưa cài → schedule prod không chạy.
 
 ## Trạng thái hiện tại (2026-06-03)
 - v2: P1 auth/RBAC ✅ · P2 monitoring ✅ · P3 collector đa máy (đơn giản) ✅ · P4 Chat Gemma 4 đã build, **chờ test runtime**. Verified live P1+P2+P3.
