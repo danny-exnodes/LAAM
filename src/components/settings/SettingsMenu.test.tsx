@@ -20,10 +20,10 @@ const USER = {
   avatarUrl: "https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp",
 };
 
-function ui() {
+function ui(role = "admin") {
   return (
     <I18nProvider lang="en">
-      <SettingsMenu user={USER} />
+      <SettingsMenu user={{ ...USER, role }} />
     </I18nProvider>
   );
 }
@@ -62,5 +62,38 @@ describe("SettingsMenu", () => {
     const link = links.find((l) => l.getAttribute("href") === "/graph");
     expect(link).toBeDefined();
     expect(link).toHaveAttribute("href", "/graph");
+  });
+
+  it("shows the /settings/users link for an admin (owner/admin manage users)", () => {
+    render(ui("admin"));
+    const link = screen.getAllByRole("link").find((l) => l.getAttribute("href") === "/settings/users");
+    expect(link).toBeDefined();
+  });
+
+  it("shows the /settings/users link for an owner", () => {
+    render(ui("owner"));
+    const link = screen.getAllByRole("link").find((l) => l.getAttribute("href") === "/settings/users");
+    expect(link).toBeDefined();
+  });
+
+  it("HIDES the /settings/users link for a member (not owner/admin)", () => {
+    render(ui("member"));
+    const link = screen.getAllByRole("link").find((l) => l.getAttribute("href") === "/settings/users");
+    expect(link).toBeUndefined();
+  });
+
+  it("HIDES the /settings/users link for a viewer", () => {
+    render(ui("viewer"));
+    const link = screen.getAllByRole("link").find((l) => l.getAttribute("href") === "/settings/users");
+    expect(link).toBeUndefined();
+  });
+
+  it("shows the /settings/access link for everyone (self-service tokens)", () => {
+    for (const role of ["owner", "admin", "member", "viewer"]) {
+      cleanup();
+      render(ui(role));
+      const link = screen.getAllByRole("link").find((l) => l.getAttribute("href") === "/settings/access");
+      expect(link, `access link missing for ${role}`).toBeDefined();
+    }
   });
 });

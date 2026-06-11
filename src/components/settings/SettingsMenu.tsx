@@ -1,6 +1,6 @@
 "use client";
 
-import { Server, Palette, Languages, Gauge, Activity, Network } from "lucide-react";
+import { Server, Palette, Languages, Gauge, Activity, Network, Users, KeyRound } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { settingsDict } from "@/i18n/dictionaries/settings";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -20,6 +20,7 @@ interface SettingsUser {
 // ThemeToggle / LangSelect controls. i18n via settingsDict (re-renders on lang change).
 export function SettingsMenu({ user }: { user: SettingsUser }) {
   const t = useT(settingsDict);
+  const canManageUsers = user.role === "owner" || user.role === "admin";
   return (
     <div className="mx-auto max-w-2xl">
       <SettingsCard title={t("settings.account")}>
@@ -46,6 +47,22 @@ export function SettingsMenu({ user }: { user: SettingsUser }) {
       </SettingsCard>
 
       <SettingsCard title={t("settings.servers")}>
+        {canManageUsers && (
+          <SettingsRow
+            href="/settings/users"
+            icon={<Users size={18} />}
+            label={t("settings.users.label")}
+            sub={t("settings.users.desc")}
+            color="#f59e0b"
+          />
+        )}
+        <SettingsRow
+          href="/settings/access"
+          icon={<KeyRound size={18} />}
+          label={t("settings.access.label")}
+          sub={t("settings.access.desc")}
+          color="#10b981"
+        />
         <SettingsRow
           href="/settings/machines"
           icon={<Server size={18} />}
