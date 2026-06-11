@@ -16,6 +16,8 @@ import {
   ScrollText,
   Languages,
   Globe,
+  Search,
+  MapPin,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -110,4 +112,6 @@ export const GRID_FEATURES: GridFeature[] = [
   { id: 'audit', icon: ScrollText, keyPrefix: 'grid.audit' },
   { id: 'i18n', icon: Languages, keyPrefix: 'grid.i18n' },
   { id: 'world', icon: Globe, keyPrefix: 'grid.world' },
+  { id: 'search', icon: Search, keyPrefix: 'grid.search' },
+  { id: 'map', icon: MapPin, keyPrefix: 'grid.map' },
 ];

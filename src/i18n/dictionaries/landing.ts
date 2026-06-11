@@ -61,9 +61,9 @@ export const landing: Dict = {
   // ── Core feature 3 — Connectors (left arm) ───────────────────────────
   'feat.3.title': { vi: 'Connectors', en: 'Connectors', zh: '连接器' },
   'feat.3.desc': {
-    vi: 'GitHub, Jira, Trello và Google Drive / Calendar / Gmail — thông tin đăng nhập mã hoá theo từng người, ghi có cổng kiểm soát.',
-    en: 'GitHub, Jira, Trello and Google Drive / Calendar / Gmail — credentials encrypted per user, writes gated.',
-    zh: 'GitHub、Jira、Trello 以及 Google Drive / 日历 / Gmail —— 凭据按用户加密，写操作受控。',
+    vi: 'GitHub, Jira, Trello và Google Drive / Calendar / Gmail — credential mã hoá khi lưu trữ, cách ly theo từng người dùng, ghi có cổng kiểm soát.',
+    en: 'GitHub, Jira, Trello and Google Drive / Calendar / Gmail — credentials encrypted at rest, isolated per user, writes gated.',
+    zh: 'GitHub、Jira、Trello 以及 Google Drive / 日历 / Gmail —— 凭据加密存储、按用户隔离，写操作受控。',
   },
   'feat.3.t1': { vi: 'Dịch vụ', en: 'Services', zh: '服务' },
   'feat.3.t2': { vi: 'Mã hoá', en: 'Crypto', zh: '加密' },
