@@ -49,6 +49,9 @@ describe('MechShowcase viewport gate', () => {
       );
       expect(screen.getByText('Real-time monitoring')).toBeInTheDocument();
       expect(screen.getByText('Dashboard & insights')).toBeInTheDocument();
+      // The scroll-progress readout exists only in the exploded view — its
+      // absence proves the narrow-viewport gate picked the readable grid.
+      expect(screen.queryByText(/— \d+%/)).toBeNull();
     } finally {
       HTMLCanvasElement.prototype.getContext = orig;
     }
