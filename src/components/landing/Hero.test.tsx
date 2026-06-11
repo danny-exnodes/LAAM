@@ -13,8 +13,8 @@ describe('Hero', () => {
   it('renders the headline and both CTAs when logged out', () => {
     render(ui(false));
     expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
-    expect(screen.getByText('Get started')).toBeInTheDocument();
-    expect(screen.getByText('Sign in')).toBeInTheDocument();
+    expect(screen.getByText('Get started')).toHaveAttribute('href', '/register');
+    expect(screen.getByText('Sign in')).toHaveAttribute('href', '/login');
   });
 
   it('routes an authed user straight to the dashboard', () => {
@@ -22,5 +22,6 @@ describe('Hero', () => {
     const cta = screen.getByText('Go to dashboard');
     expect(cta).toHaveAttribute('href', '/dashboard');
     expect(screen.queryByText('Get started')).toBeNull();
+    expect(screen.queryByText('Sign in')).toBeNull();
   });
 });
