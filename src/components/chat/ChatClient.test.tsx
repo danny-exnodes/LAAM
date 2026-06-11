@@ -110,9 +110,10 @@ test("W3 vision: thả 3 ảnh → notice cap + body.images đúng 2 ảnh raw, 
   expect(
     await screen.findByText('Tối đa 2 ảnh mỗi lượt — "c.png" sẽ chỉ dùng văn bản OCR.'),
   ).toBeInTheDocument();
-  // (2) Cả 3 ảnh vẫn đính kèm theo đường OCR-text ("OCRTEXT" = 7 ký tự).
+  // (2) Cả 3 ảnh vẫn đính kèm — chip hiện TÊN FILE (preview card mới). OCR-text
+  // ("OCRTEXT") được prepend vào message, verify ở (3) bên dưới.
   for (const name of ["a.png", "b.png", "c.png"]) {
-    expect(screen.getByText(`${name} · 7 ký tự`)).toBeInTheDocument();
+    expect(screen.getByText(name)).toBeInTheDocument();
   }
 
   // (3) Gửi → đúng 2 ảnh raw; message vẫn prefix OCR-text của CẢ 3 (flow cũ giữ nguyên).

@@ -50,8 +50,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await extractPdf(buf, { visionMax });
-    return Response.json(result);
+    const { tier, thumb } = await extractPdf(buf, { visionMax });
+    // thumb = data URL trang 1 (preview attachment, hiện lại sau reload).
+    return Response.json({ ...tier, thumb });
   } catch (e) {
     // Fail loud: lộ lý do thật (Rule 12) thay vì "lỗi hệ thống" mơ hồ.
     const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);

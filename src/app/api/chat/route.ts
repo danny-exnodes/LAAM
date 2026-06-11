@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages, chatToolCalls } from "@/db/schema";
 import { chatTools, mcpReadAllow } from "@/lib/connectors";
+import { sanitizeAttachments } from "@/lib/chat/attachment-meta";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { runToolRounds, type ChatMessage, type OllamaChatResponse } from "@/lib/agent/orchestrator";
@@ -72,6 +73,7 @@ type ChatBody = {
   presencePenalty?: number;
   system?: string;
   images?: string[]; // W3 vision: raw base64 (không prefix data:), validate qua imagesError
+  attachments?: unknown; // preview metadata để lưu + hiện lại sau reload (sanitizeAttachments)
 };
 
 // W3 vision caps (server, trần cứng): ≤2 ảnh/lượt, mỗi ảnh ≤ ~2.8MB base64
@@ -218,7 +220,15 @@ export async function POST(req: Request) {
   }
   const convId = conversationId;
 
-  await db.insert(chatMessages).values({ conversationId: convId, role: "user", content: message });
+  // Attachment preview metadata (sanitized at the trust boundary) → persist so the
+  // reloaded message shows what was attached. Empty → null (old rows read cleanly).
+  const attachments = sanitizeAttachments(body.attachments);
+  await db.insert(chatMessages).values({
+    conversationId: convId,
+    role: "user",
+    content: message,
+    attachments: attachments.length ? attachments : null,
+  });
 
   const history = await db
     .select({ id: chatMessages.id, role: chatMessages.role, content: chatMessages.content })

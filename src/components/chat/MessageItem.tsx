@@ -18,6 +18,7 @@ import type { ChatMsg } from "./types";
 import { ToolTrace } from "./ToolTrace";
 import { Citations } from "./Citations";
 import { ConfirmCard } from "./ConfirmCard";
+import { AttachmentPreview } from "./AttachmentChips";
 
 // Relative-time line from an epoch-ms timestamp. Local + dependency-free: the
 // shared format.ago() takes a Date and is Vietnamese-only, while createdAt here
@@ -61,6 +62,16 @@ export function MessageItem({
 
   return (
     <div className={`group flex flex-col gap-1 ${isUser ? "items-end" : "items-start"}`}>
+      {/* Attachment previews — PERSISTED, so a reloaded message still shows what was
+          attached (thumbnail + name/size). Rendered above the bubble (the blue bubble
+          would clash with the white cards). */}
+      {isUser && msg.attachments && msg.attachments.length > 0 && (
+        <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5">
+          {msg.attachments.map((a, i) => (
+            <AttachmentPreview key={i} att={a} />
+          ))}
+        </div>
+      )}
       <div
         className={
           isUser

@@ -10,6 +10,7 @@ import { Paperclip, Link2, Send } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { Attachment } from "./types";
+import { AttachmentPreview } from "./AttachmentChips";
 
 // Slash commands. ASCII names survive IME composition; labels are localized.
 // Each command maps to a handler ChatClient owns; picking one runs it and
@@ -133,21 +134,22 @@ export function Composer({
         </div>
       )}
 
-      {/* attachment chips */}
+      {/* attachment chips — thumbnail (ảnh / trang PDF đầu) + name/size; hover vẫn
+          xem excerpt text đã trích. Remove × ở góc. */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
           {attachments.map((a) => (
             <span
               key={a.id}
               title={a.text.slice(0, 280)} /* FEAT-4: hover shows an excerpt of the extracted text */
-              className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-1 text-xs text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
+              className="relative inline-flex"
             >
-              {t("chat.attachChars", { name: a.name, n: a.chars })}
+              <AttachmentPreview att={a} />
               <button
                 type="button"
                 aria-label={t("chat.attachRemoveAria")}
                 onClick={() => onRemoveAttachment(a.id)}
-                className="text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-100"
+                className="absolute -right-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full border border-neutral-300 bg-white text-sm leading-none text-neutral-500 hover:text-neutral-800 dark:border-neutral-600 dark:bg-neutral-900 dark:hover:text-neutral-100"
               >
                 ×
               </button>

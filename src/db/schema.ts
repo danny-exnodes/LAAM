@@ -22,6 +22,7 @@ import {
 } from "drizzle-orm/pg-core";
 import type { AdapterAccountType } from "next-auth/adapters";
 import type { WorkflowGraph } from "@/lib/workflow/types";
+import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
 
 /** Role-based access control. Single internal org → roles, not multi-tenant. */
 export const roleEnum = pgEnum("role", ["owner", "admin", "member", "viewer"]);
@@ -243,6 +244,10 @@ export const chatMessages = pgTable(
     // assistant message; user rows stay 0. Default 0 so old rows read cleanly.
     tokensIn: integer("tokensIn").notNull().default(0),
     tokensOut: integer("tokensOut").notNull().default(0),
+    // Attachment preview metadata so a reloaded message shows WHAT was attached
+    // (not just the prepended text). Capped thumbnail (data URL) + name/kind/size.
+    // NOT the full original file — the extracted text already lives in `content`.
+    attachments: jsonb("attachments").$type<AttachmentMeta[]>(),
     createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   },
   // Read path: load a conversation's messages in order (/api/conversations/[id]).

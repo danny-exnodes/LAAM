@@ -40,7 +40,7 @@ function run(bin: string, args: string[]): Promise<string> {
 export async function extractPdf(
   buf: Buffer,
   opts: { visionMax: number },
-): Promise<PdfTierResult> {
+): Promise<{ tier: PdfTierResult; thumb: string | null }> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "laam-pdf-"));
   const pdfPath = path.join(dir, "in.pdf");
   const hasOcr = await tesseractAvailable();
@@ -94,7 +94,24 @@ export async function extractPdf(
         }
       : undefined;
 
-    return await runPdfTiers({ getText, renderPages, ocr, visionMax: opts.visionMax });
+    // Thumbnail trang 1 (DPI thấp → JPEG nhỏ ~30-60KB) cho preview attachment —
+    // luôn có, kể cả PDF text. Tách khỏi tier-render (full DPI) để nhỏ gọn.
+    const renderThumb = async (): Promise<string | null> => {
+      const prefix = path.join(dir, "thumb");
+      try {
+        await run("pdftoppm", ["-jpeg", "-jpegopt", "quality=70", "-r", "60", "-f", "1", "-l", "1", pdfPath, prefix]);
+      } catch {
+        return null;
+      }
+      const f = (await fs.readdir(dir)).find((x) => x.startsWith("thumb") && x.endsWith(".jpg"));
+      if (!f) return null;
+      const b64 = (await fs.readFile(path.join(dir, f))).toString("base64");
+      return `data:image/jpeg;base64,${b64}`;
+    };
+
+    const tier = await runPdfTiers({ getText, renderPages, ocr, visionMax: opts.visionMax });
+    const thumb = await renderThumb();
+    return { tier, thumb };
   } finally {
     fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }

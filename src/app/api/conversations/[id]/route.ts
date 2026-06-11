@@ -34,6 +34,7 @@ export async function GET(
       content: chatMessages.content,
       tokensIn: chatMessages.tokensIn,
       tokensOut: chatMessages.tokensOut,
+      attachments: chatMessages.attachments,
     })
     .from(chatMessages)
     .where(eq(chatMessages.conversationId, id))

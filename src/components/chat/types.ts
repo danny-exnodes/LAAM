@@ -3,6 +3,7 @@
 // orchestrator compose without drift.
 
 import type { ToolTraceItem } from "./toolLabel";
+import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
 
 export type ChatRole = "user" | "assistant";
 
@@ -16,6 +17,7 @@ export type ChatMsg = {
   toolTrace?: ToolTraceItem[]; // SP-4: trace tool (ephemeral, không reload)
   cites?: string[];            // SP-4: tên tool nguồn (ephemeral)
   pendingWrite?: PendingWrite; // SP-2 write-gate: card xác nhận (ephemeral)
+  attachments?: AttachmentMeta[]; // preview metadata — PERSISTED, hiện lại sau reload
 };
 
 // SP-2 write-gate: một hành động write model đề xuất, chờ user xác nhận. title/
@@ -47,6 +49,11 @@ export type Attachment = {
   // W3 vision: raw base64 (không prefix data:) — chỉ ảnh image/* TRONG cap
   // (xem imageCap.ts); gửi lên /api/chat qua body.images song song OCR-text.
   b64?: string;
+  // Preview/persistence (xem attachment-meta.ts): thumbnail data URL (ảnh / trang
+  // PDF đầu) + mime/size, gửi lên /api/chat để lưu & hiện lại sau reload.
+  preview?: string;
+  mime?: string;
+  size?: number;
 };
 
 export type Conv = {

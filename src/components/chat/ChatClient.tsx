@@ -26,6 +26,7 @@ import {
 } from "./types";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
 import { isPdfFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
+import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
 import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
 import type { ToolTraceItem } from "./toolLabel";
 
@@ -162,6 +163,7 @@ export function ChatClient() {
           createdAt?: string;
           tokensIn?: number;
           tokensOut?: number;
+          attachments?: AttachmentMeta[] | null;
         }) => ({
           id: uid(),
           role: m.role === "user" ? "user" : "assistant",
@@ -169,6 +171,7 @@ export function ChatClient() {
           createdAt: m.createdAt ? new Date(m.createdAt).getTime() : undefined,
           tokensIn: m.tokensIn,
           tokensOut: m.tokensOut,
+          ...(m.attachments?.length ? { attachments: m.attachments } : {}),
         }),
       ),
     );
@@ -358,7 +361,7 @@ export function ChatClient() {
   );
 
   const streamReply = useCallback(
-    (outgoing: string, titleHint?: string, images?: string[]) =>
+    (outgoing: string, titleHint?: string, images?: string[], attachments?: AttachmentMeta[]) =>
       streamFrom({
         conversationId: activeId ?? undefined,
         message: outgoing,
@@ -367,6 +370,8 @@ export function ChatClient() {
         titleHint,
         // W3 vision: kênh ảnh raw (base64) — additive; vắng → body y như cũ.
         ...(images && images.length ? { images } : {}),
+        // Preview metadata để PERSIST (hiện lại sau reload) — additive.
+        ...(attachments && attachments.length ? { attachments } : {}),
         model: settings.model,
         temperature: settings.temperature,
         topP: settings.topP,
@@ -401,16 +406,31 @@ export function ChatClient() {
       .filter((a): a is Attachment & { b64: string } => !!a.b64)
       .slice(0, MAX_RAW_IMAGES)
       .map((a) => a.b64);
+    // Preview metadata: PERSIST + render lại sau reload (thumbnail + name/size),
+    // tách khỏi text đã prepend vào message. Server sanitize lại (trust boundary).
+    const metas: AttachmentMeta[] = attachments.map((a) => ({
+      name: a.name,
+      kind: a.kind,
+      ...(a.mime ? { mime: a.mime } : {}),
+      ...(typeof a.size === "number" ? { size: a.size } : {}),
+      ...(a.preview ? { preview: a.preview } : {}),
+    }));
     setInput("");
     setAttachments([]);
     setImgNotice(null);
     stickRef.current = true; // gửi → luôn cuộn xuống cuối
     setMessages((p) => [
       ...p,
-      { id: uid(), role: "user", content: text, createdAt: Date.now() },
+      {
+        id: uid(),
+        role: "user",
+        content: text,
+        createdAt: Date.now(),
+        ...(metas.length ? { attachments: metas } : {}),
+      },
       { id: uid(), role: "assistant", content: "", createdAt: Date.now() },
     ]);
-    await streamReply(outgoing, text, images);
+    await streamReply(outgoing, text, images, metas);
   }
 
   function send() {
@@ -472,6 +492,9 @@ export function ChatClient() {
           // đường OCR-text (không giữ b64).
           const dataUrl = await readAsDataUrl(file);
           const b64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+          // Preview thumbnail (downscale qua canvas cơ bản — chạy mọi trình duyệt,
+          // KHÔNG phải pdfjs) để hiện lại sau reload mà không lưu cả ảnh gốc.
+          const imgExtra = { preview: await makeThumb(dataUrl), mime: file.type, size: file.size };
           const verdict = rawImageVerdict(rawCount, b64.length);
           if (verdict === "ok") rawCount++;
           else
@@ -481,7 +504,7 @@ export function ChatClient() {
           const keepB64 = verdict === "ok" ? b64 : undefined;
           // OCR known-unavailable → attach with a clear note, skip the doomed call.
           if (!ocrAvailable) {
-            pushAttachment(file.name, "image", `[${t("chat.ocrOffAttach")}]`, keepB64);
+            pushAttachment(file.name, "image", `[${t("chat.ocrOffAttach")}]`, keepB64, imgExtra);
             continue;
           }
           const r = await fetch("/api/ocr", {
@@ -491,7 +514,7 @@ export function ChatClient() {
           });
           const d = await r.json().catch(() => ({}));
           const text = r.ok ? (d.text ?? "") : `[OCR: ${d.error ?? "lỗi"}]`;
-          pushAttachment(file.name, "image", text, keepB64);
+          pushAttachment(file.name, "image", text, keepB64, imgExtra);
         } else if (isPdfFile(file.name, file.type)) {
           // PDF: parse Ở SERVER (poppler + tesseract, xem /api/pdf) — chạy y hệt mọi
           // thiết bị, không phụ thuộc pdfjs/trình duyệt (pdfjs v6 vỡ trên Safari/iOS).
@@ -501,11 +524,17 @@ export function ChatClient() {
           fd.append("visionMax", String(Math.max(0, MAX_RAW_IMAGES - rawCount)));
           const r = await fetch("/api/pdf", { method: "POST", body: fd });
           const res = await r.json().catch(() => ({}) as Record<string, unknown>);
+          // Preview = thumbnail trang 1 do server render (res.thumb); hiện lại sau reload.
+          const pdfExtra = {
+            preview: typeof res.thumb === "string" ? res.thumb : undefined,
+            mime: "application/pdf",
+            size: file.size,
+          };
           if (!r.ok) {
             // Fail loud: server đã kèm lý do thật (Rule 12).
-            pushAttachment(file.name, "file", `[${String(res.error ?? t("chat.errServer"))}]`);
+            pushAttachment(file.name, "file", `[${String(res.error ?? t("chat.errServer"))}]`, undefined, pdfExtra);
           } else if (res.via === "text" || res.via === "ocr") {
-            pushAttachment(file.name, "file", stripNul(String(res.text ?? "")));
+            pushAttachment(file.name, "file", stripNul(String(res.text ?? "")), undefined, pdfExtra);
           } else if (res.via === "vision") {
             // Chốt chặn cuối: đẩy ảnh trang vào kênh vision để model ĐỌC TRỰC TIẾP (cap 2×2MB).
             let pushed = 0;
@@ -513,21 +542,27 @@ export function ChatClient() {
               const b64 = img.slice(img.indexOf(",") + 1);
               const verdict = rawImageVerdict(rawCount, b64.length);
               if (verdict === "ok") {
-                pushAttachment(file.name, "image", `[${t("chat.pdfVisionNote")}]`, b64);
+                pushAttachment(file.name, "image", `[${t("chat.pdfVisionNote")}]`, b64, pdfExtra);
                 rawCount++;
                 pushed++;
               } else {
                 setImgNotice(t(verdict === "count" ? "chat.imgCapCount" : "chat.imgCapSize", { name: file.name }));
               }
             }
-            if (!pushed) pushAttachment(file.name, "file", `[${t("chat.ocrPdfEmpty")}]`);
+            if (!pushed) pushAttachment(file.name, "file", `[${t("chat.ocrPdfEmpty")}]`, undefined, pdfExtra);
           } else {
-            pushAttachment(file.name, "file", `[${t("chat.ingPdfNoText")}]`);
+            pushAttachment(file.name, "file", `[${t("chat.ingPdfNoText")}]`, undefined, pdfExtra);
           }
         } else {
           const raw = await file.text();
           // File nhị phân khác (docx/zip/ảnh sai-mime) cũng ra rác có NUL → báo rõ thay vì gửi.
-          pushAttachment(file.name, "file", looksBinaryText(raw) ? `[${t("chat.fileBinaryUnsupported")}]` : stripNul(raw));
+          pushAttachment(
+            file.name,
+            "file",
+            looksBinaryText(raw) ? `[${t("chat.fileBinaryUnsupported")}]` : stripNul(raw),
+            undefined,
+            { mime: file.type, size: file.size },
+          );
         }
       } catch (err) {
         // Fail loud (AGENTS.md Rule 12): surface the real reason instead of swallowing it,
@@ -553,10 +588,16 @@ export function ChatClient() {
       pushAttachment(url, "url", "[không tải được URL]");
     }
   }
-  function pushAttachment(name: string, kind: Attachment["kind"], text: string, b64?: string) {
+  function pushAttachment(
+    name: string,
+    kind: Attachment["kind"],
+    text: string,
+    b64?: string,
+    extra?: { preview?: string; mime?: string; size?: number },
+  ) {
     setAttachments((a) => [
       ...a,
-      { id: uid(), name, kind, chars: text.length, text, ...(b64 ? { b64 } : {}) },
+      { id: uid(), name, kind, chars: text.length, text, ...(b64 ? { b64 } : {}), ...extra },
     ]);
   }
   function onRemoveAttachment(id: string) {
@@ -788,4 +829,34 @@ function readAsDataUrl(file: File): Promise<string> {
     fr.onerror = () => reject(fr.error);
     fr.readAsDataURL(file);
   });
+}
+
+// Downscale an image data URL to a small JPEG thumbnail (attachment preview).
+// Basic <canvas> — supported on every browser incl. iOS Safari (NOT pdfjs).
+// Returns undefined on failure → attachment just shows a file card, no crash.
+async function makeThumb(dataUrl: string, maxPx = 256): Promise<string | undefined> {
+  try {
+    // No canvas (jsdom / unsupported env) → skip preview, never block the flow.
+    if (!document.createElement("canvas").getContext("2d")) return undefined;
+    const img = await new Promise<HTMLImageElement | null>((resolve) => {
+      const im = new Image();
+      im.onload = () => resolve(im);
+      im.onerror = () => resolve(null);
+      im.src = dataUrl;
+      setTimeout(() => resolve(null), 4000); // safety net: never hang on a stuck decode
+    });
+    if (!img) return undefined;
+    const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return undefined;
+    ctx.drawImage(img, 0, 0, w, h);
+    return canvas.toDataURL("image/jpeg", 0.7);
+  } catch {
+    return undefined;
+  }
 }
