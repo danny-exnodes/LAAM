@@ -116,7 +116,7 @@ export function MechShowcase() {
       </div>
       <div ref={sectionRef} className={styles.explode}>
         <div className={styles.sticky}>
-          <div className={styles.stageWrap}>
+          <div className={styles.stageWrap} aria-hidden="true">
             {active && <Mech3D progressRef={progressRef} pointerRef={pointerRef} active={active} />}
           </div>
           {CORE_FEATURES.map((f) => {

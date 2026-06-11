@@ -6,7 +6,7 @@
   --accent2: #7fe0ff;
   --text: #e8f1fb;
   --muted: rgba(232, 241, 251, 0.64);
-  --faint: rgba(232, 241, 251, 0.42);
+  --faint: rgba(232, 241, 251, 0.58); /* ≥4.5:1 trên nền tối (AA) — đã đo 0.42 chỉ đạt 3.7:1 */
   --edge: rgba(120, 180, 230, 0.2);
   --card: rgba(8, 26, 46, 0.82);
   --card-edge: rgba(120, 180, 230, 0.2);
@@ -176,7 +176,7 @@
 .demoNote { margin: -4px 4px 8px 10px; font-size: 9px; letter-spacing: 0.14em; color: var(--muted); font-family: monospace; }
 .telem { display: flex; gap: 7px; margin: 0 4px 10px 10px; }
 .stat { flex: 1; border: 1px solid rgba(120, 180, 230, 0.16); border-radius: 8px; padding: 7px 8px; background: rgba(120, 180, 230, 0.04); }
-.statK { font-size: 9px; letter-spacing: 0.1em; color: var(--faint); text-transform: uppercase; font-family: monospace; }
+.statK { font-size: 10px; letter-spacing: 0.1em; color: var(--faint); text-transform: uppercase; font-family: monospace; }
 .statV { font-size: 1rem; font-weight: 700; color: #dff0ff; margin-top: 2px; }
 .desc { font-size: 0.85rem; color: var(--muted); line-height: 1.55; margin: 0 6px 10px 10px; font-weight: 300; }
 .foot { display: flex; align-items: center; gap: 7px; margin: 0 4px 0 10px; flex-wrap: wrap; }
