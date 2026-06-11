@@ -3,11 +3,14 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { workflows } from "@/db/schema";
 import { assertRunnable } from "@/lib/workflow/validate";
+import { requireMutator } from "@/lib/auth/rbac";
 import type { WorkflowGraph } from "@/lib/workflow/types";
 
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  const gate = requireMutator(session); // viewer is read-only
+  if (gate instanceof Response) return gate;
   const body = ((await req.json().catch(() => null)) ?? {}) as { name?: string; graph?: WorkflowGraph };
   if (!body.name || !body.graph) return new Response(JSON.stringify({ error: "name + graph bắt buộc" }), { status: 400 });
   try {

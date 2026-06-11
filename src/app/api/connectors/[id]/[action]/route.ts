@@ -18,6 +18,7 @@ import {
   parseIdTokenEmail,
 } from "@/lib/connectors/google-oauth";
 import { encryptJson, decryptJson } from "@/lib/connectors/crypto";
+import { requireMutator } from "@/lib/auth/rbac";
 
 const OAUTH_COOKIE = "laam_oauth";
 const OAUTH_TTL_MS = 600_000; // 10 minutes
@@ -42,6 +43,9 @@ export async function POST(
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  // viewer is read-only — connect/disconnect/test all touch live credentials.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const userId = session.user.id;
   const { id, action } = await params;
 
@@ -70,6 +74,12 @@ export async function GET(
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.redirect(appUrl("/login", req.url));
+  }
+  // viewer is read-only — the OAuth flow saves live Google credentials, so it
+  // must be gated too (the POST gate alone is bypassable via this GET). Redirect
+  // style (this handler returns redirects, not JSON) so a viewer lands on a page.
+  if (session.user.role === "viewer") {
+    return NextResponse.redirect(appUrl("/connectors?error=forbidden", req.url));
   }
   const userId = session.user.id;
   const { id, action } = await params;

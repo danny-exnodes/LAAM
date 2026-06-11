@@ -36,13 +36,20 @@ describe("POST /api/workflows/templates/[id]/instantiate", () => {
   });
 
   test("404 khi template id không tồn tại", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const res = await POST(new Request("http://x"), { params: Promise.resolve({ id: "nonexistent-id" }) });
     expect(res.status).toBe(404);
   });
 
+  test("viewer → 403, no workflow row inserted", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const res = await POST(new Request("http://x"), { params: Promise.resolve({ id: "digest-overnight-agents" }) });
+    expect(res.status).toBe(403);
+    expect(insertedRows).toHaveLength(0);
+  });
+
   test("tạo workflow từ template với đúng fields", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const res = await POST(new Request("http://x"), { params: Promise.resolve({ id: "digest-overnight-agents" }) });
     expect(res.status).toBe(201);
     const body = await res.json() as { id: string };
@@ -69,7 +76,7 @@ describe("POST /api/workflows/templates/[id]/instantiate", () => {
   });
 
   test("graph được deep-copy (structuredClone) — mutating returned graph không ảnh hưởng template", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     await POST(new Request("http://x"), { params: Promise.resolve({ id: "flag-stuck-agents" }) });
     const row = insertedRows[0] as { graph: { nodes: { id: string }[] } };
     // Mutate the inserted graph — should not throw or affect the static TEMPLATES
@@ -81,7 +88,7 @@ describe("POST /api/workflows/templates/[id]/instantiate", () => {
   });
 
   test("userId pada row = session user (ownership correct)", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "user-abc" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "user-abc", role: "member" } } as never);
     const res = await POST(new Request("http://x"), { params: Promise.resolve({ id: "summarize-demo-tasks" }) });
     expect(res.status).toBe(201);
     const row = insertedRows[0] as { userId: string };

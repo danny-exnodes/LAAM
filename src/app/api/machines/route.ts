@@ -10,6 +10,7 @@ import {
   hashToken,
   machinesWithActiveToken,
 } from "@/lib/access-token";
+import { requireRole } from "@/lib/auth/rbac";
 
 // GET /api/machines — list machines (no token hashes). Any logged-in user.
 // `hasToken` = a legacy machines.tokenHash OR a non-revoked collector
@@ -49,13 +50,10 @@ const createSchema = z.object({ name: z.string().min(1).max(120) });
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-  const role = session.user.role;
-  if (role !== "owner" && role !== "admin") {
-    return NextResponse.json({ error: "Cần quyền owner/admin" }, { status: 403 });
-  }
+  const gate = requireRole(session, ["owner", "admin"]);
+  if (gate instanceof Response) return gate;
+  // requireRole returned {ok:true} ⇒ a session with a user is guaranteed.
+  const userId = session!.user.id;
 
   const parsed = createSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
@@ -71,12 +69,12 @@ export async function POST(req: Request) {
     await tx.insert(machines).values({
       id,
       name: parsed.data.name,
-      ownerUserId: session.user.id,
+      ownerUserId: userId,
     });
     await tx.insert(accessTokens).values({
       kind: "collector",
       machineId: id,
-      userId: session.user.id, // provenance/audit, NOT an isolation key
+      userId, // provenance/audit, NOT an isolation key
       name: parsed.data.name,
       prefix,
       last4,

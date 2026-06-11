@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { listServers, addServer, removeServer } from "@/lib/connectors/mcp/store";
 import { discoverForUser, invalidateUser } from "@/lib/connectors/mcp/discovery";
+import { requireMutator } from "@/lib/auth/rbac";
 
 // Per-user MCP server management for the Connectors page. The token is NEVER echoed
 // back to the browser (only `hasToken`). Tool lists come from a best-effort discovery
@@ -40,6 +41,10 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // viewer is read-only — adding an MCP server stores an auth token and arms tool
+  // discovery (a write surface). Gate before persisting.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const userId = session.user.id;
 
   const body = (await req.json().catch(() => ({}))) as {
@@ -64,6 +69,9 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // viewer is read-only — removing an MCP server mutates the user's server set. Gate first.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const userId = session.user.id;
 
   const slug = new URL(req.url).searchParams.get("slug");

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { db } from "@/db";
 import { workflows } from "@/db/schema";
 import { assertRunnable } from "@/lib/workflow/validate";
+import { requireMutator } from "@/lib/auth/rbac";
 import type { WorkflowGraph } from "@/lib/workflow/types";
 
 export async function GET(
@@ -32,6 +33,8 @@ export async function PATCH(
   const session = await auth();
   if (!session?.user?.id)
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  const gate = requireMutator(session); // viewer is read-only
+  if (gate instanceof Response) return gate;
 
   const { id } = await params;
 
@@ -75,6 +78,8 @@ export async function DELETE(
   const session = await auth();
   if (!session?.user?.id)
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+  const gate = requireMutator(session); // viewer is read-only
+  if (gate instanceof Response) return gate;
 
   const { id } = await params;
 

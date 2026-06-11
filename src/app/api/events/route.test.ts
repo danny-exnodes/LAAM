@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 // src/app/api/stats/route.test.ts). The query chain here is
 // select().from().leftJoin().orderBy() so the leftJoin contributes projectName.
 const h = vi.hoisted(() => ({
-  authResult: null as { user?: { id: string } } | null,
+  authResult: null as { user?: { id: string; role?: string } } | null,
   rows: [] as unknown[],
   selectCalls: 0,
   busCbs: [] as Array<(evt: { type: string }) => void>,
@@ -39,7 +39,7 @@ vi.mock("@/lib/events-bus", () => ({
   }),
 }));
 
-import { GET, clientCount, mapRowToLiveSession } from "./route";
+import { GET, clientCount, mapRowToLiveSession, visibleForClient } from "./route";
 
 afterEach(() => {
   h.authResult = null;
@@ -67,6 +67,7 @@ describe("mapRowToLiveSession", () => {
       projectName: "alpha",
       machineId: "local:devbox",
       source: "claude",
+      userId: null,
       model: "claude",
       gitBranch: "main",
       status: "running",
@@ -98,6 +99,7 @@ describe("mapRowToLiveSession", () => {
       projectName: null,
       machineId: null,
       source: "local",
+      userId: null,
       model: null,
       gitBranch: null,
       status: null,
@@ -120,6 +122,79 @@ describe("mapRowToLiveSession", () => {
   });
 });
 
+describe("visibleForClient — per-principal SSE isolation (S2)", () => {
+  // Snapshot rows carry `userId` (the access-token owner for api|mcp). The wire
+  // leak this fixes: without filtering, user B's SSE stream received user A's
+  // mcp session — their tool calls, timing, and cost. Only the principal columns
+  // matter to the filter, so the rest of SnapshotRow is stubbed minimally.
+  const mkRow = (id: string, source: string, userId: string | null) =>
+    ({
+      id,
+      projectId: null,
+      projectName: null,
+      machineId: null,
+      source,
+      userId,
+      model: null,
+      gitBranch: null,
+      status: null,
+      startedAt: null,
+      lastActivity: null,
+      messageCount: 0,
+      toolCount: 0,
+      subAgentCount: 0,
+      subAgents: null,
+      costUsd: 0,
+      latestActivity: null,
+      tokensIn: 0,
+      tokensOut: 0,
+    }) as Parameters<typeof visibleForClient>[0][number];
+  const mkClient = (userId: string | null) => ({ send: () => {}, userId, role: null });
+
+  const rows = [
+    mkRow("local-1", "local", null),
+    mkRow("claude-1", "claude", null),
+    mkRow("api-A", "api", "userA"),
+    mkRow("mcp-B", "mcp", "userB"),
+  ];
+
+  test("local|claude stay org-shared (every client keeps them)", () => {
+    // HARD CONSTRAINT: narrowing local/claude to per-user would break the
+    // team-monitoring value-prop. This test fails if that regresses.
+    for (const uid of ["userA", "userB", null]) {
+      const ids = visibleForClient(rows, mkClient(uid)).map((r) => r.id);
+      expect(ids).toContain("local-1");
+      expect(ids).toContain("claude-1");
+    }
+  });
+
+  test("api|mcp visible ONLY to the owning principal", () => {
+    const a = visibleForClient(rows, mkClient("userA")).map((r) => r.id);
+    expect(a).toContain("api-A"); // userA owns the api session
+    expect(a).not.toContain("mcp-B"); // …but not userB's mcp session
+
+    const b = visibleForClient(rows, mkClient("userB")).map((r) => r.id);
+    expect(b).toContain("mcp-B");
+    expect(b).not.toContain("api-A");
+  });
+
+  test("owner/admin do NOT see others' api|mcp (strict per-principal, no role bypass)", () => {
+    // The filter ignores role on purpose — an admin's events feed must not
+    // surface a colleague's MCP activity. If someone adds a role bypass, this
+    // fails.
+    const admin = visibleForClient(rows, { send: () => {}, userId: "admin", role: "admin" });
+    const ids = admin.map((r) => r.id);
+    expect(ids).not.toContain("api-A");
+    expect(ids).not.toContain("mcp-B");
+    expect(ids).toContain("local-1"); // org-shared still visible
+  });
+
+  test("a null-userId client never receives any api|mcp row", () => {
+    const ids = visibleForClient(rows, mkClient(null)).map((r) => r.id);
+    expect(ids).toEqual(["local-1", "claude-1"]);
+  });
+});
+
 describe("GET /api/events — shared snapshot broadcast (perf M2)", () => {
   const row = {
     id: "s1",
@@ -127,6 +202,7 @@ describe("GET /api/events — shared snapshot broadcast (perf M2)", () => {
     projectName: null,
     machineId: null,
     source: "claude",
+    userId: null,
     model: "claude",
     gitBranch: null,
     status: "running",
@@ -202,6 +278,69 @@ describe("GET /api/events — shared snapshot broadcast (perf M2)", () => {
     expect(chunk).toContain('"runId":"wr1"');
 
     await r.cancel();
+  });
+
+  test("snapshot fan-out filters api|mcp per-principal; local|claude stay org-shared (S2)", async () => {
+    // Two clients of DIFFERENT users connect. One bus publish → ONE DB query
+    // (kept shared) but the resulting snapshot is filtered PER client: both see
+    // local+claude; only userA sees the api session; only userB the mcp session.
+    const mk = (id: string, source: string, userId: string | null) => ({
+      ...row,
+      id,
+      source,
+      userId,
+    });
+    h.rows = [
+      mk("local-1", "local", null),
+      mk("claude-1", "claude", null),
+      mk("api-A", "api", "userA"),
+      mk("mcp-B", "mcp", "userB"),
+    ];
+
+    h.authResult = { user: { id: "userA" } };
+    const resA = await GET();
+    h.authResult = { user: { id: "userB" } };
+    const resB = await GET();
+    const rA = resA.body!.getReader();
+    const rB = resB.body!.getReader();
+
+    // Drain (and assert) the per-connection initial snapshots first.
+    const initA = dec.decode((await rA.read()).value);
+    const initB = dec.decode((await rB.read()).value);
+    expect(initA).toContain('"id":"api-A"');
+    expect(initA).not.toContain('"id":"mcp-B"');
+    expect(initB).toContain('"id":"mcp-B"');
+    expect(initB).not.toContain('"id":"api-A"');
+
+    expect(clientCount()).toBe(2);
+    expect(h.busCbs).toHaveLength(1); // single shared subscription
+
+    const before = h.selectCalls;
+    h.busCbs[0]({ type: "sync" });
+    const [cA, cB] = await Promise.all([rA.read(), rB.read()]);
+    expect(h.selectCalls).toBe(before + 1); // ONE shared query for both clients
+
+    const tA = dec.decode(cA.value);
+    const tB = dec.decode(cB.value);
+
+    // Org-shared rows reach EVERYONE (locked value-prop — must not narrow).
+    expect(tA).toContain('"id":"local-1"');
+    expect(tA).toContain('"id":"claude-1"');
+    expect(tB).toContain('"id":"local-1"');
+    expect(tB).toContain('"id":"claude-1"');
+
+    // api|mcp rows reach ONLY their owner.
+    expect(tA).toContain('"id":"api-A"');
+    expect(tA).not.toContain('"id":"mcp-B"');
+    expect(tB).toContain('"id":"mcp-B"');
+    expect(tB).not.toContain('"id":"api-A"');
+
+    // userId is provenance only — it must NEVER reach the wire.
+    expect(tA).not.toContain('"userId"');
+    expect(tB).not.toContain('"userId"');
+
+    await rA.cancel();
+    await rB.cancel();
   });
 
   test("a closed client leaves the registry; the last close releases the bus", async () => {

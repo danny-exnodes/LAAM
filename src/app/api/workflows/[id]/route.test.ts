@@ -46,7 +46,7 @@ vi.mock("@/db/schema", () => ({
   workflows: Object.assign({}, { [Symbol.for("drizzle:Name")]: "workflow" }),
 }));
 
-import { GET, PATCH } from "./route";
+import { GET, PATCH, DELETE } from "./route";
 
 const baseWf = {
   id: "wf1",
@@ -84,7 +84,7 @@ describe("GET /api/workflows/[id]", () => {
   });
 
   test("200 trả về workflow của mình", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb({ ...baseWf });
     _db = db as never;
     const res = await GET(new Request("http://x"), {
@@ -97,7 +97,7 @@ describe("GET /api/workflows/[id]", () => {
   });
 
   test("404 khi workflow không tồn tại", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb(null);
     _db = db as never;
     const res = await GET(new Request("http://x"), {
@@ -107,7 +107,7 @@ describe("GET /api/workflows/[id]", () => {
   });
 
   test("404 khi workflow thuộc user khác", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb({ ...baseWf, userId: "u2" });
     _db = db as never;
     const res = await GET(new Request("http://x"), {
@@ -135,7 +135,7 @@ describe("PATCH /api/workflows/[id]", () => {
   });
 
   test("404 khi workflow của user khác", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb({ ...baseWf, userId: "u2" });
     _db = db as never;
     const res = await PATCH(
@@ -149,7 +149,7 @@ describe("PATCH /api/workflows/[id]", () => {
   });
 
   test("cập nhật name thành công", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db, updatedSets } = fakeDb({ ...baseWf });
     _db = db as never;
     const res = await PATCH(
@@ -166,7 +166,7 @@ describe("PATCH /api/workflows/[id]", () => {
   });
 
   test("PATCH với graph hợp lệ — gọi assertRunnable + cập nhật", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     mockAssertRunnable.mockReturnValue(undefined); // does not throw
     const { db, updatedSets } = fakeDb({ ...baseWf });
     _db = db as never;
@@ -184,7 +184,7 @@ describe("PATCH /api/workflows/[id]", () => {
   });
 
   test("PATCH graph không hợp lệ → 400", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     mockAssertRunnable.mockImplementation(() => {
       throw new Error("validate: trùng node id");
     });
@@ -203,7 +203,7 @@ describe("PATCH /api/workflows/[id]", () => {
   });
 
   test("PATCH không có graph — assertRunnable không được gọi", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "u1" } } as never);
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
     const { db } = fakeDb({ ...baseWf });
     _db = db as never;
     await PATCH(
@@ -214,5 +214,36 @@ describe("PATCH /api/workflows/[id]", () => {
       { params: Promise.resolve({ id: "wf1" }) },
     );
     expect(mockAssertRunnable).not.toHaveBeenCalled();
+  });
+});
+
+// ─── RBAC: viewer is read-only ────────────────────────────────────────────────
+
+describe("viewer is blocked from mutating a workflow", () => {
+  test("PATCH viewer → 403, validate/update never run", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    const { db, updatedSets } = fakeDb({ ...baseWf });
+    _db = db as never;
+    const res = await PATCH(
+      new Request("http://x", { method: "PATCH", body: JSON.stringify({ name: "Hack" }) }),
+      { params: Promise.resolve({ id: "wf1" }) },
+    );
+    expect(res.status).toBe(403);
+    expect(mockAssertRunnable).not.toHaveBeenCalled();
+    expect(updatedSets).toHaveLength(0); // no side effect
+  });
+
+  test("DELETE viewer → 403, workflow never deleted", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
+    let deleted = false;
+    _db = {
+      select: () => ({ from: () => ({ where: () => ({ limit: async () => [baseWf] }) }) }),
+      delete: () => ({ where: async () => { deleted = true; } }),
+    } as never;
+    const res = await DELETE(new Request("http://x", { method: "DELETE" }), {
+      params: Promise.resolve({ id: "wf1" }),
+    });
+    expect(res.status).toBe(403);
+    expect(deleted).toBe(false); // no side effect — the gate fires before db.delete
   });
 });

@@ -28,6 +28,7 @@ import {
   type ProactiveState,
 } from "@/lib/agent/proactive";
 import { loadSessionRows } from "@/lib/agent/tools/laam/_load";
+import { requireMutator } from "@/lib/auth/rbac";
 
 const OLLAMA_URL = (process.env.OLLAMA_URL ?? "http://localhost:11434").replace(/\/$/, "");
 const MODEL = process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
@@ -199,6 +200,11 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
   }
+  // viewer is read-only: chat creates conversations + invokes (gated) tools, and
+  // the confirm branch executes a sealed write. Gate ONCE at entry — before the
+  // confirm-body dispatch — so both the message and confirm paths are covered.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
   const userId = session.user.id;
 
   const rawBody = ((await req.json().catch(() => null)) ?? {}) as Record<string, unknown>;
