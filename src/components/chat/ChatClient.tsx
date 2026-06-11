@@ -26,7 +26,6 @@ import {
 } from "./types";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
 import { isPdfFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
-import { ingestPdfFile } from "@/lib/chat/pdf";
 import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
 import type { ToolTraceItem } from "./toolLabel";
 
@@ -494,26 +493,23 @@ export function ChatClient() {
           const text = r.ok ? (d.text ?? "") : `[OCR: ${d.error ?? "lỗi"}]`;
           pushAttachment(file.name, "image", text, keepB64);
         } else if (isPdfFile(file.name, file.type)) {
-          // PDF: chuỗi 3 tầng — text-layer → OCR scan → vision (qwen3-vl đọc ảnh trang).
-          // Xem lib/chat/pdf.ts. ocr=undefined khi tesseract off → bỏ qua thẳng tới vision.
-          const ocrFn = ocrAvailable
-            ? async (img: string) => {
-                const r = await fetch("/api/ocr", {
-                  method: "POST",
-                  headers: { "content-type": "application/json" },
-                  body: JSON.stringify({ image: img }),
-                });
-                const d = await r.json().catch(() => ({}));
-                return r.ok ? String(d.text ?? "") : "";
-              }
-            : undefined;
-          const res = await ingestPdfFile(file, { ocr: ocrFn, visionMax: Math.max(0, MAX_RAW_IMAGES - rawCount) });
-          if (res.via === "text" || res.via === "ocr") {
-            pushAttachment(file.name, "file", stripNul(res.text));
+          // PDF: parse Ở SERVER (poppler + tesseract, xem /api/pdf) — chạy y hệt mọi
+          // thiết bị, không phụ thuộc pdfjs/trình duyệt (pdfjs v6 vỡ trên Safari/iOS).
+          // Server trả PdfTierResult; ta xử lý text|ocr|vision như cũ.
+          const fd = new FormData();
+          fd.append("file", file);
+          fd.append("visionMax", String(Math.max(0, MAX_RAW_IMAGES - rawCount)));
+          const r = await fetch("/api/pdf", { method: "POST", body: fd });
+          const res = await r.json().catch(() => ({}) as Record<string, unknown>);
+          if (!r.ok) {
+            // Fail loud: server đã kèm lý do thật (Rule 12).
+            pushAttachment(file.name, "file", `[${String(res.error ?? t("chat.errServer"))}]`);
+          } else if (res.via === "text" || res.via === "ocr") {
+            pushAttachment(file.name, "file", stripNul(String(res.text ?? "")));
           } else if (res.via === "vision") {
             // Chốt chặn cuối: đẩy ảnh trang vào kênh vision để model ĐỌC TRỰC TIẾP (cap 2×2MB).
             let pushed = 0;
-            for (const img of res.images) {
+            for (const img of (res.images as string[]) ?? []) {
               const b64 = img.slice(img.indexOf(",") + 1);
               const verdict = rawImageVerdict(rawCount, b64.length);
               if (verdict === "ok") {
@@ -535,8 +531,8 @@ export function ChatClient() {
         }
       } catch (err) {
         // Fail loud (AGENTS.md Rule 12): surface the real reason instead of swallowing it,
-        // so PDF/canvas/worker failures are diagnosable from the model reply + browser console
-        // (e.g. pdfjs "PasswordException" on encrypted scans, render/canvas errors).
+        // so attach failures (network, OCR, file read) are diagnosable from the model
+        // reply + browser console instead of an opaque "không đọc được tệp".
         const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
         console.error("[chat] attach failed:", file.name, err);
         pushAttachment(file.name, "file", `[không đọc được tệp: ${reason}]`);

@@ -27,11 +27,14 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
-# --- OCR: system tesseract + language data for /api/ocr (execFile "tesseract") ---
-# Needs root, so it runs BEFORE `USER node`. eng is NOT bundled with Alpine's
-# tesseract-ocr package, and route.ts defaults to `-l vie+eng+chi_sim`, so eng
+# --- PDF + OCR: poppler-utils (pdftotext/pdftoppm) + system tesseract + language
+# data. /api/pdf parses PDFs server-side (poppler) so it works on every client
+# device (no browser pdfjs); /api/ocr + the PDF scan tier use tesseract. Needs
+# root, so it runs BEFORE `USER node`. eng is NOT bundled with Alpine's
+# tesseract-ocr package, and the routes default to `-l vie+eng+chi_sim`, so eng
 # must be listed explicitly or every default OCR call fails.
 RUN apk add --no-cache \
+      poppler-utils \
       tesseract-ocr \
       tesseract-ocr-data-eng \
       tesseract-ocr-data-vie \

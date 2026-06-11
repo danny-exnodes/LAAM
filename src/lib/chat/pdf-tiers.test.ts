@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { enoughText, runPdfTiers } from "./pdf";
+import { enoughText, runPdfTiers } from "./pdf-tiers";
 
 const LONG = "Nội dung văn bản đủ dài để coi là PDF text thật, vượt ngưỡng tối thiểu.";
 
@@ -16,7 +16,7 @@ describe("enoughText", () => {
 
 describe("runPdfTiers — chuỗi 3 tầng", () => {
   const render = (n: number) =>
-    vi.fn(async (max: number) => Array.from({ length: Math.min(n, max) }, (_, i) => "data:image/jpeg;base64,PAGE" + i));
+    vi.fn(async (max: number) => Array.from({ length: Math.min(n, max) }, (_, i) => "data:image/png;base64,PAGE" + i));
 
   test("Tier 1: text-layer đủ chữ → via=text, KHÔNG render/OCR", async () => {
     const renderPages = render(5);
