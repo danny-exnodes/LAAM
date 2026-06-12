@@ -1,27 +1,56 @@
-// Jira Cloud connector — auth with email + API token over HTTP Basic.
-// Create an API token at id.atlassian.com/manage-profile/security/api-tokens.
+// Jira Cloud connector — dual-mode auth (spec 2026-06-12 §12.10):
+//  - OAuth (Atlassian 3LO): Bearer access_token, gọi qua
+//    https://api.atlassian.com/ex/jira/{cloudId} (cloud_id/site_url do enrich() ghi).
+//  - Nhập tay (fallback): email + API token qua HTTP Basic, gọi thẳng https://{site}.
+//    Tạo API token tại id.atlassian.com/manage-profile/security/api-tokens.
 import type { Connector } from "./types";
+import { ATLASSIAN_CREDS } from "./oauth/atlassian";
+
+// Mode-detect: có access_token → Bearer + api.atlassian.com/ex/jira/{cloudId};
+// ngược lại → Basic + https://{site} (hành vi cũ, giữ nguyên lỗi "thiếu site").
+function apiBase(creds: Record<string, string>): { base: string; auth: string } {
+  if (creds && creds.access_token) {
+    const cloudId = creds[ATLASSIAN_CREDS.cloudId];
+    if (!cloudId) throw new Error("thiếu cloud_id — hãy kết nối lại Jira");
+    return {
+      base: "https://api.atlassian.com/ex/jira/" + cloudId,
+      auth: "Bearer " + creds.access_token,
+    };
+  }
+  const site = String((creds && creds.site) || "")
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
+  if (!site) throw new Error("thiếu site (vd: yourcompany.atlassian.net)");
+  const basic = Buffer.from(((creds && creds.email) || "") + ":" + ((creds && creds.api_token) || "")).toString("base64");
+  return { base: "https://" + site, auth: "Basic " + basic };
+}
+
+// Link /browse cho người dùng: ưu tiên site_url (OAuth enrich), fallback site nhập tay.
+function browseBase(creds: Record<string, string>): string {
+  const siteUrl = String((creds && creds[ATLASSIAN_CREDS.siteUrl]) || "").replace(/\/+$/, "");
+  if (siteUrl) return siteUrl;
+  const site = String((creds && creds.site) || "")
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
+  return "https://" + site;
+}
 
 async function jira(
   pathname: string,
   creds: Record<string, string>,
   init: RequestInit = {},
 ): Promise<unknown> {
-  const site = String((creds && creds.site) || "")
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "");
-  if (!site) throw new Error("thiếu site (vd: yourcompany.atlassian.net)");
-  const basic = Buffer.from(((creds && creds.email) || "") + ":" + ((creds && creds.api_token) || "")).toString("base64");
+  const { base, auth } = apiBase(creds);
   const headers = {
     Accept: "application/json",
-    Authorization: "Basic " + basic,
+    Authorization: auth,
     "User-Agent": "LAAM-connector/0.1",
     ...((init.headers as Record<string, string>) || {}),
   };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 12000);
   try {
-    const r = await fetch("https://" + site + pathname, { ...init, headers, signal: ctrl.signal });
+    const r = await fetch(base + pathname, { ...init, headers, signal: ctrl.signal });
     const body = (await r.json().catch(() => null)) as Record<string, unknown> | null;
     if (!r.ok) {
       const errs = body && (body.errorMessages as string[] | undefined);
@@ -38,7 +67,7 @@ async function jira(
   }
 }
 
-function issue(it: Record<string, unknown>, site: string) {
+function issue(it: Record<string, unknown>, base: string) {
   const f = (it && (it.fields as Record<string, unknown>)) || {};
   const status = f.status as { name?: string } | undefined;
   const assignee = f.assignee as { displayName?: string; emailAddress?: string } | undefined;
@@ -47,7 +76,7 @@ function issue(it: Record<string, unknown>, site: string) {
     summary: (f.summary as string) || "",
     status: (status && status.name) || "",
     assignee: (assignee && (assignee.displayName || assignee.emailAddress)) || null,
-    url: "https://" + site + "/browse/" + it.key,
+    url: base + "/browse/" + it.key,
   };
 }
 
@@ -55,20 +84,25 @@ function adf(text: string) {
   return { type: "doc", version: 1, content: [{ type: "paragraph", content: [{ type: "text", text }] }] };
 }
 
+// JQL mặc định khi model không truyền gì: /search/jql từ chối JQL unbounded (400),
+// nên cần ít nhất một điều kiện lọc — cửa sổ thời gian là lựa chọn tự nhiên.
+const DEFAULT_JQL = "updated >= -30d ORDER BY updated DESC";
+
+// GET /rest/api/3/search/jql — endpoint thay thế cho /rest/api/3/search (410 Gone,
+// CHANGE-2046). `fields` BẮT BUỘC (mặc định mới chỉ trả id); response không còn
+// total/startAt mà là { issues, isLast, nextPageToken? }. Lỗi 400 (JQL sai/unbounded)
+// được ném nguyên văn từ Atlassian — KHÔNG viết lại JQL của người dùng.
 async function searchIssues(jql: string, creds: Record<string, string>) {
-  const site = String((creds && creds.site) || "")
-    .replace(/^https?:\/\//, "")
-    .replace(/\/+$/, "");
   const params =
     "jql=" + encodeURIComponent(jql) + "&maxResults=15&fields=" + encodeURIComponent("summary,status,assignee");
-  const data = (await jira("/rest/api/3/search?" + params, creds)) as {
+  const data = (await jira("/rest/api/3/search/jql?" + params, creds)) as {
     issues?: Record<string, unknown>[];
-    total?: number;
   };
+  const base = browseBase(creds);
   const issues = (data && Array.isArray(data.issues) ? data.issues : [])
     .slice(0, 15)
-    .map((it) => issue(it, site));
-  return { total: (data && data.total) || issues.length, issues };
+    .map((it) => issue(it, base));
+  return { count: issues.length, issues };
 }
 
 const jiraConnector: Connector = {
@@ -77,8 +111,12 @@ const jiraConnector: Connector = {
   icon: "list",
   blurb: "Issues, tasks, sprints trên Jira Cloud",
   auth: {
-    type: "token",
+    type: "oauth",
+    provider: "atlassian",
+    scopes: ["read:jira-work", "write:jira-work", "read:jira-user", "read:me", "offline_access"],
     help: "Tạo API token tại id.atlassian.com/manage-profile/security/api-tokens. Nhập \"site\" là tên miền Jira của bạn (vd: yourcompany.atlassian.net), email đăng nhập Atlassian, và dán API token. LAAM lưu phía máy chủ, không gửi đi đâu khác.",
+    setup:
+      "Tạo OAuth 2.0 integration tại developer.atlassian.com/console/myapps, thêm scopes Jira API (read:jira-work, write:jira-work, read:jira-user) + User Identity API (read:me), đặt Callback URL {OAUTH_PUBLIC_BASE_URL}/api/connectors/atlassian/callback, bật Distribution → Sharing, rồi đặt env ATLASSIAN_OAUTH_CLIENT_ID / ATLASSIAN_OAUTH_CLIENT_SECRET. OAuth xác minh trên prod base — môi trường dev dùng nhập tay (site/email/API token).",
     fields: [
       { key: "site", label: "Site (tên miền Jira)", placeholder: "yourcompany.atlassian.net" },
       { key: "email", label: "Email Atlassian", placeholder: "you@company.com" },
@@ -92,10 +130,10 @@ const jiraConnector: Connector = {
       function: {
         name: "jira_search_issues",
         description:
-          'Tìm issue trên Jira theo câu truy vấn JQL (vd: project = ABC AND status = "In Progress"). Trả về key, tiêu đề, trạng thái, người được giao và link.',
+          'Tìm issue trên Jira theo câu truy vấn JQL. JQL PHẢI có ít nhất một điều kiện lọc (bounded) — vd: project = ABC AND status = "In Progress", hoặc updated >= -7d ORDER BY updated DESC; chỉ "ORDER BY ..." không sẽ bị từ chối. Trả về key, tiêu đề, trạng thái, người được giao và link.',
         parameters: {
           type: "object",
-          properties: { jql: { type: "string", description: "câu truy vấn JQL" } },
+          properties: { jql: { type: "string", description: "câu truy vấn JQL (có ít nhất một điều kiện lọc)" } },
           required: ["jql"],
         },
       },
@@ -170,21 +208,19 @@ const jiraConnector: Connector = {
   ],
   handlers: {
     async jira_search_issues(args, creds) {
-      return searchIssues(String(args.jql || "").trim() || "ORDER BY updated DESC", creds);
+      return searchIssues(String(args.jql || "").trim() || DEFAULT_JQL, creds);
     },
     async jira_my_issues(_args, creds) {
+      // Bounded theo docs chính thức: có điều kiện assignee = currentUser().
       return searchIssues("assignee = currentUser() ORDER BY updated DESC", creds);
     },
     async jira_get_issue(args, creds) {
-      const site = String((creds && creds.site) || "")
-        .replace(/^https?:\/\//, "")
-        .replace(/\/+$/, "");
       const key = String(args.key || "").trim();
       const data = (await jira(
         "/rest/api/3/issue/" + encodeURIComponent(key) + "?fields=summary,status,assignee",
         creds,
       )) as Record<string, unknown>;
-      return { issue: issue(data, site) };
+      return { issue: issue(data, browseBase(creds)) };
     },
     async jira_list_projects(_args, creds) {
       const data = (await jira("/rest/api/3/project/search", creds)) as {
@@ -205,9 +241,6 @@ const jiraConnector: Connector = {
       return { ok: true, id: data?.id };
     },
     async jira_create_issue(args, creds) {
-      const site = String((creds && creds.site) || "")
-        .replace(/^https?:\/\//, "")
-        .replace(/\/+$/, "");
       const projectKey = String(args.projectKey || "").trim();
       const summary = String(args.summary || "");
       const issueType = String(args.issueType || "").trim() || "Task";
@@ -222,7 +255,7 @@ const jiraConnector: Connector = {
         body: JSON.stringify({ fields }),
         headers: { "Content-Type": "application/json" },
       })) as { key?: string };
-      return { key: data.key, url: "https://" + site + "/browse/" + data.key };
+      return { key: data.key, url: browseBase(creds) + "/browse/" + data.key };
     },
   },
   async test(creds) {

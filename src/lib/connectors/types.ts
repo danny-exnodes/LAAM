@@ -15,10 +15,12 @@ export type ConnectorField = {
 
 export type ConnectorAuth = {
   type: "token" | "oauth" | "none";
-  // OAuth (in-app redirect flow). `provider` selects the OAuth implementation;
-  // `scopes` are requested at consent time for THIS connector (least-privilege:
-  // each connector grants only what it needs).
-  provider?: "google";
+  // OAuth (in-app redirect flow). `provider` selects the OAuth implementation
+  // (see oauth/registry.ts); `scopes` are requested at consent time for THIS
+  // connector (least-privilege: each connector grants only what it needs).
+  // Dual-mode: an oauth connector MAY also declare `fields` as a manual
+  // token-paste fallback (jira only — spec 2026-06-12 §12.10).
+  provider?: "google" | "atlassian" | "slack" | "zalo";
   scopes?: string[];
   help?: string;
   setup?: string;
@@ -77,6 +79,10 @@ export type ConnectorListItem = {
     scopes: string[];
     help: string;
     setup: string;
+    // True when the operator env for this connector's authorize flow is set
+    // (OAuth provider env, or TRELLO_API_KEY for the trello accelerator) —
+    // drives whether the UI renders the authorize button or the manual fields.
+    oauthConfigured: boolean;
     fields: {
       key: string;
       label: string;

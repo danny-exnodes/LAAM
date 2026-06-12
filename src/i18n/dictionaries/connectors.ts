@@ -27,15 +27,26 @@ export const connectors: Dict = {
   'conn.saveErr': { vi: 'Không lưu được credential', en: 'Could not save credentials', zh: '无法保存凭据' },
   'conn.loadErr': { vi: 'Không tải được danh sách kết nối.', en: 'Could not load connectors.', zh: '无法加载连接器。' },
   'conn.oauthNeeded': { vi: 'Cần OAuth — sắp có', en: 'OAuth needed — coming soon', zh: '需要 OAuth — 即将推出' },
-  'conn.connectGoogle': { vi: 'Kết nối với Google', en: 'Connect with Google', zh: '使用 Google 连接' },
+  // Per-provider authorize button: {name} = consent-screen brand (Google / Jira / Slack / Trello / Zalo OA).
+  'conn.connectWith': { vi: 'Kết nối với {name}', en: 'Connect with {name}', zh: '使用 {name} 连接' },
+  'conn.manualOption': {
+    vi: 'Hoặc nhập token thủ công',
+    en: 'Or enter a token manually',
+    zh: '或手动输入令牌',
+  },
+  'conn.trelloFinishing': {
+    vi: 'Đang hoàn tất kết nối Trello…',
+    en: 'Finishing the Trello connection…',
+    zh: '正在完成 Trello 连接…',
+  },
   'conn.reconnect': { vi: 'Kết nối lại', en: 'Reconnect', zh: '重新连接' },
   'conn.needsReconnect': { vi: 'Phiên hết hạn', en: 'Session expired', zh: '会话已过期' },
   'conn.account': { vi: 'Tài khoản', en: 'Account', zh: '账户' },
   'conn.connectedOk': { vi: 'Đã kết nối thành công.', en: 'Connected successfully.', zh: '连接成功。' },
   'conn.errNotConfigured': {
-    vi: 'OAuth Google chưa được cấu hình trên máy chủ.',
-    en: 'Google OAuth is not configured on the server.',
-    zh: '服务器未配置 Google OAuth。',
+    vi: 'OAuth chưa được cấu hình trên máy chủ cho dịch vụ này.',
+    en: 'OAuth is not configured on the server for this service.',
+    zh: '服务器尚未为此服务配置 OAuth。',
   },
   'conn.errDenied': { vi: 'Bạn đã từ chối cấp quyền.', en: 'You declined the permission.', zh: '你拒绝了授权。' },
   'conn.errState': { vi: 'Phiên kết nối không hợp lệ, thử lại.', en: 'Invalid session, please retry.', zh: '会话无效，请重试。' },
@@ -76,9 +87,9 @@ export const connectors: Dict = {
     zh: '看板、列表、卡片',
   },
   'conn.svc.trello.help': {
-    vi: 'Lấy API Key tại trello.com/app-key. Trên cùng trang đó, bấm "Token" để tạo một token. Dán cả hai vào đây — LAAM lưu phía máy chủ, không gửi đi đâu khác.',
-    en: 'Get an API Key at trello.com/app-key. On the same page, click "Token" to generate a token. Paste both here — LAAM stores them server-side and sends them nowhere else.',
-    zh: '在 trello.com/app-key 获取 API Key。在同一页面上，点击 "Token" 生成一个令牌。将两者都粘贴到这里 — LAAM 仅保存在服务器端，不会发送到其他地方。',
+    vi: 'Tạo app tại trello.com/power-ups/admin (trang trello.com/app-key cũ đã ngừng hoạt động): bấm "New", điền tên app và Workspace, bỏ trống "Iframe connector URL". Mở tab "API Key" → bấm "Generate a new API Key" rồi copy API Key — KHÔNG copy ô "Secret" bên cạnh (dán nhầm Secret là nguyên nhân phổ biến của lỗi 401 "invalid key"). Token: dùng nút uỷ quyền 1-click của LAAM khi server đã cấu hình TRELLO_API_KEY, hoặc tự tạo token từ liên kết trên trang API Key. Lưu ý cho người vận hành: phải thêm origin của LAAM vào "Allowed origins" của app thì luồng uỷ quyền mới hoạt động. LAAM lưu cả hai phía máy chủ, không gửi đi đâu khác.',
+    en: 'Create an app at trello.com/power-ups/admin (the old trello.com/app-key page is gone): click "New", fill in the app name and Workspace, leave "Iframe connector URL" empty. Open the "API Key" tab → "Generate a new API Key" and copy the API Key — do NOT copy the adjacent "Secret" (pasting the Secret is the common cause of 401 "invalid key"). Token: use LAAM\'s 1-click authorize button once the server has TRELLO_API_KEY configured, or mint a token yourself from the link on the API Key page. Operator note: LAAM\'s origin must be added to the app\'s "Allowed origins" for the authorize flow to work. LAAM stores both server-side and sends them nowhere else.',
+    zh: '在 trello.com/power-ups/admin 创建应用（旧的 trello.com/app-key 页面已停用）：点击 "New"，填写应用名称和 Workspace，"Iframe connector URL" 留空。打开 "API Key" 标签 → "Generate a new API Key" 并复制 API Key — 不要复制旁边的 "Secret"（误粘 Secret 是 401 "invalid key" 错误的常见原因）。令牌：服务器配置 TRELLO_API_KEY 后使用 LAAM 的一键授权按钮，或从 API Key 页面上的链接自行生成令牌。运维提示：必须将 LAAM 的 origin 添加到应用的 "Allowed origins"，授权流程才能工作。LAAM 将两者保存在服务器端，不会发送到其他地方。',
   },
   'conn.svc.jira.blurb': {
     vi: 'Issues, tasks, sprints trên Jira Cloud',
@@ -89,6 +100,51 @@ export const connectors: Dict = {
     vi: 'Tạo API token tại id.atlassian.com/manage-profile/security/api-tokens. Nhập "site" là tên miền Jira của bạn (vd: yourcompany.atlassian.net), email đăng nhập Atlassian, và dán API token. LAAM lưu phía máy chủ, không gửi đi đâu khác.',
     en: 'Create an API token at id.atlassian.com/manage-profile/security/api-tokens. Enter "site" as your Jira domain (e.g. yourcompany.atlassian.net), your Atlassian login email, and paste the API token. LAAM stores it server-side and sends it nowhere else.',
     zh: '在 id.atlassian.com/manage-profile/security/api-tokens 创建 API 令牌。"site" 填写你的 Jira 域名（例如 yourcompany.atlassian.net），填入你的 Atlassian 登录邮箱，并粘贴 API 令牌。LAAM 仅保存在服务器端，不会发送到其他地方。',
+  },
+  'conn.svc.jira.setup': {
+    vi: 'Tạo OAuth 2.0 integration tại developer.atlassian.com/console/myapps, thêm scopes Jira API (read:jira-work, write:jira-work, read:jira-user) + User Identity API (read:me), đặt Callback URL {OAUTH_PUBLIC_BASE_URL}/api/connectors/atlassian/callback, bật Distribution → Sharing, rồi đặt env ATLASSIAN_OAUTH_CLIENT_ID / ATLASSIAN_OAUTH_CLIENT_SECRET. OAuth xác minh trên prod base — môi trường dev dùng nhập tay (site/email/API token).',
+    en: 'Create an OAuth 2.0 integration at developer.atlassian.com/console/myapps, add Jira API scopes (read:jira-work, write:jira-work, read:jira-user) + the User Identity API (read:me), set the Callback URL to {OAUTH_PUBLIC_BASE_URL}/api/connectors/atlassian/callback, enable Distribution → Sharing, then set ATLASSIAN_OAUTH_CLIENT_ID / ATLASSIAN_OAUTH_CLIENT_SECRET. OAuth is verified on the prod base — use manual entry (site/email/API token) on dev.',
+    zh: '在 developer.atlassian.com/console/myapps 创建 OAuth 2.0 集成，添加 Jira API scopes（read:jira-work、write:jira-work、read:jira-user）+ User Identity API（read:me），将 Callback URL 设为 {OAUTH_PUBLIC_BASE_URL}/api/connectors/atlassian/callback，启用 Distribution → Sharing，然后设置 ATLASSIAN_OAUTH_CLIENT_ID / ATLASSIAN_OAUTH_CLIENT_SECRET。OAuth 在生产环境 base 上验证 — 开发环境使用手动输入（site/email/API token）。',
+  },
+  'conn.svc.slack.blurb': {
+    vi: 'Kênh, tin nhắn Slack của workspace (bot)',
+    en: "The workspace's Slack channels and messages (bot)",
+    zh: '工作区的 Slack 频道与消息（机器人）',
+  },
+  'conn.svc.slack.help': {
+    vi: 'Bot token là CHUNG cho cả workspace: mọi người dùng LAAM kết nối cùng workspace sẽ dùng chung danh tính bot. Muốn bot ĐỌC lịch sử một kênh, phải mời bot vào kênh đó (/invite @LAAM); gửi tin vào kênh public thì không cần mời.',
+    en: 'The bot token is SHARED for the whole workspace: every LAAM user connecting the same workspace uses the same bot identity. For the bot to READ a channel\'s history it must be invited to that channel (/invite @LAAM); posting to public channels needs no invite.',
+    zh: '机器人令牌为整个工作区共享：连接同一工作区的每个 LAAM 用户都使用同一个机器人身份。要让机器人读取某个频道的历史记录，必须先把它邀请进该频道（/invite @LAAM）；向公开频道发消息则无需邀请。',
+  },
+  'conn.svc.slack.setup': {
+    vi: 'Tạo app tại api.slack.com/apps (From scratch) → OAuth & Permissions: thêm 6 bot scopes (channels:read, groups:read, channels:history, groups:history, chat:write, chat:write.public) và Redirect URL {OAUTH_PUBLIC_BASE_URL}/api/connectors/slack/callback → Basic Information: copy Client ID/Secret vào env SLACK_CLIENT_ID/SLACK_CLIENT_SECRET. KHÔNG bật Token Rotation / PKCE / Public Distribution.',
+    en: 'Create an app at api.slack.com/apps (From scratch) → OAuth & Permissions: add the 6 bot scopes (channels:read, groups:read, channels:history, groups:history, chat:write, chat:write.public) and the Redirect URL {OAUTH_PUBLIC_BASE_URL}/api/connectors/slack/callback → Basic Information: copy the Client ID/Secret into SLACK_CLIENT_ID/SLACK_CLIENT_SECRET. Do NOT enable Token Rotation / PKCE / Public Distribution.',
+    zh: '在 api.slack.com/apps 创建应用（From scratch）→ OAuth & Permissions：添加 6 个 bot scopes（channels:read、groups:read、channels:history、groups:history、chat:write、chat:write.public）和 Redirect URL {OAUTH_PUBLIC_BASE_URL}/api/connectors/slack/callback → Basic Information：将 Client ID/Secret 复制到 SLACK_CLIENT_ID/SLACK_CLIENT_SECRET。不要启用 Token Rotation / PKCE / Public Distribution。',
+  },
+  'conn.svc.whatsapp.blurb': {
+    vi: 'Gửi tin WhatsApp qua Cloud API (chỉ gửi, trong cửa sổ 24h)',
+    en: 'Send WhatsApp messages via the Cloud API (send-only, within the 24h window)',
+    zh: '通过 Cloud API 发送 WhatsApp 消息（仅发送，限 24 小时窗口内）',
+  },
+  'conn.svc.whatsapp.help': {
+    vi: 'Cần WhatsApp BUSINESS Platform — KHÔNG dùng được tài khoản WhatsApp cá nhân. Tạo Meta app loại Business tại developers.facebook.com, thêm product WhatsApp. Access token: tạo System User token vĩnh viễn trong business.facebook.com → Business Settings → System Users (gán quyền cả App lẫn WABA, chọn whatsapp_business_messaging + whatsapp_business_management, expiration: Never). Phone number ID lấy ở App Dashboard → WhatsApp → API Setup (là ID, không phải số điện thoại). Token tạm 24h ở API Setup chỉ dùng để thử.',
+    en: 'Requires the WhatsApp BUSINESS Platform — personal WhatsApp accounts cannot be used. Create a Business-type Meta app at developers.facebook.com and add the WhatsApp product. Access token: create a permanent System User token in business.facebook.com → Business Settings → System Users (assign both the App and the WABA, pick whatsapp_business_messaging + whatsapp_business_management, expiration: Never). The Phone Number ID is in App Dashboard → WhatsApp → API Setup (it is an ID, not the phone number). The 24h temporary token on API Setup is for testing only.',
+    zh: '需要 WhatsApp 商业平台 — 无法使用个人 WhatsApp 账号。在 developers.facebook.com 创建 Business 类型的 Meta 应用并添加 WhatsApp 产品。访问令牌：在 business.facebook.com → Business Settings → System Users 创建永久 System User 令牌（同时分配 App 和 WABA，勾选 whatsapp_business_messaging + whatsapp_business_management，有效期选 Never）。Phone Number ID 在 App Dashboard → WhatsApp → API Setup（它是 ID，不是电话号码）。API Setup 上的 24 小时临时令牌仅供测试。',
+  },
+  'conn.svc.zalo.blurb': {
+    vi: 'Tin nhắn Zalo Official Account (OA) — cần OA xác thực',
+    en: 'Zalo Official Account (OA) messages — requires a verified OA',
+    zh: 'Zalo 官方账号（OA）消息 — 需要已认证的 OA',
+  },
+  'conn.svc.zalo.help': {
+    vi: 'Người bấm Kết nối phải là ADMIN của OA. Consent cấp cho CẢ OA (một token đại diện OA, không phải từng người dùng) — team chỉ định MỘT admin kết nối; admin khác bấm kết nối lại có thể làm đứt kết nối của đồng nghiệp. OA phải được XÁC THỰC (giấy tờ doanh nghiệp) và API gửi tin cần gói trả phí (ví dụ gói Tăng trưởng).',
+    en: 'Whoever clicks Connect must be an ADMIN of the OA. Consent is granted for the WHOLE OA (one token represents the OA, not each user) — the team should designate ONE admin to connect; another admin re-connecting may break a colleague\'s connection. The OA must be VERIFIED (business documents) and the messaging API requires a paid package (e.g. the Growth tier).',
+    zh: '点击连接的人必须是该 OA 的管理员。授权授予整个 OA（一个令牌代表 OA，而非每个用户）— 团队应指定一名管理员进行连接；其他管理员重新连接可能会断开同事的连接。OA 必须经过认证（企业资质文件），消息 API 需要付费套餐（例如增长版）。',
+  },
+  'conn.svc.zalo.setup': {
+    vi: 'Tạo app tại developers.zalo.me → sản phẩm Official Account: liên kết OA + kích hoạt API + đặt Callback URL {OAUTH_PUBLIC_BASE_URL}/api/connectors/zalo/callback → bật app Live → đặt env ZALO_APP_ID/ZALO_APP_SECRET. OAuth xác minh trên prod base.',
+    en: 'Create an app at developers.zalo.me → Official Account product: link the OA + activate the API + set the Callback URL to {OAUTH_PUBLIC_BASE_URL}/api/connectors/zalo/callback → switch the app Live → set ZALO_APP_ID/ZALO_APP_SECRET. OAuth is verified on the prod base.',
+    zh: '在 developers.zalo.me 创建应用 → Official Account 产品：关联 OA + 激活 API + 将 Callback URL 设为 {OAUTH_PUBLIC_BASE_URL}/api/connectors/zalo/callback → 将应用切换为 Live → 设置 ZALO_APP_ID/ZALO_APP_SECRET。OAuth 在生产环境 base 上验证。',
   },
   'conn.svc.google-calendar.blurb': {
     vi: 'Sự kiện sắp tới trên Google Calendar',

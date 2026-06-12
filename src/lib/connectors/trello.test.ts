@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import trello from "./trello";
+import { OAuthError } from "./oauth/types";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -17,6 +18,19 @@ describe("trello connector", () => {
       "trello_update_card",
       "trello_comment_card",
     ]);
+  });
+
+  test("key + token nằm trong header Authorization, KHÔNG nằm trong URL", async () => {
+    const spy = vi.spyOn(global, "fetch").mockResolvedValue(new Response(JSON.stringify([])));
+    await trello.handlers.trello_list_boards({}, { key: "kh0a-bi-mat", token: "th3-token" });
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    const auth = (init.headers as Record<string, string>).Authorization;
+    expect(auth).toContain('oauth_consumer_key="kh0a-bi-mat"');
+    expect(auth).toContain('oauth_token="th3-token"');
+    expect(String(url)).not.toContain("kh0a-bi-mat");
+    expect(String(url)).not.toContain("th3-token");
+    expect(String(url)).not.toContain("key=");
+    expect(String(url)).not.toContain("token=");
   });
 
   test("trello_list_boards shapes board", async () => {
@@ -109,12 +123,27 @@ describe("trello connector", () => {
     expect(url).toContain("text=hello");
   });
 
-  test("non-ok response throws message", async () => {
+  test("401 (token bị thu hồi / key sai) → OAuthError với invalidGrant=true", async () => {
+    // Trello trả 401 plain text "invalid token" khi token bị thu hồi — connector
+    // phải báo OAuthError(invalidGrant) để framework chuyển sang needs_reconnect.
+    vi.spyOn(global, "fetch").mockResolvedValue(new Response("invalid token", { status: 401 }));
+    const err = (await trello.handlers
+      .trello_list_boards({}, { key: "x", token: "y" })
+      .catch((e: unknown) => e)) as OAuthError;
+    expect(err).toBeInstanceOf(OAuthError);
+    expect(err.invalidGrant).toBe(true);
+    expect(err.message).toBe("invalid token");
+  });
+
+  test("lỗi khác 401 vẫn là Error thường với message của API", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ message: "invalid key" }), { status: 401 }),
+      new Response(JSON.stringify({ message: "board not found" }), { status: 404 }),
     );
-    await expect(trello.handlers.trello_list_boards({}, { key: "x", token: "y" })).rejects.toThrow(
-      "invalid key",
-    );
+    const err = (await trello.handlers
+      .trello_list_boards({}, { key: "x", token: "y" })
+      .catch((e: unknown) => e)) as Error;
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(OAuthError);
+    expect(err.message).toBe("board not found");
   });
 });

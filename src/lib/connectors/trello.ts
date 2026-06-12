@@ -1,26 +1,41 @@
 // Trello connector — auth with an API key + a token (both secret).
-// Get the API key at trello.com/app-key, then generate a token from the same
-// page. The token is scoped to your account and grants read/write access.
+// The API key comes from an app created at trello.com/power-ups/admin (the old
+// trello.com/app-key page is dead since ~2023); the token is minted via LAAM's
+// 1-click authorize accelerator or the link on the app's API Key tab.
+// Key + token travel in the Authorization header (docs-preferred form) so they
+// stay out of proxy/access logs; only ordinary params go in the query string.
 import type { Connector } from "./types";
+import { OAuthError } from "./oauth/types";
 
 const API = "https://api.trello.com/1";
 
-// Build a Trello URL with key+token (+ any extra query params) and call it.
+// Build a Trello URL (extra query params only) and call it with key+token in
+// the Authorization header.
 async function trello(
   pathname: string,
   creds: Record<string, string>,
   params: Record<string, unknown> = {},
   init: RequestInit = {},
 ): Promise<unknown> {
-  const qs = new URLSearchParams({ key: (creds && creds.key) || "", token: (creds && creds.token) || "" });
+  const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v != null && v !== "") qs.set(k, String(v));
   }
+  const q = qs.toString();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 12000);
   try {
-    const r = await fetch(API + pathname + "?" + qs.toString(), {
-      headers: { Accept: "application/json", "User-Agent": "LAAM-connector/0.1" },
+    const r = await fetch(API + pathname + (q ? "?" + q : ""), {
+      headers: {
+        Accept: "application/json",
+        Authorization:
+          'OAuth oauth_consumer_key="' +
+          ((creds && creds.key) || "") +
+          '", oauth_token="' +
+          ((creds && creds.token) || "") +
+          '"',
+        "User-Agent": "LAAM-connector/0.1",
+      },
       signal: ctrl.signal,
       ...init,
     });
@@ -34,6 +49,10 @@ async function trello(
     if (!r.ok) {
       const b = body as { message?: string };
       const msg = (b && b.message) || (typeof body === "string" && body) || "HTTP " + r.status;
+      // 401 = "invalid token" (revoked) / "invalid key": the grant is dead.
+      // OAuthError(_, true) flips the connector to needs_reconnect so the UI
+      // offers the one-click re-authorize.
+      if (r.status === 401) throw new OAuthError(msg, true);
       throw new Error(msg);
     }
     return body;
@@ -67,7 +86,8 @@ const trelloConnector: Connector = {
   blurb: "Boards, lists, cards",
   auth: {
     type: "token",
-    help: 'Lấy API Key tại trello.com/app-key. Trên cùng trang đó, bấm "Token" để tạo một token. Dán cả hai vào đây — LAAM lưu phía máy chủ, không gửi đi đâu khác.',
+    help:
+      'Tạo app tại trello.com/power-ups/admin (trang trello.com/app-key cũ đã ngừng hoạt động): bấm "New", điền tên app và Workspace, bỏ trống "Iframe connector URL". Mở tab "API Key" → bấm "Generate a new API Key" rồi copy API Key — KHÔNG copy ô "Secret" bên cạnh (dán nhầm Secret là nguyên nhân phổ biến của lỗi 401 "invalid key"). Token: dùng nút uỷ quyền 1-click của LAAM khi server đã cấu hình TRELLO_API_KEY, hoặc tự tạo token từ liên kết trên trang API Key. Lưu ý cho người vận hành: phải thêm origin của LAAM vào "Allowed origins" của app thì luồng uỷ quyền mới hoạt động. LAAM lưu cả hai phía máy chủ, không gửi đi đâu khác.',
     fields: [
       { key: "key", label: "API Key", placeholder: "Trello API key", secret: true },
       { key: "token", label: "Token", placeholder: "Trello token", secret: true },

@@ -52,9 +52,12 @@ describe("resolveKind", () => {
       "gmail_send",
       "jira_add_comment",
       "jira_create_issue",
+      "slack_send_message",
       "trello_comment_card",
       "trello_create_card",
       "trello_update_card",
+      "whatsapp_send_message",
+      "zalo_send_message",
     ]);
   });
 });

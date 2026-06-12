@@ -363,12 +363,12 @@ describe("ConnectorForm — connector/action picker", () => {
     {
       id: "demo", name: "Demo", icon: "🔌", blurb: "",
       connected: true, status: "connected" as const, account: null, tools: [{ name: "demo_list_tasks", description: "", parameters: {} }, { name: "demo_create_task", description: "", parameters: {} }],
-      auth: { type: "none", provider: "", scopes: [], help: "", setup: "", fields: [] }, connectedAt: null,
+      auth: { type: "none", provider: "", scopes: [], help: "", setup: "", oauthConfigured: false, fields: [] }, connectedAt: null,
     },
     {
       id: "github", name: "GitHub", icon: "🐙", blurb: "",
       connected: false, status: "disconnected" as const, account: null, tools: [{ name: "github_list_repos", description: "", parameters: {} }],
-      auth: { type: "token", provider: "", scopes: [], help: "", setup: "", fields: [] }, connectedAt: null,
+      auth: { type: "token", provider: "", scopes: [], help: "", setup: "", oauthConfigured: false, fields: [] }, connectedAt: null,
     },
   ];
 
@@ -432,7 +432,7 @@ describe("ConnectorForm — schema-driven args (#1)", () => {
           },
         },
       ],
-      auth: { type: "none", provider: "", scopes: [], help: "", setup: "", fields: [] }, connectedAt: null,
+      auth: { type: "none", provider: "", scopes: [], help: "", setup: "", oauthConfigured: false, fields: [] }, connectedAt: null,
     },
   ];
   const node: WfConnectorNode = { id: "c1", kind: "connector", connectorId: "demo", action: "demo_create_task", args: {} };
