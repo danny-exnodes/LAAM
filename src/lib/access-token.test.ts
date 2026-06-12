@@ -1,13 +1,16 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
 
-// Fake drizzle db: select().from().where().limit() → rows; update().set().where() → records patch.
-function fakeDb(rows: unknown[]) {
+// Fake drizzle db. verifyAccessToken does up to two selects: the token row, then
+// (when the token has a userId) the owner's disabledAt. We route by table name:
+// `user` → ownerRows, anything else → rows. update().set().where() records the patch.
+function fakeDb(rows: unknown[], ownerRows: unknown[] = [{ disabledAt: null }]) {
   const updates: { patch: unknown }[] = [];
   const db = {
     select: () => ({
-      from: () => ({
+      from: (table: Record<symbol, string> = {}) => ({
         where: () => ({
-          limit: async () => rows,
+          limit: async () =>
+            table?.[Symbol.for("drizzle:Name")] === "user" ? ownerRows : rows,
         }),
       }),
     }),
@@ -27,6 +30,7 @@ let _updates: ReturnType<typeof fakeDb>["updates"];
 vi.mock("@/db", () => ({ get db() { return _db; } }));
 vi.mock("@/db/schema", () => ({
   accessTokens: Object.assign({}, { [Symbol.for("drizzle:Name")]: "access_token" }),
+  users: Object.assign({}, { [Symbol.for("drizzle:Name")]: "user" }, { id: "u.id", disabledAt: "u.disabledAt" }),
 }));
 
 import {
@@ -36,8 +40,8 @@ import {
   verifyAccessToken,
 } from "./access-token";
 
-function setDb(rows: unknown[]) {
-  const f = fakeDb(rows);
+function setDb(rows: unknown[], ownerRows?: unknown[]) {
+  const f = fakeDb(rows, ownerRows);
   _db = f.db as never;
   _updates = f.updates;
   return f;
@@ -133,5 +137,26 @@ describe("verifyAccessToken", () => {
   test("kind filter match → row", async () => {
     setDb([{ ...base, kind: "collector" }]);
     expect((await verifyAccessToken("laam_good", { kind: "collector" }))?.id).toBe("t1");
+  });
+
+  test("owner disabled → null even when the token row is NOT revoked (disable is authoritative)", async () => {
+    // The token itself looks valid (revokedAt null), but the owning user is disabled.
+    // Defense-in-depth: a missed token-revoke must not leave a live credential.
+    const { updates } = setDb([{ ...base, revokedAt: null }], [{ disabledAt: new Date("2026-06-10") }]);
+    expect(await verifyAccessToken("laam_good")).toBeNull();
+    expect(updates).toHaveLength(0); // rejected before the lastUsedAt bump
+  });
+
+  test("owner active → valid (the disabled re-check passes through)", async () => {
+    setDb([{ ...base, revokedAt: null }], [{ disabledAt: null }]);
+    expect((await verifyAccessToken("laam_good"))?.id).toBe("t1");
+  });
+
+  test("token with null userId (collector provenance) → skips the owner check, still valid", async () => {
+    // A null userId means there is no owner to off-board; the disabled lookup is
+    // skipped entirely (and must not throw or wrongly reject).
+    const { updates } = setDb([{ ...base, userId: null }]);
+    expect((await verifyAccessToken("laam_good"))?.id).toBe("t1");
+    expect(updates).toHaveLength(1); // lastUsedAt still bumped
   });
 });

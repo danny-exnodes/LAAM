@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema";
 import type { Tool } from "../../types";
@@ -26,13 +26,23 @@ export const queryAudit: Tool = {
       limit: { type: "number", description: "số tối đa, mặc định 20" },
     },
   },
-  async handler(args) {
+  async handler(args, ctx) {
     const limit = Math.min(Number(args.limit) || 20, 50);
     const action = typeof args.action === "string" ? args.action.trim() : "";
+    // Principal-scope: a token / chat session reads ONLY its own actor rows. The
+    // audit log holds {actor, subject} ids for role_change / token_issued_for /
+    // user_disabled — unscoped, ANY api/mcp token holder could enumerate org admin
+    // actions and provisioning relationships. Org-wide reading is a session-only
+    // admin capability, never via this tool. No principal (orphaned token whose owner
+    // was deleted → ctx.userId "") → return nothing rather than fall back to org-wide.
+    // NOTE: this closes the audit-log leak only; the broader org-shared MCP read
+    // (search-sessions/get-timeline/list-agents/find-stuck) stays backlog.
+    const principal = ctx?.userId;
+    if (!principal) return { entries: [] };
     const rows = await db
       .select({ action: auditLog.action, target: auditLog.target, createdAt: auditLog.createdAt })
       .from(auditLog)
-      .where(action ? eq(auditLog.action, action) : undefined)
+      .where(and(eq(auditLog.userId, principal), action ? eq(auditLog.action, action) : undefined))
       .orderBy(desc(auditLog.createdAt))
       .limit(limit);
     return { entries: shapeAudit(rows as AuditRow[]) };
