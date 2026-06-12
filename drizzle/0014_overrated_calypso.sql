@@ -1,0 +1,2 @@
+ALTER TABLE "access_token" ADD COLUMN "createdByUserId" text;--> statement-breakpoint
+ALTER TABLE "access_token" ADD CONSTRAINT "access_token_createdByUserId_user_id_fk" FOREIGN KEY ("createdByUserId") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;

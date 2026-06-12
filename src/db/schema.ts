@@ -191,6 +191,12 @@ export const accessTokens = pgTable(
     // Who registered the token. set-null (not cascade): revoking a user must not
     // silently delete the audit trail of tokens they issued.
     userId: text("userId").references(() => users.id, { onDelete: "set null" }),
+    // Who PROVISIONED the token, when an owner/admin minted it for another user.
+    // NULL = self-service (and all pre-0014 rows). set-null mirrors userId: deleting
+    // the provisioning admin must not delete the token or lose its provenance.
+    createdByUserId: text("createdByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
     kind: text("kind").notNull(), // collector | api | mcp
     name: text("name").notNull(),
     prefix: text("prefix").notNull(), // display, non-secret (e.g. "laam_a3f2"; "legacy" for backfilled)
