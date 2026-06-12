@@ -181,6 +181,24 @@ export const workflows: Dict = {
   "wf.lib.condition.desc": { vi: "Rẽ nhánh true / false", en: "Branch true / false", zh: "分支 true / false" },
   "wf.lib.foreach.name": { vi: "Lặp (Foreach)", en: "Loop (Foreach)", zh: "循环 (Foreach)" },
   "wf.lib.foreach.desc": { vi: "Lặp qua từng phần tử", en: "Iterate over each item", zh: "遍历每个元素" },
+  "wf.lib.mcp.name": { vi: "MCP", en: "MCP", zh: "MCP" },
+  "wf.lib.mcp.desc": { vi: "Gọi tool từ MCP server (chỉ read)", en: "Call an MCP server tool (read-only)", zh: "调用 MCP 服务器工具（仅读）" },
+
+  // MCP node form (P2)
+  "wf.node.mcp.serverLabel": { vi: "MCP server", en: "MCP server", zh: "MCP 服务器" },
+  "wf.node.mcp.toolLabel": { vi: "Tool", en: "Tool", zh: "工具" },
+  "wf.node.mcp.selectServer": { vi: "— chọn server —", en: "— select server —", zh: "— 选择服务器 —" },
+  "wf.node.mcp.selectTool": { vi: "— chọn tool —", en: "— select tool —", zh: "— 选择工具 —" },
+  "wf.node.mcp.noServers": {
+    vi: "Chưa có MCP server — thêm trong trang Kết nối.",
+    en: "No MCP servers yet — add one on the Connectors page.",
+    zh: "尚无 MCP 服务器 — 请在「连接」页添加。",
+  },
+  "wf.node.mcp.writeBlocked": {
+    vi: "Tool này là write/chưa-trust — workflow sẽ chặn fail-closed khi chạy thật (chỉ MCP read được phép).",
+    en: "This tool is write/untrusted — the workflow blocks it fail-closed on real runs (only MCP reads are allowed).",
+    zh: "此工具为写入/未信任 — 实际运行时工作流将以 fail-closed 方式拦截（仅允许 MCP 读取）。",
+  },
 
   // AI generate-from-prompt (#3)
   "wf.ai.button": { vi: "Tạo bằng AI", en: "AI generate", zh: "AI 生成" },

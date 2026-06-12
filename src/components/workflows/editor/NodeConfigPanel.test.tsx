@@ -10,7 +10,7 @@ import { describe, expect, test, vi } from "vitest";
 import { render, screen, fireEvent, within, waitFor } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import { NodeConfigPanel } from "./NodeConfigPanel";
-import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode } from "@/lib/workflow/types";
+import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode, WfMcpNode } from "@/lib/workflow/types";
 
 // NodeConfigPanel now uses useT → must be wrapped in I18nProvider.
 // Default lang "vi" matches the hardcoded Vietnamese placeholder strings
@@ -513,5 +513,68 @@ describe("VariableHints — flow-aware variable autocomplete (A / #2)", () => {
     renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} allNodes={allNodes} edges={[]} />);
     expect(screen.getAllByRole("button", { name: "{{trigger}}" })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "{{steps.n2.output}}" })).not.toBeInTheDocument();
+  });
+});
+
+// ─── McpForm — MCP node config (P2.4) ────────────────────────────────────────
+// Intent: chọn server → chọn tool (từ toolDetails của /api/connectors/mcp) →
+// SchemaArgsForm render required-args từ JSON Schema; tool write phải cảnh báo
+// fail-closed (workflow chỉ chạy MCP read).
+
+describe("McpForm — MCP node config (P2.4)", () => {
+  const mcpNode: WfMcpNode = { id: "m1", kind: "mcp", server: "daab", tool: "kg_query", args: {} };
+  const mcpServers = [
+    {
+      slug: "daab",
+      name: "DAAB",
+      tools: ["mcp__daab__kg_query", "mcp__daab__kg_store_concept"],
+      toolDetails: [
+        {
+          name: "kg_query",
+          nsName: "mcp__daab__kg_query",
+          description: "truy vấn KG",
+          kind: "read" as const,
+          parameters: { type: "object", properties: { project_id: { type: "string", description: "UUID dự án" } }, required: ["project_id"] },
+        },
+        {
+          name: "kg_store_concept",
+          nsName: "mcp__daab__kg_store_concept",
+          description: "ghi concept",
+          kind: "write" as const,
+          parameters: { type: "object", properties: {} },
+        },
+      ],
+    },
+    { slug: "other", name: "Other", tools: [], toolDetails: [] },
+  ];
+
+  test("render select server + select tool theo server đã chọn", () => {
+    renderPanel(<NodeConfigPanel node={mcpNode} onChange={vi.fn()} mcpServers={mcpServers} />);
+    expect(screen.getByRole("option", { name: /DAAB/ })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "kg_query" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "kg_store_concept" })).toBeInTheDocument();
+  });
+
+  test("đổi server → onChange reset tool + args", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={mcpNode} onChange={onChange} mcpServers={mcpServers} />);
+    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "other" } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ server: "other", tool: "", args: {} }));
+  });
+
+  test("schema-driven args: required field render input form (project_id)", () => {
+    renderPanel(<NodeConfigPanel node={mcpNode} onChange={vi.fn()} mcpServers={mcpServers} />);
+    expect(screen.getByText("project_id *")).toBeInTheDocument();
+  });
+
+  test("tool kind=write → cảnh báo fail-closed hiển thị", () => {
+    const writeNode: WfMcpNode = { ...mcpNode, tool: "kg_store_concept" };
+    renderPanel(<NodeConfigPanel node={writeNode} onChange={vi.fn()} mcpServers={mcpServers} />);
+    expect(screen.getByText(/fail-closed/i)).toBeInTheDocument();
+  });
+
+  test("không có MCP server → hint thêm trong Kết nối", () => {
+    renderPanel(<NodeConfigPanel node={mcpNode} onChange={vi.fn()} mcpServers={[]} />);
+    expect(screen.getByText(/Chưa có MCP server/i)).toBeInTheDocument();
   });
 });
