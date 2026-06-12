@@ -21,5 +21,8 @@ export function assertConnectorAllowed(action: string, internal: Tool[]): void {
 // fail-closed (PIN connectors-mcp-client).
 export function assertMcpAllowed(name: string, readAllow: ReadonlySet<string>): void {
   if (readAllow.has(name)) return;
+  // Observability (review-fix minor): phân biệt "server chưa bật trustReadHints /
+  // tool không readOnlyHint" vs "readAllow rỗng vì discovery sập" khi debug.
+  console.warn(`[workflow] MCP fail-closed: '${name}' không trong readAllow (size=${readAllow.size})`);
   throw new Error(`workflow: MCP tool '${name}' là write/chưa-trust — fail-closed trong workflow`);
 }

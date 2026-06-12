@@ -6,13 +6,17 @@ import { describe, expect, test, vi, beforeEach } from "vitest";
 vi.mock("@/auth", () => ({ auth: vi.fn() }));
 vi.mock("@/lib/customAgents", () => ({ getCustomAgent: vi.fn(async () => null) }));
 
-const { updateSpy, setSpy, deleteSpy, whereDeleteSpy } = vi.hoisted(() => {
-  const whereUpdateSpy = vi.fn(async () => undefined);
+// Review-fix: PATCH/DELETE phải kiểm rows-affected qua .returning() — race
+// "ownership check pass → row bị xoá đồng thời" không được trả {ok:true} giả.
+const { updateSpy, setSpy, deleteSpy, whereDeleteSpy, updateReturningSpy, deleteReturningSpy } = vi.hoisted(() => {
+  const updateReturningSpy = vi.fn(async (): Promise<{ id: string }[]> => [{ id: "ca-1" }]);
+  const whereUpdateSpy = vi.fn(() => ({ returning: updateReturningSpy }));
   const setSpy = vi.fn(() => ({ where: whereUpdateSpy }));
   const updateSpy = vi.fn(() => ({ set: setSpy }));
-  const whereDeleteSpy = vi.fn(async () => undefined);
+  const deleteReturningSpy = vi.fn(async (): Promise<{ id: string }[]> => [{ id: "ca-1" }]);
+  const whereDeleteSpy = vi.fn(() => ({ returning: deleteReturningSpy }));
   const deleteSpy = vi.fn(() => ({ where: whereDeleteSpy }));
-  return { updateSpy, setSpy, deleteSpy, whereDeleteSpy };
+  return { updateSpy, setSpy, deleteSpy, whereDeleteSpy, updateReturningSpy, deleteReturningSpy };
 });
 vi.mock("@/db", () => ({ db: { update: updateSpy, delete: deleteSpy } }));
 
@@ -67,6 +71,13 @@ describe("PATCH /api/custom-agents/[id]", () => {
     expect(res.status).toBe(200);
     expect(setSpy).toHaveBeenCalledWith(expect.objectContaining({ name: "Mới", system: "S2" }));
   });
+
+  test("race: row biến mất giữa ownership-check và update (returning rỗng) → 404, không ok giả", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
+    mockGet.mockResolvedValue(OWNED);
+    updateReturningSpy.mockResolvedValueOnce([]);
+    expect((await PATCH(patchReq({ name: "Mới" }), params)).status).toBe(404);
+  });
 });
 
 describe("DELETE /api/custom-agents/[id]", () => {
@@ -88,5 +99,12 @@ describe("DELETE /api/custom-agents/[id]", () => {
     expect(res.status).toBe(200);
     expect(deleteSpy).toHaveBeenCalled();
     expect(whereDeleteSpy).toHaveBeenCalled();
+  });
+
+  test("race: row đã bị xoá trước (returning rỗng) → 404", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "member" } } as never);
+    mockGet.mockResolvedValue(OWNED);
+    deleteReturningSpy.mockResolvedValueOnce([]);
+    expect((await DELETE(delReq, params)).status).toBe(404);
   });
 });

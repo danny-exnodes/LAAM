@@ -7,6 +7,7 @@ import { sanitizeAttachments } from "@/lib/chat/attachment-meta";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { runToolRounds, seedRequestedTool, type ChatMessage, type OllamaChatResponse, type RequestedTool } from "@/lib/agent/orchestrator";
+import { checkRequestedTool } from "@/lib/agent/guardrails";
 import { withSafety, PendingWriteSignal } from "@/lib/agent/safety/gate";
 import { sealPendingWrite, openPendingWrite } from "@/lib/agent/safety/token";
 import { buildPreview } from "@/lib/agent/safety/preview";
@@ -322,21 +323,21 @@ export async function POST(req: Request) {
   const readAllow = await mcpReadAllow(userId);
 
   // P1 quick-tools: user picked tool → validate SỚM, fail-loud (Rule 12). Tên phải
-  // nằm trong union tool khả dụng của CHÍNH user này; Claude MVS không tool → 400.
+  // nằm trong union tool khả dụng của CHÍNH user này + args qua CÙNG chuẩn
+  // validateArgs như internal tools (review-fix: fail-fast tại boundary, không để
+  // args thiếu-required/sai-kiểu trôi xuống connector). Claude MVS không tool → 400.
   let requestedTool: RequestedTool | null = null;
-  if (body.requestedTool && typeof body.requestedTool === "object") {
-    const rtName = typeof body.requestedTool.name === "string" ? body.requestedTool.name : "";
-    const rtArgs =
-      body.requestedTool.args && typeof body.requestedTool.args === "object" && !Array.isArray(body.requestedTool.args)
-        ? (body.requestedTool.args as Record<string, unknown>)
-        : {};
-    if (!rtName || !tools.some((t) => t.function.name === rtName)) {
-      return new Response(JSON.stringify({ error: `Tool không khả dụng: ${rtName || "(thiếu tên)"}` }), { status: 400 });
+  {
+    const checked = checkRequestedTool(body.requestedTool, tools);
+    if (checked && !checked.ok) {
+      return new Response(JSON.stringify({ error: checked.error }), { status: 400 });
     }
-    if (isClaudeModel(model)) {
-      return new Response(JSON.stringify({ error: "Chọn công cụ không hỗ trợ với model Claude (MVS không tool)" }), { status: 400 });
+    if (checked?.ok) {
+      if (isClaudeModel(model)) {
+        return new Response(JSON.stringify({ error: "Chọn công cụ không hỗ trợ với model Claude (MVS không tool)" }), { status: 400 });
+      }
+      requestedTool = checked.value;
     }
-    requestedTool = { name: rtName, args: rtArgs };
   }
 
   // --- System prompt động + proactive notice COMPOSE-AROUND buildSystemPrompt (SP-3). ---

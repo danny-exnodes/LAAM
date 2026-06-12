@@ -10,7 +10,7 @@ import { Paperclip, Link2, Send, Wrench } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { Attachment, ToolPick } from "./types";
-import type { CatalogGroup, CatalogTool } from "@/lib/chat/toolCatalog";
+import { coerceNumberInput, type CatalogGroup, type CatalogTool } from "@/lib/chat/toolCatalog";
 import { AttachmentPreview } from "./AttachmentChips";
 
 // Slash commands. ASCII names survive IME composition; labels are localized.
@@ -82,7 +82,12 @@ export function Composer({
     ? toolPick.tool.args.filter((f) => {
         if (!f.required) return false;
         const v = toolPick.args[f.key];
-        return v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+        return (
+          v === undefined ||
+          v === null ||
+          (typeof v === "string" && v.trim() === "") ||
+          (typeof v === "number" && Number.isNaN(v)) // NaN = nhập hỏng, coi như thiếu
+        );
       })
     : [];
   const sendDisabled = streaming || (empty && !toolPick) || missingReq.length > 0;
@@ -386,7 +391,7 @@ export function Composer({
                       placeholder={`${f.key} *${f.description ? ` — ${f.description}` : ""}`}
                       value={raw === undefined || raw === null ? "" : String(raw)}
                       onChange={(e) =>
-                        onToolArg?.(f.key, f.kind === "number" ? (e.target.value === "" ? undefined : Number(e.target.value)) : e.target.value)
+                        onToolArg?.(f.key, f.kind === "number" ? coerceNumberInput(e.target.value) : e.target.value)
                       }
                       className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 font-mono text-xs text-neutral-800 outline-none focus:border-blue-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
                     />

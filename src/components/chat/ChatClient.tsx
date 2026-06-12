@@ -428,9 +428,15 @@ export function ChatClient() {
     const requested = toolPick
       ? {
           name: toolPick.tool.name,
-          // Bỏ giá trị rỗng/undefined — chỉ gửi args user thật sự nhập.
+          // Bỏ giá trị rỗng/undefined/NaN — chỉ gửi args user thật sự nhập hợp lệ.
           args: Object.fromEntries(
-            Object.entries(toolPick.args).filter(([, v]) => v !== undefined && v !== null && !(typeof v === "string" && v.trim() === "")),
+            Object.entries(toolPick.args).filter(
+              ([, v]) =>
+                v !== undefined &&
+                v !== null &&
+                !(typeof v === "string" && v.trim() === "") &&
+                !(typeof v === "number" && Number.isNaN(v)),
+            ),
           ),
         }
       : undefined;
@@ -480,6 +486,12 @@ export function ChatClient() {
   function onToolArg(key: string, value: unknown) {
     setToolPick((p) => (p ? { ...p, args: { ...p.args, [key]: value } } : p));
   }
+  // Review-fix (UX): Claude MVS không tool → /api/chat sẽ 400 requestedTool. Ẩn
+  // section Công cụ + clear pick khi đổi sang Claude — đừng để user chọn rồi vỡ lúc gửi.
+  const claudeSelected = settings.model.startsWith("claude");
+  useEffect(() => {
+    if (claudeSelected) setToolPick(null);
+  }, [claudeSelected]);
 
   function stop() {
     abortRef.current?.abort();
@@ -906,7 +918,7 @@ export function ChatClient() {
                 onToggleSettings={() => setSettingsOpen((v) => !v)}
                 ocrAvailable={ocrAvailable}
                 modelName={modelName}
-                toolGroups={toolGroups}
+                toolGroups={claudeSelected ? [] : toolGroups}
                 toolPick={toolPick}
                 onToolPick={onToolPick}
                 onToolArg={onToolArg}

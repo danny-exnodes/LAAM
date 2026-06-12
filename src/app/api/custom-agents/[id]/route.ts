@@ -37,7 +37,10 @@ export async function PATCH(
     patch.description = typeof body.description === "string" && body.description.trim() ? body.description.trim().slice(0, 500) : null;
   }
 
-  await db.update(customAgents).set(patch).where(eq(customAgents.id, id));
+  // Review-fix: kiểm rows-affected — row có thể bị xoá đồng thời SAU ownership-check;
+  // trả {ok:true} khi 0 row là thành công giả (Rule 12).
+  const updated = await db.update(customAgents).set(patch).where(eq(customAgents.id, id)).returning({ id: customAgents.id });
+  if (updated.length === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
 
@@ -53,6 +56,7 @@ export async function DELETE(
   const agent = await getCustomAgent(session.user.id, id);
   if (!agent) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  await db.delete(customAgents).where(eq(customAgents.id, id));
+  const deleted = await db.delete(customAgents).where(eq(customAgents.id, id)).returning({ id: customAgents.id });
+  if (deleted.length === 0) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

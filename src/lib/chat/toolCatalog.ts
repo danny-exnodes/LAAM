@@ -11,6 +11,14 @@ export type CatalogGroup = { id: string; type: "internal" | "connector" | "mcp";
 
 const MCP_NS = "mcp__";
 
+// Review-fix: input type=number có thể cho chuỗi rỗng/không-parse-được — KHÔNG bao
+// giờ trả NaN (NaN JSON-hoá thành null = hỏng dữ liệu im lặng, Rule 12).
+export function coerceNumberInput(raw: string): number | undefined {
+  if (raw.trim() === "") return undefined;
+  const n = Number(raw);
+  return Number.isNaN(n) ? undefined : n;
+}
+
 export function mcpSlugOf(name: string): string | null {
   if (!name.startsWith(MCP_NS)) return null;
   const rest = name.slice(MCP_NS.length);

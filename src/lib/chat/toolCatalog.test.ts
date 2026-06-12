@@ -3,7 +3,7 @@
 // ĐÃ kết nối; (3) MCP group theo server với label thân thiện; (4) required-args
 // trích từ JSON Schema — đây là dữ liệu UI dẫn nhập (project_id UUID...).
 import { describe, expect, test } from "vitest";
-import { buildCatalogGroups, mcpSlugOf } from "./toolCatalog";
+import { buildCatalogGroups, mcpSlugOf, coerceNumberInput } from "./toolCatalog";
 import type { Tool } from "@/lib/agent/types";
 import type { ConnectorListItem, ConnectorTool } from "@/lib/connectors/types";
 
@@ -90,6 +90,22 @@ describe("buildCatalogGroups", () => {
   test("connector tool thiếu trong chatTools → kind fail-closed write", () => {
     const g = buildCatalogGroups({ internal: [], connectors: [connectors[0]], chatTools: [], servers: [] });
     expect(g.find((x) => x.id === "connector:demo")!.tools[0].kind).toBe("write");
+  });
+});
+
+describe("coerceNumberInput — không bao giờ NaN (review-fix)", () => {
+  test("chuỗi không phải số → undefined (KHÔNG phải NaN)", () => {
+    expect(coerceNumberInput("abc")).toBeUndefined();
+    expect(coerceNumberInput("1.2.3")).toBeUndefined();
+  });
+  test("rỗng/khoảng trắng → undefined", () => {
+    expect(coerceNumberInput("")).toBeUndefined();
+    expect(coerceNumberInput("  ")).toBeUndefined();
+  });
+  test("số hợp lệ → number", () => {
+    expect(coerceNumberInput("5")).toBe(5);
+    expect(coerceNumberInput("1.5")).toBe(1.5);
+    expect(coerceNumberInput("-3")).toBe(-3);
   });
 });
 

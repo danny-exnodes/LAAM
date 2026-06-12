@@ -249,6 +249,32 @@ test("điền required arg → onToolArg; đủ args → send enabled kể cả 
   expect(onToolArg).toHaveBeenCalledWith("project_id", "abc");
 });
 
+// Review-fix (critical): field number không bao giờ đẩy NaN xuống state/server
+// (NaN JSON-hoá thành null = hỏng dữ liệu im lặng, Rule 12). Nhánh chuỗi-không-
+// phải-số test trực tiếp ở coerceNumberInput (jsdom sanitize input number nên
+// không mô phỏng "abc" qua DOM được); ở đây chốt đường DOM "" → undefined.
+test("number field: xoá về rỗng → onToolArg(key, undefined) qua coerceNumberInput", () => {
+  const onToolArg = vi.fn();
+  const numPick = {
+    tool: { name: "t_num", description: "", kind: "read" as const, args: [{ key: "n", kind: "number" as const, required: true }] },
+    groupLabel: "G",
+    args: { n: 5 },
+  };
+  setup({ toolPick: numPick, onToolArg });
+  fireEvent.change(screen.getByLabelText("n"), { target: { value: "" } });
+  expect(onToolArg).toHaveBeenCalledWith("n", undefined);
+});
+
+test("args chứa NaN (phòng thủ) → required vẫn coi là THIẾU, send disabled", () => {
+  const numPick = {
+    tool: { name: "t_num", description: "", kind: "read" as const, args: [{ key: "n", kind: "number" as const, required: true }] },
+    groupLabel: "G",
+    args: { n: NaN },
+  };
+  setup({ value: "x", toolPick: numPick });
+  expect(screen.getByLabelText("Gửi tin nhắn")).toBeDisabled();
+});
+
 test("✕ trên chip → onToolPick(null)", () => {
   const onToolPick = vi.fn();
   setup({ toolPick: pickFx, onToolPick });

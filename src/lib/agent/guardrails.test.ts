@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { validateArgs, boundOutput, guard } from "./guardrails";
+import { validateArgs, boundOutput, guard, checkRequestedTool } from "./guardrails";
 import type { Tool } from "./types";
 
 const params = {
@@ -80,5 +80,41 @@ describe("guard", () => {
     const res = (await guard(t).handler({}, { userId: "u", now: 0, lang: "vi" })) as { error?: string };
     expect(called).toBe(false);
     expect(res.error).toBeTruthy();
+  });
+});
+
+// P1 review-fix: requestedTool từ picker phải qua CÙNG chuẩn validateArgs như
+// internal tools (defense-in-depth tại trust boundary /api/chat) — fail-fast 400
+// thay vì để args hỏng trôi xuống connector handler.
+describe("checkRequestedTool (P1 quick-tools boundary)", () => {
+  const tools = [
+    { function: { name: "mcp__daab__kg_query", parameters: params } }, // required: id
+    { function: { name: "demo_list_tasks", parameters: { type: "object", properties: {} } } },
+  ];
+
+  test("null/không phải object → null (không có requestedTool)", () => {
+    expect(checkRequestedTool(undefined, tools)).toBeNull();
+    expect(checkRequestedTool(null, tools)).toBeNull();
+  });
+
+  test("tên ngoài union → {ok:false}", () => {
+    const r = checkRequestedTool({ name: "tool_la", args: {} }, tools);
+    expect(r).toMatchObject({ ok: false });
+  });
+
+  test("thiếu required arg → {ok:false} nêu tên tham số", () => {
+    const r = checkRequestedTool({ name: "mcp__daab__kg_query", args: {} }, tools);
+    expect(r).toMatchObject({ ok: false });
+    expect((r as { error: string }).error).toMatch(/id/);
+  });
+
+  test("sai kiểu → {ok:false}", () => {
+    const r = checkRequestedTool({ name: "mcp__daab__kg_query", args: { id: "x", limit: "không-phải-số" } }, tools);
+    expect(r).toMatchObject({ ok: false });
+  });
+
+  test("hợp lệ → {ok:true, value} args đã chuẩn hoá", () => {
+    const r = checkRequestedTool({ name: "mcp__daab__kg_query", args: { id: "1f99", limit: 5 } }, tools);
+    expect(r).toEqual({ ok: true, value: { name: "mcp__daab__kg_query", args: { id: "1f99", limit: 5 } } });
   });
 });
