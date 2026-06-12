@@ -518,3 +518,25 @@ export const notifications = pgTable(
 );
 
 export type Notification = typeof notifications.$inferSelect;
+
+// ---------------------------------------------------------------------------
+// P3 (2026-06-12): custom_agent — per-user Agent preset cho workflow Agent node.
+// Node lưu `customAgentId`; runtime resolve per-user (fail-loud nếu mất preset).
+// Tối thiểu theo YAGNI: name + system. (model/toolset = defer — engine A0 vốn
+// bỏ qua node.model, xem decisions/chat-mcp-quicktools-workflow-e2e.)
+// ---------------------------------------------------------------------------
+export const customAgents = pgTable(
+  "custom_agent",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("userId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    system: text("system").notNull(),
+    createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (t) => [index("custom_agent_user_idx").on(t.userId)],
+);
+
+export type CustomAgent = typeof customAgents.$inferSelect;
