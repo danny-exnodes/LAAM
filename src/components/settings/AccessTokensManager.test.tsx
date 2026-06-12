@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import { AccessTokensManager } from "./AccessTokensManager";
+import type { ComponentProps } from "react";
 
-const TOKENS = [
+type Tok = ComponentProps<typeof AccessTokensManager>["initial"][number];
+
+const TOKENS: Tok[] = [
   {
     id: "t1",
     kind: "api" as const,
@@ -16,7 +19,7 @@ const TOKENS = [
   },
 ];
 
-function ui(initial = TOKENS) {
+function ui(initial: Tok[] = TOKENS) {
   return (
     <I18nProvider lang="en">
       <AccessTokensManager initial={initial} />
