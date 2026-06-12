@@ -2,18 +2,19 @@ import { describe, expect, test, vi } from "vitest";
 
 // Mock connectors execute để phân biệt "gate chặn" vs "lọt xuống execute".
 // vi.hoisted: factory vi.mock được hoist lên đầu file → biến phải qua hoisted.
-const { execSpy, recipientSpy } = vi.hoisted(() => ({
+const { execSpy, recipientSpy, mcpReadAllowSpy } = vi.hoisted(() => ({
   execSpy: vi.fn(async () => ({ ok: true })),
   recipientSpy: vi.fn(),
+  mcpReadAllowSpy: vi.fn(async (): Promise<ReadonlySet<string>> => new Set<string>()),
 }));
-vi.mock("@/lib/connectors", () => ({ execute: execSpy }));
+vi.mock("@/lib/connectors", () => ({ execute: execSpy, mcpReadAllow: mcpReadAllowSpy }));
 // Spy the recipient gate: its BEHAVIOR is tested in recipient.test.ts; here we verify WIRING
 // (invoked in the real-execute branch with resolved args; skipped on the dry-run mock path).
 vi.mock("./recipient", () => ({ assertRecipientAllowed: recipientSpy }));
 
 import { buildRunNode } from "./runtime";
 import { emptyContext } from "./types";
-import type { WfConnectorNode } from "./types";
+import type { WfConnectorNode, WfMcpNode } from "./types";
 
 describe("buildRunNode — workflow-readiness gate wired into connector path", () => {
   test("🔴 SEAM: real-run + un-cleared write → THROW (default=real=enforced), KHÔNG execute", async () => {
@@ -69,6 +70,45 @@ describe("buildRunNode — dry-run mocks connector writes", () => {
     const out = await run(node, emptyContext({ source: "manual" }));
     expect(execSpy).not.toHaveBeenCalled(); // mock — không execute thật
     expect(out).toMatchObject({ dryRun: true, wouldHaveCalled: "trello_create_card", args: { name: "x" } });
+  });
+});
+
+// P2: MCP node — readAllow (trustReadHints × readOnlyHint) là ranh giới duy nhất:
+// read chạy thật, mọi thứ khác fail-closed (real-run) / mock (dry-run preview).
+describe("buildRunNode — mcp node", () => {
+  const node: WfMcpNode = { id: "m1", kind: "mcp", server: "daab", tool: "kg_query", args: { project_id: "p-1" } };
+
+  test("real-run + tool trong readAllow → execute với tên namespaced", async () => {
+    execSpy.mockClear();
+    mcpReadAllowSpy.mockResolvedValueOnce(new Set(["mcp__daab__kg_query"]));
+    const run = buildRunNode("u1");
+    await run(node, emptyContext({ source: "manual" }));
+    expect(execSpy).toHaveBeenCalledWith("u1", "mcp__daab__kg_query", { project_id: "p-1" });
+  });
+
+  test("🔴 real-run + ngoài readAllow (write/chưa-trust) → THROW fail-closed, KHÔNG execute", async () => {
+    execSpy.mockClear();
+    mcpReadAllowSpy.mockResolvedValueOnce(new Set());
+    const run = buildRunNode("u1");
+    await expect(Promise.resolve().then(() => run(node, emptyContext({ source: "manual" })))).rejects.toThrow(/fail-closed/);
+    expect(execSpy).not.toHaveBeenCalled();
+  });
+
+  test("dry-run + ngoài readAllow → MOCK preview, KHÔNG execute", async () => {
+    execSpy.mockClear();
+    mcpReadAllowSpy.mockResolvedValueOnce(new Set());
+    const run = buildRunNode("u1", { dryRun: true });
+    const out = await run(node, emptyContext({ source: "manual" }));
+    expect(execSpy).not.toHaveBeenCalled();
+    expect(out).toMatchObject({ dryRun: true, wouldHaveCalled: "mcp__daab__kg_query", args: { project_id: "p-1" } });
+  });
+
+  test("dry-run + read (trong readAllow) → execute THẬT (đồng nhất connector read)", async () => {
+    execSpy.mockClear();
+    mcpReadAllowSpy.mockResolvedValueOnce(new Set(["mcp__daab__kg_query"]));
+    const run = buildRunNode("u1", { dryRun: true });
+    await run(node, emptyContext({ source: "manual" }));
+    expect(execSpy).toHaveBeenCalledWith("u1", "mcp__daab__kg_query", { project_id: "p-1" });
   });
 });
 

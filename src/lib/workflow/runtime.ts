@@ -6,10 +6,10 @@
 import { runToolRounds } from "@/lib/agent/orchestrator";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { withSafety } from "@/lib/agent/safety/gate";
-import { execute as connectorExecute } from "@/lib/connectors";
+import { execute as connectorExecute, mcpReadAllow } from "@/lib/connectors";
 import { callOllamaChat } from "./ollama";
-import { runAgentNode, runConnectorNode } from "./executors";
-import { assertConnectorAllowed } from "./blast";
+import { runAgentNode, runConnectorNode, runMcpNode, mcpActionName } from "./executors";
+import { assertConnectorAllowed, assertMcpAllowed } from "./blast";
 import { assertRecipientAllowed } from "./recipient";
 import { resolveKind } from "@/lib/agent/safety/policy";
 import type { RunContext, WfNode } from "./types";
@@ -37,6 +37,23 @@ export function buildRunNode(userId: string, opts?: { dryRun?: boolean }) {
         return connectorExecute(userId, action, args);
       };
       return runConnectorNode(node, ctx, { execute });
+    }
+    if (node.kind === "mcp") {
+      // P2: readAllow (trustReadHints × readOnlyHint, cache 30s) là ranh giới duy nhất.
+      // Real-run: ngoài readAllow → fail-closed TRƯỚC execute (MCP không có workflowSafe).
+      // Dry-run: ngoài readAllow → mock preview (như connector write); read vẫn chạy THẬT.
+      return (async () => {
+        const readAllow = await mcpReadAllow(userId);
+        const name = mcpActionName(node.server, node.tool);
+        if (!dryRun) assertMcpAllowed(name, readAllow);
+        const execute = (action: string, args: Record<string, unknown>): Promise<unknown> => {
+          if (dryRun && !readAllow.has(action)) {
+            return Promise.resolve({ dryRun: true, wouldHaveCalled: action, args });
+          }
+          return connectorExecute(userId, action, args);
+        };
+        return runMcpNode(node, ctx, { execute });
+      })();
     }
     if (node.kind === "agent") {
       const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now: Date.now(), lang: "vi" }), { internal: INTERNAL_TOOLS });

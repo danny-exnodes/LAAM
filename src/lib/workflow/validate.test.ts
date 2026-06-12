@@ -186,3 +186,29 @@ describe("validate v2 (assertRunnable — condition branch + foreach body)", () 
     expect(() => assertRunnable(g)).not.toThrow();
   });
 });
+
+// P2: mcp node đi qua validate như node tuyến tính thường (≤1 cạnh ra, không nhánh).
+describe("validate — mcp node (P2)", () => {
+  test("graph chứa mcp node hợp lệ → pass", () => {
+    const g: WorkflowGraph = {
+      nodes: [
+        { id: "m1", kind: "mcp", server: "daab", tool: "kg_query", args: { project_id: "p" } },
+        { id: "a1", kind: "agent", prompt: "tóm tắt {{steps.m1.output}}" },
+      ],
+      edges: [{ from: "m1", to: "a1" }],
+    };
+    expect(() => assertRunnable(g)).not.toThrow();
+  });
+
+  test("mcp node phân nhánh (2 cạnh ra) → throw như mọi node non-condition", () => {
+    const g: WorkflowGraph = {
+      nodes: [
+        { id: "m1", kind: "mcp", server: "daab", tool: "kg_query", args: {} },
+        { id: "a1", kind: "agent", prompt: "x" },
+        { id: "a2", kind: "agent", prompt: "y" },
+      ],
+      edges: [{ from: "m1", to: "a1" }, { from: "m1", to: "a2" }],
+    };
+    expect(() => assertRunnable(g)).toThrow(/branch|nhánh|condition/i);
+  });
+});
