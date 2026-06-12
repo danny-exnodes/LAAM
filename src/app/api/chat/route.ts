@@ -6,7 +6,7 @@ import { chatTools, mcpReadAllow } from "@/lib/connectors";
 import { sanitizeAttachments } from "@/lib/chat/attachment-meta";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
-import { runToolRounds, type ChatMessage, type OllamaChatResponse } from "@/lib/agent/orchestrator";
+import { runToolRounds, seedRequestedTool, type ChatMessage, type OllamaChatResponse, type RequestedTool } from "@/lib/agent/orchestrator";
 import { withSafety, PendingWriteSignal } from "@/lib/agent/safety/gate";
 import { sealPendingWrite, openPendingWrite } from "@/lib/agent/safety/token";
 import { buildPreview } from "@/lib/agent/safety/preview";
@@ -88,6 +88,7 @@ type ChatBody = {
   system?: string;
   images?: string[]; // W3 vision: raw base64 (không prefix data:), validate qua imagesError
   attachments?: unknown; // preview metadata để lưu + hiện lại sau reload (sanitizeAttachments)
+  requestedTool?: { name?: unknown; args?: unknown }; // P1 quick-tools: tool user đã chọn (pre-dispatch deterministic)
 };
 
 // W3 vision caps (server, trần cứng): ≤2 ảnh/lượt, mỗi ảnh ≤ ~2.8MB base64
@@ -320,6 +321,24 @@ export async function POST(req: Request) {
   // other MCP tools fail-closed to write.
   const readAllow = await mcpReadAllow(userId);
 
+  // P1 quick-tools: user picked tool → validate SỚM, fail-loud (Rule 12). Tên phải
+  // nằm trong union tool khả dụng của CHÍNH user này; Claude MVS không tool → 400.
+  let requestedTool: RequestedTool | null = null;
+  if (body.requestedTool && typeof body.requestedTool === "object") {
+    const rtName = typeof body.requestedTool.name === "string" ? body.requestedTool.name : "";
+    const rtArgs =
+      body.requestedTool.args && typeof body.requestedTool.args === "object" && !Array.isArray(body.requestedTool.args)
+        ? (body.requestedTool.args as Record<string, unknown>)
+        : {};
+    if (!rtName || !tools.some((t) => t.function.name === rtName)) {
+      return new Response(JSON.stringify({ error: `Tool không khả dụng: ${rtName || "(thiếu tên)"}` }), { status: 400 });
+    }
+    if (isClaudeModel(model)) {
+      return new Response(JSON.stringify({ error: "Chọn công cụ không hỗ trợ với model Claude (MVS không tool)" }), { status: 400 });
+    }
+    requestedTool = { name: rtName, args: rtArgs };
+  }
+
   // --- System prompt động + proactive notice COMPOSE-AROUND buildSystemPrompt (SP-3). ---
   const hasSystemOverride = typeof body.system === "string" && body.system.trim().length > 0;
   let systemContent = hasSystemOverride
@@ -376,7 +395,7 @@ export async function POST(req: Request) {
   // which on attachment turns is prefixed with the extracted file content — avoids
   // buffering a summarize-turn just because an uploaded doc contains "tạo/create".
   const intentText = (typeof body.titleHint === "string" && body.titleHint.trim()) ? body.titleHint : message;
-  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow, reqSignal: req.signal });
+  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow, requestedTool, reqSignal: req.signal });
 }
 
 // S3 — the main chat turn as a single live stream. Replaces the old "await the
@@ -395,9 +414,10 @@ function streamMainTurn(opts: {
   baseLen: number;
   proactive: ProactiveAlert[];
   readAllow: ReadonlySet<string>;
+  requestedTool?: RequestedTool | null; // P1 quick-tools: pre-dispatch deterministic trước tool-loop
   reqSignal?: AbortSignal;
 }): Response {
-  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow, reqSignal } = opts;
+  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow, requestedTool, reqSignal } = opts;
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -546,6 +566,9 @@ function streamMainTurn(opts: {
       let toolTurns: ReturnType<typeof extractToolTurns> = [];
       let cites: string[] = [];
       try {
+        // P1 quick-tools: tool user đã chọn → CODE gọi trước (qua đúng dispatch withSafety
+        // → tool frame tự emit, write vẫn suspend PendingWriteSignal vào catch dưới).
+        if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
         convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
         toolTurns = extractToolTurns(convo, baseLen);
         cites = deriveCitations(convo, baseLen);

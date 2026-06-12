@@ -36,6 +36,22 @@ function convoHasWebRead(convo: ChatMessage[]): boolean {
   );
 }
 
+// P1 quick-tools: user đã CHỌN tool tường minh trên UI → code dispatch deterministic
+// (Rule 5 — không bắt model đoán selection/args). Đi qua CÙNG dispatch withSafety:
+// write vẫn ném PendingWriteSignal → confirm-card y hệt. Shape message GIỐNG HỆT
+// tool-turn của runToolRounds để extractToolTurns/deriveCitations/persist thấy như nhau.
+export type RequestedTool = { name: string; args: Record<string, unknown> };
+
+export async function seedRequestedTool(
+  convo: ChatMessage[],
+  rt: RequestedTool,
+  dispatch: ToolRoundsDeps["dispatch"],
+): Promise<void> {
+  convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: rt.name, arguments: rt.args } }] });
+  const result = await dispatch(rt.name, rt.args);
+  convo.push({ role: "tool", content: JSON.stringify(result) });
+}
+
 export async function runToolRounds(
   messages: ChatMessage[],
   tools: ConnectorTool[],
