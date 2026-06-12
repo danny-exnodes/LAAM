@@ -516,6 +516,42 @@ describe("VariableHints — flow-aware variable autocomplete (A / #2)", () => {
   });
 });
 
+// ─── AgentForm — custom-agent preset select (P3.4) ───────────────────────────
+// Intent: chọn preset → node lưu customAgentId (runtime resolve + fail-loud);
+// khi dùng preset thì system textarea ẨN (system do preset cấp, sửa ở Settings).
+
+describe("AgentForm — custom-agent preset select (P3.4)", () => {
+  const agentNode: WfAgentNode = { id: "a1", kind: "agent", prompt: "x" };
+  const presets = [
+    { id: "ca-1", name: "Tóm tắt" },
+    { id: "ca-2", name: "Phân loại" },
+  ];
+
+  test("render preset select với options từ customAgents (inject)", () => {
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} customAgents={presets} />);
+    expect(screen.getByRole("option", { name: "Tóm tắt" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Phân loại" })).toBeInTheDocument();
+  });
+
+  test("chọn preset → onChange set customAgentId", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} customAgents={presets} />);
+    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "ca-1" } });
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ customAgentId: "ca-1" }));
+  });
+
+  test("đang dùng preset → system textarea ẨN + hint hiện; bỏ preset → onChange xoá customAgentId", () => {
+    const onChange = vi.fn();
+    const withPreset: WfAgentNode = { ...agentNode, customAgentId: "ca-1" };
+    renderPanel(<NodeConfigPanel node={withPreset} onChange={onChange} customAgents={presets} />);
+    expect(screen.queryByText("System prompt")).not.toBeInTheDocument();
+    expect(screen.getByText(/lấy từ preset/i)).toBeInTheDocument();
+    fireEvent.change(screen.getAllByRole("combobox")[0], { target: { value: "" } });
+    const updated = onChange.mock.calls[0][0] as WfAgentNode;
+    expect(updated.customAgentId).toBeUndefined();
+  });
+});
+
 // ─── McpForm — MCP node config (P2.4) ────────────────────────────────────────
 // Intent: chọn server → chọn tool (từ toolDetails của /api/connectors/mcp) →
 // SchemaArgsForm render required-args từ JSON Schema; tool write phải cảnh báo

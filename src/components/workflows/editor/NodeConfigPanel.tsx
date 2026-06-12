@@ -104,11 +104,14 @@ function AgentForm({
   onChange,
   t,
   suggestions,
+  presets = [],
 }: {
   node: WfAgentNode;
   onChange: (n: WfNode) => void;
   t: Translator;
   suggestions: string[];
+  /** P3: custom-agent presets (per-user) — chọn → node lưu customAgentId */
+  presets?: { id: string; name: string }[];
 }) {
   const systemRef = useRef<HTMLTextAreaElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -145,28 +148,57 @@ function AgentForm({
     }
   }
 
+  const usingPreset = !!node.customAgentId;
+
   return (
     <>
-      {field(
-        <>
-          {label(t("wf.node.agent.systemLabel"))}
-          <textarea
-            ref={systemRef}
-            className={inputCls()}
-            rows={3}
-            value={node.system ?? ""}
-            placeholder={t("wf.node.agent.systemPlaceholder")}
-            onChange={(e) => onChange({ ...node, system: e.target.value || undefined })}
-          />
-          <VariableHints
-            tokens={suggestions}
-            inputRef={systemRef}
-            value={node.system ?? ""}
-            onChange={(v) => onChange({ ...node, system: v || undefined })}
-            hintLabel={t("wf.node.insertVar")}
-          />
-        </>,
-      )}
+      {(presets.length > 0 || usingPreset) &&
+        field(
+          <>
+            {label(t("wf.node.agent.presetLabel"))}
+            <select
+              className={inputCls()}
+              value={node.customAgentId ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                const next = { ...node };
+                if (v) next.customAgentId = v;
+                else delete next.customAgentId;
+                onChange(next);
+              }}
+            >
+              <option value="">{t("wf.node.agent.presetNone")}</option>
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+              {node.customAgentId && !presets.find((p) => p.id === node.customAgentId) && (
+                <option value={node.customAgentId}>{node.customAgentId}</option>
+              )}
+            </select>
+            {usingPreset && <p className="mt-1 text-xs text-neutral-400">{t("wf.node.agent.presetHint")}</p>}
+          </>,
+        )}
+      {!usingPreset &&
+        field(
+          <>
+            {label(t("wf.node.agent.systemLabel"))}
+            <textarea
+              ref={systemRef}
+              className={inputCls()}
+              rows={3}
+              value={node.system ?? ""}
+              placeholder={t("wf.node.agent.systemPlaceholder")}
+              onChange={(e) => onChange({ ...node, system: e.target.value || undefined })}
+            />
+            <VariableHints
+              tokens={suggestions}
+              inputRef={systemRef}
+              value={node.system ?? ""}
+              onChange={(v) => onChange({ ...node, system: v || undefined })}
+              hintLabel={t("wf.node.insertVar")}
+            />
+          </>,
+        )}
       {field(
         <>
           {label(t("wf.node.agent.promptLabel"))}
@@ -907,6 +939,7 @@ export function NodeConfigPanel({
   onDelete,
   connectors: connectorsProp,
   mcpServers: mcpServersProp,
+  customAgents: customAgentsProp,
   allNodes,
   edges,
 }: {
@@ -917,6 +950,8 @@ export function NodeConfigPanel({
   connectors?: ConnectorListItem[];
   /** Injected for tests; if omitted, fetched from /api/connectors/mcp on mount (P2) */
   mcpServers?: McpServerItem[];
+  /** Injected for tests; if omitted, fetched from /api/custom-agents on mount (P3) */
+  customAgents?: { id: string; name: string }[];
   /** All graph nodes — used to derive upstream {{steps.<id>.output}} variables. */
   allNodes?: WfNode[];
   /** Edges (source→target) — used to compute which nodes are upstream of this one. */
@@ -953,6 +988,19 @@ export function NodeConfigPanel({
       .catch(() => { /* keep empty — McpForm shows the no-servers hint */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // P3: custom-agent presets cho AgentForm (cùng pattern injection/fetch).
+  const [customAgents, setCustomAgents] = useState<{ id: string; name: string }[]>(customAgentsProp ?? []);
+  const caInjectedRef = useRef(customAgentsProp !== undefined);
+  useEffect(() => {
+    if (caInjectedRef.current) return; // test injection — skip fetch
+    void fetch("/api/custom-agents")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { agents?: { id: string; name: string }[] } | null) => {
+        if (data?.agents) setCustomAgents(data.agents.map((a) => ({ id: a.id, name: a.name })));
+      })
+      .catch(() => { /* keep empty — AgentForm hides the preset select */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-700">
@@ -976,7 +1024,7 @@ export function NodeConfigPanel({
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {node.kind === "agent" && (
-          <AgentForm node={node} onChange={onChange} t={t} suggestions={suggestions} />
+          <AgentForm node={node} onChange={onChange} t={t} suggestions={suggestions} presets={customAgents} />
         )}
         {node.kind === "connector" && (
           <ConnectorForm node={node} onChange={onChange} t={t} connectors={connectors} suggestions={suggestions} />

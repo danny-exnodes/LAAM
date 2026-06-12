@@ -259,6 +259,14 @@ export const workflows: Dict = {
   "wf.node.jsonInvalid": { vi: "JSON không hợp lệ", en: "Invalid JSON", zh: "JSON 格式无效" },
 
   // Node config panel — agent
+  // P3: custom-agent preset cho Agent node
+  "wf.node.agent.presetLabel": { vi: "Preset (Custom Agent)", en: "Preset (Custom Agent)", zh: "预设（Custom Agent）" },
+  "wf.node.agent.presetNone": { vi: "— không (tự nhập system) —", en: "— none (manual system) —", zh: "— 无（手动输入 system）—" },
+  "wf.node.agent.presetHint": {
+    vi: "System prompt lấy từ preset — sửa nội dung trong Cài đặt → Custom Agents.",
+    en: "System prompt comes from the preset — edit it in Settings → Custom Agents.",
+    zh: "System prompt 来自预设 — 请在 设置 → Custom Agents 中编辑。",
+  },
   "wf.node.agent.systemLabel": { vi: "System prompt", en: "System prompt", zh: "System prompt" },
   "wf.node.agent.systemPlaceholder": {
     vi: "(dùng mặc định harness)",
