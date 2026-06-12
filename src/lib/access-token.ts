@@ -7,7 +7,7 @@
 // See decisions/machines-decomposition.md (Q2): ingest stays org-shared.
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import { accessTokens, type AccessToken } from "@/db/schema";
+import { accessTokens, users, type AccessToken } from "@/db/schema";
 import { generateMachineToken, hashToken } from "@/lib/machine-token";
 
 // Re-export the shared primitives so callers have one import surface and we
@@ -48,6 +48,20 @@ export async function verifyAccessToken(
   if (row.revokedAt) return null;
   if (row.expiresAt && row.expiresAt.getTime() <= Date.now()) return null;
   if (opts?.kind && row.kind !== opts.kind) return null;
+
+  // Defense-in-depth (off-boarding): a disabled user's credential is invalid even if
+  // the token row was never flipped to revoked. Disabling normally revokes all tokens
+  // in one tx, but this re-check makes `disabled` authoritative regardless of token
+  // state — the correct invariant now that owner/admins can mint tokens FOR a user.
+  // (collector tokens may have a null userId — provenance only — so skip when absent.)
+  if (row.userId) {
+    const [owner] = await db
+      .select({ disabledAt: users.disabledAt })
+      .from(users)
+      .where(eq(users.id, row.userId))
+      .limit(1);
+    if (owner?.disabledAt) return null;
+  }
 
   await db
     .update(accessTokens)

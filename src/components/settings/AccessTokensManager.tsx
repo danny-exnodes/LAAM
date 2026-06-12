@@ -14,6 +14,10 @@ type Token = {
   lastUsedAt: string | null;
   revokedAt: string | null;
   createdAt: string | null;
+  // Set (to the provisioning admin) only when an owner/admin minted this key FOR the
+  // user; null for self-minted. Drives the transparency badge below. Self-service
+  // always inserts null, so any non-null value means "provisioned by an admin".
+  createdByUserId?: string | null;
 };
 
 export function AccessTokensManager({ initial }: { initial: Token[] }) {
@@ -157,6 +161,11 @@ export function AccessTokensManager({ initial }: { initial: Token[] }) {
                       <code className="text-xs text-neutral-500">
                         {tok.prefix}•••{tok.last4}
                       </code>
+                      {tok.createdByUserId && (
+                        <div className="mt-0.5 text-xs text-amber-700 dark:text-amber-400">
+                          {t("access.provisionedBy")}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 uppercase text-xs text-neutral-500">{tok.kind}</td>
                     <td className="px-4 py-3 text-xs text-neutral-500">

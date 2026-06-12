@@ -88,6 +88,32 @@ describe("UsersManager", () => {
     vi.unstubAllGlobals();
   });
 
+  it("expanding a non-self user's Keys reveals the per-user provision panel", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ tokens: [] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(ui({ currentUserId: "u1", isOwner: true }));
+    // rows are [u1(self), u2(Bea), u3(Cy)] → the 2nd "Access keys" toggle is Bea's.
+    const keyToggles = screen.getAllByRole("button", { name: /Access keys/i });
+    fireEvent.click(keyToggles[1]);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Provision key/i })).toBeInTheDocument(),
+    );
+    // it fetched THAT user's keys, not the whole org
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("userId=u2"));
+    vi.unstubAllGlobals();
+  });
+
+  it("expanding the admin's OWN Keys shows the self-service hint (no provisioning to self)", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(ui({ currentUserId: "u1", isOwner: true }));
+    fireEvent.click(screen.getAllByRole("button", { name: /Access keys/i })[0]); // u1 = self
+    expect(screen.getByText(/Create your own keys/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Provision key/i })).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("does not render a disable button for your own row", () => {
     // current user u2 (member) → only u1 and u3 get action buttons.
     render(ui({ currentUserId: "u2", isOwner: false }));

@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import { AccessTokensManager } from "./AccessTokensManager";
+import type { ComponentProps } from "react";
 
-const TOKENS = [
+type Tok = ComponentProps<typeof AccessTokensManager>["initial"][number];
+
+const TOKENS: Tok[] = [
   {
     id: "t1",
     kind: "api" as const,
@@ -16,7 +19,7 @@ const TOKENS = [
   },
 ];
 
-function ui(initial = TOKENS) {
+function ui(initial: Tok[] = TOKENS) {
   return (
     <I18nProvider lang="en">
       <AccessTokensManager initial={initial} />
@@ -40,6 +43,16 @@ describe("AccessTokensManager", () => {
   it("shows the empty state when there are no tokens", () => {
     render(ui([]));
     expect(screen.getByText(/No tokens yet/i)).toBeInTheDocument();
+  });
+
+  it("flags an admin-provisioned key with a transparency badge (createdByUserId set)", () => {
+    render(ui([{ ...TOKENS[0], id: "t2", name: "given to me", createdByUserId: "admin1" }]));
+    expect(screen.getByText(/Provisioned by an admin/i)).toBeInTheDocument();
+  });
+
+  it("does NOT show the badge on a self-minted key (createdByUserId null)", () => {
+    render(ui([{ ...TOKENS[0], createdByUserId: null }]));
+    expect(screen.queryByText(/Provisioned by an admin/i)).not.toBeInTheDocument();
   });
 
   it("create flow POSTs name+kind and reveals the raw token ONCE", async () => {

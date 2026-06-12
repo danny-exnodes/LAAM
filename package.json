@@ -1,6 +1,6 @@
 {
   "name": "laam-v2",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "private": true,
   "type": "module",
   "description": "LAAM v2 — local-first multi-user (Next.js + Postgres + Auth.js). Dev: npm run dev.",

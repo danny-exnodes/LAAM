@@ -96,6 +96,7 @@ v2/
 - Phase 2 so far: **Sync** scans `~/.claude/projects` (reusing the v0.9 parser) → upserts `machine` / `project` / `agent_session`; **Agents** groups sessions by project; **Dashboard** shows KPIs. After logging in, click **Đồng bộ** (top-right).
 - Done since: local-model sessions (Ollama logs), **Session-detail** (`/agents/[id]` — live timeline + recent tool calls), **Dashboard breakdowns** (status / top models / top projects).
 - **Phase 2 complete:** **Graph** (`/graph`, react-flow — orchestrator → sub-agents) + Dashboard charts (cost-over-time via recharts, hour×weekday heatmap, tool leaderboard).
+- **Access & off-boarding (v2.4.x):** mỗi người tự quản token api/mcp ở `/settings/access`; owner/admin quản người dùng ở `/settings/users` — đổi vai trò, vô hiệu hoá (thu hồi mọi token), và **cấp access-key cho người khác** (đọc-chỉ, ghi nhật ký `token_issued_for`/`token_revoked_for`).
 - Later: Phase 3 collector (multi-machine ingest) · Phase 4 chat per-user + Gemma 4 smart-routing · Phase 5 connectors per-user (encrypted) · Phase 6 Tailscale + hardening + audit.
 
 ## Notes

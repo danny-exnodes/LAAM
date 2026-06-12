@@ -14,6 +14,20 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 - **Fix triệt để:** pin `@emnapi/core` + `@emnapi/runtime` `^1.11.0` vào **`devDependencies`** — dep bắt buộc thì không npm version nào được phép prune khỏi lock. Lưu ý: pin vào `optionalDependencies` **KHÔNG đủ** (đã thử và bị npm 11 prune tiếp — "optional" nghĩa là được phép vắng mặt); lock re-sync trong `node:22-alpine` (`npm install --package-lock-only`, không đụng `node_modules` host).
 - Verify 4 chiều: alpine npm ci ✅ · host npm ci ✅ · npm 11 regen lock giữ nguyên 2 entry ✅ · alpine chấp nhận lock do npm 11 sinh ✅. 1757 test xanh.
 
+## [2.4.1] — 2026-06-12
+
+### Đã thêm — Owner/admin cấp access-key cho người dùng khác (hoàn tất yêu cầu key↔user 2 chiều)
+- **`POST /api/access-tokens` nhận `forUserId` (tuỳ chọn):** không có / trùng chính mình → self-service như cũ (`requireMutator`). Khác mình → **owner/admin** mới được cấp: kiểm tra target tồn tại (404) + chưa bị vô hiệu hoá (400); **admin KHÔNG cấp được cho owner/admin — chỉ owner mới được** (chặn "rửa danh nghĩa"); `userId` lấy từ bản ghi DB đã xác thực (**KHÔNG** tin `forUserId` echo — Rule 13), `createdByUserId` = người cấp, tên khoá bị gắn hậu tố `(provisioned by <admin>)` (code-set, tự tài liệu hoá để chính chủ thấy là được cấp chứ không tự tạo); token + audit `token_issued_for` trong **một transaction**; **`Cache-Control: no-store`** trên mọi response trả token.
+- **`GET /api/access-tokens?userId=<id>` (owner/admin):** xem khoá của một user khác (cho UI). **Role-first**: member truyền `?userId` bị ép về chính mình về mặt cấu trúc (không bao giờ đọc được khoá người khác); projection có `createdByUserId`, **không bao giờ** có `tokenHash`.
+- **UI `/settings/users`:** mỗi hàng có nút mở rộng **"Khoá truy cập"** (UserKeysPanel) — liệt kê khoá api/mcp của user + **"Cấp khoá"** (thẻ reveal-once **màu hổ phách**, khác hẳn thẻ xanh self-service) + thu hồi. Hàng của chính admin chỉ hiện gợi ý tự tạo ở `/settings/access`. Cảnh báo trung thực: khoá đọc **giám sát agent org-shared, chỉ đọc**, dưới danh nghĩa người được cấp. `/settings/access` hiển thị badge **"Cấp bởi quản trị viên"** trên khoá được admin cấp (chính chủ thấy rõ). i18n đầy đủ vi/en/zh. Migration **0014** (`access_token.createdByUserId`).
+
+### Bảo mật — 2 vá phòng thủ chiều sâu (phản biện thiết kế bắt được, feature này khuếch đại)
+- **`laam_query_audit` lọc theo principal:** trước đây trả **TOÀN BỘ** audit log của tổ chức cho **bất kỳ** token api/mcp (kể cả token member tự tạo) → lộ `role_change` / `user_disabled` / `token_issued_for {actor,subject}`. Nay lọc `eq(auditLog.userId, ctx.userId)` — token chỉ đọc hành động của **chính principal**; token mồ côi (chủ đã xoá → principal rỗng) **fail-closed** (không trả gì) thay vì rơi về org-wide. (Đọc audit toàn tổ chức là năng lực phiên UI, không qua tool. Org-shared read rộng của các laam_* khác — search/timeline/list — vẫn ở backlog.)
+- **`verifyAccessToken` tái kiểm `disabledAt`:** trước đây chỉ kiểm revoked/expired/kind — một token sót khỏi đợt thu hồi off-boarding sẽ sống mãi. Nay **từ chối nếu chủ sở hữu bị vô hiệu hoá**, bất kể trạng thái bản ghi token → `disabled` là tối thượng (bỏ qua khi token không có userId — collector provenance).
+
+### Sửa
+- Đính chính memory: `userId` trên `access_token` **KHÔNG** phải khoá cô lập dữ liệu MCP đang hoạt động (các tool `laam_*` không lọc theo `ctx.userId`) — nó là attribution/provenance; cô lập per-user cho MCP là **dành sẵn, chưa kích hoạt**. PR này đóng phần rò audit-log; phần còn lại ở backlog.
+
 ## [2.4.0] — 2026-06-12
 
 > ⚠️ **Triển khai:** bản này vá 2 lỗ hổng đang sống (RBAC enforce + SSE rò chéo người dùng). Container production **phải rebuild image** để có hiệu lực — image cũ đang chạy vẫn hở.
