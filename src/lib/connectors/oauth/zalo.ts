@@ -44,9 +44,13 @@ async function tokenRequest(form: Record<string, string>, secret: string): Promi
     | null;
   if (!data || !data.access_token) {
     const err = (data && (data.error_name || data.error)) ?? "HTTP " + status;
-    // Zalo doesn't document a stable invalid_grant code: a 4xx/explicit error
-    // with no token on a refresh ≈ dead grant; 5xx/network stays transient.
-    throw new OAuthError("Zalo token: " + err, status > 0 && status < 500);
+    // Zalo doesn't document a stable invalid_grant code AND signals errors with
+    // HTTP 200 + an explicit `error` field. Dead grant = Zalo EXPLICITLY said so
+    // (error/error_name present) on a non-5xx; a malformed/empty body (proxy
+    // junk, outage) stays transient so we never flag needs_reconnect on a
+    // hiccup (review 2026-06-12).
+    const explicit = !!(data && (data.error !== undefined || data.error_name));
+    throw new OAuthError("Zalo token: " + err, explicit && status < 500);
   }
   return {
     access_token: data.access_token,

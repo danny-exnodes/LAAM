@@ -47,6 +47,7 @@ const ERR_KEY: Record<string, string> = {
   oauth_state: "conn.errState",
   oauth_expired: "conn.errExpired",
   oauth_exchange: "conn.errExchange",
+  forbidden: "conn.errForbidden",
 };
 
 type Note = { ok: boolean; msg: string } | null;

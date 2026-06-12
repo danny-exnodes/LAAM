@@ -21,8 +21,9 @@ vi.mock("./store", () => ({ getCreds, setCreds, delCreds }));
 
 // The advisory lock touches Postgres — passthrough in unit tests (the lock's
 // correctness is a DB concern; the double-check + persist logic IS under test).
+// fn receives the lock's tx executor — the mocked store ignores it.
 vi.mock("./oauth/lock", () => ({
-  withCredLock: (_u: string, _id: string, fn: () => Promise<unknown>) => fn(),
+  withCredLock: (_u: string, _id: string, fn: (tx: unknown) => Promise<unknown>) => fn({}),
 }));
 
 // Fake OAuth providers: atlassian-like (rotating refresh) + slack-like (no
@@ -350,6 +351,19 @@ describe("execute", () => {
     expect(r.error).toContain("thu hồi");
     expect(memCreds["u1:github"]!._needsReconnect).toBe("true");
   });
+  test("REVIEW-FIX: thu hồi call-time nhưng row đã bị disconnect → KHÔNG tái tạo row needs_reconnect", async () => {
+    memCreds["u1:github"] = { token: "ghp_x" };
+    (github.handlers.github_list_repos as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new OAuthError("invalid token", true),
+    );
+    // call 1 = initial read; call 2 = flagReconnectOnRevoke re-read → đã disconnect
+    getCreds
+      .mockImplementationOnce(async (u: string, id: string) => memCreds[`${u}:${id}`] ?? null)
+      .mockImplementationOnce(async () => null);
+    const r = (await execute("u1", "github_list_repos", {})) as { error?: string };
+    expect(r.error).toBeTruthy();
+    expect(setCreds).not.toHaveBeenCalled(); // không hồi sinh row {_needsReconnect} sau disconnect
+  });
 });
 
 describe("ensureFreshOAuthCreds qua execute — refresh matrix (§12.2/§12.5)", () => {
@@ -407,6 +421,32 @@ describe("ensureFreshOAuthCreds qua execute — refresh matrix (§12.2/§12.5)",
     memCreds["u1:slack"] = { _connected: "true", access_token: "xoxb" };
     const r = (await execute("u1", "slack_echo", {})) as { got: Record<string, string> };
     expect(r.got.access_token).toBe("xoxb");
+  });
+  test("REVIEW-FIX: re-read null trong lock (user vừa disconnect) → abort, KHÔNG hồi sinh creds", async () => {
+    memCreds["u1:jira"] = { _connected: "true", access_token: "old", refresh_token: "rt", expiry_at: PAST };
+    // call 1 = initial read (execute), call 2 = in-lock re-read → row đã bị xoá
+    getCreds
+      .mockImplementationOnce(async (u: string, id: string) => memCreds[`${u}:${id}`] ?? null)
+      .mockImplementationOnce(async () => null);
+    const r = (await execute("u1", "jira_echo", {})) as { error?: string };
+    expect(r.error).toBeTruthy();
+    expect(refreshMock).not.toHaveBeenCalled(); // refresh trên creds cũ = re-INSERT grant đã thu hồi
+    expect(setCreds).not.toHaveBeenCalled();
+  });
+  test("REVIEW-FIX: hết hạn + KHÔNG refresh_token + manual đủ bộ → strip oauth, chạy manual (fast path)", async () => {
+    memCreds["u1:jira"] = {
+      _connected: "true",
+      access_token: "stale",
+      expiry_at: PAST,
+      site: "a.atlassian.net",
+      email: "e@x.com",
+      api_token: "t",
+    };
+    const r = (await execute("u1", "jira_echo", {})) as { got: Record<string, string> };
+    expect(r.got.api_token).toBe("t");
+    expect(r.got.access_token).toBeUndefined(); // stale Bearer không được thắng manual
+    expect(memCreds["u1:jira"]!.access_token).toBeUndefined(); // đã persist bản strip
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 });
 

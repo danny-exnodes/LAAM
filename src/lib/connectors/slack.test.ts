@@ -44,11 +44,12 @@ describe("slack connector", () => {
     expect("workflowSafe" in send).toBe(false);
   });
 
-  test("slack_list_channels: đúng URL + Bearer + form params, kết quả cap 15", async () => {
+  test("slack_list_channels: đúng URL + Bearer; fetch trang 200 rồi MỚI cap 15 + total_matched", async () => {
     const spy = vi
       .spyOn(global, "fetch")
       .mockResolvedValue(Response.json({ ok: true, channels: manyChannels }));
     const r = (await slack.handlers.slack_list_channels({ limit: 50 }, CREDS)) as {
+      total_matched: number;
       channels: { id: string; name: string; is_private: boolean; num_members: number }[];
     };
     const [url, init] = spy.mock.calls[0] as [string, RequestInit];
@@ -58,9 +59,35 @@ describe("slack connector", () => {
     const params = new URLSearchParams(String(init.body));
     expect(params.get("types")).toBe("public_channel,private_channel");
     expect(params.get("exclude_archived")).toBe("true");
-    expect(params.get("limit")).toBe("15"); // user limit 50 bị cap về 15
-    expect(r.channels).toHaveLength(15);
+    // REVIEW-FIX 06-12: request lấy cả trang (200) — limit user chỉ cap KẾT QUẢ,
+    // không cắt cụt danh sách workspace ở trang đầu tiên của Slack.
+    expect(params.get("limit")).toBe("200");
+    expect(r.total_matched).toBe(20);
+    expect(r.channels).toHaveLength(15); // user limit 50 bị cap về 15
     expect(r.channels[0]).toEqual({ id: "C0", name: "kenh-0", is_private: true, num_members: 1 });
+  });
+
+  test("slack_list_channels: theo cursor qua nhiều trang + query lọc theo tên", async () => {
+    const page1 = Response.json({
+      ok: true,
+      channels: manyChannels.slice(0, 10),
+      response_metadata: { next_cursor: "dXNlcjpV" },
+    });
+    const page2 = Response.json({
+      ok: true,
+      channels: [{ id: "C99", name: "dev-backend", is_private: false, num_members: 7 }],
+      response_metadata: { next_cursor: "" },
+    });
+    const spy = vi.spyOn(global, "fetch").mockResolvedValueOnce(page1).mockResolvedValueOnce(page2);
+    const r = (await slack.handlers.slack_list_channels({ query: "dev" }, CREDS)) as {
+      total_matched: number;
+      channels: { id: string; name: string }[];
+    };
+    expect(spy).toHaveBeenCalledTimes(2); // theo next_cursor tới khi rỗng
+    const params2 = new URLSearchParams(String((spy.mock.calls[1][1] as RequestInit).body));
+    expect(params2.get("cursor")).toBe("dXNlcjpV");
+    expect(r.total_matched).toBe(1);
+    expect(r.channels).toEqual([{ id: "C99", name: "dev-backend", is_private: false, num_members: 7 }]);
   });
 
   test("slack_channel_history: đúng URL + channel + cap 15, shape {user,text,ts}", async () => {

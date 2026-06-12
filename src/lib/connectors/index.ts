@@ -106,16 +106,28 @@ async function ensureFreshOAuthCreds(
   if (!provider?.refresh) return creds;
   const expiry = Date.parse(creds.expiry_at || "");
   if (Number.isFinite(expiry) && expiry - Date.now() > 60_000) return creds; // >60s of life left
-  // Manual-mode creds (dual-mode jira): nothing to refresh — passthrough.
-  if (!creds.refresh_token && !creds.access_token) {
-    return manualComplete(def, creds) ? creds : null;
+  // No refresh token → the grant cannot be renewed. Dual-mode manual fields take
+  // over — the same fallback the invalid_grant path gives (review 2026-06-12: the
+  // old fast path returned null here even when manual fields were complete).
+  if (!creds.refresh_token) {
+    if (!manualComplete(def, creds)) return null;
+    if (!creds.access_token) return creds; // pure manual-mode — nothing OAuth to clean
+    const stripped = stripOAuthKeys(creds); // dead-end grant + valid manual → fall back
+    await setCreds(userId, id, stripped);
+    return stripped;
   }
-  if (!creds.refresh_token) return null;
 
   // Advisory lock + double-check: another process (dev and prod share one DB)
-  // may have already rotated this single-use refresh token (§12.2).
-  return withCredLock(userId, id, async () => {
-    const cur = (await getCreds(userId, id)) ?? creds;
+  // may have already rotated this single-use refresh token (§12.2). All creds
+  // reads/writes inside run on the LOCK'S OWN transaction so the holder never
+  // waits for a second pool connection (deadlock topology — review 2026-06-12).
+  return withCredLock(userId, id, async (tx) => {
+    // A null re-read is AUTHORITATIVE: the user disconnected (or the blob became
+    // unreadable) while we waited for the lock — refreshing the captured creds
+    // would re-INSERT a revoked credential with a freshly rotated, durable
+    // refresh token (review 2026-06-12: resurrection bug). Abort instead.
+    const cur = await getCreds(userId, id, tx);
+    if (!cur) return null;
     const exp2 = Date.parse(cur.expiry_at || "");
     if (Number.isFinite(exp2) && exp2 - Date.now() > 60_000) return cur;
     if (!cur.refresh_token) return manualComplete(def, cur) ? cur : null;
@@ -131,17 +143,17 @@ async function ensureFreshOAuthCreds(
       if (tok.refresh_token) updated.refresh_token = tok.refresh_token;
       if (tok.scope) updated.scope = tok.scope;
       delete updated._needsReconnect;
-      await setCreds(userId, id, updated);
+      await setCreds(userId, id, updated, tx);
       return updated;
     } catch (e) {
       if (e instanceof OAuthError && e.invalidGrant) {
         if (manualComplete(def, cur)) {
           // Dead grant but valid manual fields → keep working in manual mode (§12.5c)
           const stripped = stripOAuthKeys(cur);
-          await setCreds(userId, id, stripped);
+          await setCreds(userId, id, stripped, tx);
           return stripped;
         }
-        await setCreds(userId, id, { ...cur, _needsReconnect: "true" });
+        await setCreds(userId, id, { ...cur, _needsReconnect: "true" }, tx);
         return null;
       }
       throw e; // transient: let caller surface as a normal error (don't flag reconnect)
@@ -155,7 +167,11 @@ async function ensureFreshOAuthCreds(
 // UI offers reconnect instead of showing "connected" forever.
 async function flagReconnectOnRevoke(userId: string, id: string, e: unknown): Promise<boolean> {
   if (!(e instanceof OAuthError && e.invalidGrant)) return false;
-  const cur = (await getCreds(userId, id)) ?? {};
+  const cur = await getCreds(userId, id);
+  // Row gone (user disconnected mid-call) → stay disconnected: re-creating a
+  // `{_needsReconnect}` row would resurrect the connector as "needs_reconnect"
+  // after an explicit disconnect (review 2026-06-12).
+  if (!cur) return true;
   await setCreds(userId, id, { ...cur, _needsReconnect: "true" });
   return true;
 }
@@ -273,7 +289,10 @@ export async function testConnector(
       if (!fresh) return { ok: false, error: "phiên đăng nhập hết hạn — cần kết nối lại" };
       creds = fresh;
     } catch (e) {
-      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+      // §12.9: only OAuthError messages (sanitized by construction — parsed
+      // provider codes, never request init/secrets) may surface; anything else
+      // stays generic.
+      return { ok: false, error: "lỗi refresh token" + (e instanceof OAuthError ? ": " + e.message : " (lỗi tạm thời)") };
     }
   }
   if (typeof def.test !== "function")
@@ -362,7 +381,8 @@ export async function execute(userId: string, toolName: string, args: unknown): 
       if (!fresh) return { error: 'connector "' + id + '" cần kết nối lại (phiên đăng nhập hết hạn)' };
       creds = fresh;
     } catch (e) {
-      return { error: "lỗi refresh token: " + (e instanceof Error ? e.message : String(e)) };
+      // §12.9: only sanitized OAuthError codes may reach the model.
+      return { error: "lỗi refresh token" + (e instanceof OAuthError ? ": " + e.message : " (lỗi tạm thời)") };
     }
   }
   let a: unknown = args;

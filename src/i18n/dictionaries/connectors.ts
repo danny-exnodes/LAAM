@@ -52,9 +52,14 @@ export const connectors: Dict = {
   'conn.errState': { vi: 'Phiên kết nối không hợp lệ, thử lại.', en: 'Invalid session, please retry.', zh: '会话无效，请重试。' },
   'conn.errExpired': { vi: 'Liên kết đã hết hạn, thử lại.', en: 'The link expired, please retry.', zh: '链接已过期，请重试。' },
   'conn.errExchange': {
-    vi: 'Không đổi được mã với Google, thử lại.',
-    en: 'Could not exchange the code with Google, please retry.',
-    zh: '无法与 Google 交换代码，请重试。',
+    vi: 'Không đổi được mã với nhà cung cấp, thử lại.',
+    en: 'Could not exchange the code with the provider, please retry.',
+    zh: '无法与提供方交换代码，请重试。',
+  },
+  'conn.errForbidden': {
+    vi: 'Tài khoản chỉ-xem không được kết nối/sửa connector.',
+    en: 'A view-only account cannot connect or modify connectors.',
+    zh: '只读账户无法连接或修改连接器。',
   },
 
   // Per-connector strings supplied by the connector modules (blurb / token help /

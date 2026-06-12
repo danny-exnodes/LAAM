@@ -249,6 +249,11 @@ describe("GET callback — state-cookie scan + provider/connector agreement", ()
       expect.objectContaining({ access_token: "at" }),
     );
     expect(res.headers.get("location")).toContain("connected=google-drive");
+    // REVIEW-FIX 06-12: deletion phải lặp lại đúng Path lúc set — delete mặc định
+    // Path=/ là cookie KHÁC, cookie gốc sống tới hết maxAge (single-use vô hiệu).
+    const setCookie = res.headers.get("set-cookie") || "";
+    expect(setCookie).toContain("laam_oauth_google-drive=");
+    expect(setCookie.toLowerCase()).toContain("path=/api/connectors");
   });
 
   test("state không khớp → oauth_state, không exchange (CSRF fail-closed)", async () => {

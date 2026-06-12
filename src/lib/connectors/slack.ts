@@ -79,10 +79,11 @@ const slack: Connector = {
       function: {
         name: "slack_list_channels",
         description:
-          "Liệt kê các kênh Slack của workspace (public và private). Kênh private chỉ hiện khi bot đã được mời vào kênh. Trả về id kênh để dùng cho các công cụ Slack khác.",
+          "Liệt kê các kênh Slack của workspace (public và private). Kênh private chỉ hiện khi bot đã được mời vào kênh. Workspace nhiều kênh: dùng query để lọc theo tên (vd query=\"dev\"). Trả về id kênh để dùng cho các công cụ Slack khác.",
         parameters: {
           type: "object",
           properties: {
+            query: { type: "string", description: "lọc theo tên kênh chứa chuỗi này (tuỳ chọn)" },
             limit: { type: "number", description: "số kênh tối đa, mặc định 15 (tối đa 15)" },
           },
         },
@@ -127,17 +128,33 @@ const slack: Connector = {
   handlers: {
     async slack_list_channels(args, creds) {
       const limit = Math.min(Number(args.limit) || 15, 15);
-      const data = await slackApi("conversations.list", creds, {
-        types: "public_channel,private_channel",
-        exclude_archived: "true",
-        limit: String(limit),
-      });
-      const channels = (Array.isArray(data.channels) ? data.channels : []) as Record<
-        string,
-        unknown
-      >[];
+      const query = String(args.query || "").trim().toLowerCase();
+      // Fetch the whole workspace listing (cursor pagination, page size 200,
+      // hard-capped at 5 pages ≈ 1000 channels) BEFORE filtering/capping —
+      // review 2026-06-12: a bare limit=15 request made every channel beyond
+      // Slack's arbitrary first page silently unreachable.
+      const all: Record<string, unknown>[] = [];
+      let cursor = "";
+      for (let page = 0; page < 5; page++) {
+        const params: Record<string, string> = {
+          types: "public_channel,private_channel",
+          exclude_archived: "true",
+          limit: "200",
+        };
+        if (cursor) params.cursor = cursor;
+        const data = await slackApi("conversations.list", creds, params);
+        all.push(...((Array.isArray(data.channels) ? data.channels : []) as Record<string, unknown>[]));
+        cursor = String(
+          (data.response_metadata as { next_cursor?: string } | undefined)?.next_cursor || "",
+        );
+        if (!cursor) break;
+      }
+      const matched = query
+        ? all.filter((c) => String(c.name || "").toLowerCase().includes(query))
+        : all;
       return {
-        channels: channels.slice(0, limit).map((c) => ({
+        total_matched: matched.length, // > limit → kết quả bị cắt, hãy lọc bằng query
+        channels: matched.slice(0, limit).map((c) => ({
           id: c.id,
           name: c.name,
           is_private: c.is_private,

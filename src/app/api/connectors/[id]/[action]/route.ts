@@ -26,7 +26,15 @@ import { requireMutator } from "@/lib/auth/rbac";
 // state/PKCE-verifier — each callback consumes only its own entry, matched by
 // the state param (spec 2026-06-12 §12.8).
 const OAUTH_COOKIE_PREFIX = "laam_oauth_";
+const OAUTH_COOKIE_PATH = "/api/connectors";
 const OAUTH_TTL_MS = 600_000; // 10 minutes
+
+// Deletion must repeat the Path the cookie was SET with — a bare delete() emits
+// Path=/ which the browser treats as a DIFFERENT cookie, leaving the original
+// alive until maxAge (review 2026-06-12: single-use/capture-replay weakened).
+function deleteStateCookie(res: NextResponse, cookieName: string): void {
+  res.cookies.delete({ name: cookieName, path: OAUTH_COOKIE_PATH });
+}
 
 type OAuthState = { state: string; codeVerifier: string; connectorId: string; exp: number };
 
@@ -49,7 +57,7 @@ function setStateCookie(res: NextResponse, payload: OAuthState): void {
     httpOnly: true,
     secure: true,
     sameSite: "lax", // sent on the top-level GET navigation back from the provider
-    path: "/api/connectors",
+    path: OAUTH_COOKIE_PATH,
     maxAge: OAUTH_TTL_MS / 1000,
   });
 }
@@ -182,7 +190,7 @@ async function callback(req: Request, userId: string, providerId: string): Promi
   const provider = PROVIDERS[providerId];
   const fail = (reason: string, cookieName?: string) => {
     const res = NextResponse.redirect(appUrl(`/connectors?error=${reason}`, req.url));
-    if (cookieName) res.cookies.delete(cookieName);
+    if (cookieName) deleteStateCookie(res, cookieName);
     return res;
   };
 
@@ -215,7 +223,7 @@ async function callback(req: Request, userId: string, providerId: string): Promi
   const res = NextResponse.redirect(
     appUrl(`/connectors?connected=${encodeURIComponent(st.connectorId)}`, req.url),
   );
-  res.cookies.delete(cookieName);
+  deleteStateCookie(res, cookieName);
   return res;
 }
 
@@ -228,7 +236,7 @@ async function trelloCapture(req: Request, userId: string): Promise<NextResponse
   const raw = (await cookies()).get(cookieName)?.value;
   const fail = (status: number, error: string) => {
     const res = NextResponse.json({ ok: false, error }, { status });
-    res.cookies.delete(cookieName);
+    deleteStateCookie(res, cookieName);
     return res;
   };
   if (!raw) return fail(400, "phiên authorize không tồn tại — bấm lại nút Kết nối");
@@ -252,6 +260,6 @@ async function trelloCapture(req: Request, userId: string): Promise<NextResponse
 
   await saveTrelloToken(userId, token, key);
   const res = NextResponse.json({ ok: true, username: verified.username || null });
-  res.cookies.delete(cookieName);
+  deleteStateCookie(res, cookieName);
   return res;
 }

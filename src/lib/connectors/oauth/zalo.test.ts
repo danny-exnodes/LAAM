@@ -86,6 +86,14 @@ describe("refresh (single-use rotation, TTL 3 tháng)", () => {
         e.invalidGrant === false && !e.message.includes("zalo-secret"),
     );
   });
+  test("REVIEW-FIX: HTTP 200 + error field tường minh (quirk Zalo) → invalidGrant=true", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => fakeResponse(200, { error: -14014, error_name: "Invalid refresh token" })));
+    await expect(zaloProvider.refresh!("dead")).rejects.toMatchObject({ invalidGrant: true });
+  });
+  test("REVIEW-FIX: HTTP 200 nhưng body rỗng/hỏng (proxy junk) → transient, KHÔNG flag reconnect", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => fakeResponse(200, null)));
+    await expect(zaloProvider.refresh!("rt")).rejects.toMatchObject({ invalidGrant: false });
+  });
 });
 
 describe("enrich", () => {
