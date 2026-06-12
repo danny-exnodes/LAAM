@@ -42,6 +42,16 @@ describe("AccessTokensManager", () => {
     expect(screen.getByText(/No tokens yet/i)).toBeInTheDocument();
   });
 
+  it("flags an admin-provisioned key with a transparency badge (createdByUserId set)", () => {
+    render(ui([{ ...TOKENS[0], id: "t2", name: "given to me", createdByUserId: "admin1" }]));
+    expect(screen.getByText(/Provisioned by an admin/i)).toBeInTheDocument();
+  });
+
+  it("does NOT show the badge on a self-minted key (createdByUserId null)", () => {
+    render(ui([{ ...TOKENS[0], createdByUserId: null }]));
+    expect(screen.queryByText(/Provisioned by an admin/i)).not.toBeInTheDocument();
+  });
+
   it("create flow POSTs name+kind and reveals the raw token ONCE", async () => {
     const fetchMock = vi
       .fn()

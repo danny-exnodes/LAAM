@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "@/i18n/provider";
 import { usersDict } from "@/i18n/dictionaries/users";
+import { UserKeysPanel } from "./UserKeysPanel";
 
 type Row = {
   id: string;
@@ -30,6 +31,12 @@ export function UsersManager({
   const [rows, setRows] = useState<Row[]>(initial);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [openKeysId, setOpenKeysId] = useState<string | null>(null);
+  // Resolve a key's createdByUserId → display name (the provisioning admin).
+  const nameById = useMemo(
+    () => Object.fromEntries(rows.map((r) => [r.id, r.name ?? r.email ?? r.id])),
+    [rows],
+  );
 
   function flash(ok: boolean, msg: string) {
     setToast({ ok, msg });
@@ -117,8 +124,10 @@ export function UsersManager({
               {rows.map((u) => {
                 const isSelf = u.id === currentUserId;
                 const disabled = !!u.disabledAt;
+                const keysOpen = openKeysId === u.id;
                 return (
-                  <tr key={u.id} className={disabled ? "opacity-60" : undefined}>
+                  <Fragment key={u.id}>
+                  <tr className={disabled ? "opacity-60" : undefined}>
                     <td className="px-4 py-3">
                       <div className="font-medium text-neutral-800 dark:text-neutral-100">
                         {u.name ?? "—"} {isSelf && <span className="text-xs text-neutral-400">{t("users.you")}</span>}
@@ -160,22 +169,44 @@ export function UsersManager({
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {!isSelf && (
+                      <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => toggleDisabled(u)}
-                          disabled={busyId === u.id}
-                          className={
-                            "rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50 " +
-                            (disabled
-                              ? "border-neutral-300 text-green-600 hover:bg-green-50 dark:border-neutral-700 dark:hover:bg-green-950/40"
-                              : "border-neutral-300 text-red-600 hover:bg-red-50 dark:border-neutral-700 dark:hover:bg-red-950/40")
-                          }
+                          onClick={() => setOpenKeysId(keysOpen ? null : u.id)}
+                          aria-expanded={keysOpen}
+                          className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
                         >
-                          {disabled ? t("users.enable") : t("users.disable")}
+                          {keysOpen ? t("users.keys.hide") : t("users.keys.expand")}
                         </button>
-                      )}
+                        {!isSelf && (
+                          <button
+                            onClick={() => toggleDisabled(u)}
+                            disabled={busyId === u.id}
+                            className={
+                              "rounded-lg border px-3 py-1.5 text-xs font-medium disabled:opacity-50 " +
+                              (disabled
+                                ? "border-neutral-300 text-green-600 hover:bg-green-50 dark:border-neutral-700 dark:hover:bg-green-950/40"
+                                : "border-neutral-300 text-red-600 hover:bg-red-50 dark:border-neutral-700 dark:hover:bg-red-950/40")
+                            }
+                          >
+                            {disabled ? t("users.enable") : t("users.disable")}
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
+                  {keysOpen && (
+                    <tr>
+                      <td colSpan={4} className="bg-neutral-50/50 px-4 py-3 dark:bg-neutral-950/40">
+                        <UserKeysPanel
+                          userId={u.id}
+                          userName={u.name ?? u.email ?? u.id}
+                          isSelf={isSelf}
+                          nameById={nameById}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

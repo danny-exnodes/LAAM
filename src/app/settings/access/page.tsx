@@ -25,6 +25,7 @@ export default async function AccessPage() {
       lastUsedAt: accessTokens.lastUsedAt,
       revokedAt: accessTokens.revokedAt,
       createdAt: accessTokens.createdAt,
+      createdByUserId: accessTokens.createdByUserId,
     })
     .from(accessTokens)
     .where(eq(accessTokens.userId, session.user.id as string))
@@ -42,6 +43,7 @@ export default async function AccessPage() {
       lastUsedAt: r.lastUsedAt ? r.lastUsedAt.toISOString() : null,
       revokedAt: r.revokedAt ? r.revokedAt.toISOString() : null,
       createdAt: r.createdAt ? r.createdAt.toISOString() : null,
+      createdByUserId: r.createdByUserId,
     }));
 
   return (

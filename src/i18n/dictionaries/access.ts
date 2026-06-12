@@ -17,9 +17,14 @@ export const accessDict: Dict = {
   "access.kind.api": { vi: "API", en: "API", zh: "API" },
   "access.kind.mcp": { vi: "MCP", en: "MCP", zh: "MCP" },
   "access.scopeNote": {
-    vi: "Phạm vi: chỉ đọc (read).",
-    en: "Scope: read-only.",
-    zh: "范围：只读。",
+    vi: "Phạm vi: chỉ đọc. Khoá đọc dữ liệu giám sát agent (chia sẻ trong tổ chức) và nhật ký của riêng bạn.",
+    en: "Scope: read-only. The key reads agent-monitoring data (org-shared) and your own audit log.",
+    zh: "范围：只读。该密钥读取 agent 监控数据（组织共享）以及您自己的审计日志。",
+  },
+  "access.provisionedBy": {
+    vi: "Cấp bởi quản trị viên",
+    en: "Provisioned by an admin",
+    zh: "由管理员发放",
   },
 
   // issued token reveal
