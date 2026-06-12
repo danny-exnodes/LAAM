@@ -1,6 +1,6 @@
 "use client";
 
-import { Server, Palette, Languages, Gauge, Activity, Network, Users, KeyRound } from "lucide-react";
+import { Server, Palette, Languages, Gauge, Activity, Network, Users, KeyRound, Bot } from "lucide-react";
 import { useT } from "@/i18n/provider";
 import { settingsDict } from "@/i18n/dictionaries/settings";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -68,6 +68,13 @@ export function SettingsMenu({ user }: { user: SettingsUser }) {
           icon={<Server size={18} />}
           label={t("settings.machines.label")}
           sub={t("settings.machines.desc")}
+        />
+        <SettingsRow
+          href="/settings/custom-agents"
+          icon={<Bot size={18} />}
+          label={t("settings.customAgents.label")}
+          sub={t("settings.customAgents.desc")}
+          color="#a855f7"
         />
         <SettingsRow
           href="/eval"

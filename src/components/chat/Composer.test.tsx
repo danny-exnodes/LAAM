@@ -169,3 +169,123 @@ test("dropping files calls onAddFiles", () => {
   fireEvent.drop(zone, { dataTransfer: { files: [file], types: ["Files"] } });
   expect(props.onAddFiles).toHaveBeenCalled();
 });
+
+// ── P1 quick-tools picker ────────────────────────────────────────────────────
+// Intent: user CHỌN tool tường minh + UI dẫn nhập required-args (project_id UUID…)
+// — đòn bẩy reliability thay cho prompt-tune (decision chat-mcp-quicktools).
+
+const toolGroupsFx = [
+  {
+    id: "mcp:daab",
+    type: "mcp" as const,
+    label: "DAAB",
+    tools: [
+      {
+        name: "mcp__daab__kg_query",
+        description: "truy vấn knowledge graph",
+        kind: "read" as const,
+        args: [{ key: "project_id", kind: "string" as const, description: "UUID dự án", required: true }],
+      },
+    ],
+  },
+  {
+    id: "connector:demo",
+    type: "connector" as const,
+    label: "Demo",
+    tools: [
+      {
+        name: "demo_create_task",
+        description: "tạo task mẫu",
+        kind: "write" as const,
+        args: [{ key: "title", kind: "string" as const, required: true }],
+      },
+    ],
+  },
+];
+
+const pickFx = {
+  tool: toolGroupsFx[0].tools[0],
+  groupLabel: "DAAB",
+  args: {},
+};
+
+test("gõ '/' hiện section Công cụ với tool từ catalog (kèm nhóm)", () => {
+  setup({ value: "/", toolGroups: toolGroupsFx });
+  expect(screen.getByText("Công cụ")).toBeInTheDocument();
+  expect(screen.getByText("mcp__daab__kg_query")).toBeInTheDocument();
+  expect(screen.getByText("demo_create_task")).toBeInTheDocument();
+  expect(screen.getByText("DAAB")).toBeInTheDocument();
+});
+
+test("slash query filter tool theo tên/mô tả", () => {
+  setup({ value: "/kg", toolGroups: toolGroupsFx });
+  expect(screen.getByText("mcp__daab__kg_query")).toBeInTheDocument();
+  expect(screen.queryByText("demo_create_task")).not.toBeInTheDocument();
+});
+
+test("click tool → onToolPick với tool + groupLabel", () => {
+  const onToolPick = vi.fn();
+  setup({ value: "/kg", toolGroups: toolGroupsFx, onToolPick });
+  fireEvent.click(screen.getByText("mcp__daab__kg_query"));
+  expect(onToolPick).toHaveBeenCalledWith({
+    tool: expect.objectContaining({ name: "mcp__daab__kg_query" }),
+    groupLabel: "DAAB",
+  });
+});
+
+test("toolPick thiếu required arg → send disabled + hint thiếu tham số", () => {
+  setup({ value: "tra cứu cá hồi", toolPick: pickFx });
+  expect(screen.getByLabelText("Gửi tin nhắn")).toBeDisabled();
+  expect(screen.getByText(/Thiếu tham số bắt buộc/)).toHaveTextContent("project_id");
+  // input required-arg hiển thị để user dán UUID
+  expect(screen.getByLabelText("project_id")).toBeInTheDocument();
+});
+
+test("điền required arg → onToolArg; đủ args → send enabled kể cả text rỗng", () => {
+  const onToolArg = vi.fn();
+  setup({ value: "", toolPick: { ...pickFx, args: { project_id: "1f991b74-x" } }, onToolArg });
+  expect(screen.getByLabelText("Gửi tin nhắn")).not.toBeDisabled();
+  fireEvent.change(screen.getByLabelText("project_id"), { target: { value: "abc" } });
+  expect(onToolArg).toHaveBeenCalledWith("project_id", "abc");
+});
+
+// Review-fix (critical): field number không bao giờ đẩy NaN xuống state/server
+// (NaN JSON-hoá thành null = hỏng dữ liệu im lặng, Rule 12). Nhánh chuỗi-không-
+// phải-số test trực tiếp ở coerceNumberInput (jsdom sanitize input number nên
+// không mô phỏng "abc" qua DOM được); ở đây chốt đường DOM "" → undefined.
+test("number field: xoá về rỗng → onToolArg(key, undefined) qua coerceNumberInput", () => {
+  const onToolArg = vi.fn();
+  const numPick = {
+    tool: { name: "t_num", description: "", kind: "read" as const, args: [{ key: "n", kind: "number" as const, required: true }] },
+    groupLabel: "G",
+    args: { n: 5 },
+  };
+  setup({ toolPick: numPick, onToolArg });
+  fireEvent.change(screen.getByLabelText("n"), { target: { value: "" } });
+  expect(onToolArg).toHaveBeenCalledWith("n", undefined);
+});
+
+test("args chứa NaN (phòng thủ) → required vẫn coi là THIẾU, send disabled", () => {
+  const numPick = {
+    tool: { name: "t_num", description: "", kind: "read" as const, args: [{ key: "n", kind: "number" as const, required: true }] },
+    groupLabel: "G",
+    args: { n: NaN },
+  };
+  setup({ value: "x", toolPick: numPick });
+  expect(screen.getByLabelText("Gửi tin nhắn")).toBeDisabled();
+});
+
+test("✕ trên chip → onToolPick(null)", () => {
+  const onToolPick = vi.fn();
+  setup({ toolPick: pickFx, onToolPick });
+  fireEvent.click(screen.getByLabelText("Bỏ chọn công cụ"));
+  expect(onToolPick).toHaveBeenCalledWith(null);
+});
+
+test("Enter khi slash-menu chỉ khớp tool → pick tool đầu tiên (không gửi)", () => {
+  const onToolPick = vi.fn();
+  const props = setup({ value: "/kg", toolGroups: toolGroupsFx, onToolPick });
+  fireEvent.keyDown(screen.getByLabelText("Soạn tin nhắn"), { key: "Enter" });
+  expect(onToolPick).toHaveBeenCalledTimes(1);
+  expect(props.onSend).not.toHaveBeenCalled();
+});

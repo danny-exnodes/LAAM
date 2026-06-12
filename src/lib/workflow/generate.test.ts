@@ -161,3 +161,17 @@ describe("buildUserMessage (refine — #3 stretch)", () => {
     expect(msg).toContain("TOÀN BỘ graph"); // asks for the full edited graph back
   });
 });
+
+// P3 anti-regression: coerceGraph STRIP customAgentId khỏi agent node do model trả —
+// model không thể biết preset id THẬT của user (Rule 13); giữ lại = runtime fail-loud
+// trên id bịa. (Hành vi hiện tại của coerceNode vốn chỉ copy field whitelist — test
+// này chốt hợp đồng để refactor sau không vô tình pass-through.)
+describe("coerceGraph — strips customAgentId (P3 / Rule 13)", () => {
+  test("agent node có customAgentId từ model → bị strip", () => {
+    const g = coerceGraph({
+      nodes: [{ id: "a1", kind: "agent", prompt: "x", customAgentId: "ca-fake" }],
+      edges: [],
+    });
+    expect(g.nodes[0]).not.toHaveProperty("customAgentId");
+  });
+});

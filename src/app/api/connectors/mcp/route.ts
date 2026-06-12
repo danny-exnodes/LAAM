@@ -19,9 +19,24 @@ export async function GET() {
 
   const servers = await listServers(userId);
   const toolsBySlug: Record<string, string[]> = {};
+  // P2.3: editor MCP-node form cần schema/kind per tool → toolDetails (additive,
+  // `tools` string[] giữ nguyên cho UI hiện có).
+  type ToolDetail = { name: string; nsName: string; description: string; parameters: object; kind: "read" | "write" };
+  const detailsBySlug: Record<string, ToolDetail[]> = {};
   try {
-    const { route } = await discoverForUser(userId);
+    const { route, tools } = await discoverForUser(userId);
     for (const [name, r] of route) (toolsBySlug[r.slug] ??= []).push(name);
+    for (const t of tools) {
+      const r = route.get(t.function.name);
+      if (!r) continue;
+      (detailsBySlug[r.slug] ??= []).push({
+        name: r.realName,
+        nsName: t.function.name,
+        description: t.function.description,
+        parameters: t.function.parameters,
+        kind: t.kind,
+      });
+    }
   } catch {
     /* discovery best-effort; show servers even if probing fails */
   }
@@ -34,6 +49,7 @@ export async function GET() {
       hasToken: !!s.authToken,
       trustReadHints: s.trustReadHints,
       tools: toolsBySlug[s.slug] ?? [],
+      toolDetails: detailsBySlug[s.slug] ?? [],
     })),
   });
 }

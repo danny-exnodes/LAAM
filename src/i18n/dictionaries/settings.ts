@@ -41,6 +41,12 @@ export const settingsDict: Dict = {
     en: "Personal tokens for API / MCP",
     zh: "用于 API / MCP 的个人令牌",
   },
+  "settings.customAgents.label": { vi: "Custom Agents", en: "Custom Agents", zh: "Custom Agents" },
+  "settings.customAgents.desc": {
+    vi: "Preset agent cho workflow (system prompt tái dùng)",
+    en: "Agent presets for workflows (reusable system prompts)",
+    zh: "工作流的 Agent 预设（可复用 system prompt）",
+  },
 
   "settings.display": { vi: "Hiển thị", en: "Display", zh: "显示" },
   "settings.appearance": { vi: "Giao diện", en: "Appearance", zh: "外观" },

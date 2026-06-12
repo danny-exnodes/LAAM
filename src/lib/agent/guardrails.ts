@@ -36,6 +36,23 @@ export function validateArgs(
   return { ok: true, value: obj };
 }
 
+// P1 quick-tools: requestedTool từ picker đi qua CÙNG chuẩn validateArgs như
+// internal tools — fail-fast tại trust boundary /api/chat thay vì để args hỏng
+// (thiếu required / sai kiểu) trôi xuống connector handler. Trả null khi body
+// không mang requestedTool (đường chat thường).
+export function checkRequestedTool(
+  rt: { name?: unknown; args?: unknown } | null | undefined,
+  tools: { function: { name: string; parameters: object } }[],
+): { ok: true; value: { name: string; args: Record<string, unknown> } } | { ok: false; error: string } | null {
+  if (!rt || typeof rt !== "object") return null;
+  const name = typeof rt.name === "string" ? rt.name : "";
+  const tool = name ? tools.find((t) => t.function.name === name) : undefined;
+  if (!tool) return { ok: false, error: `Tool không khả dụng: ${name || "(thiếu tên)"}` };
+  const v = validateArgs(tool.function.parameters, rt.args ?? {});
+  if (!v.ok) return { ok: false, error: `Tham số không hợp lệ cho ${name}: ${v.error}` };
+  return { ok: true, value: { name, args: v.value } };
+}
+
 // Chỉ dẫn cho MODEL khi kết quả bị rút gọn — bảo nó thu hẹp truy vấn rồi gọi lại,
 // thay vì bó tay/bịa. (Đây là instruction tới model trong tool-result, không hiển thị
 // trực tiếp cho người dùng.)

@@ -14,7 +14,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Trash2 } from "lucide-react";
-import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode, Predicate, WorkflowGraph, Op, Comparator } from "@/lib/workflow/types";
+import type { WfNode, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode, WfMcpNode, Predicate, WorkflowGraph, Op, Comparator } from "@/lib/workflow/types";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { Translator } from "@/i18n/types";
@@ -104,11 +104,14 @@ function AgentForm({
   onChange,
   t,
   suggestions,
+  presets = [],
 }: {
   node: WfAgentNode;
   onChange: (n: WfNode) => void;
   t: Translator;
   suggestions: string[];
+  /** P3: custom-agent presets (per-user) — chọn → node lưu customAgentId */
+  presets?: { id: string; name: string }[];
 }) {
   const systemRef = useRef<HTMLTextAreaElement>(null);
   const promptRef = useRef<HTMLTextAreaElement>(null);
@@ -145,28 +148,57 @@ function AgentForm({
     }
   }
 
+  const usingPreset = !!node.customAgentId;
+
   return (
     <>
-      {field(
-        <>
-          {label(t("wf.node.agent.systemLabel"))}
-          <textarea
-            ref={systemRef}
-            className={inputCls()}
-            rows={3}
-            value={node.system ?? ""}
-            placeholder={t("wf.node.agent.systemPlaceholder")}
-            onChange={(e) => onChange({ ...node, system: e.target.value || undefined })}
-          />
-          <VariableHints
-            tokens={suggestions}
-            inputRef={systemRef}
-            value={node.system ?? ""}
-            onChange={(v) => onChange({ ...node, system: v || undefined })}
-            hintLabel={t("wf.node.insertVar")}
-          />
-        </>,
-      )}
+      {(presets.length > 0 || usingPreset) &&
+        field(
+          <>
+            {label(t("wf.node.agent.presetLabel"))}
+            <select
+              className={inputCls()}
+              value={node.customAgentId ?? ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                const next = { ...node };
+                if (v) next.customAgentId = v;
+                else delete next.customAgentId;
+                onChange(next);
+              }}
+            >
+              <option value="">{t("wf.node.agent.presetNone")}</option>
+              {presets.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+              {node.customAgentId && !presets.find((p) => p.id === node.customAgentId) && (
+                <option value={node.customAgentId}>{node.customAgentId}</option>
+              )}
+            </select>
+            {usingPreset && <p className="mt-1 text-xs text-neutral-400">{t("wf.node.agent.presetHint")}</p>}
+          </>,
+        )}
+      {!usingPreset &&
+        field(
+          <>
+            {label(t("wf.node.agent.systemLabel"))}
+            <textarea
+              ref={systemRef}
+              className={inputCls()}
+              rows={3}
+              value={node.system ?? ""}
+              placeholder={t("wf.node.agent.systemPlaceholder")}
+              onChange={(e) => onChange({ ...node, system: e.target.value || undefined })}
+            />
+            <VariableHints
+              tokens={suggestions}
+              inputRef={systemRef}
+              value={node.system ?? ""}
+              onChange={(v) => onChange({ ...node, system: v || undefined })}
+              hintLabel={t("wf.node.insertVar")}
+            />
+          </>,
+        )}
       {field(
         <>
           {label(t("wf.node.agent.promptLabel"))}
@@ -321,6 +353,97 @@ function ConnectorForm({
   );
 }
 
+// ── MCP form (P2) ────────────────────────────────────────────────────────────
+// Server (per-user) → tool (toolDetails từ /api/connectors/mcp) → SchemaArgsForm.
+// Tool write/chưa-trust được CHỌN nhưng cảnh báo: real-run sẽ fail-closed
+// (assertMcpAllowed) — editor không giấu hành vi runtime (Rule 12).
+
+export type McpServerItem = {
+  slug: string;
+  name: string;
+  tools: string[];
+  toolDetails: { name: string; nsName: string; description: string; parameters: object; kind: "read" | "write" }[];
+};
+
+function McpForm({
+  node,
+  onChange,
+  t,
+  suggestions,
+  servers,
+}: {
+  node: WfMcpNode;
+  onChange: (n: WfNode) => void;
+  t: Translator;
+  suggestions: string[];
+  servers: McpServerItem[];
+}) {
+  const selectedServer = servers.find((s) => s.slug === node.server) ?? null;
+  const availableTools = selectedServer?.toolDetails ?? [];
+  const selectedTool = availableTools.find((td) => td.name === node.tool) ?? null;
+
+  if (servers.length === 0) {
+    return <p className="text-xs text-neutral-400">{t("wf.node.mcp.noServers")}</p>;
+  }
+
+  return (
+    <>
+      {field(
+        <>
+          {label(t("wf.node.mcp.serverLabel"))}
+          <select
+            className={inputCls()}
+            value={node.server}
+            onChange={(e) => onChange({ ...node, server: e.target.value, tool: "", args: {} })}
+          >
+            <option value="">{t("wf.node.mcp.selectServer")}</option>
+            {servers.map((s) => (
+              <option key={s.slug} value={s.slug}>{s.name}</option>
+            ))}
+            {node.server && !servers.find((s) => s.slug === node.server) && (
+              <option value={node.server}>{node.server}</option>
+            )}
+          </select>
+        </>,
+      )}
+      {field(
+        <>
+          {label(t("wf.node.mcp.toolLabel"))}
+          <select
+            className={inputCls()}
+            value={node.tool}
+            disabled={!node.server}
+            onChange={(e) => onChange({ ...node, tool: e.target.value, args: {} })}
+          >
+            <option value="">{t("wf.node.mcp.selectTool")}</option>
+            {availableTools.map((td) => (
+              <option key={td.name} value={td.name} title={td.description}>{td.name}</option>
+            ))}
+            {node.tool && !availableTools.find((td) => td.name === node.tool) && (
+              <option value={node.tool}>{node.tool}</option>
+            )}
+          </select>
+        </>,
+      )}
+      {selectedTool?.description && (
+        <p className="-mt-2 mb-3 text-xs text-neutral-400">{selectedTool.description}</p>
+      )}
+      {selectedTool && selectedTool.kind === "write" && (
+        <p className="-mt-1 mb-3 text-xs text-amber-600 dark:text-amber-400">{t("wf.node.mcp.writeBlocked")}</p>
+      )}
+      {field(
+        <SchemaArgsForm
+          node={node}
+          onChange={onChange}
+          t={t}
+          suggestions={suggestions}
+          schema={selectedTool?.parameters ?? null}
+        />,
+      )}
+    </>
+  );
+}
+
 // ── Connector args: schema-driven form (#1) ─────────────────────────────────
 // Renders a labelled field per tool parameter (from its JSON schema) instead of a
 // raw JSON blob. Falls back to a raw-JSON "Advanced" editor for nested/array args
@@ -333,13 +456,16 @@ function SchemaArgsForm({
   suggestions,
   schema,
 }: {
-  node: WfConnectorNode;
+  // P2: dùng chung cho connector node LẪN mcp node — cả hai cùng shape `args`.
+  node: WfConnectorNode | WfMcpNode;
   onChange: (n: WfNode) => void;
   t: Translator;
   suggestions: string[];
   schema: object | null;
 }) {
   const { fields, propCount, flat } = parseArgSchema(schema);
+  // Re-seed key: connector đổi theo `action`, mcp đổi theo `tool`.
+  const actionKey = node.kind === "connector" ? node.action : node.tool;
   // Default to the friendly form when the schema is a renderable object (flat fields,
   // or a no-arg object); raw JSON only when no schema is available yet or the schema
   // has fields the form can't render. Recomputed each render so the default RE-SYNCS
@@ -353,13 +479,13 @@ function SchemaArgsForm({
   );
   const [argsError, setArgsError] = useState<string | null>(null);
 
-  // Re-seed raw text + default mode when the node or the selected action changes.
+  // Re-seed raw text + default mode when the node or the selected action/tool changes.
   useEffect(() => {
     setArgsText(Object.keys(node.args).length ? JSON.stringify(node.args, null, 2) : "");
     setAdvanced(defaultAdvanced);
     setArgsError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [node.id, node.action, defaultAdvanced]);
+  }, [node.id, actionKey, defaultAdvanced]);
 
   function setArg(key: string, value: unknown) {
     const next = { ...node.args };
@@ -434,7 +560,7 @@ function ArgFieldInput({
   t,
 }: {
   field: ArgField;
-  node: WfConnectorNode;
+  node: WfConnectorNode | WfMcpNode;
   setArg: (key: string, value: unknown) => void;
   suggestions: string[];
   t: Translator;
@@ -804,6 +930,7 @@ const KIND_LABELS: Record<string, string> = {
   connector: "Connector",
   condition: "Condition",
   foreach: "Foreach",
+  mcp: "MCP",
 };
 
 export function NodeConfigPanel({
@@ -811,6 +938,8 @@ export function NodeConfigPanel({
   onChange,
   onDelete,
   connectors: connectorsProp,
+  mcpServers: mcpServersProp,
+  customAgents: customAgentsProp,
   allNodes,
   edges,
 }: {
@@ -819,6 +948,10 @@ export function NodeConfigPanel({
   onDelete?: () => void;
   /** Injected for tests; if omitted, fetched from /api/connectors on mount */
   connectors?: ConnectorListItem[];
+  /** Injected for tests; if omitted, fetched from /api/connectors/mcp on mount (P2) */
+  mcpServers?: McpServerItem[];
+  /** Injected for tests; if omitted, fetched from /api/custom-agents on mount (P3) */
+  customAgents?: { id: string; name: string }[];
   /** All graph nodes — used to derive upstream {{steps.<id>.output}} variables. */
   allNodes?: WfNode[];
   /** Edges (source→target) — used to compute which nodes are upstream of this one. */
@@ -829,6 +962,7 @@ export function NodeConfigPanel({
   const t = useT(dict);
   const suggestions = variableSuggestions(allNodes ?? [], edges ?? [], node.id);
   const [connectors, setConnectors] = useState<ConnectorListItem[]>(connectorsProp ?? []);
+  const [mcpServers, setMcpServers] = useState<McpServerItem[]>(mcpServersProp ?? []);
 
   // Capture at mount time — avoids re-firing when a caller passes a new array literal
   const injectedRef = useRef(connectorsProp !== undefined);
@@ -840,6 +974,31 @@ export function NodeConfigPanel({
         if (data?.connectors) setConnectors(data.connectors);
       })
       .catch(() => { /* keep empty — fallback to text inputs */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // P2: MCP servers + toolDetails cho McpForm (cùng pattern injection/fetch).
+  const mcpInjectedRef = useRef(mcpServersProp !== undefined);
+  useEffect(() => {
+    if (mcpInjectedRef.current) return; // test injection — skip fetch
+    void fetch("/api/connectors/mcp")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { servers?: McpServerItem[] } | null) => {
+        if (data?.servers) setMcpServers(data.servers);
+      })
+      .catch(() => { /* keep empty — McpForm shows the no-servers hint */ });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // P3: custom-agent presets cho AgentForm (cùng pattern injection/fetch).
+  const [customAgents, setCustomAgents] = useState<{ id: string; name: string }[]>(customAgentsProp ?? []);
+  const caInjectedRef = useRef(customAgentsProp !== undefined);
+  useEffect(() => {
+    if (caInjectedRef.current) return; // test injection — skip fetch
+    void fetch("/api/custom-agents")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { agents?: { id: string; name: string }[] } | null) => {
+        if (data?.agents) setCustomAgents(data.agents.map((a) => ({ id: a.id, name: a.name })));
+      })
+      .catch(() => { /* keep empty — AgentForm hides the preset select */ });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -865,10 +1024,13 @@ export function NodeConfigPanel({
       </div>
       <div className="flex-1 overflow-y-auto px-4 py-4">
         {node.kind === "agent" && (
-          <AgentForm node={node} onChange={onChange} t={t} suggestions={suggestions} />
+          <AgentForm node={node} onChange={onChange} t={t} suggestions={suggestions} presets={customAgents} />
         )}
         {node.kind === "connector" && (
           <ConnectorForm node={node} onChange={onChange} t={t} connectors={connectors} suggestions={suggestions} />
+        )}
+        {node.kind === "mcp" && (
+          <McpForm node={node} onChange={onChange} t={t} servers={mcpServers} suggestions={suggestions} />
         )}
         {node.kind === "condition" && (
           <ConditionForm node={node} onChange={onChange} t={t} suggestions={suggestions} />

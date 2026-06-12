@@ -4,6 +4,7 @@
 
 import type { ToolTraceItem } from "./toolLabel";
 import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
+import type { CatalogTool } from "@/lib/chat/toolCatalog";
 
 export type ChatRole = "user" | "assistant";
 
@@ -60,6 +61,14 @@ export type Conv = {
   id: string;
   title: string;
   updatedAt: string | null;
+};
+
+// P1 quick-tools: tool user đã chọn từ picker + args đang nhập. Ephemeral —
+// gửi kèm /api/chat (body.requestedTool) rồi clear; KHÔNG persist.
+export type ToolPick = {
+  tool: CatalogTool;
+  groupLabel: string;
+  args: Record<string, unknown>;
 };
 
 export const DEFAULT_SETTINGS: ChatSettings = {

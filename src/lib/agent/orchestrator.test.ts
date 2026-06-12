@@ -2,8 +2,9 @@ import { describe, expect, test, vi } from "vitest";
 // MIGRATED từ src/app/api/chat/tool-loop.test.ts: runToolRounds nay ở đây và nhận
 // deps.dispatch (trước là deps.execute). orchestrator.ts chỉ import 1 TYPE từ
 // @/lib/connectors → không cần mock module nào. (File cũ bị xoá ở task sau.)
-import { runToolRounds } from "./orchestrator";
+import { runToolRounds, seedRequestedTool } from "./orchestrator";
 import type { ChatMessage } from "./orchestrator";
+import { PendingWriteSignal } from "@/lib/agent/safety/gate";
 
 const tools = [
   { type: "function" as const, kind: "read" as const, function: { name: "github_list_repos", description: "list repos", parameters: {} } },
@@ -177,5 +178,30 @@ describe("runToolRounds", () => {
     expect(lastCall[1]).toEqual([]);
     expect(dispatch).toHaveBeenCalledTimes(3);
     expect(out.slice(0, 2)).toEqual(baseMessages);
+  });
+});
+
+describe("seedRequestedTool (P1 - user picked tool, code dispatches)", () => {
+  test("append dung shape tool-turn cua runToolRounds + dispatch dung args", async () => {
+    const convo: ChatMessage[] = [{ role: "user", content: "tra cuu ca hoi" }];
+    const dispatch = vi.fn(async () => ({ rows: [] as unknown[] }));
+    await seedRequestedTool(convo, { name: "mcp__daab__kg_query", args: { project_id: "1f991b74-x" } }, dispatch);
+    expect(dispatch).toHaveBeenCalledWith("mcp__daab__kg_query", { project_id: "1f991b74-x" });
+    expect(convo[1]).toMatchObject({
+      role: "assistant",
+      tool_calls: [{ function: { name: "mcp__daab__kg_query", arguments: { project_id: "1f991b74-x" } } }],
+    });
+    expect(convo[2]).toEqual({ role: "tool", content: JSON.stringify({ rows: [] }) });
+  });
+
+  test("write tool -> PendingWriteSignal propagate (gate giu nguyen), KHONG append result", async () => {
+    const convo: ChatMessage[] = [{ role: "user", content: "tao task" }];
+    const dispatch = vi.fn(async () => {
+      throw new PendingWriteSignal("demo_create_task", { title: "x" });
+    });
+    await expect(
+      seedRequestedTool(convo, { name: "demo_create_task", args: { title: "x" } }, dispatch),
+    ).rejects.toBeInstanceOf(PendingWriteSignal);
+    expect(convo.some((m) => m.role === "tool")).toBe(false);
   });
 });

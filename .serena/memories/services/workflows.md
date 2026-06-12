@@ -1,4 +1,11 @@
 
+## MCP node + Custom Agents (2026-06-12) — branch `worktree-quicktools-mcp-agent`, CHƯA merge (1859 tests, tsc clean)
+
+- **Node kind `mcp`** (P2 của [[chat-mcp-quicktools-workflow-e2e]]): `WfMcpNode {server: slug, tool: tên-thật, args}`; engine KHÔNG đổi (non-foreach/condition → runNode); `buildRunNode` nhánh mcp: `mcpReadAllow(userId)` → `assertMcpAllowed` (blast.ts — read-trong-readAllow qua, còn lại fail-closed; KHÔNG có đường workflowSafe cho MCP); dry-run mock như connector-write; `runMcpNode` (executors.ts) compose `mcp__<slug>__<tool>` → connectors.execute().
+- **Agent node `customAgentId?`** (P3): runtime resolve qua `getCustomAgent(userId, id)` (src/lib/customAgents.ts) → override `system`; preset mất = **fail-loud**. CRUD `/api/custom-agents`; UI `/settings/custom-agents` (CustomAgentsClient + 3 template); AgentForm preset select. Migration **0015** `custom_agent`.
+- **Editor:** `NODE_TYPES` (NodesLibraryPanel) giờ **exported** + có mcp (icon Server #c026d3); mobile palette derive từ đó (P4 — parity tự động); McpForm = clone ConnectorForm (server→tool→SchemaArgsForm; SchemaArgsForm/ArgFieldInput widen `WfConnectorNode|WfMcpNode`); NodeConfigPanel fetch thêm `/api/connectors/mcp` (+`toolDetails` mới) và `/api/custom-agents`, đều có inject-prop cho test.
+- **Giữ nguyên:** coerceGraph/KINDS không sinh mcp + strip customAgentId (Rule 13, có test chốt); `wf.editor.add*` keys đã XOÁ (mobile palette dùng `wf.lib.<kind>.name`).
+
 ## P6/P7/P8 — Editor + AI feature wave (2026-06-08) — ALL on main, live-verified (→1306 tests, tsc clean)
 
 3 user-feedback rounds; commit-per-feature; tests+tsc green each.

@@ -34,7 +34,7 @@ import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
 import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
-import { NodesLibraryPanel, NODE_KIND_MIME, type LibraryMode } from "./NodesLibraryPanel";
+import { NodesLibraryPanel, NODE_KIND_MIME, NODE_TYPES as LIBRARY_NODE_TYPES, type LibraryMode } from "./NodesLibraryPanel";
 import { AiGeneratePanel } from "./AiGeneratePanel";
 import { AiReviewPanel } from "./AiReviewPanel";
 import { NodeConfigPanel } from "./NodeConfigPanel";
@@ -53,6 +53,7 @@ const KIND_COLORS: Record<WfNodeKind, string> = {
   connector: "#06b6d4",
   condition: "#d97706",
   foreach: "#16a34a",
+  mcp: "#c026d3",
 };
 
 // Data-mutating RF change types — 'select' and 'dimensions' are view-only
@@ -111,7 +112,9 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
         ? `${wf.connectorId}.${wf.action}`
         : wf.kind === "condition"
           ? "condition"
-          : `foreach(${wf.items.slice(0, 20)})`;
+          : wf.kind === "mcp"
+            ? `${wf.server}.${wf.tool}`
+            : `foreach(${wf.items.slice(0, 20)})`;
 
   return (
     <div
@@ -229,19 +232,21 @@ function defaultNode(kind: WfNodeKind): WfNode {
   if (kind === "agent") return { id, kind, prompt: "" };
   if (kind === "connector") return { id, kind, connectorId: "", action: "", args: {} };
   if (kind === "condition") return { id, kind, when: { left: "", op: "eq", right: "" } };
+  if (kind === "mcp") return { id, kind, server: "", tool: "", args: {} };
   // foreach
-  return { id, kind, items: "{{items}}", body: { nodes: [], edges: [] } };
+  return { id, kind: "foreach", items: "{{items}}", body: { nodes: [], edges: [] } };
 }
 
 // ── Palette button ──────────────────────────────────────────────────────────
 
-function PaletteBtn({ label, onClick }: { label: string; onClick: () => void }) {
+function PaletteBtn({ label, icon, onClick }: { label: string; icon?: React.ReactNode; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 transition"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-xs font-semibold text-neutral-700 shadow-sm hover:bg-neutral-50 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700 transition"
     >
+      {icon}
       {label}
     </button>
   );
@@ -1025,13 +1030,21 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
             </span>
           )}
         </div>
-        {/* Row 2: palette — MOBILE ONLY (desktop uses the left Nodes Library panel) */}
-        <div className="flex items-center gap-2 overflow-x-auto border-t border-neutral-100 px-3 pb-2 pt-1.5 md:hidden dark:border-neutral-800">
+        {/* Row 2: palette — MOBILE ONLY (desktop uses the left Nodes Library panel).
+            P4 parity: derive từ NODE_TYPES — node kind mới tự xuất hiện cả 2 nơi. */}
+        <div
+          data-testid="mobile-palette"
+          className="flex items-center gap-2 overflow-x-auto border-t border-neutral-100 px-3 pb-2 pt-1.5 md:hidden dark:border-neutral-800"
+        >
           <span className="shrink-0 text-xs text-neutral-400">{t("wf.editor.palette")}</span>
-          <PaletteBtn label={t("wf.editor.addAgent")} onClick={() => addNode("agent")} />
-          <PaletteBtn label={t("wf.editor.addConnector")} onClick={() => addNode("connector")} />
-          <PaletteBtn label={t("wf.editor.addCondition")} onClick={() => addNode("condition")} />
-          <PaletteBtn label={t("wf.editor.addForeach")} onClick={() => addNode("foreach")} />
+          {LIBRARY_NODE_TYPES.map(({ kind, Icon, color }) => (
+            <PaletteBtn
+              key={kind}
+              icon={<Icon size={13} style={{ color }} aria-hidden />}
+              label={t(`wf.lib.${kind}.name`)}
+              onClick={() => addNode(kind)}
+            />
+          ))}
         </div>
       </div>
 

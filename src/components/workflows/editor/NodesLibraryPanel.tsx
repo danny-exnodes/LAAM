@@ -7,7 +7,7 @@
 // Three layout modes (show/hide/float), mirroring the config panel's dock/float.
 // Desktop-only; on mobile the toolbar keeps its compact palette row.
 
-import { Bot, Plug, GitBranch, Repeat, Move, PanelLeftClose, GripVertical } from "lucide-react";
+import { Bot, Plug, GitBranch, Repeat, Server, Move, PanelLeftClose, GripVertical } from "lucide-react";
 import type { WfNodeKind } from "@/lib/workflow/types";
 import type { Translator } from "@/i18n/types";
 
@@ -16,9 +16,12 @@ export type LibraryMode = "docked" | "float" | "hidden";
 // MIME for drag-to-add; WorkflowEditor's canvas onDrop reads this key.
 export const NODE_KIND_MIME = "application/wf-node-kind";
 
-const NODE_TYPES: { kind: WfNodeKind; Icon: typeof Bot; color: string }[] = [
+// Exported (P4): the mobile palette row derives from the SAME list so a new node
+// kind shows up on both desktop library and mobile palette automatically.
+export const NODE_TYPES: { kind: WfNodeKind; Icon: typeof Bot; color: string }[] = [
   { kind: "agent", Icon: Bot, color: "#a855f7" },
   { kind: "connector", Icon: Plug, color: "#06b6d4" },
+  { kind: "mcp", Icon: Server, color: "#c026d3" },
   { kind: "condition", Icon: GitBranch, color: "#f59e0b" },
   { kind: "foreach", Icon: Repeat, color: "#10b981" },
 ];
