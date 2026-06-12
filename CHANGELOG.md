@@ -9,6 +9,11 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã sửa — Diệt tận gốc @emnapi lockfile drift (tái diễn lần 5)
+- `npm ci` trong Docker (alpine, npm 10) vỡ "Missing: @emnapi/runtime@1.11.0 / @emnapi/core@1.11.0 from lock file": npm 11 trên host Windows prune 2 entry này khỏi `package-lock.json` ở mỗi lần `npm install` (npm 10 lại đòi chúng → lệch dialect). Đã tái diễn 5 lần (73e4672 → 64faa06 → f361801 → efb4013 → nay).
+- **Fix triệt để:** pin `@emnapi/core` + `@emnapi/runtime` `^1.11.0` vào **`devDependencies`** — dep bắt buộc thì không npm version nào được phép prune khỏi lock. Lưu ý: pin vào `optionalDependencies` **KHÔNG đủ** (đã thử và bị npm 11 prune tiếp — "optional" nghĩa là được phép vắng mặt); lock re-sync trong `node:22-alpine` (`npm install --package-lock-only`, không đụng `node_modules` host).
+- Verify 4 chiều: alpine npm ci ✅ · host npm ci ✅ · npm 11 regen lock giữ nguyên 2 entry ✅ · alpine chấp nhận lock do npm 11 sinh ✅. 1757 test xanh.
+
 ## [2.4.0] — 2026-06-12
 
 > ⚠️ **Triển khai:** bản này vá 2 lỗ hổng đang sống (RBAC enforce + SSE rò chéo người dùng). Container production **phải rebuild image** để có hiệu lực — image cũ đang chạy vẫn hở.
