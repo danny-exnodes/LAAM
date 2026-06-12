@@ -7,6 +7,7 @@ import { runToolRounds } from "@/lib/agent/orchestrator";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { withSafety } from "@/lib/agent/safety/gate";
 import { execute as connectorExecute, mcpReadAllow } from "@/lib/connectors";
+import { getCustomAgent } from "@/lib/customAgents";
 import { callOllamaChat } from "./ollama";
 import { runAgentNode, runConnectorNode, runMcpNode, mcpActionName } from "./executors";
 import { assertConnectorAllowed, assertMcpAllowed } from "./blast";
@@ -56,8 +57,20 @@ export function buildRunNode(userId: string, opts?: { dryRun?: boolean }) {
       })();
     }
     if (node.kind === "agent") {
-      const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now: Date.now(), lang: "vi" }), { internal: INTERNAL_TOOLS });
-      return runAgentNode(node, ctx, { runRounds: runToolRounds, callOllama: callOllamaChat, dispatch, tools });
+      return (async () => {
+        // P3: preset custom-agent (per-user) override system. Preset mất (xoá/khác
+        // user) = FAIL-LOUD — không lặng lẽ rơi về default (Rule 12).
+        let effective = node;
+        if (node.customAgentId) {
+          const preset = await getCustomAgent(userId, node.customAgentId);
+          if (!preset) {
+            throw new Error(`workflow: custom agent "${node.customAgentId}" không tồn tại hoặc không thuộc user (fail-loud)`);
+          }
+          effective = { ...node, system: preset.system };
+        }
+        const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now: Date.now(), lang: "vi" }), { internal: INTERNAL_TOOLS });
+        return runAgentNode(effective, ctx, { runRounds: runToolRounds, callOllama: callOllamaChat, dispatch, tools });
+      })();
     }
     throw new Error(`runNode: kind không thực thi trực tiếp "${(node as { kind: string }).kind}" (engine xử lý nội bộ)`);
   };

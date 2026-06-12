@@ -8,13 +8,24 @@ const { execSpy, recipientSpy, mcpReadAllowSpy } = vi.hoisted(() => ({
   mcpReadAllowSpy: vi.fn(async (): Promise<ReadonlySet<string>> => new Set<string>()),
 }));
 vi.mock("@/lib/connectors", () => ({ execute: execSpy, mcpReadAllow: mcpReadAllowSpy }));
+
+// P3: custom-agent preset resolution (per-user) — mock lib + Ollama (agent node
+// chạy thật tới callOllamaChat nếu không mock).
+const { getCustomAgentSpy, callOllamaSpy } = vi.hoisted(() => ({
+  getCustomAgentSpy: vi.fn(async (): Promise<{ system: string } | null> => null),
+  callOllamaSpy: vi.fn(async (_messages: { role: string; content: string }[], _tools: unknown[], _format?: Record<string, unknown>) => ({
+    message: { content: "OK" },
+  })),
+}));
+vi.mock("@/lib/customAgents", () => ({ getCustomAgent: getCustomAgentSpy }));
+vi.mock("./ollama", () => ({ callOllamaChat: callOllamaSpy }));
 // Spy the recipient gate: its BEHAVIOR is tested in recipient.test.ts; here we verify WIRING
 // (invoked in the real-execute branch with resolved args; skipped on the dry-run mock path).
 vi.mock("./recipient", () => ({ assertRecipientAllowed: recipientSpy }));
 
 import { buildRunNode } from "./runtime";
 import { emptyContext } from "./types";
-import type { WfConnectorNode, WfMcpNode } from "./types";
+import type { WfAgentNode, WfConnectorNode, WfMcpNode } from "./types";
 
 describe("buildRunNode — workflow-readiness gate wired into connector path", () => {
   test("🔴 SEAM: real-run + un-cleared write → THROW (default=real=enforced), KHÔNG execute", async () => {
@@ -109,6 +120,41 @@ describe("buildRunNode — mcp node", () => {
     const run = buildRunNode("u1", { dryRun: true });
     await run(node, emptyContext({ source: "manual" }));
     expect(execSpy).toHaveBeenCalledWith("u1", "mcp__daab__kg_query", { project_id: "p-1" });
+  });
+});
+
+// P3: agent node + customAgentId — preset (per-user) override system; preset mất
+// (xoá / khác user) = FAIL-LOUD chứ không lặng lẽ chạy default (Rule 12).
+describe("buildRunNode — agent node custom-agent preset (P3)", () => {
+  test("customAgentId + preset tồn tại → system = preset.system", async () => {
+    callOllamaSpy.mockClear();
+    getCustomAgentSpy.mockResolvedValueOnce({ system: "Bạn là chuyên gia tóm tắt." });
+    const run = buildRunNode("u1");
+    const node: WfAgentNode = { id: "a1", kind: "agent", prompt: "tóm tắt", customAgentId: "ca-1", system: "bị override" };
+    await run(node, emptyContext({ source: "manual" }));
+    expect(getCustomAgentSpy).toHaveBeenCalledWith("u1", "ca-1");
+    const firstCallMessages = callOllamaSpy.mock.calls[0][0];
+    expect(firstCallMessages[0]).toEqual({ role: "system", content: "Bạn là chuyên gia tóm tắt." });
+  });
+
+  test("🔴 customAgentId nhưng preset không tồn tại/khác user → FAIL-LOUD, không gọi model", async () => {
+    callOllamaSpy.mockClear();
+    getCustomAgentSpy.mockResolvedValueOnce(null);
+    const run = buildRunNode("u1");
+    const node: WfAgentNode = { id: "a1", kind: "agent", prompt: "x", customAgentId: "ca-gone" };
+    await expect(Promise.resolve().then(() => run(node, emptyContext({ source: "manual" })))).rejects.toThrow(/custom agent/i);
+    expect(callOllamaSpy).not.toHaveBeenCalled();
+  });
+
+  test("không có customAgentId → behavior cũ nguyên vẹn (không tra preset)", async () => {
+    callOllamaSpy.mockClear();
+    getCustomAgentSpy.mockClear();
+    const run = buildRunNode("u1");
+    const node: WfAgentNode = { id: "a1", kind: "agent", prompt: "x", system: "S riêng" };
+    await run(node, emptyContext({ source: "manual" }));
+    expect(getCustomAgentSpy).not.toHaveBeenCalled();
+    const firstCallMessages = callOllamaSpy.mock.calls[0][0];
+    expect(firstCallMessages[0]).toEqual({ role: "system", content: "S riêng" });
   });
 });
 

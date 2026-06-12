@@ -8,6 +8,9 @@ export type WfAgentNode = {
   kind: "agent";
   prompt: string; // interpolated (sink:"text")
   system?: string; // system prompt riêng của node; thiếu → default
+  // P3: tham chiếu custom_agent preset (per-user). Runtime resolve → override system;
+  // preset mất = fail-loud. AI-generate KHÔNG sinh field này (Rule 13 — model không biết id thật).
+  customAgentId?: string;
   model?: string; // SEAM D-RUNTIME — A0 bỏ qua (luôn dùng harness mặc định)
   // B1: JSON-schema cho Ollama structured output (param `format`). Có → output node
   // = object đã JSON.parse (judge-verify: condition eq trên {{steps.x.output.field}}).
