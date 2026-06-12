@@ -38,3 +38,11 @@ Desktop: node library = **sidebar trái dọc** ("THƯ VIỆN NODE", icon+title+
 - ⛔ shared checkout → worktree + junction node_modules.
 - Prod đang **v2.1.0** (docker laam-app:latest cũ) — build này KHÔNG ảnh hưởng prod tới khi rebuild; test trên dev tailnet 8443.
 - KHÔNG prompt-tune trên 1-probe; nếu đo reliability phải multi-probe k cao (bài học [[chat-tool-selection]]).
+
+## ✅ BUILT (2026-06-12, branch `worktree-quicktools-mcp-agent`, 13 commits, 1859 test + tsc sạch)
+- **P1:** `GET /api/chat/tools` (catalog per-user, `buildCatalogGroups` pure trong `src/lib/chat/toolCatalog.ts`) · Composer slash-menu 2 tầng + chip required-args · `/api/chat` body `requestedTool` → **`seedRequestedTool` pre-dispatch deterministic** (orchestrator.ts) qua đúng `withSafety` dispatch — tool-frame/pending-write/persist/citations nguyên vẹn; Claude+requestedTool=400; tên tool ngoài union user = 400.
+- **P2:** `WfMcpNode {server,tool,args}` · `runMcpNode` compose `mcp__<slug>__<tool>` · `assertMcpAllowed` (blast.ts): chỉ read trong `readAllow` chạy real-run, dry-run mock write · `/api/connectors/mcp` GET += `toolDetails` · editor McpForm (SchemaArgsForm dùng chung connector|mcp) · coerceGraph KHÔNG sinh mcp (Rule 13).
+- **P3:** bảng `custom_agent` (migration **0015**) · CRUD `/api/custom-agents` (+[id]) · `src/lib/customAgents.ts` (ownership ở tầng query) · runtime resolve `customAgentId` → override system, **preset mất = fail-loud** · AgentForm preset select (ẩn system khi dùng preset) · `/settings/custom-agents` + 3 template · coerceGraph strip customAgentId (test chốt).
+- **P4:** mobile palette derive từ `NODE_TYPES` export (NodesLibraryPanel) — kind mới tự parity 2 nơi.
+- Dọn draft `f5af11d3-…` ✅ (DELETE 1, 0 schedule/run). Plan chi tiết: `docs/superpowers/plans/2026-06-12-chat-quicktools-mcp-custom-agent.md`.
+- **CHƯA:** merge vào main (chờ user) · E2E live qua Claude-in-Chrome (cần dev server chạy code mới — user host) · redeploy prod.
