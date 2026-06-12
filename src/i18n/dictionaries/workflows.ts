@@ -162,10 +162,6 @@ export const workflows: Dict = {
   // Editor
   "wf.editor.title": { vi: "Chỉnh sửa Workflow", en: "Edit Workflow", zh: "编辑工作流" },
   "wf.editor.palette": { vi: "Thêm bước", en: "Add step", zh: "添加步骤" },
-  "wf.editor.addAgent": { vi: "+ Agent", en: "+ Agent", zh: "+ Agent" },
-  "wf.editor.addConnector": { vi: "+ Connector", en: "+ Connector", zh: "+ 连接器" },
-  "wf.editor.addCondition": { vi: "+ Condition", en: "+ Condition", zh: "+ 条件" },
-  "wf.editor.addForeach": { vi: "+ Foreach", en: "+ Foreach", zh: "+ 循环" },
 
   // Nodes Library panel (A1)
   "wf.lib.title": { vi: "Thư viện Node", en: "Nodes Library", zh: "节点库" },

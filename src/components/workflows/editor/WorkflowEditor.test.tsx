@@ -184,44 +184,44 @@ describe("WorkflowEditor", () => {
     );
   });
 
-  test("palette: clicking '+ Agent' appends a node", async () => {
+  // P4: mobile palette derive từ NODE_TYPES — parity TỰ ĐỘNG với desktop library
+  // (thêm kind mới 1 chỗ là cả hai cùng có). Click theo within(mobile-palette) vì
+  // label wf.lib.<kind>.name cũng xuất hiện ở desktop NodesLibraryPanel.
+  async function clickPalette(label: string | RegExp) {
     renderEditor();
     await waitFor(() => screen.getByDisplayValue("My WF"));
-
+    const palette = screen.getByTestId("mobile-palette");
     const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
-    fireEvent.click(screen.getByText("+ Agent"));
+    fireEvent.click(within(palette).getByText(label));
     const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
     expect(after).toBe(before + 1);
+  }
+
+  test("palette: clicking 'Agent' appends a node", async () => {
+    await clickPalette("Agent");
   });
 
-  test("palette: clicking '+ Connector' appends a node", async () => {
-    renderEditor();
-    await waitFor(() => screen.getByDisplayValue("My WF"));
-
-    const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
-    fireEvent.click(screen.getByText("+ Connector"));
-    const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
-    expect(after).toBe(before + 1);
+  test("palette: clicking 'Connector' appends a node", async () => {
+    await clickPalette("Connector");
   });
 
-  test("palette: clicking '+ Condition' appends a node", async () => {
-    renderEditor();
-    await waitFor(() => screen.getByDisplayValue("My WF"));
-
-    const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
-    fireEvent.click(screen.getByText("+ Condition"));
-    const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
-    expect(after).toBe(before + 1);
+  test("palette: clicking 'Điều kiện' appends a node", async () => {
+    await clickPalette("Điều kiện");
   });
 
-  test("palette: clicking '+ Foreach' appends a node", async () => {
+  test("palette: clicking 'Lặp (Foreach)' appends a node", async () => {
+    await clickPalette(/Lặp/);
+  });
+
+  test("palette: clicking 'MCP' appends a node (P4 parity với node kind mới)", async () => {
+    await clickPalette("MCP");
+  });
+
+  test("palette: đủ 5 nút = NODE_TYPES.length (parity desktop↔mobile)", async () => {
     renderEditor();
     await waitFor(() => screen.getByDisplayValue("My WF"));
-
-    const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
-    fireEvent.click(screen.getByText("+ Foreach"));
-    const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
-    expect(after).toBe(before + 1);
+    const palette = screen.getByTestId("mobile-palette");
+    expect(within(palette).getAllByRole("button")).toHaveLength(5);
   });
 
   test("save: valid graph — calls assertRunnable and PATCH", async () => {
