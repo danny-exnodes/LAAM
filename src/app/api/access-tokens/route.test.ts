@@ -166,6 +166,9 @@ describe("POST /api/access-tokens — provisioning for another user", () => {
     mockAuth.mockResolvedValue({ user: { id: "admin1", role: "admin", name: "Alice" } } as never);
     targetUser = { id: "REAL-u2", role: "member", disabledAt: null };
     await post({ name: "k", kind: "mcp", forUserId: "SPOOFED-id" });
+    // the lookup queried users BY the requested id (users.id == forUserId)...
+    expect((whereArgs.at(-1) as { _eq: [string, string] })._eq).toEqual(["u.id", "SPOOFED-id"]);
+    // ...then trusted the RETURNED row's id for the insert, never the echoed body value.
     expect(inserts[0].userId).toBe("REAL-u2");
   });
 
