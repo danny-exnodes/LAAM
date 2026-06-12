@@ -1,6 +1,20 @@
 import { describe, expect, test } from "vitest";
-import { assertConnectorAllowed } from "./blast";
+import { assertConnectorAllowed, assertMcpAllowed } from "./blast";
 import type { Tool } from "@/lib/agent/types";
+
+// P2: MCP trong workflow KHÔNG có đường workflowSafe — chỉ read (readAllow:
+// trustReadHints × readOnlyHint) được chạy; còn lại HIGH-blast fail-closed
+// (PIN connectors-mcp-client).
+describe("assertMcpAllowed (MCP write fail-closed trong workflow)", () => {
+  test("tool trong readAllow → qua", () => {
+    expect(() => assertMcpAllowed("mcp__daab__kg_query", new Set(["mcp__daab__kg_query"]))).not.toThrow();
+  });
+
+  test("tool ngoài readAllow (write / chưa-trust) → throw fail-closed kèm tên tool", () => {
+    expect(() => assertMcpAllowed("mcp__daab__kg_store_concept", new Set())).toThrow(/fail-closed/);
+    expect(() => assertMcpAllowed("mcp__daab__kg_store_concept", new Set())).toThrow(/mcp__daab__kg_store_concept/);
+  });
+});
 
 // internal tools (read) — không phải đối tượng của gate connector, nhưng truyền vào
 // để resolveKind phân loại đúng connector actions theo allowlist policy.

@@ -1,7 +1,7 @@
 // Hai loại node A0. KHÔNG runtime mới: connector→connectors.execute; agent→
 // runToolRounds + 1 call cuối lấy text (runToolRounds break KHÔNG push câu cuối).
 // DI để test thuần. (spec §5 dispatch.)
-import type { WfAgentNode, WfConnectorNode, RunContext } from "./types";
+import type { WfAgentNode, WfConnectorNode, WfMcpNode, RunContext } from "./types";
 import type { ChatMessage, OllamaChatResponse } from "@/lib/agent/orchestrator";
 import type { ConnectorTool } from "@/lib/connectors/types";
 import { resolveTemplate, interpolateArgs } from "./interpolate";
@@ -21,6 +21,21 @@ export async function runConnectorNode(
   const args = interpolateArgs(node.args ?? {}, ctx);
   const result = await deps.execute(node.action, args);
   // execute() trả {error} thay vì throw — nâng thành fail-stop node (spec §5.4).
+  if (result && typeof result === "object" && "error" in (result as Record<string, unknown>)) {
+    throw new Error(String((result as { error: unknown }).error));
+  }
+  return result;
+}
+
+// P2 MCP node: compose tên namespaced theo scheme discovery (mcp__<slug>__<tool>)
+// rồi đi CÙNG đường execute như connector node — route/error contract y hệt.
+export function mcpActionName(server: string, tool: string): string {
+  return `mcp__${server}__${tool}`;
+}
+
+export async function runMcpNode(node: WfMcpNode, ctx: RunContext, deps: ConnectorDeps): Promise<unknown> {
+  const args = interpolateArgs(node.args ?? {}, ctx);
+  const result = await deps.execute(mcpActionName(node.server, node.tool), args);
   if (result && typeof result === "object" && "error" in (result as Record<string, unknown>)) {
     throw new Error(String((result as { error: unknown }).error));
   }

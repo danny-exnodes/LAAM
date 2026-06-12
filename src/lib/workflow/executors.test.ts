@@ -1,7 +1,32 @@
 import { describe, expect, test, vi } from "vitest";
-import { runConnectorNode, runAgentNode } from "./executors";
+import { runConnectorNode, runAgentNode, runMcpNode, mcpActionName } from "./executors";
 import { emptyContext } from "./types";
-import type { WfConnectorNode, WfAgentNode } from "./types";
+import type { WfConnectorNode, WfAgentNode, WfMcpNode } from "./types";
+
+// P2 MCP node: intent — node lưu (server, tool THẬT); executor compose tên
+// namespaced mcp__<slug>__<tool> để connectors.execute() route đúng nhánh MCP,
+// args nội suy {{...}} y hệt connector node (cùng hợp đồng sink:"arg").
+describe("runMcpNode", () => {
+  test("interpolate args + compose tên namespaced + trả output", async () => {
+    const ctx = emptyContext({});
+    ctx.steps["n0"] = { output: { pid: "1f99" } };
+    const node: WfMcpNode = { id: "m1", kind: "mcp", server: "daab", tool: "kg_query", args: { project_id: "{{steps.n0.output.pid}}" } };
+    const execute = vi.fn(async () => ({ rows: [1] }));
+    const out = await runMcpNode(node, ctx, { execute });
+    expect(execute).toHaveBeenCalledWith("mcp__daab__kg_query", { project_id: "1f99" });
+    expect(out).toEqual({ rows: [1] });
+  });
+
+  test("execute trả {error} → throw (fail-stop node)", async () => {
+    const node: WfMcpNode = { id: "m1", kind: "mcp", server: "daab", tool: "kg_query", args: {} };
+    const execute = vi.fn(async () => ({ error: "project_id sai" }));
+    await expect(runMcpNode(node, emptyContext({}), { execute })).rejects.toThrow(/project_id sai/);
+  });
+
+  test("mcpActionName compose đúng scheme namespacing", () => {
+    expect(mcpActionName("daab", "kg_query")).toBe("mcp__daab__kg_query");
+  });
+});
 
 describe("runConnectorNode", () => {
   test("interpolate args rồi execute; trả output", async () => {

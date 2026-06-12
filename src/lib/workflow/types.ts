@@ -1,7 +1,7 @@
 // Hợp đồng đóng băng cho Workflow engine (A0). G1 (A2) thêm 'condition'|'foreach'
 // vào WfNodeKind + node mới — KHÔNG đổi shape A0 có sẵn. Xem spec §4/§5.
 
-export type WfNodeKind = "agent" | "connector" | "condition" | "foreach"; // A0 + G1
+export type WfNodeKind = "agent" | "connector" | "condition" | "foreach" | "mcp"; // A0 + G1 + P2(mcp)
 
 export type WfAgentNode = {
   id: string;
@@ -30,7 +30,18 @@ export type Predicate = Comparator | { all: Predicate[] } | { any: Predicate[] }
 export type WfConditionNode = { id: string; kind: "condition"; when: Predicate };
 export type WfForeachNode = { id: string; kind: "foreach"; items: string; body: WorkflowGraph }; // items={{...}}→array; body chạy đệ quy mỗi item
 
-export type WfNode = WfAgentNode | WfConnectorNode | WfConditionNode | WfForeachNode;
+// P2: gọi tool 1 MCP server per-user trong workflow. Lưu (server slug, tool THẬT);
+// runtime compose mcp__<server>__<tool> → connectors.execute() route nhánh MCP.
+// Write/chưa-trust = HIGH-blast fail-closed (assertMcpAllowed) — chỉ read chạy.
+export type WfMcpNode = {
+  id: string;
+  kind: "mcp";
+  server: string; // slug MCP server (per-user, xem connector_credentials mcp:<slug>)
+  tool: string; // tên tool THẬT trên server (không namespace)
+  args: Record<string, unknown>; // mỗi string value có thể chứa {{...}} (sink:"arg")
+};
+
+export type WfNode = WfAgentNode | WfConnectorNode | WfConditionNode | WfForeachNode | WfMcpNode;
 export type WfEdge = { from: string; to: string; label?: string }; // label cho nhánh condition ("true"/"false")
 export type WorkflowGraph = {
   nodes: WfNode[];

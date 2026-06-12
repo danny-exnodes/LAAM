@@ -53,6 +53,7 @@ const KIND_COLORS: Record<WfNodeKind, string> = {
   connector: "#06b6d4",
   condition: "#d97706",
   foreach: "#16a34a",
+  mcp: "#c026d3",
 };
 
 // Data-mutating RF change types — 'select' and 'dimensions' are view-only
@@ -111,7 +112,9 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
         ? `${wf.connectorId}.${wf.action}`
         : wf.kind === "condition"
           ? "condition"
-          : `foreach(${wf.items.slice(0, 20)})`;
+          : wf.kind === "mcp"
+            ? `${wf.server}.${wf.tool}`
+            : `foreach(${wf.items.slice(0, 20)})`;
 
   return (
     <div
@@ -229,8 +232,9 @@ function defaultNode(kind: WfNodeKind): WfNode {
   if (kind === "agent") return { id, kind, prompt: "" };
   if (kind === "connector") return { id, kind, connectorId: "", action: "", args: {} };
   if (kind === "condition") return { id, kind, when: { left: "", op: "eq", right: "" } };
+  if (kind === "mcp") return { id, kind, server: "", tool: "", args: {} };
   // foreach
-  return { id, kind, items: "{{items}}", body: { nodes: [], edges: [] } };
+  return { id, kind: "foreach", items: "{{items}}", body: { nodes: [], edges: [] } };
 }
 
 // ── Palette button ──────────────────────────────────────────────────────────

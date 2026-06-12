@@ -15,3 +15,11 @@ export function assertConnectorAllowed(action: string, internal: Tool[]): void {
   }
   // Cleared write → qua.
 }
+
+// P2: MCP trong workflow KHÔNG có đường workflowSafe — chỉ read (nằm trong readAllow
+// = trustReadHints × readOnlyHint, xem mcp/discovery) được chạy; còn lại HIGH-blast
+// fail-closed (PIN connectors-mcp-client).
+export function assertMcpAllowed(name: string, readAllow: ReadonlySet<string>): void {
+  if (readAllow.has(name)) return;
+  throw new Error(`workflow: MCP tool '${name}' là write/chưa-trust — fail-closed trong workflow`);
+}
