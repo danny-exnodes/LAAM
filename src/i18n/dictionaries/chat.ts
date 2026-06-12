@@ -270,4 +270,25 @@ export const chat: Dict = {
   'chat.confirmDone': { vi: 'Đã thực hiện', en: 'Done', zh: '已执行' },
   'chat.confirmCancelled': { vi: 'Đã huỷ', en: 'Cancelled', zh: '已取消' },
   'chat.confirmError': { vi: 'Lỗi thực hiện', en: 'Action failed', zh: '执行出错' },
+
+  // --- P1 quick-tools picker: section Công cụ trong slash-menu + chip required-args ---
+  'chat.toolsMenuHead': { vi: 'Công cụ', en: 'Tools', zh: '工具' },
+  'chat.toolKindRead': { vi: 'đọc', en: 'read', zh: '读' },
+  'chat.toolKindWrite': { vi: 'ghi · cần xác nhận', en: 'write · needs confirm', zh: '写 · 需确认' },
+  'chat.toolPickedHint': {
+    vi: 'Điền tham số bắt buộc — model sẽ gọi đúng công cụ này.',
+    en: 'Fill the required arguments — the model will call exactly this tool.',
+    zh: '填写必填参数 — 模型将准确调用此工具。',
+  },
+  'chat.toolReqMissing': {
+    vi: 'Thiếu tham số bắt buộc: {keys}',
+    en: 'Missing required arguments: {keys}',
+    zh: '缺少必填参数：{keys}',
+  },
+  'chat.toolClearAria': { vi: 'Bỏ chọn công cụ', en: 'Clear tool selection', zh: '取消选择工具' },
+  'chat.toolDefaultMsg': {
+    vi: 'Gọi công cụ {name} với tham số đã nhập.',
+    en: 'Call tool {name} with the provided arguments.',
+    zh: '使用提供的参数调用工具 {name}。',
+  },
 };

@@ -23,6 +23,23 @@ function streamResponse(chunks: string[], convId = "conv-1"): Response {
   } as unknown as Response;
 }
 
+// P1 quick-tools: catalog fixture cho /api/chat/tools (picker).
+const TOOL_GROUPS_FX = [
+  {
+    id: "mcp:daab",
+    type: "mcp",
+    label: "DAAB",
+    tools: [
+      {
+        name: "mcp__daab__kg_query",
+        description: "truy vấn knowledge graph",
+        kind: "read",
+        args: [{ key: "project_id", kind: "string", description: "UUID dự án", required: true }],
+      },
+    ],
+  },
+];
+
 // Route theo URL; các endpoint mount (conversations/models/info/ocr) trả JSON rỗng.
 function mockFetch() {
   return vi.fn(async (url: string, init?: RequestInit) => {
@@ -35,7 +52,9 @@ function mockFetch() {
           ? { model: "test-model" }
           : url === "/api/ocr"
             ? { available: true }
-            : {};
+            : url === "/api/chat/tools"
+              ? { groups: TOOL_GROUPS_FX }
+              : {};
     return { ok: true, json: async () => json } as unknown as Response;
   });
 }
@@ -197,4 +216,67 @@ test("C2: local model active → claudeNote NOT shown", async () => {
   // After a tick, no billing note should be visible.
   await new Promise((r) => setTimeout(r, 50));
   expect(screen.queryByRole("note")).toBeNull();
+});
+
+// P1 quick-tools INTENT: user chọn tool + dán required-arg (UUID) → body /api/chat
+// phải mang requestedTool {name, args} để server pre-dispatch deterministic — model
+// không phải đoán selection/args. Sau khi gửi, pick được clear (1 lượt 1 tool).
+test("pick tool từ slash menu, điền arg, gửi → body có requestedTool; sau gửi pick clear", async () => {
+  const fetchMock = mockFetch();
+  vi.stubGlobal("fetch", fetchMock);
+  render(
+    <I18nProvider lang="vi">
+      <ChatClient />
+    </I18nProvider>,
+  );
+  // Chờ catalog nạp xong rồi mở slash menu.
+  await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === "/api/chat/tools")).toBe(true));
+  const ta = screen.getByLabelText("Soạn tin nhắn");
+  fireEvent.change(ta, { target: { value: "/kg" } });
+  fireEvent.click(await screen.findByText("mcp__daab__kg_query"));
+
+  // Chip + input required-arg hiện ra; điền UUID + text yêu cầu rồi gửi.
+  fireEvent.change(screen.getByLabelText("project_id"), { target: { value: "1f991b74-aaaa" } });
+  fireEvent.change(ta, { target: { value: "tìm 'cá hồi' trong KG" } });
+  fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find(
+      ([u, init]) => u === "/api/chat" && (init as RequestInit | undefined)?.method === "POST",
+    );
+    expect(call).toBeTruthy();
+    const body = JSON.parse(String((call![1] as RequestInit).body));
+    expect(body.requestedTool).toEqual({ name: "mcp__daab__kg_query", args: { project_id: "1f991b74-aaaa" } });
+    expect(body.message).toBe("tìm 'cá hồi' trong KG");
+  });
+  // Pick clear sau khi gửi — không dính sang lượt sau.
+  await waitFor(() => expect(screen.queryByLabelText("Bỏ chọn công cụ")).toBeNull());
+});
+
+// P1: toolPick + composer TRỐNG → vẫn gửi được, message = câu mặc định i18n (server
+// đòi message non-empty; client tự thay vì user chỉ cần chọn tool + args).
+test("toolPick với args đủ + text rỗng → gửi message mặc định", async () => {
+  const fetchMock = mockFetch();
+  vi.stubGlobal("fetch", fetchMock);
+  render(
+    <I18nProvider lang="vi">
+      <ChatClient />
+    </I18nProvider>,
+  );
+  await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => u === "/api/chat/tools")).toBe(true));
+  const ta = screen.getByLabelText("Soạn tin nhắn");
+  fireEvent.change(ta, { target: { value: "/kg" } });
+  fireEvent.click(await screen.findByText("mcp__daab__kg_query"));
+  fireEvent.change(screen.getByLabelText("project_id"), { target: { value: "u-1" } });
+  fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find(
+      ([u, init]) => u === "/api/chat" && (init as RequestInit | undefined)?.method === "POST",
+    );
+    expect(call).toBeTruthy();
+    const body = JSON.parse(String((call![1] as RequestInit).body));
+    expect(body.message).toBe("Gọi công cụ mcp__daab__kg_query với tham số đã nhập.");
+    expect(body.requestedTool.args).toEqual({ project_id: "u-1" });
+  });
 });

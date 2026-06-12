@@ -23,7 +23,9 @@ import {
   type ChatSettings,
   type Conv,
   type PendingWrite,
+  type ToolPick,
 } from "./types";
+import type { CatalogGroup, CatalogTool } from "@/lib/chat/toolCatalog";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
 import { isPdfFile, isDocxFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
 import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
@@ -69,6 +71,8 @@ export function ChatClient() {
   const [models, setModels] = useState<string[]>([]);
   const [claudeModels, setClaudeModels] = useState<string[]>([]); // C2: from /api/chat/info
   const [ocrAvailable, setOcrAvailable] = useState(true); // F3/FEAT-4: degrade if tesseract missing
+  const [toolGroups, setToolGroups] = useState<CatalogGroup[]>([]); // P1 quick-tools catalog
+  const [toolPick, setToolPick] = useState<ToolPick | null>(null); // P1: tool user đã chọn (ephemeral)
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Conv[]>([]); // FEAT-1: content-search hits
   const abortRef = useRef<AbortController | null>(null);
@@ -100,6 +104,13 @@ export function ChatClient() {
     fetch("/api/ocr")
       .then((r) => r.json())
       .then((d: { available?: boolean }) => setOcrAvailable(d.available !== false))
+      .catch(() => {});
+    // P1 quick-tools: catalog tool per-user cho slash-picker.
+    fetch("/api/chat/tools")
+      .then((r) => r.json())
+      .then((d: { groups?: CatalogGroup[] }) => {
+        if (Array.isArray(d.groups)) setToolGroups(d.groups);
+      })
       .catch(() => {});
   }, []);
 
@@ -372,13 +383,15 @@ export function ChatClient() {
   );
 
   const streamReply = useCallback(
-    (outgoing: string, titleHint?: string, images?: string[], attachments?: AttachmentMeta[]) =>
+    (outgoing: string, titleHint?: string, images?: string[], attachments?: AttachmentMeta[], requestedTool?: { name: string; args: Record<string, unknown> }) =>
       streamFrom({
         conversationId: activeId ?? undefined,
         message: outgoing,
         // F4: the raw user text titles a new conversation, not the attachment-
         // prefixed `outgoing` (which can begin with a file's raw bytes).
         titleHint,
+        // P1 quick-tools: tool user đã chọn → server pre-dispatch deterministic.
+        ...(requestedTool ? { requestedTool } : {}),
         // W3 vision: kênh ảnh raw (base64) — additive; vắng → body y như cũ.
         ...(images && images.length ? { images } : {}),
         // Preview metadata để PERSIST (hiện lại sau reload) — additive.
@@ -408,8 +421,20 @@ export function ChatClient() {
   // UX-1: send arbitrary text (used by both the composer and one-click sample
   // prompts) so a sample sends immediately instead of just filling the input.
   async function sendMessage(rawText: string) {
-    const text = rawText.trim();
+    // P1 quick-tools: toolPick + text rỗng → message mặc định (server đòi non-empty);
+    // còn thiếu required-arg thì Composer đã disable nút gửi.
+    const text = rawText.trim() || (toolPick ? t("chat.toolDefaultMsg", { name: toolPick.tool.name }) : "");
     if (!text || streaming) return;
+    const requested = toolPick
+      ? {
+          name: toolPick.tool.name,
+          // Bỏ giá trị rỗng/undefined — chỉ gửi args user thật sự nhập.
+          args: Object.fromEntries(
+            Object.entries(toolPick.args).filter(([, v]) => v !== undefined && v !== null && !(typeof v === "string" && v.trim() === "")),
+          ),
+        }
+      : undefined;
+    setToolPick(null); // 1 lượt 1 tool — không dính sang lượt sau
     const outgoing = withAttachments(text);
     // W3 vision: thu ảnh raw TRƯỚC khi xoá attachments. slice = defense-in-depth
     // (cap đã enforce lúc đính kèm) để không bao giờ vượt trần server (400).
@@ -441,11 +466,19 @@ export function ChatClient() {
       },
       { id: uid(), role: "assistant", content: "", createdAt: Date.now() },
     ]);
-    await streamReply(outgoing, text, images, metas);
+    await streamReply(outgoing, text, images, metas, requested);
   }
 
   function send() {
     void sendMessage(input);
+  }
+
+  // P1 quick-tools: chọn/bỏ tool + nhập args (state ở đây để send() đọc được).
+  function onToolPick(pick: { tool: CatalogTool; groupLabel: string } | null) {
+    setToolPick(pick ? { ...pick, args: {} } : null);
+  }
+  function onToolArg(key: string, value: unknown) {
+    setToolPick((p) => (p ? { ...p, args: { ...p.args, [key]: value } } : p));
   }
 
   function stop() {
@@ -873,6 +906,10 @@ export function ChatClient() {
                 onToggleSettings={() => setSettingsOpen((v) => !v)}
                 ocrAvailable={ocrAvailable}
                 modelName={modelName}
+                toolGroups={toolGroups}
+                toolPick={toolPick}
+                onToolPick={onToolPick}
+                onToolArg={onToolArg}
               />
             </div>
           </div>
