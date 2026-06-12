@@ -69,7 +69,11 @@ xem `docker-compose.yml` service `app`.
 | `PROACTIVE_STUCK_MIN` / `PROACTIVE_COST_USD` | ⬜ | Ngưỡng cảnh báo chủ động | Mặc định (kẹt 10′ / $1) |
 | `SEARXNG_URL` | ⬜ | Endpoint SearXNG cho `web_search` | Compose override `searxng:8080`; thiếu → fail-soft |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Khi dùng connector Google | OAuth client dùng chung (operator đăng ký) | Xem checklist mục 8 |
-| `OAUTH_PUBLIC_BASE_URL` | Khi dùng connector Google | Base URL trình duyệt thấy (không trailing slash) | `https://<host>.ts.net` |
+| `OAUTH_PUBLIC_BASE_URL` | Khi dùng BẤT KỲ flow authorize nào | Base URL trình duyệt thấy (không trailing slash) — dùng chung cho MỌI provider OAuth + Trello | `https://<host>.ts.net` |
+| `ATLASSIAN_OAUTH_CLIENT_ID` / `ATLASSIAN_OAUTH_CLIENT_SECRET` | Khi dùng OAuth Jira | App 3LO operator đăng ký (chỉ 1 callback/app → verify trên prod) | Xem checklist mục 8b |
+| `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET` | Khi dùng connector Slack | Slack app operator tạo (KHÔNG bật rotation/PKCE) | Xem checklist mục 8c |
+| `TRELLO_API_KEY` | Khi dùng nút authorize 1-click Trello | API key từ Power-Up admin (key public-ish; nhập tay vẫn chạy nếu thiếu) | Xem checklist mục 8d |
+| `ZALO_APP_ID` / `ZALO_APP_SECRET` | Khi dùng connector Zalo OA | App developers.zalo.me link OA (OA phải verified) | Xem checklist mục 8e |
 | `HOST_METRICS_URL` / `HOST_METRICS_TOKEN` | ⬜ | Sampler phần cứng host | Compose override `host.docker.internal:47600`; token nếu muốn khoá |
 | `LAAM_PROJECTS_DIR` / `LAAM_LOCAL_LOGS` | ⬜ | Nguồn transcript Claude / log model local | Mặc định `~/.claude/projects` và `~/.laam/local-logs` — chỉ đặt khi đường dẫn khác chuẩn |
 | `NEXT_PUBLIC_CHAT_RENDERER` | ⬜ | Spike renderer chat (`streamdown`) | Để trống (mặc định react-markdown) |
@@ -232,3 +236,37 @@ chưa có script cài sẵn.
 4. Restart app.
 5. `/connectors` → **Kết nối** từng connector Google → **Test**.
 6. `gmail.send` là **restricted scope** → reconnect để re-consent; lưu ý refresh token hết hạn ~7 ngày (External+Testing) → UI có `needs_reconnect`.
+
+## 8b. Checklist OAuth Atlassian/Jira (operator, 1 lần — tuỳ chọn, nhập tay vẫn chạy)
+
+1. https://developer.atlassian.com/console/myapps → **Create → OAuth 2.0 integration**.
+2. **Permissions**: thêm *Jira API* (classic scopes `read:jira-work`, `write:jira-work`, `read:jira-user`) + *User Identity API* (`read:me` — để hiện "đã kết nối là X").
+3. **Authorization → Configure**: Callback URL = `<base>/api/connectors/atlassian/callback` (Atlassian chỉ cho **1 URL/app** → dùng prod base; dev dùng nhập tay site/email/API-token).
+4. **Distribution → Enable sharing** (BẮT BUỘC — không bật thì chỉ account tạo app authorize được; điền vendor name + privacy URL).
+5. **Settings**: copy Client ID/Secret → env `ATLASSIAN_OAUTH_CLIENT_ID` / `ATLASSIAN_OAUTH_CLIENT_SECRET`. Restart app.
+6. Lưu ý: refresh token **xoay vòng, dùng-1-lần** (90 ngày không dùng thì chết) — LAAM tự persist + khoá chống đua; consent screen sẽ ghi "chưa được Atlassian review" (bình thường với app nội bộ).
+
+## 8c. Checklist Slack (operator, 1 lần)
+
+1. https://api.slack.com/apps → **Create New App → From scratch** → chọn workspace của team.
+2. **OAuth & Permissions → Bot Token Scopes**: `channels:read`, `groups:read`, `channels:history`, `groups:history`, `chat:write`, `chat:write.public`.
+3. Cùng trang → **Redirect URLs**: `<base>/api/connectors/slack/callback` (HTTPS bắt buộc).
+4. **Basic Information → App Credentials**: copy Client ID/Secret → env `SLACK_CLIENT_ID` / `SLACK_CLIENT_SECRET`. Restart app.
+5. **KHÔNG bật** Token Rotation / PKCE / Public Distribution (đều là công tắc một-chiều có hại cho app nội bộ).
+6. Sau khi user kết nối: mời bot vào kênh cần ĐỌC lịch sử (`/invite @LAAM`); bot token là chung cho cả workspace.
+
+## 8d. Checklist Trello 1-click (operator, 1 lần — tuỳ chọn, nhập tay vẫn chạy)
+
+1. https://trello.com/power-ups/admin → **New**: điền tên + Workspace, **bỏ trống** "Iframe connector URL" (trang `trello.com/app-key` cũ đã chết).
+2. Tab **API Key** → **Generate a new API Key** → copy **API Key** (KHÔNG copy ô "Secret" — chỉ dùng cho OAuth1).
+3. Cùng tab → **Allowed origins**: thêm origin LAAM **cả dev lẫn prod** (match theo scheme+host+port; thiếu → Trello chặn redirect SAU khi user đồng ý).
+4. Env `TRELLO_API_KEY` (+`OAUTH_PUBLIC_BASE_URL`). Restart app → `/connectors` hiện nút "Kết nối với Trello".
+
+## 8e. Checklist Zalo OA (operator, 1 lần)
+
+1. Cần **OA đã xác thực** (giấy tờ DN tại oa.zalo.me); API gửi tin cần **gói trả phí** (vd Tăng trưởng ~2,5tr/năm — endpoint đọc chạy không cần gói).
+2. https://developers.zalo.me → tạo app → copy App ID + Secret Key (Cài đặt).
+3. Sản phẩm **Official Account**: link OA (account phải là admin OA) + **kích hoạt OA API** + đặt **Callback URL** = `<base>/api/connectors/zalo/callback` (1 URL → prod base).
+4. Bật app **Live** → env `ZALO_APP_ID` / `ZALO_APP_SECRET`. Restart app.
+5. Người bấm **Kết nối** trong LAAM phải là admin OA; team chỉ định MỘT admin đại diện (re-connect bởi admin khác có thể vô hiệu grant cũ — hành vi chưa verify, xem backlog).
+6. ⚠ Endpoint Zalo lấy từ SDK chính thức (docs là SPA không crawl được) — lần kết nối thật đầu tiên cần thử **Test** + 1 lệnh đọc trước khi tin dùng.

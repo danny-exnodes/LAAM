@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import jira from "./jira";
+import { ATLASSIAN_CREDS } from "./oauth/atlassian";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -28,10 +29,11 @@ describe("jira connector", () => {
     expect(kindOf("jira_create_issue")).toBe("write");
   });
 
-  test("jira_search_issues shapes issue (key/summary/status/assignee/url)", async () => {
-    vi.spyOn(global, "fetch").mockResolvedValue(
+  test("jira_search_issues gọi endpoint mới /search/jql (fields bắt buộc) và trả {count, issues}", async () => {
+    // /rest/api/3/search cũ đã 410 Gone (CHANGE-2046); endpoint mới không còn total.
+    const spy = vi.spyOn(global, "fetch").mockResolvedValue(
       Response.json({
-        total: 1,
+        isLast: true,
         issues: [
           {
             key: "ABC-1",
@@ -41,10 +43,16 @@ describe("jira connector", () => {
       }),
     );
     const r = (await jira.handlers.jira_search_issues({ jql: "project = ABC" }, CREDS)) as {
-      total: number;
+      count: number;
       issues: { key: string; summary: string; status: string; assignee: string; url: string }[];
     };
-    expect(r.total).toBe(1);
+    expect(spy.mock.calls[0][0]).toBe(
+      "https://acme.atlassian.net/rest/api/3/search/jql?jql=" +
+        encodeURIComponent("project = ABC") +
+        "&maxResults=15&fields=" +
+        encodeURIComponent("summary,status,assignee"),
+    );
+    expect(r.count).toBe(1);
     expect(r.issues[0]).toMatchObject({
       key: "ABC-1",
       summary: "Fix bug",
@@ -52,6 +60,56 @@ describe("jira connector", () => {
       assignee: "An",
       url: "https://acme.atlassian.net/browse/ABC-1",
     });
+  });
+
+  test("jira_search_issues không có jql → mặc định JQL bounded (updated >= -30d)", async () => {
+    // /search/jql trả 400 với JQL unbounded — mặc định phải có điều kiện lọc.
+    const spy = vi.spyOn(global, "fetch").mockResolvedValue(Response.json({ isLast: true, issues: [] }));
+    await jira.handlers.jira_search_issues({}, CREDS);
+    const url = String(spy.mock.calls[0][0]);
+    expect(decodeURIComponent(url)).toContain("updated >= -30d");
+  });
+
+  test("400 từ Atlassian (JQL của người dùng) được ném nguyên văn, không viết lại JQL", async () => {
+    // Model cần đúng wording của Atlassian để tự sửa JQL.
+    const spy = vi.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ errorMessages: ["The provided JQL query is unbounded."] }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(jira.handlers.jira_search_issues({ jql: "ORDER BY updated DESC" }, CREDS)).rejects.toThrow(
+      "The provided JQL query is unbounded.",
+    );
+    expect(decodeURIComponent(String(spy.mock.calls[0][0]))).toContain("ORDER BY updated DESC");
+  });
+
+  test("Bearer mode: gọi qua api.atlassian.com/ex/jira/{cloudId}, link browse dùng site_url", async () => {
+    const OAUTH_CREDS = {
+      access_token: "at",
+      [ATLASSIAN_CREDS.cloudId]: "cid",
+      [ATLASSIAN_CREDS.siteUrl]: "https://acme.atlassian.net",
+    };
+    const spy = vi.spyOn(global, "fetch").mockResolvedValue(
+      Response.json({
+        isLast: true,
+        issues: [{ key: "ABC-9", fields: { summary: "OAuth", status: { name: "Done" }, assignee: null } }],
+      }),
+    );
+    const r = (await jira.handlers.jira_search_issues({ jql: "project = ABC" }, OAUTH_CREDS)) as {
+      count: number;
+      issues: { key: string; url: string }[];
+    };
+    const [url, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect(String(url).startsWith("https://api.atlassian.com/ex/jira/cid/")).toBe(true);
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer at");
+    expect(r.issues[0].url).toBe("https://acme.atlassian.net/browse/ABC-9");
+  });
+
+  test("Bearer mode thiếu cloud_id → báo kết nối lại", async () => {
+    await expect(
+      jira.handlers.jira_search_issues({ jql: "project = ABC" }, { access_token: "at" }),
+    ).rejects.toThrow(/cloud_id/);
   });
 
   test("missing site throws", async () => {

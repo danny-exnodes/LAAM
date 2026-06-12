@@ -2,8 +2,11 @@
 
 // Connectors page — list external services, connect / disconnect / test.
 // Token connectors take pasted credentials (stored server-side, encrypted, per-user);
-// OAuth connectors (Google) use the in-app redirect flow via
-// GET /api/connectors/:id/authorize → /api/connectors/google/callback.
+// OAuth connectors (Google/Atlassian/Slack/Zalo) use the in-app redirect flow via
+// GET /api/connectors/:id/authorize → /api/connectors/:provider/callback; trello
+// has a token-mode authorize accelerator (fragment capture). The authorize button
+// renders only when auth.oauthConfigured (operator env present) — otherwise the
+// card falls back to manual fields (when declared) plus the operator setup hint.
 // Consumes GET /api/connectors and POST /api/connectors/:id/{connect,disconnect,test}.
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -198,6 +201,10 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
   const Icon = ICONS[c.icon] ?? Plug;
   const isOauth = auth.type === "oauth";
   const authorizeHref = `/api/connectors/${encodeURIComponent(c.id)}/authorize`;
+  const authorizeReady = auth.oauthConfigured;
+  // Consent-screen brand: every Google connector consents at Google; the rest
+  // consent at the service itself, so the connector name reads naturally.
+  const connectLabel = t("conn.connectWith", { name: auth.provider === "google" ? "Google" : c.name });
 
   const border =
     c.status === "connected"
@@ -242,29 +249,39 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
       )}
 
       <div className="flex flex-col gap-2">
-        {auth.type === "token" &&
-          auth.fields.map((f) => (
-            <label key={f.key} className="flex flex-col gap-1">
-              <span className="text-xs text-neutral-500">{f.label}</span>
-              <input
-                type={f.secret ? "password" : "text"}
-                autoComplete="off"
-                spellCheck={false}
-                placeholder={f.set ? f.masked || "••••" : f.placeholder}
-                onChange={(e) => {
-                  fieldsRef.current[f.key] = e.target.value;
-                }}
-                className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-sm outline-none focus:border-[var(--color-accent)] dark:border-neutral-700 dark:bg-neutral-950"
-              />
-            </label>
-          ))}
+        {auth.type === "token" && <FieldInputs fields={auth.fields} fieldsRef={fieldsRef} />}
         {auth.type === "token" && auth.help && (
           <div className="text-[11px] leading-relaxed text-neutral-400">{svc(t, c.id, "help", auth.help)}</div>
         )}
-        {isOauth && auth.setup && (
+        {/* OAuth not configured by the operator → show the setup hint; dual-mode
+            connectors (jira) additionally expose their manual fields directly. */}
+        {isOauth && !authorizeReady && (
           <div className="text-[11px] leading-relaxed text-neutral-500">
             {svc(t, c.id, "setup", auth.setup || t("conn.oauthNeeded"))}
           </div>
+        )}
+        {isOauth && !authorizeReady && auth.fields.length > 0 && (
+          <>
+            <FieldInputs fields={auth.fields} fieldsRef={fieldsRef} />
+            {auth.help && (
+              <div className="text-[11px] leading-relaxed text-neutral-400">{svc(t, c.id, "help", auth.help)}</div>
+            )}
+          </>
+        )}
+        {/* OAuth configured + dual-mode → manual entry stays available behind an expander. */}
+        {isOauth && authorizeReady && auth.fields.length > 0 && (
+          <details className="rounded-lg border border-neutral-200 px-2.5 py-1.5 dark:border-neutral-700">
+            <summary className="cursor-pointer text-xs text-neutral-500">{t("conn.manualOption")}</summary>
+            <div className="mt-2 flex flex-col gap-2">
+              <FieldInputs fields={auth.fields} fieldsRef={fieldsRef} />
+              {auth.help && (
+                <div className="text-[11px] leading-relaxed text-neutral-400">{svc(t, c.id, "help", auth.help)}</div>
+              )}
+              <button type="button" disabled={busy} onClick={() => void connect()} className={btn("secondary")}>
+                {t("conn.connect")}
+              </button>
+            </div>
+          </details>
         )}
         {auth.type === "none" && auth.help && (
           <div className="text-[11px] leading-relaxed text-neutral-400">{svc(t, c.id, "help", auth.help)}</div>
@@ -278,31 +295,7 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
       )}
 
       <div className="flex flex-wrap gap-2">
-        {isOauth ? (
-          c.status === "connected" ? (
-            <>
-              <button type="button" disabled={busy} onClick={() => void test()} className={btn("secondary")}>
-                {t("conn.test")}
-              </button>
-              <button type="button" disabled={busy} onClick={() => void disconnect()} className={btn("danger")}>
-                {t("conn.disconnect")}
-              </button>
-            </>
-          ) : c.status === "needs_reconnect" ? (
-            <>
-              <a href={authorizeHref} className={btn("primary")}>
-                {t("conn.reconnect")}
-              </a>
-              <button type="button" disabled={busy} onClick={() => void disconnect()} className={btn("danger")}>
-                {t("conn.disconnect")}
-              </button>
-            </>
-          ) : (
-            <a href={authorizeHref} className={btn("primary")}>
-              {t("conn.connectGoogle")}
-            </a>
-          )
-        ) : c.status === "connected" ? (
+        {c.status === "connected" ? (
           <>
             <button type="button" disabled={busy} onClick={() => void test()} className={btn("secondary")}>
               {t("conn.test")}
@@ -312,12 +305,74 @@ function ConnectorCard({ c, t, reload }: { c: ConnectorListItem; t: T; reload: (
             </button>
           </>
         ) : (
-          <button type="button" disabled={busy} onClick={() => void connect()} className={btn("primary")}>
-            {auth.type === "token" ? t("conn.connect") : t("conn.enable")}
-          </button>
+          <>
+            {authorizeReady && (
+              <a href={authorizeHref} className={btn("primary")}>
+                {c.status === "needs_reconnect" ? t("conn.reconnect") : connectLabel}
+              </a>
+            )}
+            {/* Manual connect: token connectors always; dual-mode oauth (jira)
+                only when the operator env is absent (otherwise it lives in the
+                expander above). `none` (demo) keeps its explicit enable. */}
+            {auth.type === "token" && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void connect()}
+                className={btn(authorizeReady ? "secondary" : "primary")}
+              >
+                {t("conn.connect")}
+              </button>
+            )}
+            {isOauth && !authorizeReady && auth.fields.length > 0 && (
+              <button type="button" disabled={busy} onClick={() => void connect()} className={btn("primary")}>
+                {t("conn.connect")}
+              </button>
+            )}
+            {auth.type === "none" && (
+              <button type="button" disabled={busy} onClick={() => void connect()} className={btn("primary")}>
+                {t("conn.enable")}
+              </button>
+            )}
+            {c.status === "needs_reconnect" && (
+              <button type="button" disabled={busy} onClick={() => void disconnect()} className={btn("danger")}>
+                {t("conn.disconnect")}
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>
+  );
+}
+
+// Shared credential inputs (token connectors + the dual-mode manual fallback).
+// Values go into the parent's fieldsRef so connect() reads one place.
+function FieldInputs({
+  fields,
+  fieldsRef,
+}: {
+  fields: ConnectorListItem["auth"]["fields"];
+  fieldsRef: React.MutableRefObject<Record<string, string>>;
+}) {
+  return (
+    <>
+      {fields.map((f) => (
+        <label key={f.key} className="flex flex-col gap-1">
+          <span className="text-xs text-neutral-500">{f.label}</span>
+          <input
+            type={f.secret ? "password" : "text"}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={f.set ? f.masked || "••••" : f.placeholder}
+            onChange={(e) => {
+              fieldsRef.current[f.key] = e.target.value;
+            }}
+            className="w-full rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-2 text-sm outline-none focus:border-[var(--color-accent)] dark:border-neutral-700 dark:bg-neutral-950"
+          />
+        </label>
+      ))}
+    </>
   );
 }
 

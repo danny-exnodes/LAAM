@@ -28,6 +28,7 @@ function item(over: Partial<ConnectorListItem> = {}): ConnectorListItem {
       scopes: [],
       help: "Paste a PAT",
       setup: "",
+      oauthConfigured: false,
       fields: [{ key: "token", label: "Token", placeholder: "ghp_…", secret: true, set: false, masked: "" }],
       ...authOver,
     },
@@ -63,7 +64,7 @@ afterEach(() => {
 
 test("renders connectors from the list endpoint", async () => {
   const fetchMock = mockFetch({
-    "/api/connectors": { connectors: [item(), item({ id: "demo", name: "Demo", blurb: "Sample tasks", auth: { type: "none", provider: "", scopes: [], help: "No auth", setup: "", fields: [] }, tools: [{ name: "demo_list_tasks", description: "", parameters: {} }] })] },
+    "/api/connectors": { connectors: [item(), item({ id: "demo", name: "Demo", blurb: "Sample tasks", auth: { type: "none", provider: "", scopes: [], help: "No auth", setup: "", oauthConfigured: false, fields: [] }, tools: [{ name: "demo_list_tasks", description: "", parameters: {} }] })] },
   });
   vi.stubGlobal("fetch", fetchMock);
 
@@ -150,6 +151,84 @@ test("disconnect calls the disconnect endpoint and reloads", async () => {
     expect(call).toBeTruthy();
     expect(call?.[1]?.method).toBe("POST");
   });
+});
+
+test("oauth đã cấu hình: nút authorize per-provider + expander nhập tay (dual-mode jira)", async () => {
+  const jira = item({
+    id: "jira",
+    name: "Jira",
+    auth: {
+      type: "oauth",
+      provider: "atlassian",
+      scopes: ["read:jira-work"],
+      help: "manual help",
+      setup: "operator setup",
+      oauthConfigured: true,
+      fields: [{ key: "api_token", label: "API Token", placeholder: "ATATT…", secret: true, set: false, masked: "" }],
+    },
+  });
+  vi.stubGlobal("fetch", mockFetch({ "/api/connectors": { connectors: [jira] } }));
+
+  wrap();
+  await screen.findByText("Jira");
+
+  // Authorize anchor with the per-provider label (NOT the old Google-only label)
+  const a = screen.getByRole("link", { name: "Kết nối với Jira" }) as HTMLAnchorElement;
+  expect(a.getAttribute("href")).toBe("/api/connectors/jira/authorize");
+  // Manual fallback lives behind the expander
+  expect(screen.getByText("Hoặc nhập token thủ công")).toBeTruthy();
+});
+
+test("oauth CHƯA cấu hình: không có nút authorize, hiện setup-hint + fields nhập tay (fallback)", async () => {
+  // id "acme" cố ý KHÔNG có key conn.svc.* trong dict → svc() fallback đúng
+  // chuỗi connector cung cấp (jira thật sẽ bị dict override — đã có test riêng).
+  const acme = item({
+    id: "acme",
+    name: "Acme",
+    auth: {
+      type: "oauth",
+      provider: "atlassian",
+      scopes: [],
+      help: "manual help",
+      setup: "operator setup hint",
+      oauthConfigured: false,
+      fields: [{ key: "api_token", label: "API Token", placeholder: "ATATT…", secret: true, set: false, masked: "" }],
+    },
+  });
+  vi.stubGlobal("fetch", mockFetch({ "/api/connectors": { connectors: [acme] } }));
+
+  wrap();
+  await screen.findByText("Acme");
+
+  expect(screen.queryByRole("link", { name: /Kết nối với/ })).toBeNull();
+  expect(screen.getByText("operator setup hint")).toBeTruthy();
+  expect(screen.getByPlaceholderText("ATATT…")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Kết nối" })).toBeTruthy();
+});
+
+test("trello (token + accelerator): có CẢ nút authorize lẫn fields nhập tay", async () => {
+  const trello = item({
+    id: "trello",
+    name: "Trello",
+    auth: {
+      type: "token",
+      provider: "",
+      scopes: [],
+      help: "trello help",
+      setup: "",
+      oauthConfigured: true,
+      fields: [{ key: "key", label: "API Key", placeholder: "key…", secret: true, set: false, masked: "" }],
+    },
+  });
+  vi.stubGlobal("fetch", mockFetch({ "/api/connectors": { connectors: [trello] } }));
+
+  wrap();
+  await screen.findByText("Trello");
+
+  const a = screen.getByRole("link", { name: "Kết nối với Trello" }) as HTMLAnchorElement;
+  expect(a.getAttribute("href")).toBe("/api/connectors/trello/authorize");
+  expect(screen.getByPlaceholderText("key…")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Kết nối" })).toBeTruthy();
 });
 
 test("test failure shows the error message inline", async () => {
