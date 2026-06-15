@@ -28,7 +28,7 @@
         }
       },
       "fails": [],
-      "avgMs": 3540,
+      "avgMs": 3318,
       "noCall": 0
     },
     {
@@ -54,7 +54,7 @@
         }
       },
       "fails": [],
-      "avgMs": 2609,
+      "avgMs": 2398,
       "noCall": 0
     },
     {
@@ -80,7 +80,7 @@
         }
       },
       "fails": [],
-      "avgMs": 4454,
+      "avgMs": 4301,
       "noCall": 0
     },
     {
@@ -106,7 +106,29 @@
         }
       },
       "fails": [],
-      "avgMs": 2275,
+      "avgMs": 2190,
+      "noCall": 0
+    },
+    {
+      "id": "top-agents-cost",
+      "capability": "args",
+      "runs": 6,
+      "perDim": {
+        "tool-selection": {
+          "passed": 6,
+          "total": 6
+        },
+        "args": {
+          "passed": 6,
+          "total": 6
+        },
+        "termination": {
+          "passed": 6,
+          "total": 6
+        }
+      },
+      "fails": [],
+      "avgMs": 5572,
       "noCall": 0
     },
     {
@@ -124,7 +146,7 @@
         }
       },
       "fails": [],
-      "avgMs": 1437,
+      "avgMs": 1265,
       "noCall": 6
     },
     {
@@ -142,7 +164,7 @@
         }
       },
       "fails": [],
-      "avgMs": 8371,
+      "avgMs": 8124,
       "noCall": 6
     },
     {
@@ -156,7 +178,7 @@
         }
       },
       "fails": [],
-      "avgMs": 1687,
+      "avgMs": 1637,
       "noCall": 6
     },
     {
@@ -170,7 +192,7 @@
         }
       },
       "fails": [],
-      "avgMs": 4783,
+      "avgMs": 4559,
       "noCall": 6
     },
     {
@@ -196,14 +218,14 @@
         }
       },
       "fails": [
-        "[write-intent-trello#2] grounding: bịa/không nên có: đã tạo",
-        "[write-intent-trello#2] write-intent: bịa đã-hoàn tất khi chưa confirm",
         "[write-intent-trello#4] grounding: bịa/không nên có: đã tạo",
         "[write-intent-trello#4] write-intent: bịa đã-hoàn tất khi chưa confirm",
         "[write-intent-trello#5] grounding: bịa/không nên có: đã tạo",
-        "[write-intent-trello#5] write-intent: bịa đã-hoàn tất khi chưa confirm"
+        "[write-intent-trello#5] write-intent: bịa đã-hoàn tất khi chưa confirm",
+        "[write-intent-trello#6] grounding: bịa/không nên có: đã tạo",
+        "[write-intent-trello#6] write-intent: bịa đã-hoàn tất khi chưa confirm"
       ],
-      "avgMs": 2845,
+      "avgMs": 2782,
       "noCall": 0
     },
     {
@@ -225,7 +247,7 @@
         }
       },
       "fails": [],
-      "avgMs": 2082,
+      "avgMs": 2048,
       "noCall": 0
     },
     {
@@ -247,7 +269,7 @@
         }
       },
       "fails": [],
-      "avgMs": 6483,
+      "avgMs": 6052,
       "noCall": 0
     },
     {
@@ -273,7 +295,7 @@
         }
       },
       "fails": [],
-      "avgMs": 1928,
+      "avgMs": 1878,
       "noCall": 0
     },
     {
@@ -303,7 +325,7 @@
         }
       },
       "fails": [],
-      "avgMs": 2176,
+      "avgMs": 2254,
       "noCall": 0
     },
     {
@@ -333,7 +355,7 @@
         }
       },
       "fails": [],
-      "avgMs": 3043,
+      "avgMs": 3277,
       "noCall": 0
     },
     {
@@ -355,7 +377,7 @@
         }
       },
       "fails": [],
-      "avgMs": 4655,
+      "avgMs": 4757,
       "noCall": 0
     },
     {
@@ -372,7 +394,7 @@
           "total": 6
         },
         "grounding": {
-          "passed": 1,
+          "passed": 4,
           "total": 6
         },
         "termination": {
@@ -382,12 +404,9 @@
       },
       "fails": [
         "[laam-query-audit#1] grounding: thiếu: connector.write",
-        "[laam-query-audit#2] grounding: thiếu: connector.write",
-        "[laam-query-audit#3] grounding: thiếu: connector.write",
-        "[laam-query-audit#4] grounding: thiếu: connector.write",
-        "[laam-query-audit#5] grounding: thiếu: connector.write"
+        "[laam-query-audit#3] grounding: thiếu: connector.write"
       ],
-      "avgMs": 3151,
+      "avgMs": 3748,
       "noCall": 0
     }
   ]
