@@ -348,7 +348,10 @@ export async function POST(req: Request) {
     : buildSystemPrompt({
         lang,
         now,
-        // QW-1: truyền {name, kind} để prompt render CÓ NHÓM đọc/ghi (tools = ConnectorTool[]).
+        // Truyền {name, kind} mỗi tool cho buildSystemPrompt. (QW-1 đã thử render
+        // CÓ-NHÓM đọc/ghi trong context.ts nhưng REVERT — lợi ích chỉ ở scale,
+        // chưa đo được; chỉ giữ lại signature {name,kind}, vô hại. Xem
+        // decisions/chat-tool-selection.md.)
         // C1: Claude KHÔNG có tool nào ở MVS → render TOOL-LESS (tools:[], như
         // handleConfirm) — liệt kê tool + "BẮT BUỘC gọi công cụ" cho model không
         // có tool sẽ làm nó bịa cú pháp tool / claim sai.
@@ -865,9 +868,10 @@ function streamText(convId: string, text: string, frames: ChatFrame[] = []): Res
 }
 
 // Turn 2 confirm: open the token, run the resume, stream the result (or cancel/reject).
-// The resume reuses streamOllama WITHOUT `persist` — tool-turn persistence for the
-// confirmed write is a documented follow-up (backlog: route-merge-reconciliation).
-// SP-4: the confirmed write runs through makeDispatch(onEvent) so it surfaces a tool frame. (SP-2.)
+// R4: the confirmed write's tool turn IS now persisted to chat_tool_call (was the
+// documented gap in backlog: route-merge-reconciliation) via streamOllama/
+// streamClaudeCompletion `persist`. SP-4: the confirmed write runs through
+// makeDispatch(onEvent) so it also surfaces a tool frame. (SP-2.)
 async function handleConfirm(
   req: Request,
   confirm: { token: string; approve: boolean },
@@ -916,13 +920,20 @@ async function handleConfirm(
   if (outcome.status === "cancelled") return streamText(convId, "Đã huỷ hành động.");
   if (outcome.status === "rejected") return streamText(convId, `Không thực hiện được: ${outcome.reason}.`);
 
+  // R4: persist the confirmed write as a chat_tool_call row. buildResumeMessages ends
+  // with [assistant{tool_calls:[write]}, tool{result}] → extract just that turn.
+  const confirmPersist = {
+    assistantMsgId: crypto.randomUUID(),
+    toolTurns: extractToolTurns(outcome.messages, Math.max(0, outcome.messages.length - 2)),
+  };
+
   // executed → a final TEXT-ONLY completion (no tools) narrating the result.
   // C1: narrate bằng đúng model lượt gốc (đã seal trong token); token cũ không có
   // field model → MODEL env như trước. Model claude → adapter stream (text-only,
   // không tools — đúng PIN MVS); còn lại → Ollama như cũ.
   const confirmModel = typeof signed.model === "string" && signed.model.trim() ? signed.model : MODEL;
   if (isClaudeModel(confirmModel)) {
-    return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal);
+    return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
   }
   let ollamaRes: Response;
   try {
@@ -944,7 +955,8 @@ async function handleConfirm(
     });
   }
   // SP-4: emit the confirmed write's tool frame (onEvent fired during runResume).
-  return streamOllama(ollamaRes, convId, { frames: confirmFrames });
+  // R4: persist the tool turn too.
+  return streamOllama(ollamaRes, convId, { persist: confirmPersist, frames: confirmFrames });
 }
 
 // C1 — confirm-resume hoàn tất bằng Claude: stream text-only qua adapter (resume
