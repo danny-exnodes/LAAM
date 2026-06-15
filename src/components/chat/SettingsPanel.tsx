@@ -18,12 +18,15 @@ export function SettingsPanel({
   settings,
   models,
   claudeModels = [],
+  customAgents = [],
   onChange,
 }: {
   settings: ChatSettings;
   models: string[];
   /** C2: Claude API model whitelist from /api/chat/info. Empty = no Claude optgroup. */
   claudeModels?: string[];
+  /** P3 chat persona: user's saved custom agents (id+name). Empty = no persona select. */
+  customAgents?: { id: string; name: string }[];
   onChange(next: ChatSettings): void;
 }) {
   const t = useT(chat);
@@ -79,6 +82,26 @@ export function SettingsPanel({
           )}
         </select>
       </label>
+
+      {customAgents.length > 0 && (
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">
+            {t("chat.setAgentLabel")}
+          </span>
+          <select
+            aria-label={t("chat.setAgentLabel")}
+            value={settings.customAgentId ?? ""}
+            onChange={(e) => onChange({ ...settings, customAgentId: e.target.value || undefined })}
+            className={FIELD_CLS}
+          >
+            <option value="">{t("chat.agentDefault")}</option>
+            {customAgents.map((a) => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+          <span className="text-[11px] text-neutral-400">{t("chat.setAgentHint")}</span>
+        </label>
+      )}
 
       <label className="flex flex-col gap-1.5">
         <span className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">

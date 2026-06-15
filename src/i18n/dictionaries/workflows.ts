@@ -263,6 +263,8 @@ export const workflows: Dict = {
     en: "System prompt comes from the preset — edit it in Settings → Custom Agents.",
     zh: "System prompt 来自预设 — 请在 设置 → Custom Agents 中编辑。",
   },
+  "wf.node.agent.noPresets": { vi: "Chưa có Custom Agent.", en: "No Custom Agents yet.", zh: "尚无 Custom Agent。" },
+  "wf.node.agent.managePresets": { vi: "Quản lý Custom Agents", en: "Manage Custom Agents", zh: "管理 Custom Agents" },
   "wf.node.agent.systemLabel": { vi: "System prompt", en: "System prompt", zh: "System prompt" },
   "wf.node.agent.systemPlaceholder": {
     vi: "(dùng mặc định harness)",

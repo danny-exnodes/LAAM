@@ -22,6 +22,8 @@ export const customAgentsDict: Dict = {
   "ca.cancel": { vi: "Huỷ", en: "Cancel", zh: "取消" },
   "ca.edit": { vi: "Sửa", en: "Edit", zh: "编辑" },
   "ca.delete": { vi: "Xoá", en: "Delete", zh: "删除" },
+  "ca.clone": { vi: "Nhân bản", en: "Clone", zh: "克隆" },
+  "ca.useInChat": { vi: "Dùng trong Chat", en: "Use in Chat", zh: "在 Chat 中使用" },
   "ca.confirmDelete": {
     vi: "Xoá preset này? Node Agent đang tham chiếu sẽ fail khi chạy (fail-loud).",
     en: "Delete this preset? Agent nodes referencing it will fail at run time (fail-loud).",

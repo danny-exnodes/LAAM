@@ -33,7 +33,7 @@ vi.mock("@/lib/llm/claude", async (importOriginal) => {
 
 import { auth } from "@/auth";
 import { sealPendingWrite } from "@/lib/agent/safety/token";
-import { POST, buildOllamaPayload, isConfirmBody, imagesError } from "./route";
+import { POST, buildOllamaPayload, isConfirmBody, imagesError, resolveAgentBase } from "./route";
 
 const mockAuth = vi.mocked(auth);
 
@@ -226,6 +226,33 @@ describe("SP-2 confirm body detection", () => {
     expect(isConfirmBody({ message: "hi" })).toBe(false);
     expect(isConfirmBody({})).toBe(false);
     expect(isConfirmBody({ confirm: null })).toBe(false);
+  });
+});
+
+// P3 chat persona: a custom-agent preset's `system` becomes the persona base for
+// buildSystemPrompt. INTENT being locked: precedence is override > persona > default.
+// A full body.system override (confirm/workflow path) must SUPPRESS the persona; a
+// missing/foreign/deleted agent (null) must fall back to the default base — chat
+// never breaks on a stale selection.
+describe("resolveAgentBase — custom-agent persona precedence", () => {
+  const agent = { system: "Bạn là trợ lý kế toán. Trả lời theo chuẩn mực VAS." };
+
+  test("custom agent + no system override → agent.system becomes the base", () => {
+    expect(resolveAgentBase(false, agent)).toBe(agent.system);
+  });
+
+  test("body.system full-override wins → persona suppressed (base undefined)", () => {
+    // confirm/workflow path sends body.system; it must NOT be shadowed by a persona.
+    expect(resolveAgentBase(true, agent)).toBeUndefined();
+  });
+
+  test("missing/foreign/deleted agent (null) → default base (undefined), not a throw", () => {
+    expect(resolveAgentBase(false, null)).toBeUndefined();
+    expect(resolveAgentBase(false, undefined)).toBeUndefined();
+  });
+
+  test("agent with blank system → ignored (undefined), not an empty persona", () => {
+    expect(resolveAgentBase(false, { system: "   " })).toBeUndefined();
   });
 });
 

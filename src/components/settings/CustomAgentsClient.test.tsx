@@ -94,3 +94,24 @@ test("sửa: đổi name → PATCH body đúng", async () => {
     expect(screen.getByText("Tóm tắt v2")).toBeInTheDocument();
   });
 });
+
+// P3: clone opens the CREATE form prefilled with "<name> (copy)" + system, so the
+// user reviews before saving (mirrors the template quick-fill: fill, don't auto-POST).
+test("nhân bản: mở form tạo prefilled '(copy)' + system, chưa POST", () => {
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  setup();
+  fireEvent.click(screen.getByRole("button", { name: /Nhân bản/i }));
+  expect((screen.getByLabelText(/Tên/i) as HTMLInputElement).value).toBe("Tóm tắt (copy)");
+  expect((screen.getByLabelText(/System prompt/i) as HTMLTextAreaElement).value).toBe(
+    "Bạn là chuyên gia tóm tắt.",
+  );
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+// P3: bridge page → chat. Each preset deep-links to the chat pre-selecting it.
+test("dùng trong Chat: link tới /chat?agent=<id>", () => {
+  setup();
+  const link = screen.getByRole("link", { name: /Dùng trong Chat/i });
+  expect(link).toHaveAttribute("href", "/chat?agent=ca-1");
+});
