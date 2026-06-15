@@ -176,7 +176,19 @@ function AgentForm({
               )}
             </select>
             {usingPreset && <p className="mt-1 text-xs text-neutral-400">{t("wf.node.agent.presetHint")}</p>}
+            <a href="/settings/custom-agents" className="mt-1 inline-block text-xs text-[var(--color-accent)] hover:underline">
+              {t("wf.node.agent.managePresets")}
+            </a>
           </>,
+        )}
+      {presets.length === 0 && !usingPreset &&
+        field(
+          <p className="text-xs text-neutral-400">
+            {t("wf.node.agent.noPresets")}{" "}
+            <a href="/settings/custom-agents" className="text-[var(--color-accent)] hover:underline">
+              {t("wf.node.agent.managePresets")}
+            </a>
+          </p>,
         )}
       {!usingPreset &&
         field(

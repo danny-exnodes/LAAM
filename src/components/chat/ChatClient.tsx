@@ -70,6 +70,7 @@ export function ChatClient() {
   const [imgNotice, setImgNotice] = useState<string | null>(null); // W3 vision: cap ảnh raw → notice
   const [models, setModels] = useState<string[]>([]);
   const [claudeModels, setClaudeModels] = useState<string[]>([]); // C2: from /api/chat/info
+  const [customAgents, setCustomAgents] = useState<{ id: string; name: string }[]>([]); // P3: persona presets
   const [ocrAvailable, setOcrAvailable] = useState(true); // F3/FEAT-4: degrade if tesseract missing
   const [toolGroups, setToolGroups] = useState<CatalogGroup[]>([]); // P1 quick-tools catalog
   const [toolPick, setToolPick] = useState<ToolPick | null>(null); // P1: tool user đã chọn (ephemeral)
@@ -112,7 +113,46 @@ export function ChatClient() {
         if (Array.isArray(d.groups)) setToolGroups(d.groups);
       })
       .catch(() => {});
+    // P3 chat persona: user's saved custom agents for the persona picker.
+    fetch("/api/custom-agents")
+      .then((r) => r.json())
+      .then((d: { agents?: { id: string; name: string }[] }) => {
+        if (Array.isArray(d.agents)) setCustomAgents(d.agents.map((a) => ({ id: a.id, name: a.name })));
+      })
+      .catch(() => {});
   }, []);
+
+  // P3 chat persona: restore the last-used agent (localStorage) and honor an
+  // ?agent=<id> deep-link from the Custom Agents page (the deep-link wins). A stale
+  // id is harmless — the backend falls back to the default persona (fail-soft).
+  useEffect(() => {
+    let restored: string | null = null;
+    try {
+      restored =
+        new URLSearchParams(window.location.search).get("agent") ||
+        localStorage.getItem("laam:chat:agent");
+    } catch {
+      /* no window/storage — ignore */
+    }
+    if (restored) setSettings((s) => ({ ...s, customAgentId: restored! }));
+  }, []);
+
+  // P3 chat persona: persist the selection so it survives reloads. Skip the initial
+  // mount run so it doesn't clear storage before the restore effect's state lands
+  // (avoids a spurious removeItem→setItem churn on every mount).
+  const agentPersistReady = useRef(false);
+  useEffect(() => {
+    if (!agentPersistReady.current) {
+      agentPersistReady.current = true;
+      return;
+    }
+    try {
+      if (settings.customAgentId) localStorage.setItem("laam:chat:agent", settings.customAgentId);
+      else localStorage.removeItem("laam:chat:agent");
+    } catch {
+      /* ignore */
+    }
+  }, [settings.customAgentId]);
 
   // Auto-scroll xuống tin nhắn cuối khi messages đổi (gửi / streaming) nếu đang dính đáy.
   useEffect(() => {
@@ -400,6 +440,8 @@ export function ChatClient() {
         temperature: settings.temperature,
         topP: settings.topP,
         system: settings.system || undefined,
+        // P3 chat persona: selected custom-agent preset (per-user, fail-soft server-side).
+        customAgentId: settings.customAgentId || undefined,
       }),
     [streamFrom, activeId, settings],
   );
@@ -815,7 +857,7 @@ export function ChatClient() {
 
         {settingsOpen && (
           <div className="anim-slide-down p-4">
-            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} onChange={setSettings} />
+            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} customAgents={customAgents} onChange={setSettings} />
           </div>
         )}
 

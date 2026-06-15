@@ -38,6 +38,9 @@ export type ChatSettings = {
   temperature: number;
   topP: number;
   system: string;
+  // P3 chat persona: selected custom-agent preset id → POST /api/chat {customAgentId}.
+  // Undefined = default assistant. The full `system` override still wins over this.
+  customAgentId?: string;
 };
 
 // An ingested attachment: its extracted text is what gets fed to the model.

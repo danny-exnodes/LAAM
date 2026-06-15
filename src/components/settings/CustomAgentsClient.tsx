@@ -49,6 +49,16 @@ export function CustomAgentsClient({ initial }: { initial: CustomAgentItem[] }) 
     setError(null);
   }
 
+  // Clone opens the CREATE form prefilled with a "(copy)" name + the same system, so
+  // the user reviews/edits before saving (no auto-POST — mirrors fillTemplate).
+  function clone(a: CustomAgentItem) {
+    setEditingId("");
+    setName(`${a.name} (copy)`.slice(0, 120));
+    setDescription(a.description ?? "");
+    setSystem(a.system);
+    setError(null);
+  }
+
   function fillTemplate(key: (typeof TEMPLATE_KEYS)[number]) {
     setName(t(`ca.tpl.${key}.name`));
     setSystem(t(`ca.tpl.${key}.system`));
@@ -187,6 +197,19 @@ export function CustomAgentsClient({ initial }: { initial: CustomAgentItem[] }) 
               <div className="mt-1 line-clamp-2 text-xs text-neutral-400">{a.system}</div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              <a
+                href={`/chat?agent=${a.id}`}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+              >
+                {t("ca.useInChat")}
+              </a>
+              <button
+                type="button"
+                onClick={() => clone(a)}
+                className="rounded-lg px-2 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+              >
+                {t("ca.clone")}
+              </button>
               <button
                 type="button"
                 onClick={() => openEdit(a)}

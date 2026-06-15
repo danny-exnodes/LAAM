@@ -41,6 +41,14 @@ describe("AgentForm", () => {
     expect((systemArea as HTMLTextAreaElement).value).toBe("Initial system");
   });
 
+  // P3 discoverability: with no saved presets the select is hidden, so the form must
+  // still point the user to where Custom Agents are created/managed.
+  test("no custom agents → shows a link to create/manage them in Settings", () => {
+    renderPanel(<NodeConfigPanel node={agentNode} onChange={vi.fn()} />);
+    const link = screen.getByRole("link", { name: /Custom Agent/i });
+    expect(link).toHaveAttribute("href", "/settings/custom-agents");
+  });
+
   test("editing prompt calls onChange with updated prompt", () => {
     const onChange = vi.fn();
     renderPanel(<NodeConfigPanel node={agentNode} onChange={onChange} />);

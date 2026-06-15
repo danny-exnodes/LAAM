@@ -5,6 +5,7 @@ import { chatConversations, chatMessages, chatToolCalls } from "@/db/schema";
 import { chatTools, mcpReadAllow } from "@/lib/connectors";
 import { sanitizeAttachments } from "@/lib/chat/attachment-meta";
 import { buildSystemPrompt } from "@/lib/agent/context";
+import { getCustomAgent } from "@/lib/customAgents";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
 import { runToolRounds, seedRequestedTool, type ChatMessage, type OllamaChatResponse, type RequestedTool } from "@/lib/agent/orchestrator";
 import { checkRequestedTool } from "@/lib/agent/guardrails";
@@ -88,6 +89,7 @@ type ChatBody = {
   topP?: number;
   presencePenalty?: number;
   system?: string;
+  customAgentId?: string; // P3 chat persona: selected custom-agent preset → buildSystemPrompt base (per-user, fail-soft)
   images?: string[]; // W3 vision: raw base64 (không prefix data:), validate qua imagesError
   attachments?: unknown; // preview metadata để lưu + hiện lại sau reload (sanitizeAttachments)
   requestedTool?: { name?: unknown; args?: unknown }; // P1 quick-tools: tool user đã chọn (pre-dispatch deterministic)
@@ -115,6 +117,22 @@ export function imagesError(v: unknown): string | null {
   }
   return null;
 }
+
+// P3 chat persona: resolve the system-prompt base for buildSystemPrompt from a
+// custom-agent preset. Precedence is override > persona > default — a full
+// body.system override (confirm/workflow path) SUPPRESSES the persona (returns
+// undefined so the caller uses body.system); otherwise a present agent contributes
+// its `system` as the base; a missing/foreign/deleted agent (null) or a blank
+// system falls back to the default base (undefined). Pure so the precedence is
+// unit-testable without DB/POST.
+export function resolveAgentBase(
+  hasSystemOverride: boolean,
+  agent: { system: string } | null | undefined,
+): string | undefined {
+  if (hasSystemOverride) return undefined;
+  return agent && agent.system.trim() ? agent.system : undefined;
+}
+
 // Build the Ollama /api/chat request payload from the request body, the
 // conversation history, and the server defaults. Pure — no I/O — so the
 // option mapping (temperature/top_p, model + system overrides, defaults) is
@@ -343,6 +361,18 @@ export async function POST(req: Request) {
 
   // --- System prompt động + proactive notice COMPOSE-AROUND buildSystemPrompt (SP-3). ---
   const hasSystemOverride = typeof body.system === "string" && body.system.trim().length > 0;
+  // P3 chat persona: a selected custom-agent preset's `system` becomes the base
+  // (precedence override > persona > default). Per-user scoped via getCustomAgent +
+  // fail-soft: a foreign/deleted preset falls back to the default base — chat never
+  // breaks on a stale selection (Rule 12 — log, don't throw).
+  let agentPreset: { system: string } | null = null;
+  if (!hasSystemOverride && typeof body.customAgentId === "string" && body.customAgentId.trim()) {
+    try {
+      agentPreset = await getCustomAgent(userId, body.customAgentId.trim());
+    } catch (e) {
+      console.warn("[chat] custom agent load failed (fail-soft → default persona)", e);
+    }
+  }
   let systemContent = hasSystemOverride
     ? (body.system as string)
     : buildSystemPrompt({
@@ -356,6 +386,8 @@ export async function POST(req: Request) {
         // handleConfirm) — liệt kê tool + "BẮT BUỘC gọi công cụ" cho model không
         // có tool sẽ làm nó bịa cú pháp tool / claim sai.
         tools: isClaudeModel(model) ? [] : tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+        // Persona base (or undefined → default BASE) per resolveAgentBase precedence.
+        base: resolveAgentBase(hasSystemOverride, agentPreset),
       });
   let proactiveSurfaced: ProactiveAlert[] = [];
   if (!hasSystemOverride) {

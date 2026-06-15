@@ -121,6 +121,47 @@ test("claude optgroup label contains 'tính phí' (billing indicator in vi)", ()
   expect(claudeGroup.label).toContain("tính phí");
 });
 
+// --- P3: custom-agent persona selector ---
+
+test("agent select lists custom agents + a default option, reflects settings.customAgentId", () => {
+  // INTENT: a user with saved presets can pick one as the chat persona; the select
+  // must reflect the current selection and always offer the default assistant.
+  setup({
+    customAgents: [{ id: "a1", name: "Kế toán" }, { id: "a2", name: "Pháp lý" }],
+    settings: { ...DEFAULT_SETTINGS, customAgentId: "a2" },
+  });
+  const sel = screen.getByLabelText(/Trợ lý/) as HTMLSelectElement;
+  expect(sel.value).toBe("a2");
+  expect(screen.getByRole("option", { name: "Kế toán" })).toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "Trợ lý mặc định" })).toBeInTheDocument();
+});
+
+test("changing the agent calls onChange with customAgentId", () => {
+  const props = setup({ customAgents: [{ id: "a1", name: "Kế toán" }] });
+  fireEvent.change(screen.getByLabelText(/Trợ lý/), { target: { value: "a1" } });
+  expect(props.onChange).toHaveBeenCalledWith(
+    expect.objectContaining({ customAgentId: "a1" }),
+  );
+});
+
+test("selecting the default option clears customAgentId (undefined, not empty string)", () => {
+  // INTENT: choosing the default assistant must SEND no persona, not an empty id the
+  // backend would have to special-case.
+  const props = setup({
+    customAgents: [{ id: "a1", name: "Kế toán" }],
+    settings: { ...DEFAULT_SETTINGS, customAgentId: "a1" },
+  });
+  fireEvent.change(screen.getByLabelText(/Trợ lý/), { target: { value: "" } });
+  expect(props.onChange).toHaveBeenCalledWith(
+    expect.objectContaining({ customAgentId: undefined }),
+  );
+});
+
+test("no custom agents → no agent select (no clutter when feature unused)", () => {
+  setup({ customAgents: [] });
+  expect(screen.queryByLabelText(/Trợ lý/)).toBeNull();
+});
+
 test("selecting a claude model calls onChange with that model value", () => {
   // INTENT: model change must propagate even when the option is inside an optgroup.
   const props = setup({
