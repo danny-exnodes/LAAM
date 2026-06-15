@@ -17,7 +17,9 @@ Chat stream/finalizer refactor (tech-debt từ audit T1/T4/T5), trong worktree
 
 ## Current state
 - ✅ `tsc --noEmit` exit 0. ✅ Full suite **1976 pass / 0 skip** (275 files). Baseline chat-surface 389→389 (bảo toàn).
-- ⏳ CHƯA merge vào main (chờ user). CHƯA E2E live.
+- ✅ **E2E LIVE PASS** (Claude-in-Chrome, dev :3100 worktree, qwen3-vl, DB shared): S1 chat thường → token frame "579 token" + proactive card; S2 `laam_list_agents` → tool-trace "Đã dùng 1 công cụ" + citation "Nguồn: …" + token; S3 write-gate Demo `demo_create_task` → confirm-card → execute (T-105) → narrate; **R4 verified qua DB: `chat_tool_call` có row demo_create_task ok=true FK✓ trong 5'**. Claude path = test-only (no ANTHROPIC_API_KEY trên host).
+- ⏳ CHƯA merge vào main (chờ user).
+- ⚠️ E2E cần `npm ci` thật trong worktree (junction KHÔNG chạy được Turbopack/next dev trên Windows — junction OK cho tsc/vitest, VỠ cho dev). node_modules worktree nay là dir thật. Main intact (0 dep mới).
 - 1 behavior delta CHỦ Ý: live-token enqueue nay try/catch-wrapped đồng nhất 4 path → client abort giữa stream Ollama nay persist FULL (Ollama đã sinh xong) thay vì partial — nhất quán với nhánh Claude. Untested edge.
 
 ## Next steps
