@@ -47,8 +47,16 @@ mandatory dep (devDependencies).
 `npm ci --dry-run` · npm11 regen lock trên scratch → 2 entry top-level còn nguyên ·
 alpine chấp nhận lock do npm11 sinh. 1757 test xanh sau edit package.json.
 
-RULE "re-sync alpine sau npm install trên host" chỉ còn cần cho package musl/WASM
-KHÁC @emnapi trong tương lai (class lỗi chưa diệt — user từ chối đồng bộ npm 11
-vào Dockerfile; nếu drift tái diễn với package khác, cân nhắc lại option đó).
+## ✅✅ CLASS LỖI ĐÃ DIỆT (2026-06-12, phiên sau cùng ngày): đồng bộ Node 24
+User duyệt đồng bộ cả 2 môi trường: Dockerfile → **node:24-alpine** (3 stage),
+host → **nvm 24.16.0**. Hai bên giờ trùng **Node v24.16.0 / npm 11.13.0** → không
+còn lệch dialect npm 10↔11. `engines` nâng floor `node>=24 npm>=11`.
+Verify: image build pass (tesseract/poppler nguyên), regen lock NGAY TRÊN HOST
+giữ nguyên entries + cả 2 bên npm ci pass, 1791 test xanh.
+
+**RULE "re-sync alpine sau npm install trên host" → HẾT HIỆU LỰC** (host regen
+giờ an toàn). Còn lại duy nhất: khi nào host nâng Node major mới (26 LTS ~10/2026),
+phải nâng Dockerfile CÙNG LÚC — lệch npm major là nguồn gốc cả saga này.
+File này có thể xoá sau khi prod đã chạy image Node 24 ổn định.
 
 ## Xoá file này khi đã đọc & nắm.
