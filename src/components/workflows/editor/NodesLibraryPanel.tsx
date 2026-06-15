@@ -16,14 +16,16 @@ export type LibraryMode = "docked" | "float" | "hidden";
 // MIME for drag-to-add; WorkflowEditor's canvas onDrop reads this key.
 export const NODE_KIND_MIME = "application/wf-node-kind";
 
-// Exported (P4): the mobile palette row derives from the SAME list so a new node
-// kind shows up on both desktop library and mobile palette automatically.
+// SINGLE SOURCE OF TRUTH for per-kind {icon, color}. The desktop library cards,
+// the mobile palette row (P4), AND the canvas node card / minimap (KIND_COLORS in
+// WorkflowEditor derives from this) all read from here, so a new kind — or a colour
+// tweak — lands in every surface at once and the palettes can never drift apart.
 export const NODE_TYPES: { kind: WfNodeKind; Icon: typeof Bot; color: string }[] = [
-  { kind: "agent", Icon: Bot, color: "#a855f7" },
+  { kind: "agent", Icon: Bot, color: "#2563eb" },
   { kind: "connector", Icon: Plug, color: "#06b6d4" },
   { kind: "mcp", Icon: Server, color: "#c026d3" },
-  { kind: "condition", Icon: GitBranch, color: "#f59e0b" },
-  { kind: "foreach", Icon: Repeat, color: "#10b981" },
+  { kind: "condition", Icon: GitBranch, color: "#d97706" },
+  { kind: "foreach", Icon: Repeat, color: "#16a34a" },
 ];
 
 export function NodesLibraryPanel({

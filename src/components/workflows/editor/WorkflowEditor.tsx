@@ -48,13 +48,11 @@ import type { HistoryState, Snapshot } from "./historyStack";
 
 // ── Custom node renderer ────────────────────────────────────────────────────
 
-const KIND_COLORS: Record<WfNodeKind, string> = {
-  agent: "#2563eb",
-  connector: "#06b6d4",
-  condition: "#d97706",
-  foreach: "#16a34a",
-  mcp: "#c026d3",
-};
+// Derived from NODE_TYPES (the single source in NodesLibraryPanel) so the canvas
+// card/minimap colours can never drift from the desktop library + mobile palette.
+const KIND_COLORS = Object.fromEntries(
+  LIBRARY_NODE_TYPES.map(({ kind, color }) => [kind, color]),
+) as Record<WfNodeKind, string>;
 
 // Data-mutating RF change types — 'select' and 'dimensions' are view-only
 // and must NOT mark the graph dirty. Defined at module level (not inside the
