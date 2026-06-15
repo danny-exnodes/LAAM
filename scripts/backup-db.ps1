@@ -9,7 +9,11 @@
     $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
       -Argument '-NoProfile -WindowStyle Hidden -File "D:\Projects\personal_projects\LAAM\scripts\backup-db.ps1"'
     $trigger = New-ScheduledTaskTrigger -Daily -At 02:00
-    Register-ScheduledTask -TaskName 'LAAM-db-backup' -Action $action -Trigger $trigger `
+    # LogonType S4U: chay o session 0 (non-interactive) -> khong nhay cua so terminal +
+    # chay duoc khi da log off (luc 02:00 thuong da dang xuat). Yeu cau Docker dang chay
+    # khi log off (Docker Desktop service-backed) thi pg_dump moi thanh cong.
+    $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Limited
+    Register-ScheduledTask -TaskName 'LAAM-db-backup' -Action $action -Trigger $trigger -Principal $principal `
       -Description 'Backup Postgres LAAM hang ngay (retention 14 ngay)'
 
   Restore (vao DB sach; xem docs/DEPLOYMENT.md muc 6.2):

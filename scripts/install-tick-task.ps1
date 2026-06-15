@@ -53,8 +53,14 @@ $action  = New-ScheduledTaskAction -Execute 'powershell.exe' `
 $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 1)
 # KHONG bat catch-up cua OS (app tu realign lich bi lo); poke truoc do con chay -> bo qua.
 $settings = New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -StartWhenAvailable
+# LogonType S4U ('Run whether user is logged on or not', KHONG luu mat khau) -> task chay
+# o session 0 (non-interactive) => (1) HET nhay cua so terminal moi phut: powershell.exe duoi
+# Interactive logon spawn conhost.exe chop len TRUOC khi -WindowStyle Hidden kip an; S4U khong
+# co console nen khong bao gio hien; (2) tick van chay khi da log off (localhost POST = local
+# resource, S4U truy cap duoc). Yeu cau quyen 'Log on as a batch job' (admin co san).
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Limited
 
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings `
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal `
   -Description "Poke LAAM workflow scheduler moi phut (port $Port)" | Out-Null
 
 Write-Host "OK: task '$TaskName' poke http://localhost:$Port/api/workflows/tick moi phut." -ForegroundColor Green
