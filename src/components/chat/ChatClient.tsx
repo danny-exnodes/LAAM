@@ -137,8 +137,15 @@ export function ChatClient() {
     if (restored) setSettings((s) => ({ ...s, customAgentId: restored! }));
   }, []);
 
-  // P3 chat persona: persist the selection so it survives reloads.
+  // P3 chat persona: persist the selection so it survives reloads. Skip the initial
+  // mount run so it doesn't clear storage before the restore effect's state lands
+  // (avoids a spurious removeItem→setItem churn on every mount).
+  const agentPersistReady = useRef(false);
   useEffect(() => {
+    if (!agentPersistReady.current) {
+      agentPersistReady.current = true;
+      return;
+    }
     try {
       if (settings.customAgentId) localStorage.setItem("laam:chat:agent", settings.customAgentId);
       else localStorage.removeItem("laam:chat:agent");
