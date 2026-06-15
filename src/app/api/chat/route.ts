@@ -19,7 +19,8 @@ import { claudeStream, isClaudeModel, ClaudeUnavailableError } from "@/lib/llm/c
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
-import { extractToolTurns } from "@/lib/agent/persist";
+import { extractToolTurns, type ToolTurnRow } from "@/lib/agent/persist";
+import { ollamaStream } from "@/lib/llm/ollama";
 import { notifyWritePending } from "@/lib/notifications";
 import { stripNul } from "@/lib/chat/attach";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
@@ -347,7 +348,10 @@ export async function POST(req: Request) {
     : buildSystemPrompt({
         lang,
         now,
-        // QW-1: truyền {name, kind} để prompt render CÓ NHÓM đọc/ghi (tools = ConnectorTool[]).
+        // Truyền {name, kind} mỗi tool cho buildSystemPrompt. (QW-1 đã thử render
+        // CÓ-NHÓM đọc/ghi trong context.ts nhưng REVERT — lợi ích chỉ ở scale,
+        // chưa đo được; chỉ giữ lại signature {name,kind}, vô hại. Xem
+        // decisions/chat-tool-selection.md.)
         // C1: Claude KHÔNG có tool nào ở MVS → render TOOL-LESS (tools:[], như
         // handleConfirm) — liệt kê tool + "BẮT BUỘC gọi công cụ" cho model không
         // có tool sẽ làm nó bịa cú pháp tool / claim sai.
@@ -487,46 +491,17 @@ function streamMainTurn(opts: {
           console.error(`[chat] claude stream failed (conv=${convId})`, e);
         }
         if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
-        // Finalize — mirror nhánh Ollama: F1 vet → persist (tokensIn/Out) → trailing frames.
-        let outText = full;
-        if (guardWrites && full) {
-          const g = guardWriteClaim(full, { writeBacked: false, lang });
-          outText = g.text;
-          if (g.blocked) console.warn("[chat] F1 guard: blocked unbacked write-success claim");
-          try {
-            controller.enqueue(enc.encode(outText));
-          } catch {
-            /* aborted */
-          }
-        }
-        if (full) {
-          try {
-            await db.insert(chatMessages).values({
-              conversationId: convId,
-              role: "assistant",
-              content: outText,
-              // MINOR 4: usage chưa tới (đứt giữa stream) → KHÔNG ghi 0/0 — lượt này
-              // CÓ tính phí thật ở Anthropic, 0/0 là $0 giả (để null).
-              ...(gotUsage ? { tokensIn, tokensOut } : {}),
-            });
-          } catch (e) {
-            console.error("[chat] persist assistant failed (fail-soft)", e);
-          }
-          // Trailing frames: không cite (không tool); proactive → tokens (FE contract y hệt).
-          try {
-            if (proactive.length) emit(proactiveFrame(proactive));
-            // MINOR 4: OMIT frame tokens khi usage chưa tới — không hiện $0 giả.
-            if (gotUsage) emit({ t: "tokens", i: tokensIn, o: tokensOut });
-          } catch {
-            /* aborted */
-          }
-        }
-        try {
-          await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
-        } catch {
-          /* ignore */
-        }
-        controller.close();
+        // Finalize — mirror nhánh Ollama qua finalizeTurn: F1 vet (writeBacked=false,
+        // MVS không tool) → persist (tokens only if gotUsage) → proactive frame. Không
+        // cite (không tool). MINOR 4: emitTokens=gotUsage tránh ghi/phát 0/0 giả.
+        await finalizeTurn(controller, enc, convId, {
+          full,
+          tokensIn,
+          tokensOut,
+          emitTokens: gotUsage,
+          guard: guardWrites ? { writeBacked: false, lang } : undefined,
+          leadingFrames: proactive.length ? [proactiveFrame(proactive)] : [],
+        });
         return;
       }
       // LIVE tool frames: assign the call→result counter `c` + redact args, then
@@ -666,104 +641,47 @@ function streamMainTurn(opts: {
         return;
       }
 
-      const reader = ollamaRes.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
+      const assistantMsgId = crypto.randomUUID();
       let full = "";
       let tokensIn = 0;
       let tokensOut = 0;
       try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop() ?? "";
-          for (const line of lines) {
-            const tl = line.trim();
-            if (!tl) continue;
-            try {
-              const j = JSON.parse(tl);
-              const tok = j?.message?.content ?? "";
-              if (tok) {
-                full += tok;
-                // Withhold live tokens on write-intent turns; the vetted text is
-                // emitted once below so an unbacked success claim never displays.
-                if (!guardWrites) controller.enqueue(enc.encode(tok));
+        for await (const ev of ollamaStream(ollamaRes)) {
+          if (ev.delta) {
+            full += ev.delta;
+            // Withhold live tokens on write-intent turns; finalizeTurn emits the
+            // vetted text once so an unbacked success claim never displays.
+            if (!guardWrites) {
+              try {
+                controller.enqueue(enc.encode(ev.delta));
+              } catch {
+                /* client aborted */
               }
-              if (j?.done) {
-                if (typeof j.prompt_eval_count === "number") tokensIn = j.prompt_eval_count;
-                if (typeof j.eval_count === "number") tokensOut = j.eval_count;
-              }
-            } catch {
-              /* skip partial line */
             }
+          }
+          if (ev.usage) {
+            tokensIn = ev.usage.in;
+            tokensOut = ev.usage.out;
           }
         }
       } finally {
         // Abort observability: client hủy request giữa stream → 1 dòng warn có convId
         // (đọc log phân biệt "user bấm Stop" với lỗi server).
         if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
-        const assistantMsgId = crypto.randomUUID();
-        // F1: vet a buffered write-intent completion before persisting/emitting it.
-        // Non-guarded turns already streamed live (outText === full, not re-emitted).
-        let outText = full;
-        if (guardWrites && full) {
-          const g = guardWriteClaim(full, { writeBacked, lang });
-          outText = g.text;
-          if (g.blocked) console.warn("[chat] F1 guard: blocked unbacked write-success claim");
-          try {
-            controller.enqueue(enc.encode(outText));
-          } catch {
-            /* aborted */
-          }
-        }
-        if (full) {
-          try {
-            await db.insert(chatMessages).values({
-              id: assistantMsgId,
-              conversationId: convId,
-              role: "assistant",
-              content: outText,
-              tokensIn,
-              tokensOut,
-            });
-          } catch (e) {
-            console.error("[chat] persist assistant failed (fail-soft)", e);
-          }
-          // Trailing frames (tool frames already emitted live): citations → proactive → tokens.
-          try {
-            if (cites.length) emit({ t: "cite", names: cites });
-            if (proactive.length) emit(proactiveFrame(proactive));
-            emit({ t: "tokens", i: tokensIn, o: tokensOut });
-          } catch {
-            /* aborted */
-          }
-          if (toolTurns.length) {
-            try {
-              await db.insert(chatToolCalls).values(
-                toolTurns.map((tt) => ({
-                  conversationId: convId,
-                  messageId: assistantMsgId,
-                  seq: tt.seq,
-                  name: tt.name,
-                  args: tt.args,
-                  result: tt.result,
-                  ok: tt.ok,
-                  bytes: tt.bytes,
-                })),
-              );
-            } catch (e) {
-              console.error("[chat] persist tool turns failed (fail-soft)", e);
-            }
-          }
-        }
-        try {
-          await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
-        } catch {
-          /* ignore */
-        }
-        controller.close();
+        // F1 vet (writeBacked from real tool turns) → persist → trailing frames
+        // (tool frames already live: citations → proactive → tokens) → tool turns.
+        await finalizeTurn(controller, enc, convId, {
+          full,
+          tokensIn,
+          tokensOut,
+          emitTokens: true, // Ollama always emits a token frame
+          guard: guardWrites ? { writeBacked, lang } : undefined,
+          persist: { assistantMsgId, toolTurns },
+          leadingFrames: [
+            ...(cites.length ? [{ t: "cite", names: cites } as ChatFrame] : []),
+            ...(proactive.length ? [proactiveFrame(proactive)] : []),
+          ],
+        });
       }
     },
   });
@@ -776,13 +694,106 @@ function streamMainTurn(opts: {
   });
 }
 
+// Shared completion finalizer for every /api/chat stream path (main Ollama, main
+// Claude, resume Ollama, resume Claude). Owns the tail those paths used to repeat:
+// F1 write-claim guard → persist assistant → emit trailing frames (leading + token)
+// → persist tool turns → updatedAt → close. `emitTokens` gates BOTH the persisted
+// tokensIn/Out AND the {t:"tokens"} frame — Claude omits both when usage never
+// arrived (MINOR 4: 0/0 would be a fake $0 on a billed turn); Ollama always emits.
+// Tool-turn persist sits OUTSIDE the if(full) block with a null FK when the
+// completion was empty (union of the old main + resume behaviors; every tested path
+// has a non-empty completion so observable output is unchanged). Provider-specific
+// PRE-stream / pre-first-delta error handling stays in the callers — it is
+// intentionally divergent (Claude persists a coded notice, Ollama emits a plain
+// message) and test-locked.
+async function finalizeTurn(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  enc: TextEncoder,
+  convId: string,
+  opts: {
+    full: string;
+    tokensIn: number;
+    tokensOut: number;
+    emitTokens: boolean;
+    guard?: { writeBacked: boolean; lang: string };
+    persist?: { assistantMsgId: string; toolTurns: ToolTurnRow[] };
+    leadingFrames: ChatFrame[];
+  },
+): Promise<void> {
+  let outText = opts.full;
+  // F1 (Rule 13): a write-intent turn had its live tokens withheld; vet the buffered
+  // completion and emit the (possibly rewritten) text exactly once. Non-guard turns
+  // already streamed live, so `guard` is absent and nothing is re-emitted here.
+  if (opts.guard && opts.full) {
+    const g = guardWriteClaim(opts.full, { writeBacked: opts.guard.writeBacked, lang: opts.guard.lang });
+    outText = g.text;
+    if (g.blocked) console.warn("[chat] F1 guard: blocked unbacked write-success claim");
+    try {
+      controller.enqueue(enc.encode(outText));
+    } catch {
+      /* client aborted */
+    }
+  }
+  if (opts.full) {
+    try {
+      await db.insert(chatMessages).values({
+        // SP-3: tool-turn FK needs a known id; paths without tool turns omit it and
+        // let the column default generate one.
+        ...(opts.persist ? { id: opts.persist.assistantMsgId } : {}),
+        conversationId: convId,
+        role: "assistant",
+        content: outText,
+        ...(opts.emitTokens ? { tokensIn: opts.tokensIn, tokensOut: opts.tokensOut } : {}),
+      });
+    } catch (e) {
+      console.error("[chat] persist assistant failed (fail-soft)", e);
+    }
+    // SP-4 trailing frames (bọc U+001E): leading (tool trace already live / cite /
+    // proactive) → token usage. Fail-soft: enqueue throw (client aborted) → bỏ qua.
+    try {
+      const frames: ChatFrame[] = [
+        ...opts.leadingFrames,
+        ...(opts.emitTokens ? [{ t: "tokens", i: opts.tokensIn, o: opts.tokensOut } as ChatFrame] : []),
+      ];
+      for (const f of frames) controller.enqueue(enc.encode(encodeFrame(f)));
+    } catch {
+      /* response already cancelled (client aborted) — nothing to send */
+    }
+  }
+  // SP-3: persist tool turns. FK is null when the completion was empty.
+  if (opts.persist && opts.persist.toolTurns.length) {
+    try {
+      await db.insert(chatToolCalls).values(
+        opts.persist.toolTurns.map((tt) => ({
+          conversationId: convId,
+          messageId: opts.full ? opts.persist!.assistantMsgId : null,
+          seq: tt.seq,
+          name: tt.name,
+          args: tt.args,
+          result: tt.result,
+          ok: tt.ok,
+          bytes: tt.bytes,
+        })),
+      );
+    } catch (e) {
+      console.error("[chat] persist tool turns failed (fail-soft)", e);
+    }
+  }
+  try {
+    await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+  } catch {
+    /* ignore */
+  }
+  controller.close();
+}
+
 // Stream Ollama tokens to the client, persist the assistant message + (SP-3) the
 // tool turns, and emit the trailing frames (SP-4: tool trace → citations → token
 // usage, all via encodeFrame). Extracted from POST (SP-2) so the resume path reuses
 // it. `persist` carries the SP-3 tool-turn rows + the assistant message id they FK
 // to; `frames` are the trailing tool/cite frames (the {t:"tokens"} frame is appended
-// here from the live token counts). The legacy single-SEP {i,o} frame is gone —
-// ChatClient now parses every frame via splitFrames (SP-4 token-frame migrate).
+// by finalizeTurn from the live token counts). The legacy single-SEP {i,o} frame is
+// gone — ChatClient now parses every frame via splitFrames (SP-4 token-frame migrate).
 function streamOllama(
   ollamaRes: Response,
   convId: string,
@@ -791,89 +802,36 @@ function streamOllama(
     frames?: ChatFrame[];
   } = {},
 ): Response {
-  const stream = new ReadableStream({
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
-      const reader = ollamaRes.body!.getReader();
-      const decoder = new TextDecoder();
-      const encoder = new TextEncoder();
-      let buf = "";
       let full = "";
       let tokensIn = 0;
       let tokensOut = 0;
       try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buf += decoder.decode(value, { stream: true });
-          const lines = buf.split("\n");
-          buf = lines.pop() ?? "";
-          for (const line of lines) {
-            const t = line.trim();
-            if (!t) continue;
+        for await (const ev of ollamaStream(ollamaRes)) {
+          if (ev.delta) {
+            full += ev.delta;
             try {
-              const j = JSON.parse(t);
-              const tok = j?.message?.content ?? "";
-              if (tok) {
-                full += tok;
-                controller.enqueue(encoder.encode(tok));
-              }
-              if (j?.done) {
-                if (typeof j.prompt_eval_count === "number") tokensIn = j.prompt_eval_count;
-                if (typeof j.eval_count === "number") tokensOut = j.eval_count;
-              }
+              controller.enqueue(enc.encode(ev.delta));
             } catch {
-              /* skip partial line */
+              /* client aborted */
             }
+          }
+          if (ev.usage) {
+            tokensIn = ev.usage.in;
+            tokensOut = ev.usage.out;
           }
         }
       } finally {
-        if (full) {
-          await db.insert(chatMessages).values({
-            // SP-3: when persisting tool turns we need a known id for the FK; the
-            // resume path omits `persist` and lets the column default generate one.
-            ...(opts.persist ? { id: opts.persist.assistantMsgId } : {}),
-            conversationId: convId,
-            role: "assistant",
-            content: full,
-            tokensIn,
-            tokensOut,
-          });
-          // SP-4: trailing frames (bọc U+001E): tool trace → citations → token usage.
-          // Fail-soft: enqueue lỗi (client aborted) → bỏ qua.
-          try {
-            const trailing: ChatFrame[] = [
-              ...(opts.frames ?? []),
-              { t: "tokens", i: tokensIn, o: tokensOut },
-            ];
-            for (const f of trailing) controller.enqueue(encoder.encode(encodeFrame(f)));
-          } catch {
-            /* response already cancelled (client aborted) — nothing to send */
-          }
-        }
-        // SP-3: persist tool turns (main turn only; resume path omits `persist`).
-        if (opts.persist && opts.persist.toolTurns.length) {
-          try {
-            await db.insert(chatToolCalls).values(
-              opts.persist.toolTurns.map((t) => ({
-                conversationId: convId,
-                messageId: full ? opts.persist!.assistantMsgId : null,
-                seq: t.seq,
-                name: t.name,
-                args: t.args,
-                result: t.result,
-                ok: t.ok,
-                bytes: t.bytes,
-              })),
-            );
-          } catch (e) {
-            console.error("[chat] persist tool turns failed (fail-soft)", e);
-          }
-        }
-        await db
-          .update(chatConversations)
-          .set({ updatedAt: new Date() })
-          .where(eq(chatConversations.id, convId));
-        controller.close();
+        await finalizeTurn(controller, enc, convId, {
+          full,
+          tokensIn,
+          tokensOut,
+          emitTokens: true, // Ollama always emits a token frame
+          persist: opts.persist,
+          leadingFrames: opts.frames ?? [],
+        });
       }
     },
   });
@@ -910,9 +868,10 @@ function streamText(convId: string, text: string, frames: ChatFrame[] = []): Res
 }
 
 // Turn 2 confirm: open the token, run the resume, stream the result (or cancel/reject).
-// The resume reuses streamOllama WITHOUT `persist` — tool-turn persistence for the
-// confirmed write is a documented follow-up (backlog: route-merge-reconciliation).
-// SP-4: the confirmed write runs through makeDispatch(onEvent) so it surfaces a tool frame. (SP-2.)
+// R4: the confirmed write's tool turn IS now persisted to chat_tool_call (was the
+// documented gap in backlog: route-merge-reconciliation) via streamOllama/
+// streamClaudeCompletion `persist`. SP-4: the confirmed write runs through
+// makeDispatch(onEvent) so it also surfaces a tool frame. (SP-2.)
 async function handleConfirm(
   req: Request,
   confirm: { token: string; approve: boolean },
@@ -961,13 +920,20 @@ async function handleConfirm(
   if (outcome.status === "cancelled") return streamText(convId, "Đã huỷ hành động.");
   if (outcome.status === "rejected") return streamText(convId, `Không thực hiện được: ${outcome.reason}.`);
 
+  // R4: persist the confirmed write as a chat_tool_call row. buildResumeMessages ends
+  // with [assistant{tool_calls:[write]}, tool{result}] → extract just that turn.
+  const confirmPersist = {
+    assistantMsgId: crypto.randomUUID(),
+    toolTurns: extractToolTurns(outcome.messages, Math.max(0, outcome.messages.length - 2)),
+  };
+
   // executed → a final TEXT-ONLY completion (no tools) narrating the result.
   // C1: narrate bằng đúng model lượt gốc (đã seal trong token); token cũ không có
   // field model → MODEL env như trước. Model claude → adapter stream (text-only,
   // không tools — đúng PIN MVS); còn lại → Ollama như cũ.
   const confirmModel = typeof signed.model === "string" && signed.model.trim() ? signed.model : MODEL;
   if (isClaudeModel(confirmModel)) {
-    return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal);
+    return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
   }
   let ollamaRes: Response;
   try {
@@ -989,7 +955,8 @@ async function handleConfirm(
     });
   }
   // SP-4: emit the confirmed write's tool frame (onEvent fired during runResume).
-  return streamOllama(ollamaRes, convId, { frames: confirmFrames });
+  // R4: persist the tool turn too.
+  return streamOllama(ollamaRes, convId, { persist: confirmPersist, frames: confirmFrames });
 }
 
 // C1 — confirm-resume hoàn tất bằng Claude: stream text-only qua adapter (resume
@@ -1005,9 +972,10 @@ function streamClaudeCompletion(
   frames: ChatFrame[],
   lang: string,
   signal?: AbortSignal,
+  persist?: { assistantMsgId: string; toolTurns: ToolTurnRow[] }, // R4: confirmed write tool-turn
 ): Response {
   const enc = new TextEncoder();
-  const stream = new ReadableStream({
+  const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let full = "";
       let tokensIn = 0;
@@ -1047,33 +1015,16 @@ function streamClaudeCompletion(
           console.error(`[chat] claude resume stream failed (conv=${convId})`, e);
         }
       }
-      if (full) {
-        try {
-          await db.insert(chatMessages).values({
-            conversationId: convId,
-            role: "assistant",
-            content: full,
-            // MINOR 4: usage chưa tới → KHÔNG ghi 0/0 (để null — không $0 giả).
-            ...(gotUsage ? { tokensIn, tokensOut } : {}),
-          });
-        } catch (e) {
-          console.error("[chat] persist assistant failed (fail-soft)", e);
-        }
-        try {
-          // MINOR 4: OMIT frame tokens khi usage chưa tới; tool frame của write đã
-          // confirm vẫn phát (hành động ĐÃ xảy ra).
-          const trailing: ChatFrame[] = [...frames, ...(gotUsage ? [{ t: "tokens", i: tokensIn, o: tokensOut } as ChatFrame] : [])];
-          for (const f of trailing) controller.enqueue(enc.encode(encodeFrame(f)));
-        } catch {
-          /* aborted */
-        }
-      }
-      try {
-        await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
-      } catch {
-        /* ignore */
-      }
-      controller.close();
+      // MINOR 4: emitTokens=gotUsage → OMIT token frame/persist when usage never came;
+      // the confirmed write's tool frame (in `frames`) still goes out (action happened).
+      await finalizeTurn(controller, enc, convId, {
+        full,
+        tokensIn,
+        tokensOut,
+        emitTokens: gotUsage,
+        persist,
+        leadingFrames: frames,
+      });
     },
   });
   return new Response(stream, {

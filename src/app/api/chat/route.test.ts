@@ -699,3 +699,53 @@ describe("C1 review hardening", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// R4 — a CONFIRMED write must land in chat_tool_call. Previously handleConfirm
+// streamed the narration without `persist`, so the executed write surfaced a
+// trace frame but never persisted a tool turn (documented gap). The tool turn is
+// the LAST two resume messages [assistant{tool_calls:[write]}, tool{result}].
+// ---------------------------------------------------------------------------
+describe("R4 — confirmed write persists chat_tool_call", () => {
+  test("Ollama confirm → tool turn row inserted (name)", async () => {
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const captured = { values: [] as unknown[] };
+    // select #1 = history (handleConfirm); isNonceUsed audit-window select → [].
+    _db = fakeChainDb(captured, [[{ role: "user", content: "tạo task" }, { role: "assistant", content: 'Tạo "X".' }]]);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Resume narration = a one-line Ollama NDJSON stream.
+    const ndjson = JSON.stringify({ message: { content: "Đã tạo." }, done: true, prompt_eval_count: 1, eval_count: 1 }) + "\n";
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      body: {
+        getReader: () => {
+          let sent = false;
+          return { read: async () => sent ? { done: true as const, value: undefined } : (sent = true, { done: false as const, value: new TextEncoder().encode(ndjson) }) };
+        },
+      },
+    }));
+    const now = Date.now();
+    const token = sealPendingWrite({
+      v: 1, name: "demo_create_task", args: { title: "X" },
+      conversationId: "c1", userId: "u1", iat: now, exp: now + 60_000,
+      nonce: crypto.randomUUID(), model: "qwen3-vl:8b-instruct-q8_0", // Ollama → Ollama resume path
+    });
+    try {
+      const res = await POST(new Request("http://x/api/chat", {
+        method: "POST", headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+        body: JSON.stringify({ confirm: { token, approve: true } }),
+      }));
+      await res.text();
+      // chatToolCalls insert is the only ARRAY of rows captured; find our tool by name.
+      const toolRows = captured.values
+        .filter((v): v is { name?: string }[] => Array.isArray(v))
+        .flat()
+        .filter((r): r is { name?: string } => !!r && typeof r === "object" && "name" in r);
+      expect(toolRows.some((r) => r.name === "demo_create_task")).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+});
