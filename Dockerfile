@@ -1,13 +1,15 @@
 # syntax=docker/dockerfile:1
 
 # ---- deps: install full dependencies for the build ----
-FROM node:22-alpine AS deps
+# node:24-alpine (Active LTS) — keep in sync with the dev host's Node/npm major
+# (npm 10 vs 11 write different lockfile dialects → recurring @emnapi npm ci breakage).
+FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # ---- builder: production build → .next/standalone ----
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -21,7 +23,7 @@ RUN cp -r .next/static .next/standalone/.next/static \
  && if [ -d public ]; then cp -r public .next/standalone/public; fi
 
 # ---- runner: minimal production image ----
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -44,7 +46,7 @@ RUN apk add --no-cache \
 USER node
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 EXPOSE 3000
-# Node 22 has global fetch; /login is public (no auth) → 200 when healthy.
+# Node has global fetch; /login is public (no auth) → 200 when healthy.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "server.js"]
