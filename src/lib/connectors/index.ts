@@ -338,6 +338,9 @@ export async function mcpReadAllow(userId: string): Promise<ReadonlySet<string>>
 
 // Route an MCP tool call (mcp__<slug>__<tool>) to the user's configured MCP server.
 async function executeMcp(userId: string, toolName: string, args: unknown): Promise<unknown> {
+  // toolName is mcp__<slug>__<realName> where realName comes from the (untrusted) MCP server and
+  // is unbounded — bound it before it goes into ANY error we feed back to the model (cost/bloat).
+  const safeName = toolName.slice(0, 64);
   let route: Map<string, { slug: string; realName: string }>;
   try {
     route = (await discoverForUser(userId)).route;
@@ -345,7 +348,7 @@ async function executeMcp(userId: string, toolName: string, args: unknown): Prom
     return { error: "không khám phá được MCP server" };
   }
   const r = route.get(toolName);
-  if (!r) return { error: "tool MCP không tồn tại: " + toolName };
+  if (!r) return { error: "tool MCP không tồn tại: " + safeName };
   const cfg = await getMcpServer(userId, r.slug);
   if (!cfg) return { error: 'MCP server "' + r.slug + '" chưa cấu hình' };
   let a: unknown = args;
@@ -363,7 +366,7 @@ async function executeMcp(userId: string, toolName: string, args: unknown): Prom
     // attacker-controlled and unbounded (cost/context-bloat). The host is user-configured and
     // the auth token rides a header (never the URL), so length is the residual concern.
     const raw = e instanceof Error ? e.message : String(e);
-    return { error: "lỗi gọi MCP " + toolName + ": " + raw.slice(0, 300) };
+    return { error: "lỗi gọi MCP " + safeName + ": " + raw.slice(0, 300) };
   }
 }
 

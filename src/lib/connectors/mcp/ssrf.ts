@@ -30,18 +30,53 @@ function isBlockedIPv4(ip: string): boolean {
   );
 }
 
-// IPv6 — loopback (::1), unspecified (::), link-local (fe80::/10), unique-local (fc00::/7),
-// and IPv4-mapped / -compatible addresses whose embedded IPv4 is itself blocked.
+// Expand any valid IPv6 spelling (compressed "::", embedded dotted IPv4, uncompressed) into its
+// 8 numeric 16-bit groups. Working on the structure — not the string spelling — is what makes the
+// checks below immune to alternate encodings (new URL() normalizes ::ffff:1.2.3.4 to hex
+// ::ffff:HHHH:HHHH, which a dotted-only regex misses). Returns null if it can't parse.
+function ipv6ToGroups(ip: string): number[] | null {
+  let s = ip.toLowerCase();
+  const zone = s.indexOf("%"); // strip zone id, e.g. fe80::1%eth0
+  if (zone >= 0) s = s.slice(0, zone);
+  // Embedded dotted IPv4 tail (::ffff:1.2.3.4 / ::1.2.3.4) → fold into two hex groups.
+  const dotted = s.match(/^(.*:)(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (dotted) {
+    const o = [dotted[2], dotted[3], dotted[4], dotted[5]].map(Number);
+    if (o.some((x) => x > 255)) return null;
+    s = dotted[1] + (((o[0] << 8) | o[1]).toString(16)) + ":" + (((o[2] << 8) | o[3]).toString(16));
+  }
+  const halves = s.split("::");
+  if (halves.length > 2) return null;
+  const head = halves[0] === "" ? [] : halves[0].split(":");
+  const tail = halves.length === 2 ? (halves[1] === "" ? [] : halves[1].split(":")) : [];
+  let groups: string[];
+  if (halves.length === 1) {
+    groups = head; // no "::" → must already be the full 8 groups
+  } else {
+    const fill = 8 - head.length - tail.length;
+    if (fill < 1) return null; // "::" must stand for at least one zero group
+    groups = [...head, ...Array(fill).fill("0"), ...tail];
+  }
+  if (groups.length !== 8) return null;
+  const nums = groups.map((g) => parseInt(g, 16));
+  if (nums.some((n) => Number.isNaN(n) || n < 0 || n > 0xffff)) return null;
+  return nums;
+}
+
+// IPv6 — loopback (::1), unspecified (::), link-local (fe80::/10), unique-local (fc00::/7), and
+// IPv4-mapped/-compatible addresses (incl. their hex spelling) whose embedded IPv4 is blocked.
 function isBlockedIPv6(ip: string): boolean {
-  let h = ip.toLowerCase();
-  const zone = h.indexOf("%"); // strip zone id, e.g. fe80::1%eth0
-  if (zone >= 0) h = h.slice(0, zone);
-  if (h === "::1" || h === "::") return true;
-  // ::ffff:a.b.c.d (mapped) / ::a.b.c.d (compatible) → validate the embedded IPv4.
-  const v4 = h.match(/(?:^|:)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
-  if (v4 && isBlockedIPv4(v4[1])) return true;
-  if (/^fe[89ab]/.test(h)) return true; // fe80::/10 link-local
-  if (/^f[cd]/.test(h)) return true; // fc00::/7 unique-local
+  const g = ipv6ToGroups(ip);
+  if (!g) return false; // isIP already validated this as v6; unparseable → not in our block set
+  const hiZero = g[0] === 0 && g[1] === 0 && g[2] === 0 && g[3] === 0 && g[4] === 0;
+  // IPv4-mapped (g[5]==0xffff) / IPv4-compatible, loopback, unspecified (g[5]==0): the embedded
+  // IPv4 is the last 32 bits. ::1 → 0.0.0.1 and :: → 0.0.0.0, both blocked via the 0.0.0.0/8 rule.
+  if (hiZero && (g[5] === 0xffff || g[5] === 0)) {
+    const v4 = `${(g[6] >> 8) & 0xff}.${g[6] & 0xff}.${(g[7] >> 8) & 0xff}.${g[7] & 0xff}`;
+    if (isBlockedIPv4(v4)) return true;
+  }
+  if ((g[0] & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((g[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
   return false;
 }
 

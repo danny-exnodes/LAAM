@@ -72,6 +72,40 @@ describe("isBlockedIp — private/reserved range predicate", () => {
   });
 });
 
+// REGRESSION (adversarial review 2026-06-16): new URL() normalizes an IPv4-mapped IPv6 host to
+// canonical HEX, e.g. [::ffff:169.254.169.254] → [::ffff:a9fe:a9fe]. A dotted-only check misses
+// the hex form → SSRF to the metadata IP. isBlockedIp must work on the hex spelling too.
+describe("isBlockedIp — IPv4-in-IPv6 in the hex form new URL() actually produces", () => {
+  test("IPv4-mapped private/metadata/loopback in hex → blocked", () => {
+    // a9fe:a9fe=169.254.169.254, 7f00:1=127.0.0.1, a00:1=10.0.0.1, c0a8:101=192.168.1.1, ac10:1=172.16.0.1
+    for (const ip of ["::ffff:a9fe:a9fe", "::ffff:7f00:1", "::ffff:a00:1", "::ffff:c0a8:101", "::ffff:ac10:1"]) {
+      expect(isBlockedIp(ip), ip).toBe(true);
+    }
+  });
+  test("IPv4-compatible (no ffff) private in hex → blocked", () => {
+    expect(isBlockedIp("::a9fe:a9fe")).toBe(true); // ::169.254.169.254
+  });
+  test("IPv4-mapped PUBLIC in hex → allowed", () => {
+    expect(isBlockedIp("::ffff:808:808")).toBe(false); // 8.8.8.8
+    expect(isBlockedIp("::ffff:5db8:d822")).toBe(false); // 93.184.216.34
+  });
+  test("still blocks the dotted spellings too (defence in depth)", () => {
+    expect(isBlockedIp("::ffff:169.254.169.254")).toBe(true);
+    expect(isBlockedIp("::ffff:127.0.0.1")).toBe(true);
+  });
+});
+
+describe("assertSafeUrl — end-to-end through URL normalization (hex IPv4-mapped regression)", () => {
+  test("bracketed IPv4-mapped metadata/loopback URL → throw", () => {
+    expect(() => assertSafeUrl("https://[::ffff:169.254.169.254]/")).toThrow();
+    expect(() => assertSafeUrl("https://[::ffff:127.0.0.1]/mcp")).toThrow();
+    expect(() => assertSafeUrl("https://[::169.254.169.254]/")).toThrow();
+  });
+  test("bracketed IPv4-mapped PUBLIC URL → allowed", () => {
+    expect(() => assertSafeUrl("https://[::ffff:8.8.8.8]/")).not.toThrow();
+  });
+});
+
 // assertSafeUrlResolved closes the DNS-rebind hole the comment in ssrf.ts admits: a PUBLIC
 // hostname whose A/AAAA record points at a private/metadata IP. It resolves and validates
 // EVERY returned address (fail-closed: any private address throws).
