@@ -1,12 +1,12 @@
 // Per-user MCP server configs. Reuses the connector credential store: each
 // server is one `connector_credential` row with connectorId = "mcp:<slug>" and
-// secret = encryptJson({ name, url, authToken, trustReadHints }). Mirrors
-// ../store.ts (encrypt + insert/onConflictDoUpdate + delete) so secrets never
-// touch the DB in plaintext.
+// secret = encryptJsonForUser(userId, { name, url, authToken, trustReadHints }). Mirrors
+// ../store.ts (per-user encrypt + insert/onConflictDoUpdate + delete) so secrets — including the
+// server's authToken — never touch the DB in plaintext and are isolated per user.
 import { and, eq, like } from "drizzle-orm";
 import { db } from "@/db";
 import { connectorCredentials } from "@/db/schema";
-import { encryptJson, decryptJson } from "../crypto";
+import { encryptJsonForUser, decryptJsonForUser } from "../crypto";
 import { assertSafeUrl } from "./ssrf";
 import type { McpServerConfig } from "./types";
 
@@ -42,7 +42,7 @@ export async function listServers(userId: string): Promise<McpServerConfig[]> {
   const out: McpServerConfig[] = [];
   for (const row of rows) {
     try {
-      const cfg = decryptJson<StoredServer>(row.secret);
+      const cfg = decryptJsonForUser<StoredServer>(userId, row.secret);
       out.push({ slug: row.connectorId.slice(PREFIX.length), ...cfg });
     } catch {
       // unreadable blob (key rotated / corrupt) → skip this server
@@ -64,7 +64,7 @@ export async function getServer(userId: string, slug: string): Promise<McpServer
   const row = rows[0];
   if (!row) return null;
   try {
-    const cfg = decryptJson<StoredServer>(row.secret);
+    const cfg = decryptJsonForUser<StoredServer>(userId, row.secret);
     return { slug, ...cfg };
   } catch {
     return null;
@@ -94,7 +94,7 @@ export async function addServer(
     trustReadHints: input.trustReadHints ?? false,
   };
   const now = new Date();
-  const secret = encryptJson(blob);
+  const secret = encryptJsonForUser(userId, blob);
   try {
     await db
       .insert(connectorCredentials)

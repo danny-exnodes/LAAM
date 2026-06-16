@@ -1,6 +1,8 @@
 // Per-user connector credential store. The `secret` column holds an
-// AES-256-GCM blob (see crypto.ts) — plaintext creds never touch the DB. One
-// row per (userId, connectorId); writes upsert.
+// AES-256-GCM blob encrypted under a PER-USER key (HKDF(master, userId), see crypto.ts) —
+// plaintext creds never touch the DB. One row per (userId, connectorId); writes upsert.
+// Legacy rows (global-key, pre-HKDF) still decrypt and are re-encrypted to the per-user
+// scheme on the next setCreds (lazy migration).
 //
 // `dbx` lets callers run a read/write on a specific executor — the advisory-lock
 // transaction (oauth/lock.ts) passes its OWN tx so the locked refresh never needs
@@ -8,7 +10,7 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { connectorCredentials } from "@/db/schema";
-import { encryptJson, decryptJson } from "./crypto";
+import { encryptJsonForUser, decryptJsonForUser } from "./crypto";
 
 // Minimal structural executor type satisfied by both the pool db and a
 // drizzle transaction.
@@ -31,9 +33,9 @@ export async function getCreds(
   const row = rows[0];
   if (!row) return null;
   try {
-    return decryptJson<Record<string, string>>(row.secret);
+    return decryptJsonForUser<Record<string, string>>(userId, row.secret);
   } catch {
-    return null; // unreadable blob (key rotated / corrupt) → treat as not set
+    return null; // unreadable blob (key rotated / corrupt / wrong user) → treat as not set
   }
 }
 
@@ -44,7 +46,7 @@ export async function setCreds(
   dbx: CredsDb = db,
 ): Promise<void> {
   const now = new Date();
-  const secret = encryptJson(creds);
+  const secret = encryptJsonForUser(userId, creds);
   await dbx
     .insert(connectorCredentials)
     .values({ userId, connectorId, secret, updatedAt: now })
