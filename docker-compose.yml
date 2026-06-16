@@ -1,41 +1,23 @@
-# LAAM v2 — DEV INFRA ONLY (Postgres + Adminer).
-# The app itself runs on the host via `npm run dev` (port 3000). Ollama stays
-# native on the host (GPU). The old v0.9 stack (its own compose) runs separately
-# and untouched.
+# LAAM v2 — production stack (app + adminer + searxng). Postgres is the SHARED
+# ecosystem-infra instance (container `infra-pg`, reachable in-network as `postgres`
+# on the external `ecosystem-net`); LAAM no longer runs its own Postgres container.
+# The app also runs on the host via `npm run dev` (Ollama native/GPU).
 #
-#   docker compose up -d            # start Postgres + Adminer
-#   docker compose down             # stop (data persists in the volume)
-#   docker compose down -v          # stop and WIPE the database
+#   docker compose up -d            # start app + adminer + searxng (DB = shared infra)
+#   docker compose down             # stop (the shared DB + its data are untouched)
+# Migrated off the local Postgres on 2026-06-16 (Phase 2 ecosystem-infra migration);
+# host DB port is now :5500 (shared), the old :5434 is retired.
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: laam-v2-postgres
-    environment:
-      POSTGRES_USER: laam
-      POSTGRES_PASSWORD: laam
-      POSTGRES_DB: laam
-    ports:
-      # Host port 5434 (container stays 5432) — avoids the conflict with another
-      # project's Postgres already on host :5432 (e.g. am-ai-postgres).
-      - "5434:5432"
-    volumes:
-      - laam-v2-pg:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U laam -d laam"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
   # Lightweight DB UI at http://localhost:8080 (System: PostgreSQL, Server:
-  # postgres, User/Pass/DB: laam).
+  # postgres, User/Pass/DB: laam). On ecosystem-net → `postgres` = shared infra-pg.
   adminer:
     image: adminer:latest
     container_name: laam-v2-adminer
     ports:
       - "8080:8080"
-    depends_on:
-      - postgres
+    networks:
+      - default
+      - ecosystem-net
     restart: unless-stopped
 
   # LAAM v2 production app (standalone Next.js, built from the infra/docker-stack
@@ -61,9 +43,11 @@ services:
       NODE_ENV: production
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
+    networks:
+      # `default` for app↔searxng; `ecosystem-net` so DATABASE_URL host `postgres`
+      # resolves to the shared infra-pg (DATABASE_URL itself is unchanged).
+      - default
+      - ecosystem-net
     restart: unless-stopped
 
   # Self-hosted metasearch (FOSS, $0) — powers the web_search harness tool. JSON API
@@ -83,5 +67,8 @@ services:
       SEARXNG_BASE_URL: http://localhost:8888/
     restart: unless-stopped
 
-volumes:
-  laam-v2-pg:
+networks:
+  # Shared ecosystem-infra network (created externally by SharedContainers). app +
+  # adminer join it so the in-network DNS name `postgres` resolves to shared infra-pg.
+  ecosystem-net:
+    external: true
