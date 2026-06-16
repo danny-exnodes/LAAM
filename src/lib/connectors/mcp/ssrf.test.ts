@@ -1,5 +1,9 @@
-import { describe, expect, test } from "vitest";
-import { assertSafeUrl } from "./ssrf";
+import { describe, expect, test, vi } from "vitest";
+import { assertSafeUrl, assertSafeUrlResolved, isBlockedIp } from "./ssrf";
+
+// assertSafeUrlResolved takes an injectable resolver (DI) so the connect-time check is unit-
+// testable without real DNS — `resolver(...ips)` stands in for dns.lookup returning those IPs.
+const resolver = (...ips: string[]) => async () => ips;
 
 describe("mcp ssrf guard", () => {
   test("rejects localhost", () => {
@@ -39,5 +43,72 @@ describe("mcp ssrf guard", () => {
     expect(() => assertSafeUrl("https://api.githubcopilot.com/mcp/")).not.toThrow();
     // 172.32.x is OUTSIDE the private 172.16-31 range → allowed.
     expect(() => assertSafeUrl("https://172.32.0.1/mcp")).not.toThrow();
+  });
+});
+
+// isBlockedIp is the shared predicate behind both the literal check and the resolved check.
+// It must cover IPv6 (loopback/link-local/ULA/IPv4-mapped), not just IPv4 — a DNS name can
+// resolve to a private IPv6 just as easily as a private IPv4.
+describe("isBlockedIp — private/reserved range predicate", () => {
+  test("IPv4 private/reserved → blocked", () => {
+    for (const ip of ["127.0.0.1", "10.0.0.1", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254", "0.0.0.0"]) {
+      expect(isBlockedIp(ip), ip).toBe(true);
+    }
+  });
+  test("IPv4 public → allowed", () => {
+    for (const ip of ["8.8.8.8", "1.1.1.1", "172.32.0.1", "93.184.216.34"]) {
+      expect(isBlockedIp(ip), ip).toBe(false);
+    }
+  });
+  test("IPv6 loopback/link-local/ULA + IPv4-mapped private → blocked", () => {
+    for (const ip of ["::1", "fe80::1", "febf::1", "fc00::1", "fd12:3456::1", "::ffff:169.254.169.254", "::ffff:10.0.0.1"]) {
+      expect(isBlockedIp(ip), ip).toBe(true);
+    }
+  });
+  test("IPv6 public + IPv4-mapped public → allowed", () => {
+    for (const ip of ["2001:4860:4860::8888", "::ffff:8.8.8.8"]) {
+      expect(isBlockedIp(ip), ip).toBe(false);
+    }
+  });
+});
+
+// assertSafeUrlResolved closes the DNS-rebind hole the comment in ssrf.ts admits: a PUBLIC
+// hostname whose A/AAAA record points at a private/metadata IP. It resolves and validates
+// EVERY returned address (fail-closed: any private address throws).
+describe("assertSafeUrlResolved — DNS-aware check", () => {
+  test("public hostname resolving to the metadata IP → throw (the named hole)", async () => {
+    await expect(assertSafeUrlResolved("https://evil.example.com/mcp", resolver("169.254.169.254"))).rejects.toThrow();
+  });
+
+  test("public hostname resolving to a private IPv4 → throw", async () => {
+    await expect(assertSafeUrlResolved("https://rebind.example.com/mcp", resolver("10.0.0.5"))).rejects.toThrow();
+  });
+
+  test("public hostname resolving to a private IPv6 → throw", async () => {
+    await expect(assertSafeUrlResolved("https://rebind6.example.com/mcp", resolver("fd00::1"))).rejects.toThrow();
+  });
+
+  test("any one of several resolved IPs private → throw (all must be safe)", async () => {
+    await expect(
+      assertSafeUrlResolved("https://mixed.example.com/mcp", resolver("93.184.216.34", "10.1.2.3")),
+    ).rejects.toThrow();
+  });
+
+  test("unresolvable host → throw (fail-closed)", async () => {
+    const failing = async () => {
+      throw new Error("ENOTFOUND");
+    };
+    await expect(assertSafeUrlResolved("https://nope.example.com/mcp", failing)).rejects.toThrow();
+  });
+
+  test("public hostname resolving to a public IP → resolves OK", async () => {
+    await expect(assertSafeUrlResolved("https://good.example.com/mcp", resolver("93.184.216.34"))).resolves.toBeUndefined();
+  });
+
+  test("bad scheme / literal private IP rejected before DNS (resolver not called)", async () => {
+    const spy = vi.fn(async () => ["1.2.3.4"]);
+    await expect(assertSafeUrlResolved("ftp://example.com/mcp", spy)).rejects.toThrow();
+    await expect(assertSafeUrlResolved("http://10.0.0.1/mcp", spy)).rejects.toThrow();
+    expect(spy).not.toHaveBeenCalled();
   });
 });

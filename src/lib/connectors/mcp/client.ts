@@ -5,6 +5,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { assertSafeUrlResolved } from "./ssrf";
 import type { McpServerConfig } from "./types";
 
 const TIMEOUT_MS = 15_000;
@@ -28,6 +29,9 @@ function authInit(cfg: McpServerConfig): { requestInit?: { headers: Record<strin
 // Connect with Streamable HTTP; on any failure retry once over SSE. Returns the
 // connected client (caller owns closing it).
 async function connect(cfg: McpServerConfig): Promise<Client> {
+  // SSRF: resolve + validate the URL BEFORE opening any transport, so a hostname pointing at a
+  // private / metadata IP is rejected at the actual fetch chokepoint (not only at config time).
+  await assertSafeUrlResolved(cfg.url);
   const client = new Client({ name: "laam", version: "2.0" });
   try {
     const transport = new StreamableHTTPClientTransport(new URL(cfg.url), authInit(cfg));
