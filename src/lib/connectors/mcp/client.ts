@@ -5,9 +5,14 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { assertSafeUrlResolved } from "./ssrf";
 import type { McpServerConfig } from "./types";
 
 const TIMEOUT_MS = 15_000;
+// Upper bound on tools accepted from one (possibly untrusted) MCP server. A server that returns
+// thousands of tools would otherwise bloat the model's tool list / context. Truncation is logged,
+// never silent.
+const MAX_TOOLS = 200;
 
 export type RemoteTool = {
   name: string;
@@ -28,6 +33,9 @@ function authInit(cfg: McpServerConfig): { requestInit?: { headers: Record<strin
 // Connect with Streamable HTTP; on any failure retry once over SSE. Returns the
 // connected client (caller owns closing it).
 async function connect(cfg: McpServerConfig): Promise<Client> {
+  // SSRF: resolve + validate the URL BEFORE opening any transport, so a hostname pointing at a
+  // private / metadata IP is rejected at the actual fetch chokepoint (not only at config time).
+  await assertSafeUrlResolved(cfg.url);
   const client = new Client({ name: "laam", version: "2.0" });
   try {
     const transport = new StreamableHTTPClientTransport(new URL(cfg.url), authInit(cfg));
@@ -53,7 +61,12 @@ export async function listTools(cfg: McpServerConfig): Promise<RemoteTool[]> {
   const client = await connect(cfg);
   try {
     const res = (await withTimeout(client.listTools())) as { tools: RemoteTool[] };
-    return res.tools ?? [];
+    const all = res.tools ?? [];
+    if (all.length > MAX_TOOLS) {
+      console.warn(`[mcp] server '${cfg.slug}' trả ${all.length} tool — cắt còn ${MAX_TOOLS} (DoS guard)`);
+      return all.slice(0, MAX_TOOLS);
+    }
+    return all;
   } finally {
     await client.close();
   }

@@ -57,3 +57,48 @@ describe("parseAllowlist — operator env parse", () => {
     expect(parseAllowlist("   ").size).toBe(0);
   });
 });
+
+// After the 2026-06-16 flip, slack/whatsapp/zalo writes are workflowSafe — so the gate must
+// validate their NON-email destinations per format and enforce a per-format allowlist. The
+// 3rd-arg override is interpreted in the tool's own format (exact match; email also matches by
+// domain). Empty allowlist stays fail-closed for every format.
+describe("assertRecipientAllowed — format-aware (slack / whatsapp / zalo)", () => {
+  test("slack_send_message: channel in allowlist → pass; not in → throw; empty → throw", () => {
+    expect(() =>
+      assertRecipientAllowed("slack_send_message", { channel: "C01234ABCD" }, new Set(["C01234ABCD"])),
+    ).not.toThrow();
+    expect(() =>
+      assertRecipientAllowed("slack_send_message", { channel: "C09999ZZZZ" }, new Set(["C01234ABCD"])),
+    ).toThrow(/allowlist/i);
+    expect(() =>
+      assertRecipientAllowed("slack_send_message", { channel: "C01234ABCD" }, new Set()),
+    ).toThrow();
+  });
+
+  test("slack_send_message: lowercase / comma-smuggle channel → throw (via parser)", () => {
+    expect(() =>
+      assertRecipientAllowed("slack_send_message", { channel: "c01234abcd" }, new Set(["c01234abcd"])),
+    ).toThrow();
+    expect(() =>
+      assertRecipientAllowed("slack_send_message", { channel: "C01234ABCD,C09999ZZZZ" }, new Set(["C01234ABCD"])),
+    ).toThrow();
+  });
+
+  test("whatsapp_send_message: phone allow-matched after digit-strip → pass; other → throw", () => {
+    expect(() =>
+      assertRecipientAllowed("whatsapp_send_message", { to: "+84 912 345 678" }, new Set(["84912345678"])),
+    ).not.toThrow();
+    expect(() =>
+      assertRecipientAllowed("whatsapp_send_message", { to: "84900000000" }, new Set(["84912345678"])),
+    ).toThrow(/allowlist/i);
+  });
+
+  test("zalo_send_message: user_id in allowlist → pass; empty → throw", () => {
+    expect(() =>
+      assertRecipientAllowed("zalo_send_message", { user_id: "2367895144017812345" }, new Set(["2367895144017812345"])),
+    ).not.toThrow();
+    expect(() =>
+      assertRecipientAllowed("zalo_send_message", { user_id: "2367895144017812345" }, new Set()),
+    ).toThrow();
+  });
+});

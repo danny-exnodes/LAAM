@@ -9,6 +9,9 @@ const h = vi.hoisted(() => ({
   close: vi.fn(async () => undefined),
   streamableCtor: vi.fn(),
   sseCtor: vi.fn(),
+  // SSRF guard: its behaviour is tested in ssrf.test.ts; here it is a no-op by default so the
+  // client tests don't touch real DNS, and a throwing spy in the wiring test below.
+  assertSafeUrlResolved: vi.fn(async () => undefined),
 }));
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
@@ -34,6 +37,7 @@ vi.mock("@modelcontextprotocol/sdk/client/sse.js", () => ({
     return { kind: "sse" };
   }),
 }));
+vi.mock("./ssrf", () => ({ assertSafeUrlResolved: h.assertSafeUrlResolved }));
 
 import { listTools, callTool } from "./client";
 
@@ -46,6 +50,7 @@ beforeEach(() => {
   h.close.mockReset().mockResolvedValue(undefined);
   h.streamableCtor.mockReset();
   h.sseCtor.mockReset();
+  h.assertSafeUrlResolved.mockReset().mockResolvedValue(undefined);
 });
 
 describe("mcp client", () => {
@@ -106,5 +111,27 @@ describe("mcp client", () => {
     h.callTool.mockRejectedValue(new Error("boom"));
     await expect(callTool(cfg, "do", {})).rejects.toThrow("boom");
     expect(h.close).toHaveBeenCalledTimes(1);
+  });
+
+  test("caps an absurd tool count from an untrusted server (DoS) and warns", async () => {
+    const many = Array.from({ length: 250 }, (_, i) => ({ name: `t${i}`, inputSchema: {} }));
+    h.listTools.mockResolvedValue({ tools: many });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tools = await listTools(cfg);
+    expect(tools).toHaveLength(200); // capped, not 250 — no silent unbounded ingestion
+    expect(warn).toHaveBeenCalled(); // truncation surfaced, not silent (Rule 12)
+    warn.mockRestore();
+  });
+
+  test("SSRF guard is wired into connect: a blocked URL never opens a transport", async () => {
+    // The connect-time DNS check runs BEFORE any transport is constructed. If it throws
+    // (e.g. host resolves to a private IP), no StreamableHTTP/SSE transport is created and
+    // no network connection is attempted.
+    h.assertSafeUrlResolved.mockRejectedValue(new Error("SSRF chặn"));
+    await expect(listTools(cfg)).rejects.toThrow(/SSRF/);
+    expect(h.assertSafeUrlResolved).toHaveBeenCalledWith(cfg.url);
+    expect(h.streamableCtor).not.toHaveBeenCalled();
+    expect(h.sseCtor).not.toHaveBeenCalled();
+    expect(h.connect).not.toHaveBeenCalled();
   });
 });

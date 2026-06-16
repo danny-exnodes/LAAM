@@ -5,9 +5,25 @@
 import { describe, expect, test, vi } from "vitest";
 // Import from retry.mjs (shebang-free) — laam-collector.mjs carries a #! shebang the
 // test bundler (rolldown) can't parse. The CLI re-exports these same symbols.
-import { pushWithRetry, makeCycle, RETRY_BACKOFF_MS } from "./retry.mjs";
+import { pushWithRetry, makeCycle, RETRY_BACKOFF_MS, jitteredBackoff } from "./retry.mjs";
 
 const noSleep = vi.fn(async () => {});
+
+// Jitter: many collectors that fail at the same instant (e.g. the ingest endpoint blips) must
+// NOT all retry in lockstep — that just re-creates the spike. Backoff = base + up to +100%
+// random, so the minimum wait is still `base` (never hammers faster) but retries are spread out.
+describe("collector jitteredBackoff (anti thundering-herd)", () => {
+  test("random=0 → exactly base (never shorter than base)", () => {
+    expect(jitteredBackoff(2000, () => 0)).toBe(2000);
+  });
+  test("random≈1 → up to 2x base", () => {
+    expect(jitteredBackoff(2000, () => 0.999999)).toBeGreaterThanOrEqual(3999);
+    expect(jitteredBackoff(2000, () => 0.999999)).toBeLessThanOrEqual(4000);
+  });
+  test("random=0.5 → base + half base", () => {
+    expect(jitteredBackoff(2000, () => 0.5)).toBe(3000);
+  });
+});
 
 describe("collector pushWithRetry", () => {
   test("backoff mặc định đúng spec 2s", () => {
@@ -24,18 +40,27 @@ describe("collector pushWithRetry", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
-  test("fail lần 1 → backoff đúng RETRY_BACKOFF_MS rồi retry; retry OK → true", async () => {
+  test("fail lần 1 → backoff (jitter, random=0 → base) rồi retry; retry OK → true", async () => {
     const push = vi
       .fn()
       .mockRejectedValueOnce(new Error("ECONNREFUSED"))
       .mockResolvedValueOnce(undefined);
     const sleep = vi.fn(async () => {});
     const log = vi.fn();
-    await expect(pushWithRetry(push, { sleep, log })).resolves.toBe(true);
+    // random=()=>0 pins the jitter to its minimum so the asserted wait is deterministic = base.
+    await expect(pushWithRetry(push, { sleep, log, random: () => 0 })).resolves.toBe(true);
     expect(push).toHaveBeenCalledTimes(2);
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep).toHaveBeenCalledWith(RETRY_BACKOFF_MS);
     expect(log).toHaveBeenCalledTimes(1); // chỉ log lần fail đầu
+  });
+
+  test("backoff áp jitter: random≈1 → chờ ~2x base (desync nhiều collector)", async () => {
+    const push = vi.fn().mockRejectedValueOnce(new Error("blip")).mockResolvedValueOnce(undefined);
+    const sleep = vi.fn(async () => {});
+    await pushWithRetry(push, { sleep, log: vi.fn(), random: () => 0.999999 });
+    expect(sleep.mock.calls[0][0]).toBeGreaterThanOrEqual(3999);
+    expect(sleep.mock.calls[0][0]).toBeLessThanOrEqual(4000);
   });
 
   test("fail cả 2 lần → resolve false, KHÔNG throw (vòng setInterval sống sót)", async () => {

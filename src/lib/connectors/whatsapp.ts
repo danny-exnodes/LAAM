@@ -69,7 +69,9 @@ const whatsapp: Connector = {
     {
       type: "function",
       kind: "write",
+      workflowSafe: true, // CTO-cleared 2026-06-16: gated by per-format WhatsApp E.164 allowlist (WORKFLOW_WHATSAPP_ALLOWLIST), fail-closed by default — see workflow/recipient.ts
       recipientField: "to",
+      recipientFormat: "e164",
       function: {
         name: "whatsapp_send_message",
         description:
