@@ -73,13 +73,16 @@ describe("isWorkflowSafe (workflow-readiness — fail-closed default)", () => {
   test("tool lạ → false (fail-closed)", () => {
     expect(isWorkflowSafe("anything_else")).toBe(false);
   });
-  test("đúng tập workflowSafe (demo + gmail_send) — tripwire: flip CÓ Ý", () => {
-    // gmail_send flip CÓ Ý 2026-06-09: CTO code-verify parseRecipients + recipient-allowlist
-    // gate (chỉ chạy khi WORKFLOW_RECIPIENT_ALLOWLIST set + recipient khớp). 9 tool tier-low
-    // VẪN fail-closed tới khi flip. Thêm/bớt workflowSafe phải cập nhật list này (audit).
+  test("đúng tập workflowSafe (demo + gmail + slack/whatsapp/zalo) — tripwire: flip CÓ Ý", () => {
+    // Flips CÓ Ý: gmail_send (2026-06-09) + slack/whatsapp/zalo send (2026-06-16, CTO-cleared).
+    // Mỗi cái chỉ chạy trong workflow khi recipient khớp allowlist PER-FORMAT của nó
+    // (WORKFLOW_*_ALLOWLIST) — fail-closed khi env trống. Các write còn lại (github/jira/trello/
+    // gcal/gdrive) VẪN fail-closed. Thêm/bớt workflowSafe phải cập nhật list này (audit).
     const safe = CONNECTORS.flatMap((c) =>
       c.tools.filter((t) => t.workflowSafe).map((t) => t.function.name),
     ).sort();
-    expect(safe).toEqual(["demo_create_task", "gmail_send"]);
+    expect(safe).toEqual(
+      ["demo_create_task", "gmail_send", "slack_send_message", "whatsapp_send_message", "zalo_send_message"].sort(),
+    );
   });
 });

@@ -148,6 +148,7 @@ const gmail: Connector = {
       kind: "write",
       workflowSafe: true, // CTO-cleared 2026-06-09: tier-high-exfil, gated by recipient-allowlist (WORKFLOW_RECIPIENT_ALLOWLIST) — see workflow/recipient.ts
       recipientField: "to", // outbound destination → workflow recipient-gate enforces allowlist
+      recipientFormat: "email",
       function: {
         name: "gmail_send",
         description:

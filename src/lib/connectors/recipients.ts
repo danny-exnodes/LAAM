@@ -26,3 +26,46 @@ export function parseRecipients(raw: string): string[] {
   }
   return tokens;
 }
+
+// Recipient-destination formats a connector tool can self-declare via `recipientFormat`.
+// Each maps to a strict parser below + an operator allowlist env (see workflow/recipient.ts).
+export type RecipientFormat = "email" | "slack_channel" | "e164" | "zalo_user";
+
+// Slack channel/conversation ID: uppercase alphanumeric, no separators (anti multi-target /
+// injection). Lowercase rejected — real Slack IDs are uppercase and the handler sends the raw
+// value, so accepting lowercase would create a gate↔Slack differential.
+const SLACK_ID = /^[A-Z0-9]{6,}$/;
+// E.164 national+country digits, 7–15 (the upper bound also caps two-number concatenation).
+const E164_DIGITS = /^\d{7,15}$/;
+// Zalo OA user-id: a single opaque identifier token (real ones are long numerics). Allow
+// alphanumerics plus _ and - only — no whitespace/comma/structural chars.
+const ZALO_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+// Validate + canonicalize ONE outbound destination for `format`, returning the recipient(s) in
+// the EXACT form the connector handler will send (so the gate validates what is actually sent).
+// `email` keeps its comma-list semantics; the messenger formats are single-target (a comma is a
+// smuggling attempt, not a separator). Throws on anything non-canonical → fail-closed.
+export function parseRecipientsByFormat(format: RecipientFormat, raw: string): string[] {
+  switch (format) {
+    case "email":
+      return parseRecipients(raw);
+    case "slack_channel":
+      if (!SLACK_ID.test(raw)) {
+        throw new Error(`recipient: kênh Slack không hợp lệ "${raw}" — cần ID kênh dạng C… (chữ HOA + số, một kênh)`);
+      }
+      return [raw];
+    case "e164": {
+      // Mirror the WhatsApp handler exactly: strip every non-digit, then validate.
+      const digits = raw.replace(/\D/g, "");
+      if (!E164_DIGITS.test(digits)) {
+        throw new Error(`recipient: số WhatsApp không hợp lệ "${raw}" — cần 7–15 chữ số (E.164, không dấu +)`);
+      }
+      return [digits];
+    }
+    case "zalo_user":
+      if (!ZALO_ID.test(raw)) {
+        throw new Error(`recipient: user_id Zalo không hợp lệ "${raw}" — một định danh, không khoảng trắng/ký tự đặc biệt`);
+      }
+      return [raw];
+  }
+}

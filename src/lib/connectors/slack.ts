@@ -109,7 +109,9 @@ const slack: Connector = {
     {
       type: "function",
       kind: "write",
+      workflowSafe: true, // CTO-cleared 2026-06-16: gated by per-format Slack-channel allowlist (WORKFLOW_SLACK_ALLOWLIST), fail-closed by default — see workflow/recipient.ts
       recipientField: "channel", // outbound destination → workflow recipient-gate enforces allowlist
+      recipientFormat: "slack_channel",
       function: {
         name: "slack_send_message",
         description:

@@ -64,17 +64,19 @@ describe("connector registry", () => {
     expect(names.size).toBe(42);
   });
 
-  test("mọi write tool mới (slack/whatsapp/zalo) đều fail-closed trong workflow + khai recipientField", () => {
-    // The 2026-06-12 expansion adds 3 exfil-capable writes. None may be
-    // workflowSafe (the recipient-gate parser is email-only — a non-email
-    // recipientField could never pass it anyway), and each must self-declare
-    // its outbound-destination arg so the gate stays derivable from the registry.
+  test("slack/whatsapp/zalo writes are workflow-cleared but stay destination-gated (recipientField + recipientFormat)", () => {
+    // 2026-06-16: these 3 exfil writes were flipped workflowSafe so workflows CAN use them —
+    // but ONLY behind the format-aware recipient-gate. The safety invariant is therefore that
+    // every such write MUST self-declare recipientField + recipientFormat, so the gate is
+    // derivable from the registry and fail-closed by default (empty per-format allowlist →
+    // throws). A write that is workflowSafe WITHOUT a recipientFormat would run ungated.
     const expanded = CONNECTORS.filter((c) => ["slack", "whatsapp", "zalo"].includes(c.id));
     expect(expanded.map((c) => c.id).sort()).toEqual(["slack", "whatsapp", "zalo"]);
     for (const c of expanded) {
       for (const t of c.tools.filter((t) => t.kind === "write")) {
-        expect(t.workflowSafe, `${t.function.name} must NOT be workflowSafe`).toBeUndefined();
+        expect(t.workflowSafe, `${t.function.name} must be workflowSafe (flipped 2026-06-16)`).toBe(true);
         expect(t.recipientField, `${t.function.name} must declare recipientField`).toBeTruthy();
+        expect(t.recipientFormat, `${t.function.name} must declare recipientFormat for the gate`).toBeTruthy();
       }
     }
   });

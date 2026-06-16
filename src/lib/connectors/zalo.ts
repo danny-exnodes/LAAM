@@ -71,8 +71,9 @@ const zalo: Connector = {
     {
       type: "function",
       kind: "write",
-      // NO workflowSafe: fail-closed — chưa được duyệt chạy tự động trong workflow.
+      workflowSafe: true, // CTO-cleared 2026-06-16: gated by per-format Zalo OA user-id allowlist (WORKFLOW_ZALO_ALLOWLIST), fail-closed by default — see workflow/recipient.ts
       recipientField: "user_id", // outbound destination → workflow recipient-gate enforces allowlist
+      recipientFormat: "zalo_user",
       function: {
         name: "zalo_send_message",
         description:

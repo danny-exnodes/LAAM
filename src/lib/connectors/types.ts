@@ -5,6 +5,7 @@
 // (decrypted) credentials and feeds the real result back to the model.
 // Credentials are stored server-side ONLY, encrypted at rest, per-user, and are
 // NEVER returned to the browser in clear (always masked).
+import type { RecipientFormat } from "./recipients";
 
 export type ConnectorField = {
   key: string;
@@ -41,6 +42,9 @@ export type ConnectorTool = {
   // workflow recipient-gate enforces the operator allowlist on this field's RESOLVED value.
   // Absent → tool is not recipient-controlled. (spec 2026-06-09 §3.1.)
   recipientField?: string;
+  // Format of the recipientField value, selecting the gate's parser + per-format allowlist env
+  // (see workflow/recipient.ts). Absent defaults to "email" for back-compat (gmail_send).
+  recipientFormat?: RecipientFormat;
   function: { name: string; description: string; parameters: object };
 };
 

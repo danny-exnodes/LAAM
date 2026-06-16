@@ -8,17 +8,19 @@ afterEach(() => {
 const CREDS = { access_token: "EAAGtoktest", phone_number_id: "106540352242922" };
 
 describe("whatsapp connector", () => {
-  test("định danh: 1 tool duy nhất, kind write, recipientField 'to', KHÔNG có workflowSafe", () => {
+  test("định danh: 1 tool write, recipientField 'to' + recipientFormat e164, workflowSafe=true (gated 2026-06-16)", () => {
     expect(whatsapp.id).toBe("whatsapp");
     expect(whatsapp.auth.type).toBe("token");
     expect(whatsapp.tools).toHaveLength(1);
     const t = whatsapp.tools[0];
     expect(t.function.name).toBe("whatsapp_send_message");
     expect(t.kind).toBe("write");
-    // Gate đích đến (exfil): trường "to" phải được khai báo là recipientField.
+    // Gate đích đến (exfil): trường "to" phải được khai báo là recipientField + format E.164.
     expect(t.recipientField).toBe("to");
-    // Fail-closed: tool write KHÔNG được tự khai workflowSafe — key phải VẮNG MẶT.
-    expect("workflowSafe" in t).toBe(false);
+    expect(t.recipientFormat).toBe("e164");
+    // 2026-06-16: flipped workflowSafe — gated by the per-format WhatsApp (E.164) allowlist,
+    // fail-closed when WORKFLOW_WHATSAPP_ALLOWLIST unset.
+    expect(t.workflowSafe).toBe(true);
   });
 
   test("send_message POST đúng body Cloud API + Bearer header + URL có phone_number_id", async () => {

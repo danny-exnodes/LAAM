@@ -25,7 +25,7 @@ const manyMessages = Array.from({ length: 20 }, (_, i) => ({
 }));
 
 describe("slack connector", () => {
-  test("định danh + tên 3 tool + kind + recipientField (workflowSafe VẮNG MẶT trên write)", () => {
+  test("định danh + tên 3 tool + kind + recipientField/Format + workflowSafe (gated flip 2026-06-16)", () => {
     expect(slack.id).toBe("slack");
     expect(slack.auth.type).toBe("oauth");
     expect(slack.auth.provider).toBe("slack");
@@ -40,8 +40,10 @@ describe("slack connector", () => {
     const send = toolOf("slack_send_message");
     expect(send.kind).toBe("write");
     expect(send.recipientField).toBe("channel");
-    // fail-closed: write tool KHÔNG được khai báo workflowSafe (kể cả false)
-    expect("workflowSafe" in send).toBe(false);
+    expect(send.recipientFormat).toBe("slack_channel");
+    // 2026-06-16: flipped workflowSafe — allowed in workflows ONLY because the recipient-gate
+    // enforces the per-format Slack-channel allowlist (fail-closed when WORKFLOW_SLACK_ALLOWLIST unset).
+    expect(send.workflowSafe).toBe(true);
   });
 
   test("slack_list_channels: đúng URL + Bearer; fetch trang 200 rồi MỚI cap 15 + total_matched", async () => {

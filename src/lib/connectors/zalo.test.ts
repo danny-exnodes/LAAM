@@ -22,14 +22,16 @@ describe("zalo connector", () => {
     ]);
   });
 
-  test("kinds: recent_chats là read, send_message là write + recipientField user_id, workflowSafe VẮNG MẶT (fail-closed)", () => {
+  test("kinds: recent_chats read; send_message write + recipientField/Format + workflowSafe=true (gated 2026-06-16)", () => {
     const chats = zalo.tools.find((t) => t.function.name === "zalo_recent_chats")!;
     const send = zalo.tools.find((t) => t.function.name === "zalo_send_message")!;
     expect(chats.kind).toBe("read");
     expect(send.kind).toBe("write");
     expect(send.recipientField).toBe("user_id");
-    // fail-closed: key phải VẮNG MẶT hoàn toàn, không phải false
-    expect("workflowSafe" in send).toBe(false);
+    expect(send.recipientFormat).toBe("zalo_user");
+    // 2026-06-16: flipped workflowSafe — gated by the per-format Zalo allowlist,
+    // fail-closed when WORKFLOW_ZALO_ALLOWLIST unset.
+    expect(send.workflowSafe).toBe(true);
   });
 
   test("auth dùng header LITERAL access_token (không Bearer, không query param)", async () => {
