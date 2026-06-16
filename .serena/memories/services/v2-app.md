@@ -1,14 +1,16 @@
 # Service: v2 app (root)
 
+> **Refresh 2026-06-16:** **v2.4.1** (+`[Unreleased]`). P1–P4 đều ✅ **live**. App nay vượt xa khung POC: **Workflows** (durable engine + scheduler), **Connectors OAuth đa-provider** (Slack/WhatsApp/Zalo + Google/Atlassian), **Security/RBAC** (mọi mutation gated + off-boarding), **Notifications** in-app, **Custom Agents** (migration 0015), **Monitoring** hợp nhất, **Matte-Dark**. Cả 7 cụm GA-ready (cluster review 06-16). **Danh sách route canonical: `CLAUDE.md`.** Việc còn lại: [[platform-cluster-review-remaining]]. ⏬ Các mục "## Trạng thái…/## Chưa làm" bên dưới = **lịch sử Wave/POC** (06-03), không phải hiện hành.
+
 Cập nhật: 2026-06-03. Stack: Next.js 16 + React 19 + TS + Tailwind 4 + Auth.js v5 + Drizzle + Postgres. Spec đầy đủ: `docs/v2-plan.md`.
 
-**Dev:** `docker compose up -d && cp .env.example .env && npm install && npm run db:migrate && npm run dev` (:3000). Docker chỉ chạy Postgres+Adminer; app chạy bằng npm; Ollama native (gemma4:e4b).
+**Dev:** `docker compose up -d && cp .env.example .env && npm install && npm run db:migrate && npm run dev` (:3100). Docker chỉ chạy Postgres+Adminer; app chạy bằng npm; Ollama native (gemma4:e4b).
 
 ## Routes
 - Pages: `/login` `/register` `/dashboard` `/chat` `/agents` `/agents/[id]` `/graph` `/machines`
 - API: `/api/auth/[...nextauth]`, `/api/register`, `/api/sync`, `/api/ingest`, `/api/machines`(+`/[id]`), `/api/chat`, `/api/conversations`(+`/[id]`), `/api/agents/[id]/timeline` (log cho drawer — Session 2), `/api/connectors`(+`/[id]/[action]`), `/api/stats`, `/api/events`(SSE), map+ocr helpers
 
-## Trạng thái
+## Trạng thái (ảnh chụp lịch sử Wave — 2026-06-03)
 - P1 auth/RBAC ✅ · P2 monitoring (sync, Agents, Session-detail, Dashboard: KPIs+cost chart recharts+heatmap+breakdowns+leaderboard, Graph @xyflow/react) ✅ · P3 collector đa máy (đơn giản: machine-token + ingest + /machines + collector) ✅ · **P4 Chat Gemma 4** ✅ built (streaming Ollama, per-user history) — **chờ test runtime**.
 - Verified LIVE (Chrome): P1+P2+P3. Chat cần Ollama gemma4:e4b + login để test.
 

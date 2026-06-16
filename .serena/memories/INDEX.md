@@ -2,12 +2,21 @@
 
 > Đọc đầu mỗi phiên (Session Boot Protocol).
 
+## Trạng thái hiện tại (2026-06-16) — NGUỒN CHÂN LÝ, đọc trước tiên
+- **Phiên bản: v2.4.1** (`package.json` + CHANGELOG) + **[Unreleased]**: quick-tools picker (chat), node MCP (workflow), **Custom Agents** (migration 0015), OAuth đa-provider (Slack / WhatsApp / Zalo OA), đồng bộ Node 24 LTS.
+- **Full v1→v2 parity ĐÃ ĐẠT** (Dashboard / Agents / Chat / Connectors) — tình trạng "gap" mô tả ở [[v2-parity-gap]] nay là **lịch sử**, không còn hiệu lực.
+- **Cluster review 06-16 — cả 7 cụm GA-ready, KHÔNG lỗi chức năng:** Workflows (durable + scheduler) · Custom-Agents (E2E PASS) · Connectors/OAuth · Chat/MCP/Vision · Security/RBAC (mọi mutation gated) · Monitoring/Collector/Machines · Matte-Dark (shipped + guarded).
+- **Vừa vá:** off-boarding gap — disable user ⇒ disable luôn `workflow_schedule` của họ (`ce09496`); Custom-Agents reach (chat persona / discoverability / clone) merged `e296852`.
+- **Việc còn lại = backlog hardening bảo mật** (gate tính năng TƯƠNG LAI, không chặn hiện tại): recipient-gate format-aware → SSRF DNS-pin → per-user HKDF. Canonical: [[platform-cluster-review-remaining]] (→ [[connectors-oauth-followups]], [[connectors-crypto-hkdf]]).
+- **Checkpoint mới nhất:** `checkpoint/cto-2026-06-16.md`.
+- ⏬ Các mục "## Trạng thái …" phía dưới (06-03 → 06-11) là **ảnh chụp lịch sử** — giữ làm hồ sơ, KHÔNG phải trạng thái hiện hành.
+
 ## Decisions
 - [v2-architecture](decisions/v2-architecture.md) — Định hướng v2: **local-first** (không SaaS), giám sát **đa máy**, Next.js 16 + Postgres + Auth.js v5 + RBAC + Drizzle, **Gemma 4** chủ đạo, Tailscale, <50 user.
 - [db-migrations](decisions/db-migrations.md) — Dùng **migration** (db:generate→commit→db:migrate), KHÔNG db:push; drizzle-kit không chạy trong sandbox agent.
 - [auth-and-proxy](decisions/auth-and-proxy.md) — Auth.js `trustHost:true`; Next 16 `proxy.ts`; **GOTCHA: API public phải thêm vào isPublic** (auth.config.ts); RBAC + user đầu = owner.
 - [monitoring-parser-reuse](decisions/monitoring-parser-reuse.md) — v2 tái dùng parser v0.9 (copy vào src/lib/monitoring); `upsertSessions` dùng chung local + ingest; transcriptPath chỉ live cho host.
-- [v2-parity-gap](decisions/v2-parity-gap.md) — **v2 CHƯA parity v1** (Dash ~35%, Agents ~40%, Chat ~8%, Connectors 0%). Quyết định: port đầy đủ theo lộ trình `docs/v2-parity-roadmap.md` (Wave 0 hạ tầng → Agents → Dashboard → Chat → Connectors).
+- [v2-parity-gap](decisions/v2-parity-gap.md) — **(LỊCH SỬ — parity ĐÃ ĐẠT)** ghi nhận gap 06-03 (Dash ~35% / Agents ~40% / Chat ~8% / Connectors 0%) + quyết định port đầy đủ theo `docs/v2-parity-roadmap.md`. Wave 0→4 đã hoàn tất; xem **Trạng thái hiện tại** ở đầu file.
 - [v2-dark-mode-theming](decisions/v2-dark-mode-theming.md) — dark mode v2 là **media-query** (không class `.dark`): viền accent phải inline `borderLeftColor`, chart recharts cần `useChartTheme`, `.dark .x` CSS là code chết. + reset DB làm rỗng `user` → đăng ký lại (đầu tiên = owner).
 - [poc-model-choice](decisions/poc-model-choice.md) — POC dùng **1 model** `qwen3-vl:8b-instruct-q8_0` (chat+tool-call), **không smart-routing** (vốn chưa implement); OCR=Tesseract, vision chưa nối; set `DEFAULT_CHAT_MODEL` là đủ. Host: RTX 5070 Ti 16GB.
 - [ocr-tesseract-docker](decisions/ocr-tesseract-docker.md) — OCR=Tesseract **bake vào image app** (`node:22-alpine`, `apk add tesseract-ocr + data eng/vie/chi_sim`), né UAC trên host. **Gotcha:** Alpine không kèm `eng` mà route mặc định `vie+eng+chi_sim` → phải thêm `eng`. Đã verify OCR ảnh tiếng Việt chuẩn. Handoff: `backlog/docker-stack-tesseract.md`.
@@ -50,7 +59,7 @@
 - [agent-ops-rules](decisions/agent-ops-rules.md) — ⛔ **KHÔNG tự ý chạy ngầm service nào** (dev/start/docker/ollama/preview) nếu user chưa cho phép; user tự host dev. Không `build` in-place khi prod đang chạy.
 
 ## Services
-- [v2-app](services/v2-app.md) — Trạng thái app (root): routes, schema, phase status (P1-3 ✅, P4 Chat built chờ test), lib chính, việc chưa làm.
+- [v2-app](services/v2-app.md) — Trạng thái app (root): routes, schema, lib chính. (Refresh 06-16: P1–P4 ✅ live + Workflows / Connectors-OAuth / Security-RBAC / Notifications / Custom-Agents; xem Trạng thái hiện tại ở đầu file.)
 
 ## Spec
 - `docs/v2-plan.md` — kế hoạch/spec v2 đầy đủ (Phase 0→6).
@@ -89,7 +98,7 @@
 - **R2 post-release MERGE `fa69046`** (+ collector-fix `a0f99c4`): perf scan-cache+SSE shared-snapshot · ingest 5MB stream-cap + collector retry · chat **vision** (ảnh→qwen3-vl) · workflow **cancel/picker/toast** · **/search** + `/api/config` (LAAM_STUCK_MIN) + lọc Agents theo máy · UI residual contrast. 8 review-finding xử lý hết. **1470 test + tsc sạch verify trên main.**
 - ⚠️ Còn lại: chưa push origin (chờ user) · Funnel :3900 vẫn public (đã an toàn nhờ register-gate) · OAuth Google cần operator setup (checklist trong DEPLOYMENT.md) · worktree `workflow-high-blast-mechanism` (PR#8 cũ) prunable.
 
-## Trạng thái hiện tại (2026-06-03)
+## Trạng thái (ảnh chụp lịch sử) — 2026-06-03
 - v2: P1 auth/RBAC ✅ · P2 monitoring ✅ · P3 collector đa máy (đơn giản) ✅ · P4 Chat Gemma 4 đã build, **chờ test runtime**. Verified live P1+P2+P3.
 - App cũ (vanilla, Docker :4317) vẫn chạy; Phase 0 fixes (gemma4 default + toolbar) chưa deploy.
 - DB dùng **migration**; user đã làm baseline sạch (→ `user` rỗng; phải đăng ký lại để dùng v2).
