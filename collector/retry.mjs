@@ -8,17 +8,27 @@ export const RETRY_BACKOFF_MS = 2000;
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Backoff có jitter: base + tới +100% ngẫu nhiên. Tối thiểu vẫn = base (không bao giờ retry
+ * nhanh hơn), nhưng nhiều collector cùng fail một lúc sẽ KHÔNG retry đồng loạt (chống
+ * thundering-herd / tự tái tạo spike). `random` inject được cho test.
+ */
+export function jitteredBackoff(baseMs, random = Math.random) {
+  return baseMs + Math.floor(random() * baseMs);
+}
+
+/**
  * Chạy `push` với tối đa 1 retry sau backoff. KHÔNG bao giờ throw — trả về
  * true (thành công) / false (cả hai lần đều fail) để vòng setInterval không
  * chết vì một lần mạng/server lỗi. `sleep`/`log` inject được cho test.
  */
-export async function pushWithRetry(push, { backoffMs = RETRY_BACKOFF_MS, sleep: wait = sleep, log = console.error } = {}) {
+export async function pushWithRetry(push, { backoffMs = RETRY_BACKOFF_MS, sleep: wait = sleep, log = console.error, random = Math.random } = {}) {
   try {
     await push();
     return true;
   } catch (err) {
-    log(`[${new Date().toISOString()}] ✗ Push lỗi (${err?.message ?? err}) — retry sau ${backoffMs / 1000}s…`);
-    await wait(backoffMs);
+    const delay = jitteredBackoff(backoffMs, random);
+    log(`[${new Date().toISOString()}] ✗ Push lỗi (${err?.message ?? err}) — retry sau ${Math.round(delay / 100) / 10}s…`);
+    await wait(delay);
   }
   try {
     await push();

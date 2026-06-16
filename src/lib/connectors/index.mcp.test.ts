@@ -41,4 +41,11 @@ describe("index — MCP wiring", () => {
     const r = await execute("u1", "mcp__slack__unknown", {});
     expect(r).toHaveProperty("error");
   });
+
+  test("bounds an oversized error message from an untrusted MCP server (cost/DoS guard)", async () => {
+    vi.mocked(mcpCallTool).mockRejectedValueOnce(new Error("X".repeat(5000)));
+    const r = (await execute("u1", "mcp__slack__search", {})) as { error: string };
+    expect(r.error.length).toBeLessThanOrEqual(400); // bounded, not the raw 5000 chars
+    expect(r.error).toContain("mcp__slack__search"); // still says which tool failed
+  });
 });

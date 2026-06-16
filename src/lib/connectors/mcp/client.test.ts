@@ -113,6 +113,16 @@ describe("mcp client", () => {
     expect(h.close).toHaveBeenCalledTimes(1);
   });
 
+  test("caps an absurd tool count from an untrusted server (DoS) and warns", async () => {
+    const many = Array.from({ length: 250 }, (_, i) => ({ name: `t${i}`, inputSchema: {} }));
+    h.listTools.mockResolvedValue({ tools: many });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const tools = await listTools(cfg);
+    expect(tools).toHaveLength(200); // capped, not 250 — no silent unbounded ingestion
+    expect(warn).toHaveBeenCalled(); // truncation surfaced, not silent (Rule 12)
+    warn.mockRestore();
+  });
+
   test("SSRF guard is wired into connect: a blocked URL never opens a transport", async () => {
     // The connect-time DNS check runs BEFORE any transport is constructed. If it throws
     // (e.g. host resolves to a private IP), no StreamableHTTP/SSE transport is created and

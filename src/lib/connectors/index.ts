@@ -359,7 +359,11 @@ async function executeMcp(userId: string, toolName: string, args: unknown): Prom
   try {
     return await mcpCallTool(cfg, r.realName, (a as Record<string, unknown>) ?? {});
   } catch (e) {
-    return { error: "lỗi gọi MCP " + toolName + ": " + (e instanceof Error ? e.message : String(e)) };
+    // Bound the error fed back to the model: an untrusted MCP server's error string is
+    // attacker-controlled and unbounded (cost/context-bloat). The host is user-configured and
+    // the auth token rides a header (never the URL), so length is the residual concern.
+    const raw = e instanceof Error ? e.message : String(e);
+    return { error: "lỗi gọi MCP " + toolName + ": " + raw.slice(0, 300) };
   }
 }
 
