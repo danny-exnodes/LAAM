@@ -3,7 +3,7 @@ import { and, count, eq, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { db } from "@/db";
-import { users, accessTokens, machines, auditLog, roleEnum } from "@/db/schema";
+import { users, accessTokens, machines, auditLog, workflowSchedules, roleEnum } from "@/db/schema";
 import { requireRole } from "@/lib/auth/rbac";
 
 // PATCH /api/users/:id — user-management mutations. Two disjoint operations:
@@ -107,6 +107,13 @@ export async function PATCH(
         .update(machines)
         .set({ tokenHash: null })
         .where(eq(machines.ownerUserId, id));
+      // Off-boarding: disable their workflow schedules so cron automation stops
+      // firing with their (still-encrypted) connector creds. Not auto-restored on
+      // re-enable — the user re-enables manually (mirrors token revocation).
+      await tx
+        .update(workflowSchedules)
+        .set({ enabled: false, updatedAt: now })
+        .where(eq(workflowSchedules.userId, id));
       await tx.insert(auditLog).values({
         userId: actorId,
         action: "user_disabled",

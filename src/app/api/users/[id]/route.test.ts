@@ -10,6 +10,7 @@ vi.mock("@/db/schema", () => ({
   users: { __t: "user", id: "user.id", role: "user.role" },
   accessTokens: { __t: "access_token", userId: "at.userId" },
   machines: { __t: "machine", ownerUserId: "m.ownerUserId" },
+  workflowSchedules: { __t: "workflow_schedule", userId: "ws.userId" },
   auditLog: { __t: "audit_log" },
   roleEnum: { enumValues: ["owner", "admin", "member", "viewer"] },
 }));
@@ -66,7 +67,7 @@ vi.mock("drizzle-orm", () => ({
 }));
 
 import { PATCH } from "./route";
-import { users as usersTable, accessTokens as atTable, machines as mTable } from "@/db/schema";
+import { users as usersTable, accessTokens as atTable, machines as mTable, workflowSchedules as schedTable } from "@/db/schema";
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const body = (b: unknown) =>
@@ -156,6 +157,19 @@ describe("PATCH /api/users/[id] — disabled toggle (owner/admin)", () => {
     mockAuth.mockResolvedValue({ user: { id: "u1", role: "viewer" } } as never);
     const res = await PATCH(body({ disabled: true }), params("u2"));
     expect(res.status).toBe(403);
+  });
+
+  // Off-boarding: disabling a user must also disable their workflow schedules, else
+  // their cron automation keeps firing with their (still-live) connector creds.
+  test("disabling a user disables their workflow schedules", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "u1", role: "owner" } } as never);
+    targetRow = { id: "u2", role: "member", disabledAt: null };
+    const res = await PATCH(body({ disabled: true }), params("u2"));
+    expect(res.status).toBe(200);
+    const schedDisable = txUpdates.find(
+      (u) => u.table === schedTable && (u.patch as { enabled?: boolean }).enabled === false,
+    );
+    expect(schedDisable, "disable tx must set workflow_schedule.enabled=false for the user").toBeTruthy();
   });
 
   test("member → 403", async () => {
