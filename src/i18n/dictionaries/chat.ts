@@ -250,6 +250,7 @@ export const chat: Dict = {
   // Optgroup labels in the model <select>
   'chat.grpLocal': { vi: 'Local (Ollama) — $0', en: 'Local (Ollama) — $0', zh: '本地（Ollama）— $0' },
   'chat.grpClaude': { vi: 'Claude API — tính phí', en: 'Claude API — billed', zh: 'Claude API — 按用量计费' },
+  'chat.grpByteplus': { vi: 'BytePlus API — tính phí', en: 'BytePlus API — billed', zh: 'BytePlus API — 按用量计费' },
   // Inline note shown near the composer when a Claude model is selected.
   // Clarifies: API key = org cost, NOT the user's personal Claude subscription.
   'chat.claudeNote': {

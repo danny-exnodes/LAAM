@@ -1,6 +1,7 @@
-// L0 — vòng tool-call (bounded, non-streaming). Chuyển từ /api/chat, đổi
+// L0 — vòng tool-call (run-until-done, non-streaming). Chuyển từ /api/chat, đổi
 // execute→dispatch. onEvent phát ở makeDispatch (chokepoint), không lặp ở đây.
 import type { ConnectorTool } from "@/lib/connectors/types";
+import { evictOldToolResults } from "./loop-context";
 
 // W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
 // Ollama multimodal. Optional/additive: vắng mặt ⇒ wire-format y như cũ.
@@ -52,26 +53,83 @@ export async function seedRequestedTool(
   convo.push({ role: "tool", content: JSON.stringify(result) });
 }
 
+// Runaway BACKSTOP on tool rounds — NOT a task-shaping cap. The loop's real exit is
+// natural completion (model returns no tool calls). 25 matches LangGraph's
+// recursion_limit default: high enough that legitimate multi-step tasks ("summarize 10
+// emails then send") finish on their own, low enough to halt a runaway. The route can
+// override via CHAT_MAX_ROUNDS; clamped so it can't be set absurdly high.
+export const DEFAULT_MAX_ROUNDS = 25;
+const MAX_ROUNDS_CEILING = 50; // hard safety ceiling — env CHAT_MAX_ROUNDS can raise the default up to here
+const REPEAT_THRESHOLD = 3; // same tool+args this many times → stuck → stop, answer with what we have
+// Default in-loop eviction budget — sized for the local 16k model (≈ route's
+// REPLAY_BUDGET_CHARS). The route passes a much larger budget for big-context providers.
+const DEFAULT_TOOL_BUDGET_CHARS = 37_000;
+
+export type ToolRoundsOpts = {
+  maxRounds?: number;
+  budgetChars?: number; // evict oldest tool results when the convo exceeds this
+  keepRecent?: number; // tool results kept verbatim during eviction (default 3)
+  onBackstop?: () => void; // fired when the loop is FORCE-terminated (backstop / repeat), not on natural completion
+};
+
+// Stable key for repeat-detection: tool name + normalized args (object OR JSON string).
+// Keyed on tool+args (never tool alone) so reading 10 different emails — 10 distinct
+// args — never trips the guard; only the SAME call repeated does.
+function stableArgs(args: unknown): string {
+  if (typeof args === "string") return args;
+  try {
+    return JSON.stringify(args ?? {});
+  } catch {
+    return "{}";
+  }
+}
+
+const repeatFeedback = (name: string, n: number) =>
+  `Bạn đã gọi "${name}" với cùng tham số ${n} lần — kết quả sẽ không đổi. Hãy đổi cách tiếp cận hoặc trả lời với dữ liệu hiện có.`;
+
+// Run the agentic tool-loop until the model NATURALLY stops calling tools (the primary
+// exit) — so multi-step tasks actually finish — bounded only by real safety limits: a
+// high round backstop, in-loop context eviction (long runs don't overflow the model),
+// and repeat-call detection. A write tool still throws PendingWriteSignal out of here
+// (uncaught) → the route suspends for confirmation. onBackstop fires only when the loop
+// is force-ended (backstop round or a stuck repeat), so the caller can flag the answer
+// as possibly-incomplete (fail loud).
 export async function runToolRounds(
   messages: ChatMessage[],
   tools: ConnectorTool[],
   deps: ToolRoundsDeps,
-  maxRounds = 4,
+  opts: ToolRoundsOpts = {},
 ): Promise<ChatMessage[]> {
-  const convo: ChatMessage[] = messages.slice();
+  const maxRounds = Math.max(1, Math.min(opts.maxRounds ?? DEFAULT_MAX_ROUNDS, MAX_ROUNDS_CEILING));
+  const budgetChars = opts.budgetChars ?? DEFAULT_TOOL_BUDGET_CHARS;
+  const keepRecent = opts.keepRecent ?? 3;
+  let convo: ChatMessage[] = messages.slice();
   let webReadNudged = convoHasWebRead(convo);
+  const seen = new Map<string, number>(); // repeat-detection: tool+args → count
+
   for (let i = 0; i < maxRounds; i++) {
-    const allowTools = i < maxRounds - 1; // vòng cuối phải ra text
-    const res = await deps.callOllama(convo, allowTools ? tools : []);
+    const isLastRound = i === maxRounds - 1; // ONLY the backstop forces a text answer
+    const res = await deps.callOllama(convo, isLastRound ? [] : tools);
     const msg = res?.message ?? {};
-    const calls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
-    if (allowTools && calls.length) {
+    const calls = isLastRound ? [] : Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    if (calls.length) {
       convo.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });
       let sawWebSearchWithUrl = false;
+      let stuck = false;
       for (const tc of calls) {
         const name = tc.function?.name ?? "";
+        const args = tc.function?.arguments;
+        const count = (seen.get(name + "|" + stableArgs(args)) ?? 0) + 1;
+        seen.set(name + "|" + stableArgs(args), count);
+        if (count >= REPEAT_THRESHOLD) {
+          // Stuck on the same call — don't re-dispatch (result won't change); tell the
+          // model, then end the loop gracefully so it answers with what it has.
+          convo.push({ role: "tool", content: repeatFeedback(name, count) });
+          stuck = true;
+          continue;
+        }
         if (name === "web_read") webReadNudged = true; // đã đọc rồi → khỏi nhắc
-        const result = await deps.dispatch(name, tc.function?.arguments);
+        const result = await deps.dispatch(name, args);
         convo.push({ role: "tool", content: JSON.stringify(result) });
         if (name === "web_search" && searchResultHasUrl(result)) sawWebSearchWithUrl = true;
       }
@@ -79,8 +137,16 @@ export async function runToolRounds(
         convo.push({ role: "tool", content: WEB_READ_NUDGE });
         webReadNudged = true; // chỉ chèn 1 lần/lượt
       }
+      // Context mgmt: evict oldest raw tool bytes when the convo nears the model window
+      // (provider-aware via budgetChars) so a long run never silently truncates.
+      convo = evictOldToolResults(convo, { budgetChars, keepRecent }).convo;
+      if (stuck) {
+        opts.onBackstop?.();
+        break;
+      }
       continue;
     }
+    if (isLastRound) opts.onBackstop?.(); // reached the backstop round → forced text → honest signal
     break;
   }
   return convo;

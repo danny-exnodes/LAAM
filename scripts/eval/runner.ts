@@ -26,7 +26,8 @@ async function runOnce(s: Scenario, deps: RunnerDeps): Promise<RunTrace> {
   });
   const messages: ChatMessage[] = [{ role: "system", content: system }, { role: "user", content: s.input }];
   try {
-    const convo = await runToolRounds(messages, tools, { callOllama: deps.callOllama, dispatch }, deps.maxRounds ?? 4);
+    // maxRounds now via opts; per-scenario override (e.g. loopGuard) preserved, default = prod backstop.
+    const convo = await runToolRounds(messages, tools, { callOllama: deps.callOllama, dispatch }, { maxRounds: deps.maxRounds });
     const rounds = convo.filter((m) => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length).length;
     const finalRes = await deps.callOllama(convo, []); // call bù: lấy câu trả lời cuối
     const finalText = finalRes?.message?.content ?? "";

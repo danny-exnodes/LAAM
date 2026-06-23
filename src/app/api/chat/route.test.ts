@@ -776,3 +776,98 @@ describe("R4 — confirmed write persists chat_tool_call", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// BytePlus provider — FULL agent (user's choice). Unlike Claude's no-tool MVS,
+// a BytePlus model runs the SAME gated tool-loop as Ollama, then streams the final
+// completion. Uses the REAL adapter (src/lib/llm/byteplus) over a mocked fetch so the
+// OpenAI-compat wire is exercised end-to-end.
+// ---------------------------------------------------------------------------
+describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
+  const BP_MODEL = "gpt-oss-120b";
+
+  // CONTRACT (differentiator vs Claude): a BytePlus model MUST enter runToolRounds
+  // (full agent), then stream. byteplusChat for the round (no tool_calls → loop ends),
+  // byteplusStream for the completion; usage → a {t:"tokens"} frame.
+  test("runs the tool-loop (runToolRounds called) then streams; token frame from usage", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "bp-key");
+    orch.runToolRounds.mockClear();
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    _db = fakeChainDb({ values: [] });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sse =
+      'data: {"choices":[{"delta":{"content":"chào"}}]}\n\n' +
+      'data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":3}}\n\n' +
+      "data: [DONE]\n\n";
+    const fetchMock = vi
+      .fn()
+      // round 1: OpenAI non-stream, NO tool_calls → tool-loop ends after one round
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
+      // final completion: OpenAI SSE
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => {
+            let sent = false;
+            return { read: async () => (sent ? { done: true as const, value: undefined } : ((sent = true), { done: false as const, value: new TextEncoder().encode(sse) })) };
+          },
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: BP_MODEL }),
+        }),
+      );
+      expect(res.headers.get("x-conversation-id")).toBeTruthy();
+      const text = await res.text();
+      expect(orch.runToolRounds).toHaveBeenCalledTimes(1); // full agent (Claude would be 0)
+      expect(fetchMock.mock.calls[0][0]).toContain("/chat/completions"); // BytePlus, not Ollama
+      expect(text).toContain("chào"); // streamed delta reached the user
+      expect(text).toContain('"t":"tokens"'); // usage → token frame
+      expect(fetchMock).toHaveBeenCalledTimes(2); // round + completion, no Ollama
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  // Fail loud (Rule 12): a BytePlus model with NO server key → adapter throws 'auth'
+  // BEFORE any network; the route surfaces a tri-lingual coded notice + persists it,
+  // never a silent Ollama fallback.
+  test("no BYTEPLUS_API_KEY → coded notice (persisted), no fetch, no Ollama fallback", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: BP_MODEL }),
+        }),
+      );
+      const text = await res.text();
+      expect(text).toContain("Không gọi được BytePlus API");
+      expect(text).toContain("auth");
+      expect(fetchMock).not.toHaveBeenCalled();
+      const assistantRows = captured.values.filter((v) => (v as { role?: string }).role === "assistant") as { content?: string }[];
+      expect(assistantRows.some((v) => String(v.content).includes("Không gọi được BytePlus API"))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+});

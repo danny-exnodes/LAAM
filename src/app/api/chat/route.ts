@@ -7,7 +7,7 @@ import { sanitizeAttachments } from "@/lib/chat/attachment-meta";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { getCustomAgent } from "@/lib/customAgents";
 import { INTERNAL_TOOLS, modelToolSchemas, makeDispatch } from "@/lib/agent/registry";
-import { runToolRounds, seedRequestedTool, type ChatMessage, type OllamaChatResponse, type RequestedTool } from "@/lib/agent/orchestrator";
+import { runToolRounds, seedRequestedTool, DEFAULT_MAX_ROUNDS, type ChatMessage, type OllamaChatResponse, type RequestedTool } from "@/lib/agent/orchestrator";
 import { checkRequestedTool } from "@/lib/agent/guardrails";
 import { withSafety, PendingWriteSignal } from "@/lib/agent/safety/gate";
 import { sealPendingWrite, openPendingWrite } from "@/lib/agent/safety/token";
@@ -17,6 +17,7 @@ import { recordWrite, isNonceUsed } from "@/lib/agent/safety/audit";
 import { resolveKind } from "@/lib/agent/safety/policy";
 import { looksLikeWriteIntent, guardWriteClaim } from "@/lib/agent/safety/write-claim-guard";
 import { claudeStream, isClaudeModel, ClaudeUnavailableError } from "@/lib/llm/claude";
+import { isBytePlusModel, byteplusChat, byteplusStream, BytePlusUnavailableError } from "@/lib/llm/byteplus";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
@@ -58,6 +59,16 @@ const CLAUDE_ERR: Record<"vi" | "en" | "zh", string> = {
 };
 const claudeErrText = (lang: string, code: string) =>
   (CLAUDE_ERR[lang as keyof typeof CLAUDE_ERR] ?? CLAUDE_ERR.vi).replace("{code}", code);
+// BytePlus (ModelArk OpenAI-compat, org key) — same coded-notice pattern as Claude.
+// Unlike Claude (MVS no-tool), BytePlus runs the FULL tool-loop; this notice covers a
+// connection/auth/rate-limit/overload failure on a round OR the final completion.
+const BYTEPLUS_ERR: Record<"vi" | "en" | "zh", string> = {
+  vi: "Không gọi được BytePlus API ({code}). Vui lòng thử lại hoặc chuyển về model local.",
+  en: "Could not reach the BytePlus API ({code}). Please retry or switch back to the local model.",
+  zh: "无法调用 BytePlus API（{code}）。请重试或切换回本地模型。",
+};
+const byteplusErrText = (lang: string, code: string) =>
+  (BYTEPLUS_ERR[lang as keyof typeof BYTEPLUS_ERR] ?? BYTEPLUS_ERR.vi).replace("{code}", code);
 // SP-4: tên internal tool — redact args theo set-membership (D-SP4-3) khi gom tool frames.
 const INTERNAL_NAMES = new Set(INTERNAL_TOOLS.map((t) => t.name));
 // Cửa sổ ngữ cảnh model phục vụ. Ollama mặc định num_ctx=4096 BẤT KỂ model hỗ trợ tới ~128k+ →
@@ -67,6 +78,21 @@ const NUM_CTX = Math.max(2048, Number(process.env.CHAT_NUM_CTX) || 16384);
 // Budget (chars) cho summary+replay history: chừa chỗ output + system + tool results TRONG num_ctx
 // (~3.5 char/token; reserve 3072 tok output + 2560 tok system/tools) ⇒ replay không nuốt cả cửa sổ.
 const REPLAY_BUDGET_CHARS = Math.max(8000, Math.floor((NUM_CTX - 3072 - 2560) * 3.5));
+// Run-until-done tool loop: the agent finishes on natural completion; CHAT_MAX_ROUNDS is
+// only a runaway backstop (default 25, orchestrator clamps to its hard ceiling).
+const CHAT_MAX_ROUNDS = Math.max(1, Number(process.env.CHAT_MAX_ROUNDS) || DEFAULT_MAX_ROUNDS);
+// In-loop tool-result eviction budget. Local Ollama shares the replay budget (16k window);
+// BytePlus has a large window so it evicts far later (≈115k tokens, mirrors Anthropic's
+// 100k clear trigger) — env-tunable.
+const BYTEPLUS_TOOL_BUDGET_CHARS = Math.max(REPLAY_BUDGET_CHARS, Number(process.env.BYTEPLUS_TOOL_BUDGET_CHARS) || 400_000);
+// Honest "stopped early" notice (Rule 12) appended when the loop is force-terminated by
+// the backstop or a stuck repeat — never silently truncate.
+const LOOP_TRUNCATED: Record<"vi" | "en" | "zh", string> = {
+  vi: "\n\n_(Đã dừng sau nhiều bước công cụ — kết quả có thể chưa đầy đủ.)_",
+  en: "\n\n_(Stopped after many tool steps — the result may be incomplete.)_",
+  zh: "\n\n_(在多次工具调用后停止——结果可能不完整。)_",
+};
+const loopTruncatedText = (lang: string) => LOOP_TRUNCATED[lang as keyof typeof LOOP_TRUNCATED] ?? LOOP_TRUNCATED.vi;
 // Sampler (góp ý team): Qwen3-Q8 hay lặp từ khi để mặc định cao → presence_penalty 0.0–0.3 giảm
 // lặp + ổn định JSON/code. Env CHAT_PRESENCE_PENALTY (default 0.2). Áp server-side để có hiệu lực
 // NGAY (kể cả FE chưa gửi); `body.presencePenalty` override nếu có. (temperature default 0.6 ở DEFAULT_SETTINGS.)
@@ -536,6 +562,145 @@ function streamMainTurn(opts: {
         });
         return;
       }
+      // --- BytePlus provider (ModelArk, OpenAI-compat, org key) — FULL agent. Unlike
+      // Claude's no-tool MVS, BytePlus runs the SAME gated tool-loop as Ollama
+      // (runToolRounds + withSafety + write-gate), differing only in transport:
+      // byteplusChat per round, byteplusStream for the final completion. Final-stream
+      // error handling mirrors the Claude branch (byteplusStream THROWS typed errors,
+      // unlike ollamaStream). Summarize/proactive already ran on the local model above.
+      if (isBytePlusModel(payload.model)) {
+        let c = -1;
+        const onEvent = (e: { type: "tool_call"; name: string; args: unknown } | { type: "tool_result"; name: string; ok: boolean }) => {
+          if (e.type === "tool_call") {
+            c++;
+            emit({ t: "tool", phase: "call", c, name: e.name, args: summarizeArgs(e.args, INTERNAL_NAMES.has(e.name)) });
+          } else {
+            emit({ t: "tool", phase: "result", c, name: e.name, ok: e.ok });
+          }
+        };
+        const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
+          internal: INTERNAL_TOOLS,
+          readAllow,
+        });
+        // Tool round transport: BytePlus /chat/completions (non-stream) → OllamaChatResponse.
+        const callByteplus = (messages: ChatMessage[], roundTools: typeof tools): Promise<OllamaChatResponse> =>
+          byteplusChat({ model: payload.model, messages, tools: roundTools, options: payload.options, signal: reqSignal });
+
+        let convo: ChatMessage[] = payload.messages;
+        let toolTurns: ReturnType<typeof extractToolTurns> = [];
+        let cites: string[] = [];
+        let hitBackstop = false;
+        try {
+          if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
+          convo = await runToolRounds(payload.messages, tools, { callOllama: callByteplus, dispatch }, {
+            maxRounds: CHAT_MAX_ROUNDS,
+            budgetChars: BYTEPLUS_TOOL_BUDGET_CHARS,
+            onBackstop: () => { hitBackstop = true; },
+          });
+          toolTurns = extractToolTurns(convo, baseLen);
+          cites = deriveCitations(convo, baseLen);
+        } catch (e) {
+          if (e instanceof PendingWriteSignal) {
+            await emitPendingWriteSuspend(controller, enc, emit, e, { convId, userId, now, model: payload.model });
+            return;
+          }
+          // Real failure mid tool-loop (BytePlus unreachable at round ≥ 1). Fail loud:
+          // coded notice + persist + close (pattern of the Ollama tool-loop catch).
+          const code = e instanceof BytePlusUnavailableError ? e.code : "api";
+          console.error(`[chat] byteplus tool-loop failed (conv=${convId}, code=${code})`, e);
+          const errText = byteplusErrText(lang, code);
+          try {
+            controller.enqueue(enc.encode(errText));
+          } catch {
+            /* aborted */
+          }
+          try {
+            await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: errText });
+            await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+          } catch (err) {
+            console.error("[chat] byteplus tool-loop error persist failed (fail-soft)", err);
+          }
+          controller.close();
+          return;
+        }
+
+        // F1 (Rule 13): a write never executes in the main turn — it suspends above.
+        const guardWrites = looksLikeWriteIntent(userText);
+        const writeBacked = toolTurns.some(
+          (tt) => tt.ok && resolveKind(tt.name, INTERNAL_TOOLS, readAllow) === "write",
+        );
+
+        const assistantMsgId = crypto.randomUUID();
+        let full = "";
+        let tokensIn = 0;
+        let tokensOut = 0;
+        let gotUsage = false; // billed provider: omit token frame if usage never arrived (no fake $0)
+        try {
+          for await (const ev of byteplusStream({ model: payload.model, messages: convo, options: payload.options, signal: reqSignal })) {
+            if (ev.delta) {
+              full += ev.delta;
+              if (!guardWrites) {
+                try {
+                  controller.enqueue(enc.encode(ev.delta));
+                } catch {
+                  /* client aborted */
+                }
+              }
+            }
+            if (ev.usage) {
+              gotUsage = true;
+              tokensIn = ev.usage.in;
+              tokensOut = ev.usage.out;
+            }
+          }
+        } catch (e) {
+          // Final completion dropped. Before first delta → fail loud (notice + persist
+          // + close). After some delta / user abort → log + finalize with what we have.
+          if (!full && !reqSignal?.aborted) {
+            const code = e instanceof BytePlusUnavailableError ? e.code : "api";
+            console.error(`[chat] byteplus stream failed before first delta (conv=${convId}, code=${code})`, e);
+            const errText = byteplusErrText(lang, code);
+            try {
+              controller.enqueue(enc.encode(errText));
+            } catch {
+              /* aborted */
+            }
+            try {
+              await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: errText });
+              await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
+            } catch (err) {
+              console.error("[chat] byteplus notice persist failed (fail-soft)", err);
+            }
+            controller.close();
+            return;
+          }
+          console.error(`[chat] byteplus stream failed (conv=${convId})`, e);
+        }
+        if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
+        // Backstop/repeat force-terminated the loop → append an honest notice (Rule 12).
+        // Add to `full` so it persists + (guard turns) re-emits via finalizeTurn; enqueue
+        // live for non-guard turns (those already streamed and won't re-emit).
+        if (hitBackstop && full) {
+          const note = loopTruncatedText(lang);
+          full += note;
+          if (!guardWrites) {
+            try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ }
+          }
+        }
+        await finalizeTurn(controller, enc, convId, {
+          full,
+          tokensIn,
+          tokensOut,
+          emitTokens: gotUsage,
+          guard: guardWrites ? { writeBacked, lang } : undefined,
+          persist: { assistantMsgId, toolTurns },
+          leadingFrames: [
+            ...(cites.length ? [{ t: "cite", names: cites } as ChatFrame] : []),
+            ...(proactive.length ? [proactiveFrame(proactive)] : []),
+          ],
+        });
+        return;
+      }
       // LIVE tool frames: assign the call→result counter `c` + redact args, then
       // enqueue immediately (was collected and flushed only at the end).
       let c = -1;
@@ -573,48 +738,23 @@ function streamMainTurn(opts: {
       let convo: ChatMessage[] = payload.messages;
       let toolTurns: ReturnType<typeof extractToolTurns> = [];
       let cites: string[] = [];
+      let hitBackstop = false;
       try {
         // P1 quick-tools: tool user đã chọn → CODE gọi trước (qua đúng dispatch withSafety
         // → tool frame tự emit, write vẫn suspend PendingWriteSignal vào catch dưới).
         if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
-        convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch });
+        convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch }, {
+          maxRounds: CHAT_MAX_ROUNDS,
+          budgetChars: REPLAY_BUDGET_CHARS,
+          onBackstop: () => { hitBackstop = true; },
+        });
         toolTurns = extractToolTurns(convo, baseLen);
         cites = deriveCitations(convo, baseLen);
       } catch (e) {
         if (e instanceof PendingWriteSignal) {
-          // SP-2 suspend (inline): code-built preview + sealed token + pending_write
-          // frame; the read tool frames already went out live. Persist the proposal.
-          const preview = buildPreview(e.tool, e.args);
-          const token = sealPendingWrite({
-            v: 1,
-            name: e.tool,
-            args: e.args,
-            conversationId: convId,
-            userId,
-            iat: now,
-            exp: now + PENDING_TTL_MS,
-            nonce: crypto.randomUUID(),
-            model: payload.model, // C1: confirm narrate bằng đúng model của lượt gốc
-          });
-          try {
-            controller.enqueue(enc.encode(preview.summary));
-          } catch {
-            /* aborted */
-          }
-          emit({ t: "pending_write", token, tool: e.tool, title: preview.title, summary: preview.summary, fields: preview.fields });
-          // F2: surface the pending write in the bell too. Fire-and-forget — the
-          // in-chat confirm card (the pending_write frame above) is the primary
-          // signal and the single source; a notify failure must NOT break the turn.
-          void notifyWritePending({ userId, conversationId: convId, tool: e.tool, title: preview.title }).catch((err) =>
-            console.error("[chat] write-pending notify failed (fail-soft)", err),
-          );
-          try {
-            await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: preview.summary });
-            await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
-          } catch (err) {
-            console.error("[chat] suspend persist failed (fail-soft)", err);
-          }
-          controller.close();
+          // SP-2 suspend (shared helper): code-built preview + sealed token +
+          // pending_write frame; the read tool frames already went out live.
+          await emitPendingWriteSuspend(controller, enc, emit, e, { convId, userId, now, model: payload.model });
           return;
         }
         // Lỗi THẬT giữa tool-loop (Ollama rớt / HTTP lỗi ở round ≥ 1). Fail-soft cũ
@@ -700,6 +840,15 @@ function streamMainTurn(opts: {
         // Abort observability: client hủy request giữa stream → 1 dòng warn có convId
         // (đọc log phân biệt "user bấm Stop" với lỗi server).
         if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
+        // Backstop/repeat force-terminated the loop → honest "stopped early" notice (Rule
+        // 12): append to `full` (persist + guard re-emit), enqueue live for non-guard turns.
+        if (hitBackstop && full) {
+          const note = loopTruncatedText(lang);
+          full += note;
+          if (!guardWrites) {
+            try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ }
+          }
+        }
         // F1 vet (writeBacked from real tool turns) → persist → trailing frames
         // (tool frames already live: citations → proactive → tokens) → tool turns.
         await finalizeTurn(controller, enc, convId, {
@@ -724,6 +873,53 @@ function streamMainTurn(opts: {
       "cache-control": "no-cache",
     },
   });
+}
+
+// SP-2 write-gate suspend, shared by every tool-loop provider (Ollama + BytePlus).
+// A write tool throws PendingWriteSignal instead of executing; this builds the code-
+// derived preview, seals a confirm token (carrying the ORIGINAL model so confirm
+// narrates with it), emits the pending_write frame, mirrors it to the bell, persists
+// the proposal, and closes. Extracted to ONE place so the security-critical confirm
+// contract cannot drift between providers (AGENTS.md Rule 7). The read tool frames
+// have already streamed live by the time this runs.
+async function emitPendingWriteSuspend(
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  enc: TextEncoder,
+  emit: (f: ChatFrame) => void,
+  e: PendingWriteSignal,
+  ctx: { convId: string; userId: string; now: number; model: string },
+): Promise<void> {
+  const preview = buildPreview(e.tool, e.args);
+  const token = sealPendingWrite({
+    v: 1,
+    name: e.tool,
+    args: e.args,
+    conversationId: ctx.convId,
+    userId: ctx.userId,
+    iat: ctx.now,
+    exp: ctx.now + PENDING_TTL_MS,
+    nonce: crypto.randomUUID(),
+    model: ctx.model, // C1: confirm narrate bằng đúng model của lượt gốc
+  });
+  try {
+    controller.enqueue(enc.encode(preview.summary));
+  } catch {
+    /* aborted */
+  }
+  emit({ t: "pending_write", token, tool: e.tool, title: preview.title, summary: preview.summary, fields: preview.fields });
+  // F2: surface the pending write in the bell too. Fire-and-forget — the in-chat
+  // confirm card (the pending_write frame above) is the primary signal and the single
+  // source; a notify failure must NOT break the turn.
+  void notifyWritePending({ userId: ctx.userId, conversationId: ctx.convId, tool: e.tool, title: preview.title }).catch((err) =>
+    console.error("[chat] write-pending notify failed (fail-soft)", err),
+  );
+  try {
+    await db.insert(chatMessages).values({ conversationId: ctx.convId, role: "assistant", content: preview.summary });
+    await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, ctx.convId));
+  } catch (err) {
+    console.error("[chat] suspend persist failed (fail-soft)", err);
+  }
+  controller.close();
 }
 
 // Shared completion finalizer for every /api/chat stream path (main Ollama, main
@@ -967,6 +1163,9 @@ async function handleConfirm(
   if (isClaudeModel(confirmModel)) {
     return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
   }
+  if (isBytePlusModel(confirmModel)) {
+    return streamByteplusCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
+  }
   let ollamaRes: Response;
   try {
     ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
@@ -1049,6 +1248,77 @@ function streamClaudeCompletion(
       }
       // MINOR 4: emitTokens=gotUsage → OMIT token frame/persist when usage never came;
       // the confirmed write's tool frame (in `frames`) still goes out (action happened).
+      await finalizeTurn(controller, enc, convId, {
+        full,
+        tokensIn,
+        tokensOut,
+        emitTokens: gotUsage,
+        persist,
+        leadingFrames: frames,
+      });
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "x-conversation-id": convId,
+      "cache-control": "no-cache",
+    },
+  });
+}
+
+// Confirm-resume completed by BytePlus: stream text-only narration of the executed
+// write via the adapter (resume messages contain role:"tool" → toOpenAI maps it to
+// user for narration), persist assistant + trailing frames (the confirmed write's tool
+// frame + {t:"tokens"}). The write ALREADY ran before reaching here → a pre-delta
+// failure loses only the narration, not the action (persist a "done, no narration"
+// notice). Mirrors streamClaudeCompletion.
+function streamByteplusCompletion(
+  convId: string,
+  model: string,
+  messages: ChatMessage[],
+  frames: ChatFrame[],
+  lang: string,
+  signal?: AbortSignal,
+  persist?: { assistantMsgId: string; toolTurns: ToolTurnRow[] },
+): Response {
+  const enc = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      let full = "";
+      let tokensIn = 0;
+      let tokensOut = 0;
+      let gotUsage = false;
+      try {
+        for await (const ev of byteplusStream({ model, messages, signal })) {
+          if (ev.delta) {
+            full += ev.delta;
+            try {
+              controller.enqueue(enc.encode(ev.delta));
+            } catch {
+              /* client aborted */
+            }
+          }
+          if (ev.usage) {
+            gotUsage = true;
+            tokensIn = ev.usage.in;
+            tokensOut = ev.usage.out;
+          }
+        }
+      } catch (e) {
+        if (!full) {
+          const code = e instanceof BytePlusUnavailableError ? e.code : "api";
+          console.error(`[chat] byteplus resume failed before first delta (conv=${convId}, code=${code})`, e);
+          full = `Đã thực hiện hành động nhưng không tạo được phản hồi. ${byteplusErrText(lang, code)}`;
+          try {
+            controller.enqueue(enc.encode(full));
+          } catch {
+            /* aborted */
+          }
+        } else {
+          console.error(`[chat] byteplus resume stream failed (conv=${convId})`, e);
+        }
+      }
       await finalizeTurn(controller, enc, convId, {
         full,
         tokensIn,

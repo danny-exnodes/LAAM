@@ -45,4 +45,20 @@ describe("GET /api/chat/info", () => {
     const body = await (await GET()).json();
     expect(body.claudeModels).toEqual([]);
   });
+
+  // Same env-gated pattern for BytePlus: the picker only offers BytePlus models when
+  // the server holds a BYTEPLUS_API_KEY (read at request time, not import).
+  test("byteplusModels = whitelist khi có BYTEPLUS_API_KEY", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "bp-test");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.byteplusModels).toEqual(["gpt-oss-120b"]);
+  });
+
+  test("byteplusModels = [] khi không có BYTEPLUS_API_KEY", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.byteplusModels).toEqual([]);
+  });
 });

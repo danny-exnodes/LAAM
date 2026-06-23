@@ -18,6 +18,7 @@ export function SettingsPanel({
   settings,
   models,
   claudeModels = [],
+  byteplusModels = [],
   customAgents = [],
   onChange,
 }: {
@@ -25,6 +26,8 @@ export function SettingsPanel({
   models: string[];
   /** C2: Claude API model whitelist from /api/chat/info. Empty = no Claude optgroup. */
   claudeModels?: string[];
+  /** BytePlus model whitelist from /api/chat/info. Empty = no BytePlus optgroup. */
+  byteplusModels?: string[];
   /** P3 chat persona: user's saved custom agents (id+name). Empty = no persona select. */
   customAgents?: { id: string; name: string }[];
   onChange(next: ChatSettings): void;
@@ -38,11 +41,14 @@ export function SettingsPanel({
     Boolean,
   );
 
-  // C2: when claudeModels is non-empty, split the <select> into two optgroups.
-  // When empty, render the flat list exactly as before (tests pass unchanged).
-  const hasGroups = claudeModels.length > 0;
-  // Ollama list: exclude any Claude models that somehow appear in the Ollama list.
-  const ollamaList = hasGroups ? list.filter((m) => !claudeModels.includes(m)) : list;
+  // C2: when any cloud-provider whitelist is non-empty, split the <select> into
+  // optgroups. When all are empty, render the flat list exactly as before (tests
+  // pass unchanged). Each cloud optgroup renders only when it has entries.
+  const hasGroups = claudeModels.length > 0 || byteplusModels.length > 0;
+  // Ollama list: exclude any cloud models that somehow appear in the Ollama list.
+  const ollamaList = hasGroups
+    ? list.filter((m) => !claudeModels.includes(m) && !byteplusModels.includes(m))
+    : list;
 
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -67,11 +73,20 @@ export function SettingsPanel({
                   <option key={m} value={m}>{m}</option>
                 ))}
               </optgroup>
-              <optgroup label={t("chat.grpClaude")}>
-                {claudeModels.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </optgroup>
+              {claudeModels.length > 0 && (
+                <optgroup label={t("chat.grpClaude")}>
+                  {claudeModels.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </optgroup>
+              )}
+              {byteplusModels.length > 0 && (
+                <optgroup label={t("chat.grpByteplus")}>
+                  {byteplusModels.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </optgroup>
+              )}
             </>
           ) : (
             list.map((m) => (

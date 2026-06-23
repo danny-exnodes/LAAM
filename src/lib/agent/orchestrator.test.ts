@@ -167,17 +167,82 @@ describe("runToolRounds", () => {
     expect(nudges).toHaveLength(1);
   });
 
-  test("bounded — dừng sau maxRounds dù model cứ gọi tool", async () => {
-    const callOllama = vi.fn(async (_messages: unknown, _tools: unknown) => ({
-      message: { content: "", tool_calls: [{ function: { name: "github_list_repos", arguments: {} } }] },
+  // Run-until-done: the loop's PRIMARY exit is natural completion (model stops calling
+  // tools). The backstop is only a runaway guard; onBackstop must NOT fire on a normal
+  // multi-step finish — this is the whole point of the redesign.
+  test("natural completion → finishes on its own, onBackstop NOT fired", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "github_list_repos", arguments: { page: 1 } } }] } })
+      .mockResolvedValueOnce({ message: { content: "Done." } }); // model stops by itself
+    const dispatch = vi.fn(async () => ({ ok: true }));
+    const onBackstop = vi.fn();
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onBackstop });
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(onBackstop).not.toHaveBeenCalled();
+  });
+
+  // Multi-step task completes well past the OLD cap of 3: 6 distinct reads + finish, all
+  // dispatched, no premature cutoff. "Get 10 emails" no longer dies at round 3.
+  test("multi-step — 6 distinct tool calls all complete (was capped at 3)", async () => {
+    let n = 0;
+    const callOllama = vi.fn(async () =>
+      n < 6
+        ? { message: { content: "", tool_calls: [{ function: { name: "gmail_get_message", arguments: { id: `m${n++}` } } }] } }
+        : { message: { content: "Summarized all." } },
+    );
+    const dispatch = vi.fn(async () => ({ body: "email" }));
+    const onBackstop = vi.fn();
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onBackstop });
+    expect(dispatch).toHaveBeenCalledTimes(6); // all 6 distinct reads ran — not truncated
+    expect(onBackstop).not.toHaveBeenCalled(); // natural finish, not a backstop hit
+  });
+
+  // The backstop fires only on a genuine runaway (model keeps calling DIFFERENT tools
+  // forever). It force-disables tools on the final round and signals onBackstop.
+  test("backstop — runaway model (distinct args) stops at maxRounds, forces text, fires onBackstop", async () => {
+    let n = 0;
+    const callOllama = vi.fn(async (_m: unknown, _t: unknown) => ({
+      message: { content: "", tool_calls: [{ function: { name: "github_list_repos", arguments: { page: n++ } } }] },
     }));
     const dispatch = vi.fn(async () => ({ ok: true }));
-    const out = await runToolRounds(baseMessages, tools, { callOllama, dispatch }, 4);
-    expect(callOllama).toHaveBeenCalledTimes(4);
-    const lastCall = callOllama.mock.calls[callOllama.mock.calls.length - 1];
-    expect(lastCall[1]).toEqual([]);
-    expect(dispatch).toHaveBeenCalledTimes(3);
-    expect(out.slice(0, 2)).toEqual(baseMessages);
+    const onBackstop = vi.fn();
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { maxRounds: 5, onBackstop });
+    expect(callOllama).toHaveBeenCalledTimes(5);
+    expect(callOllama.mock.calls.at(-1)![1]).toEqual([]); // final round: tools disabled (forced text)
+    expect(dispatch).toHaveBeenCalledTimes(4); // rounds 0..3 dispatched; round 4 forced text
+    expect(onBackstop).toHaveBeenCalledTimes(1);
+  });
+
+  // Repeat-guard: the SAME tool+args 3× = stuck → stop dispatching it, tell the model,
+  // end gracefully (onBackstop). Catches the stuck-agent loop without a low round cap.
+  test("repeat-guard — same tool+args 3× → break, 3rd not dispatched, onBackstop fires", async () => {
+    const callOllama = vi.fn(async () => ({
+      message: { content: "", tool_calls: [{ function: { name: "github_list_repos", arguments: { q: "same" } } }] },
+    }));
+    const dispatch = vi.fn(async () => ({ ok: true }));
+    const onBackstop = vi.fn();
+    const out = await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onBackstop });
+    expect(dispatch).toHaveBeenCalledTimes(2); // 1st + 2nd dispatched; 3rd identical → skipped
+    expect(onBackstop).toHaveBeenCalledTimes(1);
+    expect(out.some((m) => m.role === "tool" && String(m.content).includes("cùng tham số"))).toBe(true);
+  });
+
+  // In-loop eviction fires on a tight budget so a long run doesn't overflow the model
+  // window: oldest tool results become stubs, the most recent are kept verbatim.
+  test("in-loop eviction — tight budget clears oldest tool results during a long run", async () => {
+    let n = 0;
+    const big = "Z".repeat(5000);
+    const callOllama = vi.fn(async () =>
+      n < 5
+        ? { message: { content: "", tool_calls: [{ function: { name: "gmail_get_message", arguments: { id: `m${n++}` } } }] } }
+        : { message: { content: "Done." } },
+    );
+    const dispatch = vi.fn(async () => big); // each result ~5000 chars
+    const out = await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { budgetChars: 8000, keepRecent: 2 });
+    const toolMsgs = out.filter((m) => m.role === "tool");
+    expect(toolMsgs.some((m) => String(m.content).includes("cleared to save context"))).toBe(true);
+    expect(toolMsgs.at(-1)!.content).toBe(JSON.stringify(big)); // most recent kept verbatim
   });
 });
 

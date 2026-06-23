@@ -70,6 +70,7 @@ export function ChatClient() {
   const [imgNotice, setImgNotice] = useState<string | null>(null); // W3 vision: cap ảnh raw → notice
   const [models, setModels] = useState<string[]>([]);
   const [claudeModels, setClaudeModels] = useState<string[]>([]); // C2: from /api/chat/info
+  const [byteplusModels, setByteplusModels] = useState<string[]>([]); // from /api/chat/info (env-gated)
   const [customAgents, setCustomAgents] = useState<{ id: string; name: string }[]>([]); // P3: persona presets
   const [ocrAvailable, setOcrAvailable] = useState(true); // F3/FEAT-4: degrade if tesseract missing
   const [toolGroups, setToolGroups] = useState<CatalogGroup[]>([]); // P1 quick-tools catalog
@@ -94,10 +95,12 @@ export function ChatClient() {
       .catch(() => {});
     fetch("/api/chat/info")
       .then((r) => r.json())
-      .then((d: { model?: string; claudeModels?: string[] }) => {
+      .then((d: { model?: string; claudeModels?: string[]; byteplusModels?: string[] }) => {
         if (d.model) setSettings((s) => ({ ...s, model: d.model! }));
         // C2: expose Claude model whitelist to the picker; empty array = no Claude key.
         if (Array.isArray(d.claudeModels)) setClaudeModels(d.claudeModels);
+        // BytePlus whitelist (same env-gated pattern); empty = no BytePlus key.
+        if (Array.isArray(d.byteplusModels)) setByteplusModels(d.byteplusModels);
       })
       .catch(() => {});
     // Probe OCR once so the composer can warn up front instead of failing an
@@ -857,7 +860,7 @@ export function ChatClient() {
 
         {settingsOpen && (
           <div className="anim-slide-down p-4">
-            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} customAgents={customAgents} onChange={setSettings} />
+            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} byteplusModels={byteplusModels} customAgents={customAgents} onChange={setSettings} />
           </div>
         )}
 
