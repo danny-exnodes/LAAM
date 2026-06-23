@@ -1,6 +1,7 @@
 # Serena Memory Index — LAAM
 
 > Đọc đầu mỗi phiên (Session Boot Protocol).
+> 🌐 **Ecosystem (global, cross-platform):** hợp đồng shared-memory + kế hoạch của LAAM nằm ở Serena **global** memory — đọc `global/ecosystem/shared-memory-contract` và `global/ecosystem/laam-plan` (Serena tự liệt kê global ở đầu phiên). Quản lý bởi orchestrator NewEcoSystem.
 
 ## Trạng thái hiện tại (2026-06-16) — NGUỒN CHÂN LÝ, đọc trước tiên
 - **Phiên bản: v2.4.1** (`package.json` + CHANGELOG) + **[Unreleased]**: quick-tools picker (chat), node MCP (workflow), **Custom Agents** (migration 0015), OAuth đa-provider (Slack / WhatsApp / Zalo OA), đồng bộ Node 24 LTS.
@@ -13,6 +14,7 @@
 
 ## Decisions
 - [ecosystem-hermes-allocation](decisions/ecosystem-hermes-allocation.md) — ⭐ ECOSYSTEM (AAAA/DAAB/LAAM): xây memory MỘT LẦN ở **DAAB**, LAAM **consume** qua `kg_recall` (read-only Qwen 8B); GIỮ quyết định KHÔNG skill-creation; skip subagent-shell. Nhận định CTO 2026-06-23.
+- [laam-name-expansion](decisions/laam-name-expansion.md) — 🏷️ TÊN LAAM (CTO 2026-06-23, "Docs only"): canonical = **"Life AI Assistant Monitoring"** (parent CLAUDE.md) → đã đổi `CLAUDE.md`+`README.md`; **GIỮ NGUYÊN** chuỗi UI (title/`brand.sub`/`hero.eyebrow` vi/en/zh = "Local AI Agent Monitoring") vì là copy mô tả đúng sản phẩm. ⚠️ ĐỪNG revert để "reconcile" docs↔UI.
 - [laam-daab-consumer-posture](decisions/laam-daab-consumer-posture.md) — 🔬 PRESSURE-TEST của memo ⭐ trên CODE LAAM (2026-06-23): verdict (a)CONFIRMED/(b)NEEDS-REVISION/(c)CONFIRMED/(d)CONFIRMED. **kg_recall** OK read-only nhưng read-only DELEGATED cho DAAB hint × trustReadHints(default false). **kg_search_sessions:** giữ index LOCAL + chỉ lộ POINTER (KHÔNG đẩy transcript body vào shared graph). Loop+BytePlus **đã MERGE main `feb279a`** (2080 test xanh, tsc sạch; run-until-done DEFAULT_MAX_ROUNDS=25 + eviction + provider thứ 3). Pivot tạm: chat→cloud BytePlus, **tắt hẳn local Qwen** → workflow agent-node vỡ + summarizer stale (cả hai PIN local, chờ guardrail); recall=best-effort fail-loud; **Phase 2 local-memory HOÃN**.
 - [v2-architecture](decisions/v2-architecture.md) — Định hướng v2: **local-first** (không SaaS), giám sát **đa máy**, Next.js 16 + Postgres + Auth.js v5 + RBAC + Drizzle, **Gemma 4** chủ đạo, Tailscale, <50 user.
 - [db-migrations](decisions/db-migrations.md) — Dùng **migration** (db:generate→commit→db:migrate), KHÔNG db:push; drizzle-kit không chạy trong sandbox agent.

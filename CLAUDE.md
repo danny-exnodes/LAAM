@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) and other AI agents 
 
 ## Project Overview
 
-**LAAM (Local AI Agent Monitoring)** is an internal web tool that lets a developer team watch **Claude AI agents** running on their local machine in real time — with no changes to the agents themselves. It reads the JSONL transcripts that Claude Code / the Agent SDK write to `~/.claude/projects/`, groups them by **project**, and shows each agent: which orchestrator it belongs to, its status, how long it has run, and what it is currently working on. The repo root **is** the v2 (Next.js) app; the legacy v1 (vanilla JS + Express) is archived on branch `archive/v1`.
+**LAAM (Life AI Assistant Monitoring)** is an internal web tool that lets a developer team watch **Claude AI agents** running on their local machine in real time — with no changes to the agents themselves. It reads the JSONL transcripts that Claude Code / the Agent SDK write to `~/.claude/projects/`, groups them by **project**, and shows each agent: which orchestrator it belongs to, its status, how long it has run, and what it is currently working on. The repo root **is** the v2 (Next.js) app; the legacy v1 (vanilla JS + Express) is archived on branch `archive/v1`.
 
 LAAM is a **local-first daily-work assistant**: real-time monitoring, a multimodal local-model **chat assistant**, and **connectors** to external apps — all running locally, with the local model free ($0). **v2.0.0** (the Next.js rewrite, now at the repo root) shipped full v1 feature parity plus auth/RBAC, multi-machine monitoring, and per-user Postgres storage. The platform is now at **v2.4.1+** (`package.json` / `CHANGELOG.md`): durable workflows + scheduler, custom agents, multi-provider connector OAuth (Slack/WhatsApp/Zalo/Google/Atlassian), in-app notifications, and enforced RBAC.
 
@@ -57,6 +57,22 @@ The UI and documentation are primarily **Vietnamese**, with English and 中文 a
 ## Workflow Rules
 
 @AGENTS.md
+
+### Serena MCP Protocol (canonical — defines *how*; overrides file-path wording below)
+
+**All `.serena/memories/` I/O goes through Serena MCP tools (`mcp__serena__*`). NEVER hand-edit memory files** with Read/Edit/Write — Serena indexes memories and resolves `` `mem:` `` links; hand-editing bypasses both. (Recorded global preference: `global/preferences/memory-system`.)
+
+**Session start (before reading source):**
+1. `mcp__serena__activate_project` for this repo **by path** (it is not in the Serena registry) → `mcp__serena__initial_instructions` (loads the manual + lists available `global/*` memories).
+2. `mcp__serena__read_memory`: `INDEX` → relevant `decisions/` / `services/` → **`global/ecosystem/shared-memory-contract`** + **`global/ecosystem/laam-plan`** (ecosystem context for LAAM) → `comms/active/` → `backlog/` → your latest `checkpoint/`.
+
+**Writing:** `mcp__serena__write_memory(name, content)` — names use `/` topics (`decisions/…`, `services/…`, `backlog/…`, `comms/active/…`, `qa/…`, `checkpoint/…`); link memories as `` `mem:<name>` ``. Use `mcp__serena__edit_memory` for targeted edits and `mcp__serena__delete_memory` when an item is done.
+
+**Checkpoint (end of EVERY session):** `mcp__serena__write_memory("checkpoint/<agent-name>-<YYYY-MM-DD>", …)`.
+
+**Ecosystem (cross-platform):** shared knowledge lives in Serena **`global/ecosystem/*`** — the only channel readable across platforms. **READ** it for context (`global/ecosystem/laam-plan` is LAAM's slice; `global/ecosystem/shared-memory-contract` is the keystone). The **NewEcoSystem orchestrator owns/writes** it — do NOT write `global/ecosystem/*` or copy it into this repo's store.
+
+> The subsections below (Session Boot / Knowledge Source / Serena Memory Protocol / checkpoint) remain the reference for *what* to read/write and *where things go*; **this block is authoritative for *how*** — always via Serena MCP, checkpoints under `memories/checkpoint/`, ecosystem context via `global/ecosystem/*`.
 
 ### Session Boot Protocol
 
@@ -216,9 +232,9 @@ flowchart TD
 
 ### Mandatory Session Checkpoint
 
-**All AI agents MUST write a checkpoint file at the end of every session** to `.serena/checkpoint/`.
+**All AI agents MUST write a checkpoint at the end of every session — via Serena MCP** (`mcp__serena__write_memory`).
 
-**Format**: `.serena/checkpoint/<agent-name>-<YYYY-MM-DD>.md`
+**Format**: `mcp__serena__write_memory("checkpoint/<agent-name>-<YYYY-MM-DD>", …)` → stored at `.serena/memories/checkpoint/<agent-name>-<YYYY-MM-DD>.md`. Write through Serena MCP, **never** by hand-editing the file. (Supersedes the old `.serena/checkpoint/` path.)
 
 **Required content**:
 ```markdown
