@@ -34,3 +34,5 @@ connectors.json
 
 # DB backups (scripts/backup-db.ps1)
 backups/
+
+.claude/tmp/
