@@ -23,6 +23,7 @@ import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
 import { extractToolTurns, type ToolTurnRow } from "@/lib/agent/persist";
 import { ollamaStream } from "@/lib/llm/ollama";
+import { callModelText } from "@/lib/llm/internal";
 import { notifyWritePending } from "@/lib/notifications";
 import { stripNul } from "@/lib/chat/attach";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
@@ -333,11 +334,12 @@ export async function POST(req: Request) {
   let effectiveSummary = convSummary;
   if (plan.needsSummary) {
     try {
-      // C1: summarize PIN về MODEL env (Ollama local) BẤT KỂ chat model — callModelText
-      // fetch OLLAMA_URL nên truyền model claude vào đây sẽ lỗi MỌI lượt dài; tóm tắt
-      // là việc rẻ, chạy local là đủ (và $0).
+      // Summarize runs on the INTERNAL model (cloud-first router), NOT the user's chat
+      // model: it is a cheap background task with no picker. The router picks BytePlus/
+      // Claude when a cloud key is set (so summaries keep working with local off) and
+      // falls back to the local model ($0) otherwise. See lib/llm/internal.ts.
       effectiveSummary = await summarizeMessages(plan.toSummarize, convSummary, lang, {
-        callModel: (prompt) => callModelText(prompt, MODEL),
+        callModel: (prompt) => callModelText(prompt),
       });
       const through = plan.toSummarize[plan.toSummarize.length - 1]?.id ?? null;
       await db
@@ -1336,16 +1338,4 @@ function streamByteplusCompletion(
       "cache-control": "no-cache",
     },
   });
-}
-
-// Helper SP-3: gọi model 1 lần non-streaming (cho summarize). Hoisted — đặt cuối file OK.
-async function callModelText(prompt: string, model: string): Promise<string> {
-  const r = await fetch(`${OLLAMA_URL}/api/chat`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ model, messages: [{ role: "user", content: prompt }], options: { num_ctx: NUM_CTX }, stream: false }),
-  });
-  if (!r.ok) throw new Error(`Ollama ${r.status}`);
-  const j = (await r.json()) as OllamaChatResponse;
-  return j?.message?.content ?? "";
 }

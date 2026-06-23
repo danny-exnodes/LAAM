@@ -19,6 +19,7 @@ import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { Translator } from "@/i18n/types";
 import type { ConnectorListItem } from "@/lib/connectors/types";
+import { FOREACH_STEP_KINDS, type ForeachStepKind, linearize, buildLinearGraph, nextStepId, makeStep, changeStepKind, moveStep } from "./foreach-body";
 import { variableSuggestions } from "./variableHints";
 import { parseArgSchema, type ArgField } from "./schemaForm";
 
@@ -869,15 +870,39 @@ function ForeachForm({
   onChange,
   t,
   suggestions,
+  connectors,
+  servers,
+  presets,
 }: {
   node: WfForeachNode;
   onChange: (n: WfNode) => void;
   t: Translator;
   suggestions: string[];
+  connectors: ConnectorListItem[];
+  servers: McpServerItem[];
+  presets: { id: string; name: string }[];
 }) {
   const itemsRef = useRef<HTMLInputElement>(null);
   const [bodyText, setBodyText] = useState(JSON.stringify(node.body, null, 2));
   const [bodyError, setBodyError] = useState<string | null>(null);
+
+  // Linear chain of agent/connector/mcp steps ⇒ structured list; branchy/nested body ⇒
+  // raw-JSON only (linearize returns null). The user can drop to JSON anytime; they can't
+  // force the step list onto a branchy body (would silently drop branches).
+  const linear = linearize(node.body);
+  const [mode, setMode] = useState<"structured" | "json">(linear !== null ? "structured" : "json");
+  const effectiveMode: "structured" | "json" = mode === "structured" && linear === null ? "json" : mode;
+  const steps = linear ?? [];
+  const kindLabel = (k: string) => (k === "mcp" ? "MCP" : k.charAt(0).toUpperCase() + k.slice(1));
+
+  // Edges are AUTO-GENERATED as a linear chain — the user never writes JSON edges.
+  function commitSteps(next: WfNode[]) {
+    const body = buildLinearGraph(next, node.body);
+    setBodyText(JSON.stringify(body, null, 2));
+    setBodyError(null);
+    onChange({ ...node, body });
+  }
+  const replaceAt = (idx: number, n: WfNode) => commitSteps(steps.map((s, i) => (i === idx ? n : s)));
 
   function handleBodyChange(raw: string) {
     setBodyText(raw);
@@ -889,6 +914,11 @@ function ForeachForm({
       setBodyError(t("wf.node.jsonInvalid"));
     }
   }
+
+  const toggleCls = (on: boolean) =>
+    `rounded px-2 py-0.5 text-xs font-medium transition ${
+      on ? "bg-[var(--color-accent)] text-white" : "bg-neutral-100 text-neutral-500 hover:text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
+    }`;
 
   return (
     <>
@@ -910,25 +940,92 @@ function ForeachForm({
             onChange={(v) => onChange({ ...node, items: v })}
             hintLabel={t("wf.node.insertVar")}
           />
-          <p className="mt-1 text-xs text-neutral-400">
-            {t("wf.node.foreach.itemsHint")}
-          </p>
+          <p className="mt-1 text-xs text-neutral-400">{t("wf.node.foreach.itemsHint")}</p>
         </>,
       )}
       {field(
         <>
-          {label(t("wf.node.foreach.bodyLabel"))}
-          <textarea
-            className={inputCls(!!bodyError)}
-            rows={8}
-            value={bodyText}
-            placeholder={'{\n  "nodes": [...],\n  "edges": [...]\n}'}
-            onChange={(e) => handleBodyChange(e.target.value)}
-          />
-          {bodyError && errorMsg(bodyError)}
-          <p className="mt-1 text-xs text-neutral-400">
-            {t("wf.node.foreach.bodyHint")}
-          </p>
+          <div className="mb-1.5 flex items-center justify-between">
+            {label(t("wf.node.foreach.bodyLabel"))}
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={linear === null}
+                className={toggleCls(effectiveMode === "structured") + (linear === null ? " cursor-not-allowed opacity-40" : "")}
+                onClick={() => setMode("structured")}
+                title={linear === null ? t("wf.node.foreach.complexBody") : undefined}
+              >
+                {t("wf.node.foreach.modeSteps")}
+              </button>
+              <button type="button" className={toggleCls(effectiveMode === "json")} onClick={() => setMode("json")}>
+                {t("wf.node.foreach.modeJson")}
+              </button>
+            </div>
+          </div>
+
+          {effectiveMode === "structured" ? (
+            <div className="space-y-2">
+              {steps.length === 0 && <p className="text-xs text-neutral-400">{t("wf.node.foreach.empty")}</p>}
+              {steps.map((step, idx) => (
+                <div
+                  key={step.id}
+                  className="rounded-lg border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-700 dark:bg-neutral-800/40"
+                >
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <span className="font-mono text-[10px] text-neutral-400">#{idx + 1}</span>
+                    <select
+                      className="rounded border border-neutral-200 bg-white px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                      value={step.kind}
+                      onChange={(e) => replaceAt(idx, changeStepKind(step, e.target.value as ForeachStepKind))}
+                    >
+                      {FOREACH_STEP_KINDS.map((k) => (
+                        <option key={k} value={k}>{kindLabel(k)}</option>
+                      ))}
+                    </select>
+                    <span className="ml-auto flex items-center gap-0.5">
+                      <button type="button" className="rounded px-1 text-neutral-400 transition hover:text-neutral-700 disabled:opacity-30 dark:hover:text-neutral-200" disabled={idx === 0} onClick={() => commitSteps(moveStep(steps, idx, -1))} aria-label={t("wf.node.foreach.stepUp")} title={t("wf.node.foreach.stepUp")}>↑</button>
+                      <button type="button" className="rounded px-1 text-neutral-400 transition hover:text-neutral-700 disabled:opacity-30 dark:hover:text-neutral-200" disabled={idx === steps.length - 1} onClick={() => commitSteps(moveStep(steps, idx, 1))} aria-label={t("wf.node.foreach.stepDown")} title={t("wf.node.foreach.stepDown")}>↓</button>
+                      <button type="button" className="rounded p-0.5 text-neutral-400 transition hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/20" onClick={() => commitSteps(steps.filter((_, i) => i !== idx))} aria-label={t("wf.node.foreach.stepRemove")} title={t("wf.node.foreach.stepRemove")}><Trash2 size={12} aria-hidden /></button>
+                    </span>
+                  </div>
+                  {step.kind === "agent" && (
+                    <AgentForm node={step} onChange={(n) => replaceAt(idx, n)} t={t} suggestions={suggestions} presets={presets} />
+                  )}
+                  {step.kind === "connector" && (
+                    <ConnectorForm node={step} onChange={(n) => replaceAt(idx, n)} t={t} connectors={connectors} suggestions={suggestions} />
+                  )}
+                  {step.kind === "mcp" && (
+                    <McpForm node={step} onChange={(n) => replaceAt(idx, n)} t={t} servers={servers} suggestions={suggestions} />
+                  )}
+                </div>
+              ))}
+              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                <span className="text-xs text-neutral-400">{t("wf.node.foreach.addStep")}</span>
+                {FOREACH_STEP_KINDS.map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    className="rounded border border-dashed border-neutral-300 px-2 py-0.5 text-xs text-neutral-500 transition hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] dark:border-neutral-600"
+                    onClick={() => commitSteps([...steps, makeStep(k, nextStepId(steps))])}
+                  >
+                    + {kindLabel(k)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <textarea
+                className={inputCls(!!bodyError)}
+                rows={8}
+                value={bodyText}
+                placeholder={'{\n  "nodes": [...],\n  "edges": [...]\n}'}
+                onChange={(e) => handleBodyChange(e.target.value)}
+              />
+              {bodyError && errorMsg(bodyError)}
+            </>
+          )}
+          <p className="mt-1 text-xs text-neutral-400">{t("wf.node.foreach.bodyHint")}</p>
         </>,
       )}
     </>
@@ -1048,7 +1145,7 @@ export function NodeConfigPanel({
           <ConditionForm node={node} onChange={onChange} t={t} suggestions={suggestions} />
         )}
         {node.kind === "foreach" && (
-          <ForeachForm node={node} onChange={onChange} t={t} suggestions={suggestions} />
+          <ForeachForm node={node} onChange={onChange} t={t} suggestions={suggestions} connectors={connectors} servers={mcpServers} presets={customAgents} />
         )}
       </div>
     </div>

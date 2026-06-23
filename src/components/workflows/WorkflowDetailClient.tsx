@@ -34,6 +34,7 @@ import { useWorkflowEvents } from "@/hooks/useWorkflowEvents";
 import type { Workflow, WorkflowRun, WorkflowRunStep, WorkflowSchedule } from "@/db/schema";
 import { RecurrencePicker, describeCron } from "./RecurrencePicker";
 import { RunWaterfall } from "./RunWaterfall";
+import { MarkdownView } from "@/components/render/MarkdownView";
 
 // ----- Types -----
 type RunDetail = { run: WorkflowRun; steps: WorkflowRunStep[] };
@@ -825,13 +826,20 @@ function StepRow({
               {step.error}
             </p>
           )}
-          {step.output != null && (
-            <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-neutral-50 px-2 py-1.5 text-[11px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
-              {typeof step.output === "string"
-                ? step.output
-                : JSON.stringify(step.output, null, 2)}
-            </pre>
-          )}
+          {step.output != null &&
+            (typeof step.output === "string" ? (
+              // Agent/text output is prose (digests use **bold**, bullets, emoji) →
+              // render markdown like the chat + AI-review panels, not raw monospace.
+              <MarkdownView
+                source={step.output}
+                className="max-h-48 overflow-auto rounded bg-neutral-50 px-2 py-1.5 text-xs leading-relaxed text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200"
+              />
+            ) : (
+              // Structured (connector/object) output stays as readable JSON.
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-neutral-50 px-2 py-1.5 text-[11px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+                {JSON.stringify(step.output, null, 2)}
+              </pre>
+            ))}
           {step.output == null && !step.error && (
             <span className="text-xs text-neutral-400">—</span>
           )}

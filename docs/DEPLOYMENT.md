@@ -60,10 +60,17 @@ xem `docker-compose.yml` service `app`.
 | `REGISTER_INVITE_CODE` | Khi `mode=invite` | Mã mời; **rỗng/chưa đặt = từ chối mọi đăng ký** (fail-closed) | Chuỗi ngẫu nhiên dài, phát tay cho thành viên |
 | `CONNECTOR_KEY` | ✅ (prod) | Khoá AES-256-GCM mã hoá credential connector at-rest | **Đặt RIÊNG, đừng dựa fallback `AUTH_SECRET`** — nếu fallback, xoay `AUTH_SECRET` sẽ làm toàn bộ credential không giải mã được |
 | `WORKFLOW_TICK_SECRET` | ✅ **BẮT BUỘC** (prod) | Auth máy-gọi cho `POST /api/workflows/tick`. Khi secret ĐƯỢC set: **chỉ** header `x-workflow-tick-secret` khớp mới qua (không còn fallback localhost) | `openssl rand -base64 32`; cài tick task bằng `scripts/install-tick-task.ps1` (mục 6.1) |
-| `WORKFLOW_RECIPIENT_ALLOWLIST` | Khi dùng `gmail_send` trong workflow | Allowlist domain/địa chỉ người nhận. **Rỗng = fail-closed: `gmail_send` không chạy được trong workflow** | Liệt kê hẹp nhất có thể, vd `exnodes.vn,alerts@partner.com`; đổi xong phải restart container (mục 4) |
+| `WORKFLOW_RECIPIENT_ALLOWLIST` | Khi dùng `gmail_send` trong workflow | Allowlist domain/địa chỉ người nhận (email). **Rỗng = fail-closed** | Liệt kê hẹp nhất, vd `exnodes.vn`; đổi xong phải restart container (mục 4) |
+| `WORKFLOW_SLACK_ALLOWLIST` | Khi dùng `slack_send_message` trong workflow | Allowlist **channel-id** Slack được phép gửi. **Rỗng = fail-closed** (write Slack trong workflow chặn) | Per-format riêng; mở 1 kênh không nới kênh khác. Restart container sau khi đổi |
+| `WORKFLOW_WHATSAPP_ALLOWLIST` | Khi dùng `whatsapp_send_message` | Allowlist số **E.164**. **Rỗng = fail-closed** | Restart container sau khi đổi |
+| `WORKFLOW_ZALO_ALLOWLIST` | Khi dùng `zalo_send_message` | Allowlist **OA user-id** Zalo. **Rỗng = fail-closed** | Restart container sau khi đổi |
+| `CHAT_MAX_ROUNDS` / `BYTEPLUS_TOOL_BUDGET_CHARS` / `CHAT_PRESENCE_PENALTY` | ⬜ | Tinh chỉnh tool-loop (chặn runaway 25/trần 50) · ngân sách evict BytePlus · sampler chống lặp | Mặc định hợp lý — xem `.env.example` |
 | `OLLAMA_URL` | ✅ | Endpoint Ollama | Compose override `host.docker.internal:11434` — không cần sửa |
-| `DEFAULT_CHAT_MODEL` | ✅ | Model chat mặc định | `gemma4:e4b` — **không** đặt `claude-*` (summarize/proactive chạy local; Claude chỉ chọn per-request từ picker) |
-| `ANTHROPIC_API_KEY` | ⬜ | Key Anthropic (server-only, không bao giờ lộ xuống client) — đặt để bật model Claude trong picker chat (C1) | Tuỳ chọn; tính phí theo token vào key org (Sonnet 4.6 / Opus 4.8) — xem ghi chú `.env.example` |
+| `DEFAULT_CHAT_MODEL` | ✅ | Model chat mặc định khi user chưa chọn | Local: `qwen3-vl:8b-instruct-q8_0`. **Không** đặt `claude-*`. Tác vụ NỀN (summarize/workflow) đi qua `INTERNAL_MODEL` (dưới), KHÔNG phải biến này |
+| `ANTHROPIC_API_KEY` | ⬜ | Key Anthropic (server-only) — bật model Claude trong picker chat (C1) | Tuỳ chọn; tính phí token vào key org (Sonnet 4.6 / Opus 4.8) |
+| `BYTEPLUS_API_KEY` | ⬜ (✅ nếu cloud-first) | Key BytePlus ModelArk (server-only) — bật BytePlus trong picker chat **và** là provider cloud-first cho tác vụ nền | **Đặt khi local OFF**: summarize + workflow agent sẽ tự chạy trên BytePlus (xem `INTERNAL_MODEL`). Base phải khớp region |
+| `BYTEPLUS_BASE_URL` | Khi dùng BytePlus | Endpoint khớp region của key | Mặc định ap-southeast; Coding Plan `.../api/coding/v3` |
+| `INTERNAL_MODEL` | ⬜ | **Override** model cho tác vụ NỀN (summarize · workflow agent/generate/review). Bỏ trống = tự phân giải: BytePlus→Claude→local | Để TRỐNG cho cloud-first khi có `BYTEPLUS_API_KEY`. Đặt model local để ép tác vụ nền $0 dù có key cloud. **Không** đặt model Claude (no-tool → workflow agent fail-loud) |
 | `CHAT_NUM_CTX` | ⬜ | Cửa sổ ngữ cảnh chat | `16384` (an toàn FP16 trên 16GB VRAM — xem ghi chú trong `.env.example`) |
 | `CHAT_PRESENCE_PENALTY` | ⬜ | Sampler chống lặp từ | `0.2` |
 | `PROACTIVE_STUCK_MIN` / `PROACTIVE_COST_USD` | ⬜ | Ngưỡng cảnh báo chủ động | Mặc định (kẹt 10′ / $1) |
@@ -83,7 +90,7 @@ xem `docker-compose.yml` service `app`.
 ## 3. Triển khai lần đầu
 
 ```powershell
-cd D:\Projects\personal_projects\LAAM
+cd D:\Projects\NewEcoSystem\LAAM
 
 # 1) .env: copy template rồi điền các biến ✅ ở bảng trên
 cp .env.example .env
@@ -113,7 +120,7 @@ khoá đăng ký lại nếu đang để `open`.
 ## 4. Nâng cấp (mỗi lần release)
 
 ```powershell
-cd D:\Projects\personal_projects\LAAM
+cd D:\Projects\NewEcoSystem\LAAM
 git pull                                  # hoặc merge branch release
 
 docker build -t laam-app:latest .         # build image mới
@@ -127,6 +134,11 @@ Rồi chạy checklist xác minh (mục 5). Lưu ý theo từng đợt:
   viết tay đối chiếu serializer drizzle-kit. Sau khi merge R0, chạy `npm run db:generate`
   trên host để **VERIFY drizzle báo "No schema changes"**. Nếu drizzle sinh ra file
   migration thừa → snapshot bị drift: **báo lại team, ĐỪNG commit file đó**.
+- **Migration `0016` (pg_trgm + GIN search indexes):** raw-SQL hand-authored, **idempotent**
+  (`CREATE EXTENSION IF NOT EXISTS pg_trgm` + `CREATE INDEX IF NOT EXISTS … gin_trgm_ops`).
+  `npm run db:migrate` áp như thường; DB user `laam` (superuser trong compose) đủ quyền tạo
+  extension. Snapshot 0016 = bản sao 0015 (index opclass không track trong schema-diff) nên
+  `db:generate` vẫn báo "No schema changes" — đúng như thiết kế.
 - **Precondition P0a (chỉ lần đầu deploy bản có resume-spine ≥ 2.1.0):** **drain hết
   run đang `running` TRƯỚC khi deploy** — run mồ côi có-từ-trước-WAL không có idempotency
   row nên resume có thể re-send write đã commit. Đã thực hiện ngày 2026-06-10; ghi lại

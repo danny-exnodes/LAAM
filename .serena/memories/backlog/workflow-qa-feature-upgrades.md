@@ -1,14 +1,17 @@
-# Workflow QA — Feature upgrades / chức năng cần thêm (còn lại sau 2026-06-06)
+# Workflow QA — feature upgrades  (STATUS 2026-06-23: ~all DONE — verified in code)
 
-> **Đã xong (06-06):** Xoá workflow (DELETE endpoint + nút xoá + confirm). Xem checkpoint `tech-lead-qa-2026-06-06`.
+Grounded re-audit 2026-06-23 (`checkpoint/cloud-first-2026-06-23`): the 06-05/06 list is
+STALE. Verified SHIPPED in code:
+- ✅ Schedule mgmt: toggle enable/disable + delete + edit-cron — `WorkflowDetailClient`
+  (PATCH `{enabled}` / PATCH cron / DELETE) over `api/workflows/schedules/[id]`.
+- ✅ Editor delete node (toolbar btn + ⌫ keyboard) + delete/relabel edges (true/false).
+- ✅ Editor connect nodes (onConnect + addEdge), verified handles.
+- ✅ Editor unsaved-changes guard (`isDirty` + beforeunload) — `WorkflowEditor`.
+- ✅ Structured condition form (left / op-select / right) — `ConditionForm` in `NodeConfigPanel`.
+- ✅ Connector/action + MCP server/tool **dropdowns** + schema-driven args (`SchemaArgsForm`).
+- ✅ Run cancel (sync long run) — PATCH `runs/[id]` `{action:"cancel"}` + cancel button.
 
-Ưu tiên còn lại:
-
-- **Quản lý schedule**: hiện CHỈ thêm được — không xoá / không tắt / không sửa, có thể thêm trùng. Cần nút xoá + toggle enable/disable + sửa cron. (`WorkflowDetailClient` bảng schedule read-only.)
-- **Editor — xoá node**: không có affordance xoá (chỉ dựa phím Backspace mặc định RF, user không biết). Cần nút xoá node (trên node / trong config panel) + xoá cạnh.
-- **Editor — nối node**: Handle đã có (fix F1 06-06). Cần verify kéo-nối + label true/false hoạt động end-to-end live.
-- **Editor — cảnh báo thay đổi chưa lưu**: rời trang (back link / đóng tab) mất sạch chỉnh sửa, không hỏi. Cần `beforeunload` guard.
-- **Editor — form cấu trúc cho condition/foreach**: hiện buộc gõ **JSON thô** → cần condition = 3 trường (left / dropdown op / right); foreach = builder body trực quan.
-- **Editor — picker connector/action**: `connectorId`/`action` đang là text tự do → nên dropdown từ `/api/connectors` + validate.
-- **Run — huỷ run đang chạy**: run đồng bộ dài (digest ~24s) chặn, không huỷ được.
-- **Connector ghi ngoài thật** (Slack/Drive write) + **manual BLAST_HIGH preview/confirm** (hoãn §10).
+## Genuinely remaining (minor / deferred — NOT blockers)
+- foreach **body** still a raw-JSON textarea (no visual ForeachForm builder). Low priority.
+- Connector EXTERNAL writes in workflow + manual **BLAST_HIGH** preview/confirm — gated on
+  connector-write GA (§10 deferral), not a bug.

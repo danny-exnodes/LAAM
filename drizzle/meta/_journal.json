@@ -113,6 +113,13 @@
       "when": 1781252202293,
       "tag": "0015_needy_stingray",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1781252202294,
+      "tag": "0016_search_trgm_indexes",
+      "breakpoints": true
     }
   ]
 }

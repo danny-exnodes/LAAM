@@ -3,16 +3,19 @@
 // One query per result group, each capped at GROUP_LIMIT:
 //   - sessions:      org-shared (same visibility as /api/events) — matches the
 //                     agent's current activity, the project name or the git branch.
-//   - conversations: the caller's chat conversations only (title match).
+//   - conversations: the caller's chat conversations only — matched by title OR by
+//                     the CONTENT of any message in the conversation (pointer-only:
+//                     a hit returns the conversation id/title, never raw message text).
 //   - workflows:     the caller's workflows only (name match).
 //
-// Plain ILIKE is enough at the current scale (single team, thousands of rows).
-// If it ever gets slow, the upgrade path is a pg_trgm GIN index on the matched
-// columns — no API change needed here.
+// Substring (ILIKE) matching is language-agnostic — important because LAAM is
+// trilingual (vi/en/zh) and Postgres has no built-in vi/zh full-text config. The
+// pg_trgm GIN indexes in migration 0016 accelerate exactly these ILIKE `%term%`
+// scans (incl. the message-content subquery) — no query/API change needed.
 
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import { and, desc, eq, exists, ilike, or, sql } from "drizzle-orm";
 import type { db as appDb } from "@/db";
-import { agentSessions, chatConversations, projects, workflows } from "@/db/schema";
+import { agentSessions, chatConversations, chatMessages, projects, workflows } from "@/db/schema";
 
 export type Db = typeof appDb;
 
@@ -82,7 +85,22 @@ export async function searchAll(database: Db, q: string, userId: string): Promis
       updatedAt: chatConversations.updatedAt,
     })
     .from(chatConversations)
-    .where(and(eq(chatConversations.userId, userId), ilike(chatConversations.title, pattern)))
+    .where(
+      and(
+        eq(chatConversations.userId, userId),
+        or(
+          ilike(chatConversations.title, pattern),
+          // CONTENT search: the conversation has at least one message matching the term.
+          // EXISTS keeps it a single round-trip and returns conversation pointers only.
+          exists(
+            database
+              .select({ one: sql`1` })
+              .from(chatMessages)
+              .where(and(eq(chatMessages.conversationId, chatConversations.id), ilike(chatMessages.content, pattern))),
+          ),
+        ),
+      ),
+    )
     .orderBy(desc(chatConversations.updatedAt))
     .limit(GROUP_LIMIT);
 

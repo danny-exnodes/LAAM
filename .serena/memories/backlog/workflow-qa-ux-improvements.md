@@ -1,7 +1,7 @@
 # Workflow QA — UX improvements (E2E 2026-06-05)
 
 - **Phản hồi run chủ động** (gắn F4): toast khi bắt đầu / xong / lỗi run, kèm lý do. Hiện phải tự phát hiện dòng "Thất bại" + đào 3 lớp click mới thấy nguyên nhân.
-- **Render markdown cho output agent step**: hiện `<pre>` thô → digest hiển thị literal `**Tổng quan**`, bullet, emoji. Dùng react-markdown (Chat đã có) cho step output → dễ đọc hơn nhiều.
+- ✅ **DONE 2026-06-23** — Render markdown cho output agent step: `WorkflowDetailClient` StepRow nay dùng `MarkdownView` cho output chuỗi (agent digest), giữ `<pre>` cho JSON. (Output prose font item bên dưới cũng được giải quyết theo.)
 - **Nhãn step thân thiện**: step hiện nodeId thô ("fetch", "summarize") → nên hiện action/label (vd "demo.demo_list_tasks") hoặc tên do user đặt.
 - **Detail page tải chậm** (~5s spinner toàn trang, 3 fetch client tuần tự). Cân nhắc SSR hoặc skeleton; ít nhất giữ header/khung khi tải (hiện trắng + spinner giữa).
 - **Thông điệp validate kỹ thuật/khó hiểu** ("validate: cần đúng 1 start, có 2") — không chỉ rõ node lỗi, không i18n. Nên: nêu node + ngôn ngữ người dùng.

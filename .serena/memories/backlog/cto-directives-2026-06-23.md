@@ -2,12 +2,13 @@
 
 > Tracking items from the CTO review `mem:global/ecosystem/cto-review-2026-06-23`. Contract: `mem:global/ecosystem/shared-memory-contract` · LAAM plan: `mem:global/ecosystem/laam-plan`. Delete items as completed.
 
-## Now — no DAAB dependency (start immediately)
-- [ ] **P0** **Merge PR#9** (security hardening: recipient-gate format-aware + SSRF DNS-pin + per-user HKDF + defense-in-depth). CTO-approved (D12; sign-off 2026-06-16, adversarially verified, 2037 tests green). Then set `WORKFLOW_{SLACK,WHATSAPP,ZALO}_ALLOWLIST` (operator action; fail-closed by default).
-- [ ] **P0** **Local-off guardrails (fail-loud)** for summarizer + agent-node workflows — cloud pivot (Qwen off) broke them (`route.ts:336-340` fail-soft, `executors.ts` hard-break).
-- [ ] **P1** **No-skill-creation guard test** + invariant comment (security invariant, D9; LAAM is the ecosystem's strongest precedent).
-- [ ] **P3** **Local session search** — upgrade `laam_search_sessions` + `/api/search` from ILIKE-title → **tsvector + pg_trgm GIN** on `chat_message.content`. Keep pointer-only export.
-- [ ] **chore** Reconcile CLAUDE.md version drift (claims v2.0.0; `package.json` = v2.4.1+) + CHANGELOG `[Unreleased]`.
+## Now — no DAAB dependency  ✅ ALL DONE 2026-06-23 (`checkpoint/cloud-first-2026-06-23`)
+- [x] **P0 Merge PR#9** — already merged to main (`ab3753c`). ⚠️ Operator action remains: set `WORKFLOW_{SLACK,WHATSAPP,ZALO}_ALLOWLIST` (fail-closed by default until set).
+- [x] **P0 Local-off guardrails** — shipped as **cloud-first routing** (user choice over literal fail-loud): summarizer + workflow agent/generate/review route via `src/lib/llm/internal.ts` `resolveInternalModel()` → work when local Qwen is off; local-only deploys keep the $0 path. +router tests.
+- [x] **P1 No-skill-creation guard** — `src/lib/agent/no-skill-creation.guard.test.ts`: code-exec scan (child_process/eval/Function/vm/spawn) + closed INTERNAL_TOOLS allowlist + frozen 5 node kinds.
+- [x] **P3 session/chat search** — `lib/search.ts` matches message CONTENT (EXISTS, pointer-only) + migration **0016** (pg_trgm GIN; trigram over tsvector for vi/zh). `laam_search_sessions` gains the GIN index.
+- [x] **chore version** — 2.4.1 → **2.5.0** (package.json/CLAUDE.md/CHANGELOG cut); `.env.example` INTERNAL_MODEL + `docs/DEPLOYMENT.md` updated.
+- ⚠️ **NOT verified in-sandbox**: full `npm test` (node-24 only; sandbox node-22 segfaults vitest). Run on host.
 
 ## Gated — HOLD until DAAB **gate g2**
 - [ ] **P1** Wire `kg_recall` read tool via the existing MCP client — inject as a **PINNED context message** (not an evictable tool result); best-effort fail-loud. Tests: Rule-13 altered-recall, kg-write fail-closed, DAAB-down degraded path. Requires DAAB `readOnlyHint=true` (D7).

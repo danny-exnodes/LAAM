@@ -430,10 +430,15 @@ describe("C1 Claude provider MVS", () => {
     }
   });
 
-  // PIN summarize: callModelText fetch OLLAMA — đưa model claude vào đó sẽ lỗi
-  // MỌI lượt dài. Summarize phải chạy model local (MODEL env) bất kể chat model.
-  test("SP-3 summarize được PIN về MODEL env (Ollama) kể cả khi chat model là Claude", async () => {
+  // Summarize runs on the INTERNAL model (cloud-first router, lib/llm/internal.ts),
+  // NOT the user's chat model. With no cloud key in the test env the router resolves to
+  // the local model (DEFAULT_CHAT_MODEL) — so summarize never tries to summarize a long
+  // history with the (here unavailable) Claude chat model.
+  test("SP-3 summarize uses the internal model, not the chat model (Claude)", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("BYTEPLUS_API_KEY", "");
+    vi.stubEnv("INTERNAL_MODEL", "");
+    vi.stubEnv("DEFAULT_CHAT_MODEL", "qwen-local");
     mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const big = "x".repeat(10_000);
     const longHistory = [
@@ -464,10 +469,10 @@ describe("C1 Claude provider MVS", () => {
         }),
       );
       await res.text();
-      // ĐÚNG 1 lần fetch (summarize) — và payload mang MODEL env, KHÔNG phải model claude.
+      // EXACTLY 1 fetch (summarize) — payload carries the internal model, NOT claude.
       expect(fetchMock).toHaveBeenCalledTimes(1);
       const sumBody = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body) as { model: string };
-      expect(sumBody.model).toBe("gemma4:e4b");
+      expect(sumBody.model).toBe("qwen-local");
       expect(sumBody.model).not.toContain("claude");
     } finally {
       vi.unstubAllGlobals();

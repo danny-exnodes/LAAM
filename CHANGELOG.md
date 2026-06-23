@@ -9,6 +9,24 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-06-23 — Cloud-first internal model · message-content search · security guard
+
+### Đã thêm — Workflow UX & độ tin cậy (digest ground-truth · foreach builder · markdown output)
+- **Digest dùng số liệu GROUND-TRUTH (Rule 13):** tool mới `laam_metrics_digest` — CODE tính tổng phiên/đang chạy/idle/xong, token vào-ra, chi phí, phiên kẹt, top đốt token và trả sẵn block `summary`. Hai template digest (`digest-overnight-agents`, `digest-judge-verify`) nay yêu cầu chèn NGUYÊN VĂN block đó thay vì để model 8B tự "nhớ" số → hết bịa số liệu. Formatter thuần `formatMetricsDigest` có unit test.
+- **Foreach — builder body trực quan:** node `foreach` body trước bắt gõ JSON thô. Nay có **danh sách bước có cấu trúc** (agent/connector/mcp, DÙNG LẠI đúng form + dropdown của node thường) và **tự sinh cạnh nối tuyến tính**; body phân nhánh/nested tự rơi về chế độ JSON (có toggle). Helpers thuần (`linearize`/`buildLinearGraph`/`moveStep`…) + i18n vi/en/zh, có test.
+- **Render markdown cho output bước workflow:** `WorkflowDetailClient` StepRow hiển thị output chuỗi (digest agent) qua `MarkdownView` (bold/bullet/emoji) thay vì `<pre>` monospace; output JSON/object giữ `<pre>`.
+
+### Đã đổi — Cloud-first cho tác vụ NỀN (summarize + workflow agent/generate/review)
+- Các tác vụ LLM nền (tóm tắt lịch sử chat SP-3, node `agent` trong workflow, AI `generate`/`review` workflow) trước đây **PIN cứng model local** (`DEFAULT_CHAT_MODEL`/Ollama). Sau pivot cloud (tắt Qwen local) chúng **vỡ âm thầm**: mọi hội thoại dài ngừng tóm tắt (fail-soft), mọi workflow có node agent **hard-break** (`Ollama <status>`). Nay đi qua **router chung** `src/lib/llm/internal.ts`: phân giải MỘT model nội bộ theo thứ tự `INTERNAL_MODEL` → có `BYTEPLUS_API_KEY` (cloud-first) → có `ANTHROPIC_API_KEY` → `DEFAULT_CHAT_MODEL` (local $0). Có key cloud thì summarize + workflow agent **chạy tiếp khi local tắt**; deploy local-only (không key cloud) **giữ nguyên đường $0**.
+- 3 entry provider-aware: `callModelText` (no-tool: summarize/generate), `callModelChat` (tool-loop: workflow agent), `callModelGenerate` (structured: AI generate) — route BytePlus/Claude/Ollama. Claude là provider no-tool → summarize được nhưng **fail-loud** nếu bị ép chạy node agent (không thể chạy tool). Gộp đường gọi Ollama non-stream về một chỗ (`llm/ollama.ts` `ollamaChat`), bỏ 3 bản sao trùng (chat route + workflow). Thêm env `INTERNAL_MODEL`. **+test** router (ưu tiên phân giải + dispatch từng provider), tsc sạch.
+
+### Đã thêm — Tìm kiếm theo NỘI DUNG tin nhắn + chỉ mục pg_trgm GIN (migration 0016)
+- `/api/search` (`lib/search.ts`) nay khớp hội thoại theo **nội dung tin nhắn** (EXISTS trên `chat_message`, scope theo user, **chỉ trả con trỏ** id/title — không lộ body), không chỉ tiêu đề.
+- Migration **0016** (idempotent, hand-authored): `CREATE EXTENSION pg_trgm` + **GIN trigram index** trên `chat_message.content`, `chat_conversation.title`, `agent_session.{latestActivity,gitBranch}`, `project.name`, `workflow.name` → tăng tốc các quét ILIKE (gồm tìm nội dung). Chọn **trigram thay vì tsvector** vì LAAM đa ngữ (vi/en/zh) mà Postgres không có cấu hình FTS vi/zh; trigram khớp chuỗi con, ngôn ngữ-bất-khả-tri.
+
+### Bảo mật — guard bất biến "không tạo skill / không exec code tuỳ ý" trong agent tree
+- Test guard `src/lib/agent/no-skill-creation.guard.test.ts`: quét `src/lib/agent` + `src/lib/workflow` (đã strip comment/string literal) chặn `child_process` / `eval(` / `new Function(` / module `vm` / `spawn`; khẳng định `INTERNAL_TOOLS` là **allowlist read/write đóng** (không tool nào tạo skill/tool/code) và node-kind workflow **đóng băng** 5 loại. Hợp đồng-hoá bất biến ecosystem (D9; LAAM là tiền lệ mạnh nhất): KHÔNG co-locate agent thực thi code-do-model-sinh với connector mang credential sống.
+
 ### Đã đổi — Tool-loop "chạy-tới-xong" (run-until-done) thay cho cap maxRounds=4 cứng
 - **Agent giờ HOÀN THÀNH tác vụ nhiều bước** (vd "tổng hợp 10 email rồi gửi báo cáo") thay vì dừng sau 3 tool. `runToolRounds` (`orchestrator.ts`) trước đây cap `maxRounds=4` và **ép-text vòng cuối** (`allowTools = i < maxRounds-1`) → cắt ngang mọi tác vụ cần >3 lượt tool. Nay: thoát theo **hoàn-thành-tự-nhiên** (model ngừng gọi tool — vốn đã là điều kiện break); cap chỉ còn là **chặn runaway** (mặc định **25**, env `CHAT_MAX_ROUNDS`, trần cứng 50).
 - **Quản lý ngữ cảnh trong vòng lặp** (`loop-context.ts` mới, thuần): `evictOldToolResults` xoá nội dung tool-result CŨ NHẤT (thay bằng stub, giữ 3 cái gần nhất + pin user/assistant) khi convo vượt ngân sách — chống tràn cửa sổ 16k của Qwen local làm cụt câu trả lời (Ollama không báo lỗi khi cụt). Provider-aware qua `budgetChars`: local = `REPLAY_BUDGET_CHARS`; BytePlus = `BYTEPLUS_TOOL_BUDGET_CHARS` (~400K, cửa sổ lớn nên hiếm khi evict). Per-result cap 8192B (`boundOutput`) GIỮ NGUYÊN.

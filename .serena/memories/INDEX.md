@@ -4,12 +4,12 @@
 > 🌐 **Ecosystem (global, cross-platform):** hợp đồng shared-memory + kế hoạch của LAAM nằm ở Serena **global** memory — đọc `global/ecosystem/shared-memory-contract` và `global/ecosystem/laam-plan` (Serena tự liệt kê global ở đầu phiên). Quản lý bởi orchestrator NewEcoSystem.
 
 ## Trạng thái hiện tại (2026-06-16) — NGUỒN CHÂN LÝ, đọc trước tiên
-- **Phiên bản: v2.4.1** (`package.json` + CHANGELOG) + **[Unreleased]**: quick-tools picker (chat), node MCP (workflow), **Custom Agents** (migration 0015), OAuth đa-provider (Slack / WhatsApp / Zalo OA), đồng bộ Node 24 LTS.
+- **Phiên bản: v2.5.0** (`package.json` + CHANGELOG, cut 2026-06-23): **cloud-first internal-model router** (summarize/workflow chạy khi local tắt — `src/lib/llm/internal.ts`), tìm kiếm **nội dung tin nhắn** + pg_trgm GIN (migration **0016**), guard "không tạo skill". Trước (2.4.x): quick-tools, node MCP, Custom Agents (mig 0015), OAuth đa-provider, run-until-done loop + BytePlus.
 - **Full v1→v2 parity ĐÃ ĐẠT** (Dashboard / Agents / Chat / Connectors) — tình trạng "gap" mô tả ở [[v2-parity-gap]] nay là **lịch sử**, không còn hiệu lực.
 - **Cluster review 06-16 — cả 7 cụm GA-ready, KHÔNG lỗi chức năng:** Workflows (durable + scheduler) · Custom-Agents (E2E PASS) · Connectors/OAuth · Chat/MCP/Vision · Security/RBAC (mọi mutation gated) · Monitoring/Collector/Machines · Matte-Dark (shipped + guarded).
 - **Vừa vá:** off-boarding gap — disable user ⇒ disable luôn `workflow_schedule` của họ (`ce09496`); Custom-Agents reach (chat persona / discoverability / clone) merged `e296852`.
 - **Việc còn lại = backlog hardening bảo mật** (gate tính năng TƯƠNG LAI, không chặn hiện tại): recipient-gate format-aware → SSRF DNS-pin → per-user HKDF. Canonical: [[platform-cluster-review-remaining]] (→ [[connectors-oauth-followups]], [[connectors-crypto-hkdf]]).
-- **Checkpoint mới nhất:** `checkpoint/cto-2026-06-16.md`.
+- **Checkpoint mới nhất:** `checkpoint/cloud-first-2026-06-23.md` (CTO directives 2026-06-23 ✅ done) → trước đó `checkpoint/principal-2026-06-23.md`, `checkpoint/cto-2026-06-16.md`.
 - ⏬ Các mục "## Trạng thái …" phía dưới (06-03 → 06-11) là **ảnh chụp lịch sử** — giữ làm hồ sơ, KHÔNG phải trạng thái hiện hành.
 
 ## Decisions

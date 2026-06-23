@@ -31,7 +31,7 @@ export const TEMPLATES: WorkflowTemplate[] = [
           kind: "agent",
           system: "Bạn là trợ lý vận hành nội bộ. Dùng các tool LAAM để đọc dữ liệu agent.",
           prompt:
-            "Liệt kê các agent đã chạy trong 24h qua; chỉ ra con nào đang kẹt (stuck) hoặc tốn token bất thường; tóm tắt thành một digest ngắn gọn bằng tiếng Việt.",
+            "Gọi tool `laam_metrics_digest` để lấy số liệu GROUND-TRUTH. Chèn NGUYÊN VĂN block `summary` của nó vào ĐẦU digest (KHÔNG sửa bất kỳ con số nào). Bên dưới, liệt kê các agent đáng chú ý (kẹt/đốt token) và viết phần phân tích ngắn gọn bằng tiếng Việt.",
         },
       ],
       edges: [],
@@ -91,9 +91,9 @@ export const TEMPLATES: WorkflowTemplate[] = [
           kind: "agent",
           system: "Bạn là trợ lý vận hành nội bộ. Dùng các tool LAAM để đọc dữ liệu agent.",
           prompt:
-            "Dùng tool LAAM để lấy danh sách các agent đã chạy trong 24h qua. " +
-            "Tóm tắt: số lượng session, tổng token, session kẹt (stuck), token bất thường. " +
-            "Trả kết quả bằng tiếng Việt, ngắn gọn.",
+            "Gọi tool `laam_metrics_digest` để lấy số liệu GROUND-TRUTH (code tính, không bịa). " +
+            "Chèn NGUYÊN VĂN block `summary` vào digest (KHÔNG sửa số), rồi thêm nhận xét ngắn gọn " +
+            "về agent kẹt / token bất thường bằng tiếng Việt.",
         },
         {
           id: "judge",

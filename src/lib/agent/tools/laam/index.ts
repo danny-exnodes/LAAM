@@ -7,6 +7,7 @@ import { findStuck } from "./find-stuck";
 import { searchSessions } from "./search-sessions";
 import { getTimelineTool } from "./get-timeline";
 import { queryAudit } from "./query-audit";
+import { metricsDigest } from "./metrics-digest";
 
 export const LAAM_TOOLS: Tool[] = [
   listAgents,
@@ -17,4 +18,5 @@ export const LAAM_TOOLS: Tool[] = [
   searchSessions,
   getTimelineTool,
   queryAudit,
+  metricsDigest,
 ];
