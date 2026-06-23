@@ -12,6 +12,8 @@
 - ⏬ Các mục "## Trạng thái …" phía dưới (06-03 → 06-11) là **ảnh chụp lịch sử** — giữ làm hồ sơ, KHÔNG phải trạng thái hiện hành.
 
 ## Decisions
+- [ecosystem-hermes-allocation](decisions/ecosystem-hermes-allocation.md) — ⭐ ECOSYSTEM (AAAA/DAAB/LAAM): xây memory MỘT LẦN ở **DAAB**, LAAM **consume** qua `kg_recall` (read-only Qwen 8B); GIỮ quyết định KHÔNG skill-creation; skip subagent-shell. Nhận định CTO 2026-06-23.
+- [laam-daab-consumer-posture](decisions/laam-daab-consumer-posture.md) — 🔬 PRESSURE-TEST của memo ⭐ trên CODE LAAM (2026-06-23): verdict (a)CONFIRMED/(b)NEEDS-REVISION/(c)CONFIRMED/(d)CONFIRMED. **kg_recall** OK read-only nhưng read-only DELEGATED cho DAAB hint × trustReadHints(default false). **kg_search_sessions:** giữ index LOCAL + chỉ lộ POINTER (KHÔNG đẩy transcript body vào shared graph). Loop+BytePlus **đã MERGE main `feb279a`** (2080 test xanh, tsc sạch; run-until-done DEFAULT_MAX_ROUNDS=25 + eviction + provider thứ 3). Pivot tạm: chat→cloud BytePlus, **tắt hẳn local Qwen** → workflow agent-node vỡ + summarizer stale (cả hai PIN local, chờ guardrail); recall=best-effort fail-loud; **Phase 2 local-memory HOÃN**.
 - [v2-architecture](decisions/v2-architecture.md) — Định hướng v2: **local-first** (không SaaS), giám sát **đa máy**, Next.js 16 + Postgres + Auth.js v5 + RBAC + Drizzle, **Gemma 4** chủ đạo, Tailscale, <50 user.
 - [db-migrations](decisions/db-migrations.md) — Dùng **migration** (db:generate→commit→db:migrate), KHÔNG db:push; drizzle-kit không chạy trong sandbox agent.
 - [auth-and-proxy](decisions/auth-and-proxy.md) — Auth.js `trustHost:true`; Next 16 `proxy.ts`; **GOTCHA: API public phải thêm vào isPublic** (auth.config.ts); RBAC + user đầu = owner.
