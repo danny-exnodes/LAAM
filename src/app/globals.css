@@ -215,6 +215,14 @@ body::after {
 .anim-float-2 { animation: laam-float-2 9s ease-in-out infinite; }
 .anim-glow { animation: laam-glow 4s ease-in-out infinite; }
 
+/* Voice waveform bars (constellation voice command-center). Each bar sets its own
+   animation-delay inline for the travelling-wave look. Static under reduced-motion. */
+@keyframes laam-wave {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.voice-wave-bar { transform-origin: center; animation: laam-wave 0.9s ease-in-out infinite; }
+
 /* ── React Flow controls — clear fixed bottom-nav on mobile ──────────────── */
 /* Bottom-nav is fixed, ~56–64 px (3.5rem), z-40, md:hidden. Lift the RF     */
 /* controls above it on narrow viewports. Applied globally so both the        */
@@ -234,7 +242,8 @@ body::after {
   .anim-scale-in,
   .anim-float,
   .anim-float-2,
-  .anim-glow {
+  .anim-glow,
+  .voice-wave-bar {
     animation: none;
   }
 }

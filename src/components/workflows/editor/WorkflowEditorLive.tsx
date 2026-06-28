@@ -12,17 +12,19 @@
 import { useMemo, useState } from "react";
 import { useWorkflowEvents } from "@/hooks/useWorkflowEvents";
 import { WorkflowEditor } from "./WorkflowEditor";
-import { stepsToNodeStatuses } from "./nodeStatus";
+import { stepsToNodeStatuses, stepsToNodeOutputs } from "./nodeStatus";
 
 export function WorkflowEditorLive({ workflowId }: { workflowId: string }) {
   const [testRunId, setTestRunId] = useState<string | undefined>(undefined);
   const { steps, runStatus } = useWorkflowEvents(testRunId);
   const nodeStatuses = useMemo(() => stepsToNodeStatuses(steps), [steps]);
+  const nodeOutputs = useMemo(() => stepsToNodeOutputs(steps), [steps]);
 
   return (
     <WorkflowEditor
       workflowId={workflowId}
       nodeStatuses={nodeStatuses}
+      nodeOutputs={nodeOutputs}
       runStatus={runStatus}
       onTestRun={setTestRunId}
     />

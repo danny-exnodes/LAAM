@@ -44,7 +44,7 @@ import { layoutPositions } from "./autoLayout";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { WfNode, WfNodeKind, WorkflowGraph } from "@/lib/workflow/types";
-import { edgeRunDecoration } from "./nodeStatus";
+import { edgeRunDecoration, type NodeRunOutput } from "./nodeStatus";
 import { emptyHistory, pushSnapshot, undo, redo, canUndo, canRedo } from "./historyStack";
 import type { HistoryState, Snapshot } from "./historyStack";
 
@@ -101,12 +101,15 @@ type WfNodeData = {
   status?: "idle" | "running" | "success" | "error";
   /** Localized authoring-time validation messages for this node (advisory). */
   issues?: string[];
+  /** Last run output/error preview for this node (per-node popover when selected). */
+  output?: NodeRunOutput;
 };
 
 // RF NodeProps data is Record<string, unknown>; we cast to extract our payload.
 function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selected?: boolean }) {
-  const { node: wf, status, actionsRef, issues } = data as WfNodeData;
+  const { node: wf, status, actionsRef, issues, output } = data as WfNodeData;
   const hasIssues = !!issues?.length && (!status || status === "idle");
+  const showOutput = !!selected && !!(output?.outputPreview || output?.error);
   const color = KIND_COLORS[wf.kind] ?? "#64748b";
   const label =
     wf.kind === "agent"
@@ -250,6 +253,35 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
           !
         </div>
       )}
+
+      {/* Per-node run output / error popover — shown when the node is selected and
+          its last run produced output or failed. Output is code-derived + bounded. */}
+      {showOutput && (
+        <div
+          data-testid="node-output-popover"
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            left: 0,
+            width: 240,
+            maxHeight: 140,
+            overflowY: "auto",
+            zIndex: 20,
+            borderRadius: 8,
+            padding: "6px 8px",
+            fontSize: 11,
+            lineHeight: 1.4,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            background: output?.error ? "#fef2f2" : "var(--wf-node-bg)",
+            color: output?.error ? "#b91c1c" : "var(--wf-node-text)",
+            border: `1px solid ${output?.error ? "#fecaca" : "var(--wf-node-border)"}`,
+            boxShadow: "0 4px 12px rgba(0,0,0,.12)",
+          }}
+        >
+          {output?.error ? output.error : output?.outputPreview}
+        </div>
+      )}
     </div>
   );
 }
@@ -304,6 +336,8 @@ export interface WorkflowEditorProps {
    * Key = node id. Used to show status badges on nodes (P5-C run-in-editor).
    */
   nodeStatuses?: Record<string, "idle" | "running" | "success" | "error">;
+  /** Per-node run output/error previews (from the SSE step frame) — drives the popover. */
+  nodeOutputs?: Record<string, NodeRunOutput>;
   /** Called with the runId after a Test (dry-run) is triggered — parent tracks it via SSE. */
   onTestRun?: (runId: string) => void;
   /** Overall run status from the parent's useWorkflowEvents — drives edge flow animation. */
@@ -323,7 +357,7 @@ export function WorkflowEditor(props: WorkflowEditorProps) {
   );
 }
 
-function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onTestRun, runStatus }: WorkflowEditorProps) {
+function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nodeOutputs, onTestRun, runStatus }: WorkflowEditorProps) {
   const t = useT(dict);
   const router = useRouter();
   const rfInstance = useReactFlow();
@@ -428,10 +462,11 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           actionsRef: nodeActionsRef,
           status: nodeStatuses?.[n.id] ?? "idle",
           issues: issuesByNode.get(n.id),
+          output: nodeOutputs?.[n.id],
         } satisfies WfNodeData,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nodes, nodeStatuses, issuesByNode],
+    [nodes, nodeStatuses, nodeOutputs, issuesByNode],
   );
 
   // Decorate edges with run status: animate flow while running, redden on source error.

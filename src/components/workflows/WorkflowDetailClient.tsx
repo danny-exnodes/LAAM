@@ -27,6 +27,7 @@ import {
   Loader2,
   Calendar,
   AlertTriangle,
+  BookmarkPlus,
 } from "lucide-react";
 import { useLang, useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
@@ -91,6 +92,8 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
   // Run-now state + inline error feedback
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateNote, setTemplateNote] = useState<string | null>(null);
 
   // Cancel-run state (W4)
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
@@ -219,6 +222,25 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
       setRunning(false);
     }
   }, [workflowId, load, t]);
+
+  // Save the current workflow as a reusable template (new template-flagged copy).
+  const handleSaveTemplate = useCallback(async () => {
+    setSavingTemplate(true);
+    setTemplateNote(null);
+    try {
+      const res = await fetch(`/api/workflows/${encodeURIComponent(workflowId)}/save-as-template`, { method: "POST" });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setTemplateNote(body.error ?? t("wf.detail.saveTemplateFailed"));
+        return;
+      }
+      setTemplateNote(t("wf.detail.saveTemplateOk"));
+    } catch {
+      setTemplateNote(t("wf.detail.saveTemplateFailed"));
+    } finally {
+      setSavingTemplate(false);
+    }
+  }, [workflowId, t]);
 
   // W4: hủy run queued|running — PATCH /api/workflows/runs/[id] { action: "cancel" }.
   const handleCancelRun = useCallback(async (runId: string) => {
@@ -430,6 +452,15 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
           </Link>
           <button
             type="button"
+            onClick={() => void handleSaveTemplate()}
+            disabled={savingTemplate}
+            className={btn("secondary") + " flex items-center gap-1.5"}
+          >
+            {savingTemplate ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <BookmarkPlus size={14} aria-hidden />}
+            {t("wf.detail.saveTemplate")}
+          </button>
+          <button
+            type="button"
             onClick={() => void handleRunNow()}
             disabled={running}
             className={btn("primary")}
@@ -443,6 +474,14 @@ export function WorkflowDetailClient({ workflowId }: { workflowId: string }) {
           </button>
         </div>
       </div>
+
+      {/* Save-as-template feedback */}
+      {templateNote && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-2.5 text-sm text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/40 dark:text-neutral-300">
+          <span>{templateNote}</span>
+          <button type="button" onClick={() => setTemplateNote(null)} className="flex-none text-xs text-neutral-400 underline hover:text-neutral-600">✕</button>
+        </div>
+      )}
 
       {/* Run error feedback */}
       {runError && (

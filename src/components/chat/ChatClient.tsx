@@ -844,6 +844,15 @@ export function ChatClient() {
               <PanelLeft size={18} aria-hidden />
             </button>
             <button
+              type="button"
+              onClick={() => setConstellationOpen(true)}
+              aria-label={t("chat.constellationOpenAria")}
+              title={t("chat.constellationTitle")}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              <Orbit size={18} aria-hidden />
+            </button>
+            <button
               onClick={() => setSettingsOpen((v) => !v)}
               aria-label={t("chat.setTitle")}
               title={t("chat.setTitle")}
@@ -892,45 +901,13 @@ export function ChatClient() {
         )}
 
         <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
-          {messages.length === 0 && constellationOpen ? (
-            <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-8">
-              <Constellation
-                groups={claudeSelected ? [] : toolGroups}
-                agents={customAgents}
-                activeAgentId={settings.customAgentId}
-                onFocusTool={(group, tool) => {
-                  const picked = tool ?? group.tools[0];
-                  if (picked) onToolPick({ tool: picked, groupLabel: group.label });
-                  setConstellationOpen(false);
-                }}
-                onFocusAgent={(id) => {
-                  setSettings((s) => ({ ...s, customAgentId: id }));
-                  setConstellationOpen(false);
-                }}
-                onClose={() => setConstellationOpen(false)}
-                t={t}
-                voiceSupported={voice.support.recognition || voice.support.synthesis}
-                voiceOn={voiceOn}
-                listening={voice.listening}
-                speaking={voice.speaking}
-                onToggleVoice={() =>
-                  setVoiceOn((v) => {
-                    const next = !v;
-                    if (!next) voice.cancelSpeak();
-                    return next;
-                  })
-                }
-                onMic={() => (voice.listening ? voice.stopListening() : voice.startListening())}
-              />
-            </div>
-          ) : messages.length === 0 ? (
+          {messages.length === 0 ? (
             <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-4 py-8 text-center">
               <h2 className="mb-1 text-lg font-bold tracking-tight">{t("chat.emptyTitle")}</h2>
               <p className="mb-4 text-sm leading-relaxed text-neutral-500">{t("chat.empty", { model: modelName })}</p>
               <button
                 type="button"
                 onClick={() => setConstellationOpen(true)}
-                aria-label={t("chat.constellationOpenAria")}
                 className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/40 px-4 py-2 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-muted)]"
               >
                 <Orbit size={16} aria-hidden /> {t("chat.constellationOpen")}
@@ -1037,6 +1014,49 @@ export function ChatClient() {
             </div>
           </div>
         </div>
+
+        {/* Constellation command-center — a modal overlay so it's reachable any time
+            (empty-state or mid-conversation), not just from the empty screen. */}
+        {constellationOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+            onClick={() => setConstellationOpen(false)}
+          >
+            <div
+              className="w-full max-w-2xl rounded-2xl bg-white p-4 shadow-2xl dark:bg-neutral-900"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Constellation
+                groups={claudeSelected ? [] : toolGroups}
+                agents={customAgents}
+                activeAgentId={settings.customAgentId}
+                onFocusTool={(group, tool) => {
+                  const picked = tool ?? group.tools[0];
+                  if (picked) onToolPick({ tool: picked, groupLabel: group.label });
+                  setConstellationOpen(false);
+                }}
+                onFocusAgent={(id) => {
+                  setSettings((s) => ({ ...s, customAgentId: id }));
+                  setConstellationOpen(false);
+                }}
+                onClose={() => setConstellationOpen(false)}
+                t={t}
+                voiceSupported={voice.support.recognition || voice.support.synthesis}
+                voiceOn={voiceOn}
+                listening={voice.listening}
+                speaking={voice.speaking}
+                onToggleVoice={() =>
+                  setVoiceOn((v) => {
+                    const next = !v;
+                    if (!next) voice.cancelSpeak();
+                    return next;
+                  })
+                }
+                onMic={() => (voice.listening ? voice.stopListening() : voice.startListening())}
+              />
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

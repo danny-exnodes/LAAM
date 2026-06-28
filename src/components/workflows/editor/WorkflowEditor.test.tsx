@@ -646,3 +646,40 @@ describe("WorkflowEditor — authoring-time validation surfacing", () => {
     expect(screen.getByText(/chưa nối vào luồng/i)).toBeInTheDocument();
   });
 });
+
+describe("WorkflowEditor — per-node run output popover", () => {
+  function renderWithOutputs(nodeOutputs: Record<string, { outputPreview?: string; error?: string }>, nodeStatuses: Record<string, "idle" | "running" | "success" | "error">) {
+    return render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor
+          workflowId="wf1"
+          fetchImpl={buildFetch({ name: "My WF", graph: starterGraph })}
+          onSaved={vi.fn()}
+          nodeStatuses={nodeStatuses}
+          nodeOutputs={nodeOutputs}
+        />
+      </I18nProvider>,
+    );
+  }
+
+  test("selecting a node with run output shows its (code-derived) preview", async () => {
+    renderWithOutputs({ n1: { outputPreview: "ket qua: 42" } }, { n1: "success" });
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    fireEvent.click(screen.getByTestId("node-n1")); // select the node
+    expect(await screen.findByTestId("node-output-popover")).toHaveTextContent("ket qua: 42");
+  });
+
+  test("a failed node's popover shows the error message", async () => {
+    renderWithOutputs({ n1: { error: "Ollama 500" } }, { n1: "error" });
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    fireEvent.click(screen.getByTestId("node-n1"));
+    expect(await screen.findByTestId("node-output-popover")).toHaveTextContent("Ollama 500");
+  });
+
+  test("no popover when the node has no run output/error", async () => {
+    renderWithOutputs({}, {});
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    fireEvent.click(screen.getByTestId("node-n1"));
+    expect(screen.queryByTestId("node-output-popover")).not.toBeInTheDocument();
+  });
+});

@@ -17,6 +17,10 @@ export type WorkflowStepEvent = {
   nodeId: string;
   seq: number;
   status: string;
+  /** Code-derived, length-bounded preview of the node's output (terminal steps). */
+  outputPreview?: string;
+  /** Error message when the node failed. */
+  error?: string;
 };
 
 export type WorkflowRunEvent = {

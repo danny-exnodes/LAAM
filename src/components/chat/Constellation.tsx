@@ -16,6 +16,7 @@ import { useRef, useState } from "react";
 import { X, Mic, AudioLines } from "lucide-react";
 import type { Translator } from "@/i18n/types";
 import { Bloom } from "@/components/ui/bloom";
+import { VoiceWave } from "./VoiceWave";
 import { layoutConstellation, type ConstellationNode } from "./constellationLayout";
 import type { CatalogGroup, CatalogTool } from "@/lib/chat/toolCatalog";
 
@@ -230,6 +231,7 @@ export function Constellation({
           >
             <Mic size={15} aria-hidden />
           </button>
+          {(listening || speaking) && <VoiceWave active />}
           {listening && <span className="text-xs text-[var(--accent)]">{t("chat.listening")}</span>}
           {speaking && <span className="text-xs text-neutral-400">{t("chat.speaking")}</span>}
         </div>

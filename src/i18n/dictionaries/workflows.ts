@@ -95,6 +95,9 @@ export const workflows: Dict = {
   "wf.detail.scheduleSaved": { vi: "Đã lưu lịch chạy.", en: "Schedule saved.", zh: "已保存定时计划。" },
   "wf.detail.loadErr": { vi: "Không tải được workflow.", en: "Could not load workflow.", zh: "无法加载工作流。" },
   "wf.detail.notFound": { vi: "Không tìm thấy workflow.", en: "Workflow not found.", zh: "未找到工作流。" },
+  "wf.detail.saveTemplate": { vi: "Lưu thành mẫu", en: "Save as template", zh: "保存为模板" },
+  "wf.detail.saveTemplateOk": { vi: "Đã lưu thành mẫu.", en: "Saved as a template.", zh: "已保存为模板。" },
+  "wf.detail.saveTemplateFailed": { vi: "Lưu mẫu thất bại.", en: "Save as template failed.", zh: "保存为模板失败。" },
 
   // Run-log step kinds
   "wf.step.connector": { vi: "Connector", en: "Connector", zh: "连接器" },

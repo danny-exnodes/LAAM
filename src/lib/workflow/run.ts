@@ -14,6 +14,7 @@ import { evalPredicate } from "./predicate";
 import { emptyContext, DEFAULT_BUDGET } from "./types";
 import type { RunContext, StepRecord, WfNode, Budget, WorkflowGraph } from "./types";
 import { withWriteIdempotency } from "./idempotency";
+import { previewOutput } from "./outputPreview";
 
 const MAX_OUTPUT_BYTES = 256 * 1024; // PIN-D4b — cap output persist, KHÔNG cắt context RAM
 
@@ -127,7 +128,19 @@ export async function executeRunRow(runRow: RunRow, deps: ExecuteRunDeps): Promi
     } catch (e) {
       console.error(`[workflow] onStep DB write lỗi (fail-soft) run=${runId} node=${s.nodeId} status=${s.status}:`, e);
     }
-    deps.publish({ type: "workflow_run_step", runId, nodeId: s.nodeId, seq: s.seq, status: s.status });
+    // Carry a code-derived, length-bounded preview of the REAL output + any error
+    // so the editor can show a per-node output/error popover (Rule 13: truncate the
+    // actual value, never an LLM re-description). Only on terminal step events.
+    const preview = s.status === "running" ? undefined : previewOutput(s.output);
+    deps.publish({
+      type: "workflow_run_step",
+      runId,
+      nodeId: s.nodeId,
+      seq: s.seq,
+      status: s.status,
+      ...(preview ? { outputPreview: preview } : {}),
+      ...(s.error ? { error: s.error } : {}),
+    });
   };
 
   // F1 WAL: wrap so writes are recorded in workflow_node_idempotency on the INITIAL run too

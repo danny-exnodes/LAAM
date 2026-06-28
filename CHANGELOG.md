@@ -9,6 +9,16 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — R&D round 3: workflow exec-legibility + voice/constellation nâng cao
+**Workflow builder (legibility):**
+- **Popover output/lỗi từng node trên canvas:** khi chọn 1 node đã chạy (Test/run), hiện preview output (hoặc lỗi, nền đỏ) ngay trên node. Frame SSE `workflow_run_step` được mở rộng **additive** với `outputPreview` (cắt ≤280 ký tự **từ output thật** trong `run.ts`, Rule 13) + `error`; module thuần `outputPreview.ts` + `stepsToNodeOutputs` (nodeStatus) đều có test. `BusEvent` vốn open nên 0 đổi hợp đồng.
+- **Lưu thành mẫu:** nút "Lưu thành mẫu" ở trang chi tiết → `POST /api/workflows/[id]/save-as-template` (clone nhưng `isTemplate:true`, cột đã có sẵn ⇒ **0 migration**); RBAC gate mutator, owner/template-only. +route test.
+
+**Chat (Jarvis nâng cao):**
+- **Constellation là overlay luôn-hiện:** trước chỉ ở empty-state, nay mở được **mọi lúc** (nút Orbit trên header + nút ở empty-state) dưới dạng modal — không tranh chỗ với transcript.
+- **Waveform giọng nói:** component `VoiceWave` (SVG bars, keyframe `laam-wave` chia sẻ, tắt dưới `prefers-reduced-motion`) hiện khi đang nghe/đang đọc — đúng tinh thần "SPEAKING" của UI tham khảo.
+- **Tests:** +outputPreview 5 · nodeStatus +2 · save-as-template route 5 · editor popover 3; i18n `wf.detail.saveTemplate*` + (constellation/voice đã có). tsc sạch; full suite xanh trừ 4 test `search.test.ts` đỏ-sẵn không liên quan.
+
 ### Đã thêm — Chat "Constellation" command-center + giọng nói (R&D round 2)
 Lấy cảm hứng từ UI kiểu Jarvis. Dependency-light (SVG/CSS, **không thêm thư viện 3D**), zero migration, **không thêm network call** (dùng lại dữ liệu đã fetch sẵn).
 - **Bản đồ trợ lý (Constellation):** ở empty-state của /chat, nút "Bản đồ trợ lý" mở một **radial command-center** — Custom Agent ở vòng trong, nhóm Connector/MCP/Internal ở vòng ngoài, quanh một **orb trợ lý phát sáng** (dùng lại `Bloom` + token `--accent`/`--accent-glow`, 1 filter glow `<defs>` chia sẻ). Node là `<button>` thật mang **đúng object nguồn** (Rule 13): bấm tool → đúng đường `onToolPick` cũ; bấm agent → set `customAgentId`. Điều hướng bàn phím (mũi tên/Enter/Esc), a11y, tôn trọng `prefers-reduced-motion`. Layout là module thuần `constellationLayout.ts` (polar→cartesian, ref giữ-nguyên-định-danh) + test.
