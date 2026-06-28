@@ -29,16 +29,18 @@ import {
   NodeToolbar,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
-import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft, Sparkles, ClipboardCheck } from "lucide-react";
+import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft, Sparkles, ClipboardCheck, LayoutGrid, AlertTriangle, SearchCode } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
 import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
 import { NodesLibraryPanel, NODE_KIND_MIME, NODE_TYPES as LIBRARY_NODE_TYPES, type LibraryMode } from "./NodesLibraryPanel";
+import { NodePalette } from "./NodePalette";
 import { AiGeneratePanel } from "./AiGeneratePanel";
 import { AiReviewPanel } from "./AiReviewPanel";
 import { NodeConfigPanel } from "./NodeConfigPanel";
-import { assertRunnable } from "@/lib/workflow/validate";
+import { assertRunnable, collectIssues } from "@/lib/workflow/validate";
+import { layoutPositions } from "./autoLayout";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { WfNode, WfNodeKind, WorkflowGraph } from "@/lib/workflow/types";
@@ -97,11 +99,14 @@ type WfNodeData = {
   actionsRef: RefObject<NodeActions>;
   /** Node run status — set by WorkflowEditorInner when a run is active */
   status?: "idle" | "running" | "success" | "error";
+  /** Localized authoring-time validation messages for this node (advisory). */
+  issues?: string[];
 };
 
 // RF NodeProps data is Record<string, unknown>; we cast to extract our payload.
 function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selected?: boolean }) {
-  const { node: wf, status, actionsRef } = data as WfNodeData;
+  const { node: wf, status, actionsRef, issues } = data as WfNodeData;
+  const hasIssues = !!issues?.length && (!status || status === "idle");
   const color = KIND_COLORS[wf.kind] ?? "#64748b";
   const label =
     wf.kind === "agent"
@@ -219,6 +224,32 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
           {status === "running" ? "…" : status === "success" ? "✓" : "✕"}
         </div>
       )}
+
+      {/* Authoring-time validation badge — advisory only (never blocks save). */}
+      {hasIssues && (
+        <div
+          data-testid="node-issue-badge"
+          title={issues!.join("\n")}
+          aria-label={issues!.join("; ")}
+          style={{
+            position: "absolute",
+            top: -8,
+            left: -8,
+            width: 16,
+            height: 16,
+            borderRadius: "50%",
+            background: "#ef4444",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 11,
+            color: "#fff",
+            fontWeight: 700,
+          }}
+        >
+          !
+        </div>
+      )}
     </div>
   );
 }
@@ -323,6 +354,8 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
   const [saveError, setSaveError] = useState<string | null>(null);
   // Test (dry-run) in progress
   const [testing, setTesting] = useState(false);
+  // Cmd/Ctrl+K quick-add node palette
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   // Condition edge label prompt: when user connects FROM a condition node
   // we need to assign a true/false label.
@@ -361,7 +394,31 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     copy: () => {},
   });
 
-  // Merge external nodeStatuses into RF node data so WfNodeCard can render status badges.
+  // Authoring-time validation: recompute structured issues whenever the graph
+  // changes, localize each code, and attribute foreach-body faults to their
+  // top-level foreach node. Advisory only — Save/Test still gate via assertRunnable.
+  const { issuesByNode, graphIssues } = useMemo(() => {
+    const list = collectIssues(fromReactFlow(nodes, edges));
+    const byNode = new Map<string, string[]>();
+    const top: string[] = [];
+    for (const iss of list) {
+      const msg = t(`wf.validate.${iss.code}`);
+      if (iss.nodeId) {
+        const topId = iss.nodeId.split("/")[0];
+        const arr = byNode.get(topId) ?? [];
+        arr.push(iss.nodeId === topId ? msg : `${msg} (${iss.nodeId})`);
+        byNode.set(topId, arr);
+      } else {
+        top.push(msg);
+      }
+    }
+    return { issuesByNode: byNode, graphIssues: top };
+  }, [nodes, edges, t]);
+
+  const issueCount = graphIssues.length + [...issuesByNode.values()].reduce((s, a) => s + a.length, 0);
+
+  // Merge external nodeStatuses + validation issues into RF node data so WfNodeCard
+  // can render its status and issue badges.
   const nodesWithStatus = useMemo(
     () =>
       nodes.map((n) => ({
@@ -370,10 +427,11 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           ...n.data,
           actionsRef: nodeActionsRef,
           status: nodeStatuses?.[n.id] ?? "idle",
+          issues: issuesByNode.get(n.id),
         } satisfies WfNodeData,
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [nodes, nodeStatuses],
+    [nodes, nodeStatuses, issuesByNode],
   );
 
   // Decorate edges with run status: animate flow while running, redden on source error.
@@ -454,6 +512,22 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     },
     [nodes.length, setNodes, rfInstance],
   );
+
+  // ── Tidy: auto-layout the canvas (explicit action only) ──────────────────
+  // Re-positions every node into a left→right layered tree (pure layoutPositions),
+  // sets dirty (the debounced snapshot effect records it so Undo reverts), and
+  // re-fits the viewport. Never auto-runs, so hand-placed positions are safe.
+  const handleTidy = useCallback(() => {
+    const pos = layoutPositions(
+      nodes.map((n) => ({ id: n.id })),
+      edges.map((e) => ({ from: e.source, to: e.target })),
+    );
+    setNodes((prev) => prev.map((n) => (pos[n.id] ? { ...n, position: pos[n.id] } : n)));
+    setIsDirty(true);
+    requestAnimationFrame(() => {
+      try { rfInstance.fitView({ padding: 0.2, duration: 300 }); } catch { /* no viewport yet */ }
+    });
+  }, [nodes, edges, setNodes, rfInstance]);
 
   // Drag-to-add from the Nodes Library: drop a node kind onto the canvas at the cursor.
   const onCanvasDragOver = useCallback((e: React.DragEvent) => {
@@ -832,6 +906,19 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [undoEdit, redoEdit]);
 
+  // Keyboard: Cmd/Ctrl+K opens the quick-add node palette (intentional chord —
+  // works regardless of focus). Esc-to-close is handled inside NodePalette.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   // ── Config panel dock mode (B) ────────────────────────────────────────────
   useEffect(() => {
     try {
@@ -948,6 +1035,26 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           >
             <Redo2 size={16} aria-hidden />
           </button>
+          {/* Tidy (auto-layout) + quick-add palette */}
+          <button
+            type="button"
+            onClick={handleTidy}
+            disabled={nodes.length === 0}
+            aria-label={t("wf.editor.tidy")}
+            title={t("wf.editor.tidyHint")}
+            className="shrink-0 rounded-lg p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 disabled:opacity-30 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            <LayoutGrid size={16} aria-hidden />
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            aria-label={t("wf.palette.open")}
+            title={t("wf.palette.open")}
+            className="hidden shrink-0 rounded-lg p-1.5 text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800 md:inline-flex dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            <SearchCode size={16} aria-hidden />
+          </button>
           {/* View-controls cluster: Nodes Library toggle + config-panel dock/float */}
           <button
             type="button"
@@ -1052,6 +1159,40 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, onT
           <span className="font-semibold">{t("wf.editor.saveErr")}</span>
           {saveError !== t("wf.editor.saveErr") ? `: ${saveError}` : ""}
         </div>
+      )}
+
+      {/* Authoring-time issues — advisory (does NOT block Save/Test); click a row
+          to jump to the offending node. assertRunnable stays the hard save gate. */}
+      {issueCount > 0 && (
+        <details className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-300">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 font-semibold">
+            <AlertTriangle size={13} aria-hidden />
+            {t("wf.issues.title")} ({issueCount})
+          </summary>
+          <ul className="mt-1.5 space-y-1">
+            {[...issuesByNode.entries()].flatMap(([nodeId, msgs]) =>
+              msgs.map((msg, i) => (
+                <li key={`${nodeId}-${i}`}>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedId(nodeId)}
+                    className="text-left underline-offset-2 hover:underline"
+                  >
+                    {msg} <span className="opacity-60">— {t("wf.issues.atNode")} {nodeId}</span>
+                  </button>
+                </li>
+              )),
+            )}
+            {graphIssues.map((msg, i) => (
+              <li key={`g-${i}`}>{msg}</li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {/* Cmd/Ctrl+K quick-add node palette */}
+      {paletteOpen && (
+        <NodePalette t={t} onPick={(kind) => addNode(kind)} onClose={() => setPaletteOpen(false)} />
       )}
 
       {/* Body: nodes library + canvas + config panel */}

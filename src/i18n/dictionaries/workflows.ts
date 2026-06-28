@@ -409,4 +409,78 @@ export const workflows: Dict = {
   // Editor — edge toolbar
   "wf.editor.editEdge": { vi: "Cạnh", en: "Edge", zh: "连线" },
   "wf.editor.deleteEdge": { vi: "Xoá cạnh", en: "Delete edge", zh: "删除连线" },
+
+  // Editor — Tidy (auto-layout)
+  "wf.editor.tidy": { vi: "Sắp xếp", en: "Tidy", zh: "整理" },
+  "wf.editor.tidyHint": {
+    vi: "Tự động sắp xếp các node theo luồng trái → phải",
+    en: "Auto-arrange nodes left → right by flow",
+    zh: "按流程自动从左到右排列节点",
+  },
+
+  // Editor — authoring-time validation issues panel
+  "wf.issues.title": { vi: "Vấn đề", en: "Issues", zh: "问题" },
+  "wf.issues.badge": { vi: "Node có vấn đề cấu hình", en: "Node has a validation issue", zh: "节点存在校验问题" },
+  "wf.issues.atNode": { vi: "tại node", en: "at node", zh: "在节点" },
+
+  // Validation issue messages — keyed by stable WfIssueCode (Rule 13: code on the
+  // wire, localized text here). One per assertRunnable throw site.
+  "wf.validate.dup_id": { vi: "Trùng ID node", en: "Duplicate node ID", zh: "节点 ID 重复" },
+  "wf.validate.edge_unknown": {
+    vi: "Cạnh trỏ tới node không tồn tại",
+    en: "Edge points to a non-existent node",
+    zh: "连线指向不存在的节点",
+  },
+  "wf.validate.fan_in": {
+    vi: "Nhiều cạnh vào (chưa hỗ trợ gộp luồng)",
+    en: "Multiple incoming edges (merging not supported)",
+    zh: "多条入边（暂不支持合流）",
+  },
+  "wf.validate.multi_out": {
+    vi: "Nhiều cạnh ra (chỉ node Điều kiện mới được rẽ nhánh)",
+    en: "Multiple outgoing edges (only Condition nodes may branch)",
+    zh: "多条出边（仅条件节点可分支）",
+  },
+  "wf.validate.condition_branches": {
+    vi: "Điều kiện cần đúng 2 nhánh: true + false",
+    en: "Condition needs exactly two branches: true + false",
+    zh: "条件需恰好两个分支：true + false",
+  },
+  "wf.validate.no_start": {
+    vi: "Không có node bắt đầu (có thể đang tạo vòng lặp)",
+    en: "No start node (a cycle may exist)",
+    zh: "没有起始节点（可能存在环）",
+  },
+  "wf.validate.multi_start": {
+    vi: "Có nhiều node bắt đầu (đồ thị bị rời rạc)",
+    en: "More than one start node (graph is disconnected)",
+    zh: "存在多个起始节点（图不连通）",
+  },
+  "wf.validate.cycle": { vi: "Phát hiện vòng lặp", en: "Cycle detected", zh: "检测到环" },
+  "wf.validate.orphan": {
+    vi: "Node chưa nối vào luồng từ node bắt đầu",
+    en: "Node is not connected to the flow from the start",
+    zh: "节点未连接到起始流程",
+  },
+  "wf.validate.agent_format": {
+    vi: "agent.format phải là object JSON-schema",
+    en: "agent.format must be a JSON-schema object",
+    zh: "agent.format 必须是 JSON-schema 对象",
+  },
+
+  // Editor — Cmd/Ctrl+K node palette
+  "wf.palette.title": { vi: "Thêm node nhanh", en: "Quick add node", zh: "快速添加节点" },
+  "wf.palette.search": { vi: "Tìm loại node…", en: "Search node type…", zh: "搜索节点类型…" },
+  "wf.palette.empty": { vi: "Không có node phù hợp", en: "No matching node", zh: "无匹配节点" },
+  "wf.palette.open": { vi: "Thêm node (⌘K)", en: "Add node (⌘K)", zh: "添加节点 (⌘K)" },
+
+  // Node config — compound condition (all/any) builder
+  "wf.cond.all": { vi: "TẤT CẢ (AND)", en: "ALL (AND)", zh: "全部 (AND)" },
+  "wf.cond.any": { vi: "BẤT KỲ (OR)", en: "ANY (OR)", zh: "任一 (OR)" },
+  "wf.cond.matchLabel": { vi: "Khớp", en: "Match", zh: "匹配" },
+  "wf.cond.addCondition": { vi: "+ Điều kiện", en: "+ Condition", zh: "+ 条件" },
+  "wf.cond.addGroup": { vi: "+ Nhóm", en: "+ Group", zh: "+ 分组" },
+  "wf.cond.remove": { vi: "Xoá", en: "Remove", zh: "移除" },
+  "wf.cond.groupMode": { vi: "Nhóm điều kiện (AND/OR)", en: "Group conditions (AND/OR)", zh: "条件分组 (AND/OR)" },
+  "wf.cond.simpleMode": { vi: "Điều kiện đơn", en: "Single condition", zh: "单个条件" },
 };

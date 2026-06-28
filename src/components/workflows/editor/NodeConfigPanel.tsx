@@ -22,6 +22,20 @@ import type { ConnectorListItem } from "@/lib/connectors/types";
 import { FOREACH_STEP_KINDS, type ForeachStepKind, linearize, buildLinearGraph, nextStepId, makeStep, changeStepKind, moveStep } from "./foreach-body";
 import { variableSuggestions } from "./variableHints";
 import { parseArgSchema, type ArgField } from "./schemaForm";
+import {
+  PREDICATE_OPS,
+  type Path,
+  isGroup,
+  groupMode,
+  groupChildren,
+  getAt,
+  setMode,
+  setModeAt,
+  addComparator,
+  addGroup,
+  removeBranch,
+  updateComparator,
+} from "./predicateForm";
 
 // ── Shared style helpers ────────────────────────────────────────────────────
 
@@ -648,22 +662,154 @@ function ArgFieldInput({
 
 // ── Condition form ──────────────────────────────────────────────────────────
 
-// All comparison operators supported by the engine
-const OPS: { value: Op; label: string }[] = [
-  { value: "eq", label: "= (eq)" },
-  { value: "ne", label: "≠ (ne)" },
-  { value: "gt", label: "> (gt)" },
-  { value: "lt", label: "< (lt)" },
-  { value: "gte", label: "≥ (gte)" },
-  { value: "lte", label: "≤ (lte)" },
-  { value: "contains", label: "contains" },
-  { value: "not_contains", label: "not_contains" },
-  { value: "exists", label: "exists" },
-  { value: "not_exists", label: "not_exists" },
-];
+// All comparison operators supported by the engine. Built from PREDICATE_OPS (the
+// single source shared with the engine Op union — see predicateForm) so the UI can
+// never drift from what evalPredicate accepts. The Record<Op,…> forces a label for
+// every op at compile time.
+const OP_LABELS: Record<Op, string> = {
+  eq: "= (eq)",
+  ne: "≠ (ne)",
+  gt: "> (gt)",
+  lt: "< (lt)",
+  gte: "≥ (gte)",
+  lte: "≤ (lte)",
+  contains: "contains",
+  not_contains: "not_contains",
+  exists: "exists",
+  not_exists: "not_exists",
+};
+const OPS: { value: Op; label: string }[] = PREDICATE_OPS.map((value) => ({ value, label: OP_LABELS[value] }));
 
 function isSimpleComparator(p: Predicate): p is Comparator {
   return "op" in p;
+}
+
+/** First comparator found anywhere in a predicate tree (for group→simple downgrade). */
+function firstComparator(p: Predicate): Comparator {
+  if (isSimpleComparator(p)) return p;
+  for (const child of groupChildren(p)) {
+    const c = firstComparator(child);
+    if (c) return c;
+  }
+  return { left: "", op: "eq", right: "" };
+}
+
+// Recursive editor for an all/any predicate group. Reads the group at `path`
+// inside `root`; every edit produces a NEW root via the pure predicateForm
+// helpers and is reported through onChangeRoot. Comparator leaves reuse the same
+// left / op / right inputs as the simple form; nested groups recurse.
+function GroupPredicateEditor({
+  root,
+  path,
+  onChangeRoot,
+  t,
+}: {
+  root: Predicate;
+  path: Path;
+  onChangeRoot: (p: Predicate) => void;
+  t: Translator;
+}) {
+  const group = getAt(root, path);
+  if (!group || !isGroup(group)) return null;
+  const mode = groupMode(group)!;
+  const children = groupChildren(group);
+  const isRoot = path.length === 0;
+
+  return (
+    <div className={isRoot ? "" : "ml-2 border-l-2 border-neutral-200 pl-2 dark:border-neutral-700"}>
+      <div className="mb-1.5 flex items-center gap-2">
+        <span className="text-xs text-neutral-500">{t("wf.cond.matchLabel")}</span>
+        <select
+          className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+          value={mode}
+          aria-label={t("wf.cond.groupMode")}
+          onChange={(e) => onChangeRoot(setModeAt(root, path, e.target.value as "all" | "any"))}
+        >
+          <option value="all">{t("wf.cond.all")}</option>
+          <option value="any">{t("wf.cond.any")}</option>
+        </select>
+        {!isRoot && (
+          <button
+            type="button"
+            className="ml-auto rounded p-1 text-neutral-400 hover:text-red-500"
+            title={t("wf.cond.remove")}
+            aria-label={t("wf.cond.remove")}
+            onClick={() => onChangeRoot(removeBranch(root, path))}
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
+      </div>
+
+      <div className="space-y-1.5">
+        {children.map((child, i) => {
+          const childPath = [...path, i];
+          if (isGroup(child)) {
+            return (
+              <GroupPredicateEditor key={i} root={root} path={childPath} onChangeRoot={onChangeRoot} t={t} />
+            );
+          }
+          const c = child as Comparator;
+          return (
+            <div key={i} className="flex items-center gap-1">
+              <input
+                type="text"
+                className={inputCls() + " !px-2 !py-1 text-xs"}
+                value={c.left}
+                placeholder="{{...}}"
+                aria-label={t("wf.node.condition.leftLabel")}
+                onChange={(e) => onChangeRoot(updateComparator(root, childPath, { left: e.target.value }))}
+              />
+              <select
+                className="rounded-lg border border-neutral-200 bg-white px-1 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+                value={c.op}
+                aria-label={t("wf.node.condition.opLabel")}
+                onChange={(e) => onChangeRoot(updateComparator(root, childPath, { op: e.target.value as Op }))}
+              >
+                {OPS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                className={inputCls() + " !px-2 !py-1 text-xs"}
+                value={String(c.right ?? "")}
+                placeholder="0"
+                aria-label={t("wf.node.condition.rightLabel")}
+                onChange={(e) => onChangeRoot(updateComparator(root, childPath, { right: e.target.value }))}
+              />
+              <button
+                type="button"
+                className="shrink-0 rounded p-1 text-neutral-400 hover:text-red-500"
+                title={t("wf.cond.remove")}
+                aria-label={t("wf.cond.remove")}
+                onClick={() => onChangeRoot(removeBranch(root, childPath))}
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-1.5 flex gap-2">
+        <button
+          type="button"
+          className="text-xs font-semibold text-[var(--color-accent)] hover:underline"
+          onClick={() => onChangeRoot(addComparator(root, path))}
+        >
+          {t("wf.cond.addCondition")}
+        </button>
+        <button
+          type="button"
+          className="text-xs font-semibold text-neutral-500 hover:underline"
+          onClick={() => onChangeRoot(addGroup(root, path))}
+        >
+          {t("wf.cond.addGroup")}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ConditionForm({
@@ -679,13 +825,15 @@ function ConditionForm({
 }) {
   const leftRef = useRef<HTMLInputElement>(null);
   const rightRef = useRef<HTMLInputElement>(null);
-  const simple = isSimpleComparator(node.when);
-  const [mode, setMode] = useState<"form" | "json">(simple ? "form" : "json");
+  const initialMode = (p: Predicate): "form" | "group" | "json" =>
+    isGroup(p) ? "group" : isSimpleComparator(p) ? "form" : "json";
+  const [viewMode, setViewMode] = useState<"form" | "group" | "json">(initialMode(node.when));
 
   // Structured-form local state
-  const [left, setLeft] = useState(simple ? (node.when as Comparator).left : "");
-  const [op, setOp] = useState<Op>(simple ? (node.when as Comparator).op : "eq");
-  const [right, setRight] = useState(simple ? String((node.when as Comparator).right ?? "") : "");
+  const simple0 = isSimpleComparator(node.when);
+  const [left, setLeft] = useState(simple0 ? (node.when as Comparator).left : "");
+  const [op, setOp] = useState<Op>(simple0 ? (node.when as Comparator).op : "eq");
+  const [right, setRight] = useState(simple0 ? String((node.when as Comparator).right ?? "") : "");
 
   // JSON-mode local state
   const [jsonText, setJsonText] = useState(JSON.stringify(node.when, null, 2));
@@ -693,8 +841,7 @@ function ConditionForm({
 
   // Sync local state when a different node is selected (node.id changes)
   useEffect(() => {
-    const s = isSimpleComparator(node.when);
-    if (s) {
+    if (isSimpleComparator(node.when)) {
       const c = node.when as Comparator;
       setLeft(c.left);
       setOp(c.op);
@@ -702,7 +849,7 @@ function ConditionForm({
     }
     setJsonText(JSON.stringify(node.when, null, 2));
     setParseError(null);
-    setMode(s ? "form" : "json");
+    setViewMode(initialMode(node.when));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [node.id]);
 
@@ -720,17 +867,23 @@ function ConditionForm({
   function switchToJson() {
     setJsonText(JSON.stringify(node.when, null, 2));
     setParseError(null);
-    setMode("json");
+    setViewMode("json");
   }
 
   function switchToForm() {
-    if (isSimpleComparator(node.when)) {
-      const c = node.when as Comparator;
-      setLeft(c.left);
-      setOp(c.op);
-      setRight(String(c.right ?? ""));
-      setMode("form");
-    }
+    // Downgrade to a single comparator (keep the first one found in a group).
+    const c = firstComparator(node.when);
+    setLeft(c.left);
+    setOp(c.op);
+    setRight(String(c.right ?? ""));
+    if (!isSimpleComparator(node.when)) onChange({ ...node, when: c });
+    setViewMode("form");
+  }
+
+  function switchToGroup() {
+    // Wrap the current comparator into an ALL group (the common compound case).
+    if (!isGroup(node.when)) onChange({ ...node, when: setMode(node.when, "all") });
+    setViewMode("group");
   }
 
   function handleJsonChange(raw: string) {
@@ -744,29 +897,46 @@ function ConditionForm({
     }
   }
 
+  // Mode switcher — links between single / group / JSON authoring.
+  const modeBtn = (onClick: () => void, txt: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-xs text-neutral-400 transition hover:text-neutral-600 dark:hover:text-neutral-200"
+    >
+      {txt}
+    </button>
+  );
   const modeSwitcher = (
-    <div className="mb-3 flex justify-end">
-      {mode === "form" ? (
-        <button
-          type="button"
-          onClick={switchToJson}
-          className="text-xs text-neutral-400 transition hover:text-neutral-600 dark:hover:text-neutral-200"
-        >
-          {t("wf.node.condition.jsonMode")} ↗
-        </button>
-      ) : isSimpleComparator(node.when) ? (
-        <button
-          type="button"
-          onClick={switchToForm}
-          className="text-xs text-neutral-400 transition hover:text-neutral-600 dark:hover:text-neutral-200"
-        >
-          {t("wf.node.condition.formMode")} ↗
-        </button>
-      ) : null}
+    <div className="mb-3 flex justify-end gap-3">
+      {viewMode === "form" && modeBtn(switchToGroup, `${t("wf.cond.groupMode")} ↗`)}
+      {viewMode === "group" && modeBtn(switchToForm, `${t("wf.cond.simpleMode")} ↗`)}
+      {viewMode !== "json" && modeBtn(switchToJson, `${t("wf.node.condition.jsonMode")} ↗`)}
+      {viewMode === "json" && isSimpleComparator(node.when) && modeBtn(switchToForm, `${t("wf.node.condition.formMode")} ↗`)}
+      {viewMode === "json" && isGroup(node.when) && modeBtn(() => setViewMode("group"), `${t("wf.cond.groupMode")} ↗`)}
     </div>
   );
 
-  if (mode === "form") {
+  if (viewMode === "group") {
+    return (
+      <>
+        {modeSwitcher}
+        {field(
+          <>
+            <GroupPredicateEditor
+              root={node.when}
+              path={[]}
+              onChangeRoot={(p) => onChange({ ...node, when: p })}
+              t={t}
+            />
+            <p className="mt-2 text-xs text-neutral-400 break-words">{t("wf.node.condition.hint")}</p>
+          </>,
+        )}
+      </>
+    );
+  }
+
+  if (viewMode === "form") {
     return (
       <>
         {modeSwitcher}

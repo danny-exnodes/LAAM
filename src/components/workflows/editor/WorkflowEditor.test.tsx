@@ -115,9 +115,15 @@ vi.mock("@xyflow/react", () => {
   };
 });
 
-// assertRunnable — we spy on it to control pass/fail
+// assertRunnable — we spy on it to control pass/fail. collectIssues is the
+// advisory authoring-time validator; default to "no issues" so badges/panel
+// don't interfere with the save-path assertions below.
 const mockAssertRunnable = vi.fn();
-vi.mock("@/lib/workflow/validate", () => ({ assertRunnable: (...args: unknown[]) => mockAssertRunnable(...args) }));
+const mockCollectIssues = vi.fn((..._args: unknown[]) => [] as unknown[]);
+vi.mock("@/lib/workflow/validate", () => ({
+  assertRunnable: (...args: unknown[]) => mockAssertRunnable(...args),
+  collectIssues: (...args: unknown[]) => mockCollectIssues(...args),
+}));
 
 // fromReactFlow + toReactFlow — use real implementation
 // (no mock needed; graph-serde is pure and tested separately)
@@ -165,6 +171,7 @@ function renderEditor(fetchImpl: MockFetch = buildFetch({ name: "My WF", graph: 
 beforeEach(() => {
   vi.clearAllMocks();
   mockAssertRunnable.mockReturnValue(undefined); // valid by default
+  mockCollectIssues.mockReturnValue([]); // no authoring issues by default
 });
 
 afterEach(() => {
@@ -580,5 +587,62 @@ describe("WorkflowEditor — config panel dock mode (B)", () => {
     // Now in "float" → the toggle offers the "dock" action; clicking returns to right.
     fireEvent.click(screen.getByRole("button", { name: /gắn panel|dock panel/i }));
     expect(localStorage.getItem("wf-panel-mode")).toBe("right");
+  });
+});
+
+describe("WorkflowEditor — Tidy (auto-layout)", () => {
+  test("Tidy button renders and clicking it marks the graph dirty (Save shows ●)", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    const tidy = screen.getByRole("button", { name: /sắp xếp|tidy/i });
+    fireEvent.click(tidy);
+    // Dirty indicator (●) appears on the Save button after a layout change.
+    await waitFor(() => expect(screen.getByText("●")).toBeInTheDocument());
+  });
+});
+
+describe("WorkflowEditor — Cmd/Ctrl+K node palette", () => {
+  test("Ctrl+K opens the palette; typing filters to a matching kind; Esc closes", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const palette = await screen.findByTestId("node-palette");
+    const input = within(palette).getByRole("textbox");
+
+    // Diacritic-folded query "dieu kien" should narrow to the Condition kind only.
+    fireEvent.change(input, { target: { value: "dieu kien" } });
+    expect(within(palette).getByText("Điều kiện")).toBeInTheDocument();
+    expect(within(palette).queryByText("Agent")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByTestId("node-palette")).not.toBeInTheDocument();
+  });
+
+  test("picking a kind from the palette appends a node", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
+
+    fireEvent.keyDown(document, { key: "k", metaKey: true });
+    const palette = await screen.findByTestId("node-palette");
+    fireEvent.click(within(palette).getByText("Connector"));
+
+    const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
+    expect(after).toBe(before + 1);
+  });
+});
+
+describe("WorkflowEditor — authoring-time validation surfacing", () => {
+  test("a collected issue shows a node badge AND a clickable issues panel (advisory)", async () => {
+    mockCollectIssues.mockReturnValue([{ nodeId: "n1", code: "orphan", severity: "error" }]);
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+
+    // Per-node advisory badge on the offending node card.
+    expect(screen.getByTestId("node-issue-badge")).toBeInTheDocument();
+    // Aggregate issues panel with the localized message and count.
+    expect(screen.getByText(/Vấn đề \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText(/chưa nối vào luồng/i)).toBeInTheDocument();
   });
 });

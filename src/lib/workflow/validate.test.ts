@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { assertLinear, assertRunnable, linearOrder } from "./validate";
+import { assertLinear, assertRunnable, collectIssues, linearOrder } from "./validate";
+import type { WfIssueCode } from "./validate";
 import type { WorkflowGraph, Predicate } from "./types";
+
+const codes = (g: WorkflowGraph): WfIssueCode[] => collectIssues(g).map((i) => i.code).sort();
 
 const chain: WorkflowGraph = {
   nodes: [
@@ -210,5 +213,119 @@ describe("validate — mcp node (P2)", () => {
       edges: [{ from: "m1", to: "a1" }, { from: "m1", to: "a2" }],
     };
     expect(() => assertRunnable(g)).toThrow(/branch|nhánh|condition/i);
+  });
+});
+
+describe("collectIssues (structured, multi-fault, advisory)", () => {
+  test("valid graph → no issues (parity: assertRunnable also passes)", () => {
+    expect(collectIssues(chain)).toEqual([]);
+    expect(() => assertRunnable(chain)).not.toThrow();
+  });
+
+  test("empty graph → no issues", () => {
+    expect(collectIssues({ nodes: [], edges: [] })).toEqual([]);
+  });
+
+  test("surfaces MULTIPLE faults at once (a throw-based gate can only see one)", () => {
+    // WHY: the whole point of the collector is that an author sees EVERY problem
+    // in one pass. This graph has a bad condition AND a node with two faults.
+    const g: WorkflowGraph = {
+      nodes: [
+        { id: "c1", kind: "condition", when: { left: "a", op: "eq", right: "b" } },
+        { id: "a1", kind: "agent", prompt: "x" },
+        { id: "a2", kind: "agent", prompt: "y" },
+      ],
+      // c1 has only one (unlabeled) out-edge → condition_branches; a1 fans into a2
+      // from two sources → fan_in.
+      edges: [
+        { from: "c1", to: "a1" },
+        { from: "c1", to: "a2", label: "true" },
+        { from: "a1", to: "a2" },
+      ],
+    };
+    const found = codes(g);
+    expect(found).toContain("condition_branches");
+    expect(found).toContain("fan_in");
+    expect(found.length).toBeGreaterThanOrEqual(2);
+  });
+
+  test("pins a foreach-body fault to the NESTED node id (prefixed)", () => {
+    // WHY: a fault buried inside a foreach body must be locatable — the id is
+    // prefixed with the foreach node so the editor can point at it.
+    const g: WorkflowGraph = {
+      nodes: [
+        {
+          id: "f1",
+          kind: "foreach",
+          items: "{{items}}",
+          body: {
+            // duplicate id inside the body
+            nodes: [
+              { id: "b1", kind: "agent", prompt: "x" },
+              { id: "b1", kind: "agent", prompt: "y" },
+            ],
+            edges: [],
+          },
+        },
+      ],
+      edges: [],
+    };
+    const issues = collectIssues(g);
+    const dup = issues.find((i) => i.code === "dup_id");
+    expect(dup?.nodeId).toBe("f1/b1");
+  });
+
+  test("detects cycle (no start) and pins fan_in / condition faults to their node", () => {
+    const cyc: WorkflowGraph = {
+      nodes: [
+        { id: "n1", kind: "agent", prompt: "x" },
+        { id: "n2", kind: "agent", prompt: "y" },
+      ],
+      edges: [
+        { from: "n1", to: "n2" },
+        { from: "n2", to: "n1" },
+      ],
+    };
+    const found = codes(cyc);
+    // every node has an in-edge ⇒ no_start, and n1/n2 each receive an in-edge so
+    // neither is flagged fan_in (exactly one in each). assertRunnable also throws.
+    expect(found).toContain("no_start");
+    expect(() => assertRunnable(cyc)).toThrow();
+  });
+
+  test("DRIFT GUARD: collectIssues is non-empty iff assertRunnable throws", () => {
+    // Keeps the advisory collector and the hard gate from diverging without
+    // forcing assertRunnable to change its (tested) Vietnamese messages.
+    const cases: WorkflowGraph[] = [
+      chain, // valid
+      { nodes: [{ id: "x", kind: "agent", prompt: "" }], edges: [] }, // valid single
+      {
+        nodes: [
+          { id: "a", kind: "agent", prompt: "" },
+          { id: "b", kind: "agent", prompt: "" },
+        ],
+        edges: [],
+      }, // multi_start (2 starts)
+      {
+        nodes: [
+          { id: "a", kind: "agent", prompt: "" },
+          { id: "b", kind: "agent", prompt: "" },
+          { id: "c", kind: "agent", prompt: "" },
+        ],
+        edges: [
+          { from: "a", to: "c" },
+          { from: "b", to: "c" },
+        ],
+      }, // fan_in + multi_start
+    ];
+    for (const g of cases) {
+      let threw = false;
+      try {
+        assertRunnable(g);
+      } catch {
+        threw = true;
+      }
+      expect(collectIssues(g).length > 0).toBe(threw);
+    }
   });
 });
