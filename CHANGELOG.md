@@ -9,6 +9,13 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Chat "Constellation" command-center + giọng nói (R&D round 2)
+Lấy cảm hứng từ UI kiểu Jarvis. Dependency-light (SVG/CSS, **không thêm thư viện 3D**), zero migration, **không thêm network call** (dùng lại dữ liệu đã fetch sẵn).
+- **Bản đồ trợ lý (Constellation):** ở empty-state của /chat, nút "Bản đồ trợ lý" mở một **radial command-center** — Custom Agent ở vòng trong, nhóm Connector/MCP/Internal ở vòng ngoài, quanh một **orb trợ lý phát sáng** (dùng lại `Bloom` + token `--accent`/`--accent-glow`, 1 filter glow `<defs>` chia sẻ). Node là `<button>` thật mang **đúng object nguồn** (Rule 13): bấm tool → đúng đường `onToolPick` cũ; bấm agent → set `customAgentId`. Điều hướng bàn phím (mũi tên/Enter/Esc), a11y, tôn trọng `prefers-reduced-motion`. Layout là module thuần `constellationLayout.ts` (polar→cartesian, ref giữ-nguyên-định-danh) + test.
+- **Giọng nói (Web Speech API):** toggle "Bật giọng nói" + nút mic trong command-center. Mic (SpeechRecognition) → ghép transcript vào composer; trợ lý **đọc to** câu trả lời (SpeechSynthesis) khi stream xong. Module thuần `voice.ts` (`speechSupport` feature-detect · `langToBcp47` map vi/en/zh → BCP-47, Rule 13 · `stripForSpeech`) + test; hook `useVoice` SSR-safe (mọi truy cập `window` trong effect/handler, guard `typeof window`). **Fallback duyên dáng:** trình duyệt không hỗ trợ → ẩn UI giọng nói, chat text như cũ. (Lưu ý: recognition là Chrome/Edge và định tuyến audio qua vendor — caveat hiển thị qua toggle rõ ràng.)
+- **Tests/i18n:** +module test thuần (constellationLayout 6 + voice 6) + 4 test tích hợp ChatClient (toggle, pick tool ground-truth, chọn agent persisted, Esc); key i18n `chat.constellation*`/`chat.voice*` vi/en/zh (parity test tự bao phủ). tsc sạch.
+- **Follow-up (backlog R&D):** workflow-builder execution-legibility (output/error popover + save-as-template), constellation luôn-hiện (floating launcher), connector ngắt kết nối hiện mờ, waveform AnalyserNode đầy đủ, status SSE trực tiếp trên node.
+
 ### Đã thêm — Workflow Builder R&D upgrade (authoring 2.0: Tidy · validation · ⌘K · all/any)
 Gói nâng cấp trình dựng workflow (zero-migration, KHÔNG đụng engine — `assertRunnable` vẫn là cổng chạy cứng). Mỗi đơn vị logic là module thuần + test colocated, mọi chuỗi i18n vi/en/zh.
 - **Tidy — tự động sắp xếp canvas:** nút "Sắp xếp" (toolbar) trải node thành cây trái→phải. Engine bảo đảm đồ thị LUÔN là cây (≤1 cạnh vào, 1 start), nên dùng layout phân tầng **thuần, không thêm dependency** (`autoLayout.ts`: rank = đường dài nhất, y = thứ tự DFS để 2 nhánh true/false tách hàng). Chỉ chạy khi bấm → không bao giờ ghi đè vị trí đặt tay; Undo hoàn tác được (snapshot có sẵn ghi vị trí).

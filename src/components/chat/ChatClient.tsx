@@ -6,13 +6,15 @@
 // settings; ingests attachments via /api/fetch-url (URLs) and /api/ocr (images).
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PanelLeft, SlidersHorizontal, BarChart3, Navigation, MapPin, CloudSun, ArrowDown } from "lucide-react";
-import { useT } from "@/i18n/provider";
+import { PanelLeft, SlidersHorizontal, BarChart3, Navigation, MapPin, CloudSun, ArrowDown, Orbit } from "lucide-react";
+import { useT, useLang } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import { ConversationSidebar } from "./ConversationSidebar";
 import { SettingsPanel } from "./SettingsPanel";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
+import { Constellation } from "./Constellation";
+import { useVoice } from "./useVoice";
 import { ChatExport } from "./ChatExport";
 import { ProactiveCard, type ProactiveAlertView } from "./ProactiveCard";
 import { loadDismissed, dismissAlerts } from "./proactiveDismiss";
@@ -64,6 +66,8 @@ export function ChatClient() {
   const [streaming, setStreaming] = useState(false);
   const [settings, setSettings] = useState<ChatSettings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [constellationOpen, setConstellationOpen] = useState(false); // radial command-center overlay
+  const [voiceOn, setVoiceOn] = useState(false); // speak assistant replies aloud
   const [convOpen, setConvOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false); // F1: /xuat opens the export menu
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -538,6 +542,29 @@ export function ChatClient() {
     if (claudeSelected) setToolPick(null);
   }, [claudeSelected]);
 
+  // Voice command-center: mic transcript appends to the composer; when Voice On
+  // is enabled the assistant's reply is spoken once it finishes streaming. The
+  // hook is feature-gated (SSR-safe) — on unsupported browsers support is false
+  // and the voice UI stays hidden.
+  const { lang } = useLang();
+  const voice = useVoice({
+    lang,
+    onTranscript: (text) => setInput((prev) => (prev ? `${prev} ${text}` : text)),
+  });
+  const voiceRef = useRef(voice);
+  voiceRef.current = voice;
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    // Speak the latest assistant reply on the streaming true→false edge.
+    if (prevStreamingRef.current && !streaming && voiceOn && voiceRef.current.support.synthesis) {
+      const last = [...messagesRef.current].reverse().find((m) => m.role === "assistant" && m.content.trim());
+      if (last) voiceRef.current.speak(last.content);
+    }
+    prevStreamingRef.current = streaming;
+  }, [streaming, voiceOn]);
+
   function stop() {
     abortRef.current?.abort();
   }
@@ -865,10 +892,49 @@ export function ChatClient() {
         )}
 
         <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
+          {messages.length === 0 && constellationOpen ? (
+            <div className="mx-auto flex min-h-full w-full max-w-2xl flex-col justify-center px-4 py-8">
+              <Constellation
+                groups={claudeSelected ? [] : toolGroups}
+                agents={customAgents}
+                activeAgentId={settings.customAgentId}
+                onFocusTool={(group, tool) => {
+                  const picked = tool ?? group.tools[0];
+                  if (picked) onToolPick({ tool: picked, groupLabel: group.label });
+                  setConstellationOpen(false);
+                }}
+                onFocusAgent={(id) => {
+                  setSettings((s) => ({ ...s, customAgentId: id }));
+                  setConstellationOpen(false);
+                }}
+                onClose={() => setConstellationOpen(false)}
+                t={t}
+                voiceSupported={voice.support.recognition || voice.support.synthesis}
+                voiceOn={voiceOn}
+                listening={voice.listening}
+                speaking={voice.speaking}
+                onToggleVoice={() =>
+                  setVoiceOn((v) => {
+                    const next = !v;
+                    if (!next) voice.cancelSpeak();
+                    return next;
+                  })
+                }
+                onMic={() => (voice.listening ? voice.stopListening() : voice.startListening())}
+              />
+            </div>
+          ) : messages.length === 0 ? (
             <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-4 py-8 text-center">
               <h2 className="mb-1 text-lg font-bold tracking-tight">{t("chat.emptyTitle")}</h2>
-              <p className="mb-5 text-sm leading-relaxed text-neutral-500">{t("chat.empty", { model: modelName })}</p>
+              <p className="mb-4 text-sm leading-relaxed text-neutral-500">{t("chat.empty", { model: modelName })}</p>
+              <button
+                type="button"
+                onClick={() => setConstellationOpen(true)}
+                aria-label={t("chat.constellationOpenAria")}
+                className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/40 px-4 py-2 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-muted)]"
+              >
+                <Orbit size={16} aria-hidden /> {t("chat.constellationOpen")}
+              </button>
               <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
                 {SAMPLE_PROMPTS.map(({ key, Icon }) => (
                   <button

@@ -280,3 +280,73 @@ test("toolPick với args đủ + text rỗng → gửi message mặc định", 
     expect(body.requestedTool.args).toEqual({ project_id: "u-1" });
   });
 });
+
+// ── Constellation command-center ────────────────────────────────────────────
+// Mock incl. /api/custom-agents so the inner ring has an agent node.
+function mockFetchWithAgents() {
+  return vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/chat" && init?.method === "POST") return streamResponse(["chào bạn"]);
+    const json = url.startsWith("/api/conversations")
+      ? { conversations: [] }
+      : url === "/api/ollama/models"
+        ? { models: [] }
+        : url === "/api/chat/info"
+          ? { model: "test-model" }
+          : url === "/api/ocr"
+            ? { available: true }
+            : url === "/api/chat/tools"
+              ? { groups: TOOL_GROUPS_FX }
+              : url === "/api/custom-agents"
+                ? { agents: [{ id: "ag-1", name: "Strategist" }] }
+                : {};
+    return { ok: true, json: async () => json } as unknown as Response;
+  });
+}
+
+function renderChat() {
+  return render(
+    <I18nProvider lang="vi">
+      <ChatClient />
+    </I18nProvider>,
+  );
+}
+
+test("constellation: empty-state shows the Assistant-map toggle", async () => {
+  vi.stubGlobal("fetch", mockFetchWithAgents());
+  renderChat();
+  expect(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" })).toBeInTheDocument();
+});
+
+// Rule 13: clicking a connector node must hand the EXACT catalog tool back through
+// the existing onToolPick path — observable as the real tool name shown in the composer.
+test("constellation: clicking a connector node picks its real tool into the composer", async () => {
+  vi.stubGlobal("fetch", mockFetchWithAgents());
+  renderChat();
+  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
+  // The DAAB (mcp) group node sits on the outer ring.
+  fireEvent.click(await screen.findByRole("button", { name: "Chọn DAAB" }));
+  // Constellation closed + composer now shows the ground-truth tool name.
+  expect(await screen.findByText("mcp__daab__kg_query")).toBeInTheDocument();
+  expect(screen.queryByRole("dialog", { name: "Bản đồ agent và công cụ" })).not.toBeInTheDocument();
+});
+
+test("constellation: clicking an agent node selects that custom agent (persisted)", async () => {
+  localStorage.clear();
+  vi.stubGlobal("fetch", mockFetchWithAgents());
+  renderChat();
+  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Chọn Strategist" }));
+  await waitFor(() => expect(localStorage.getItem("laam:chat:agent")).toBe("ag-1"));
+});
+
+test("constellation: Escape closes the overlay", async () => {
+  vi.stubGlobal("fetch", mockFetchWithAgents());
+  renderChat();
+  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
+  const dialog = await screen.findByRole("dialog", { name: "Bản đồ agent và công cụ" });
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Bản đồ agent và công cụ" })).not.toBeInTheDocument(),
+  );
+  expect(screen.getByRole("button", { name: "Mở bản đồ trợ lý" })).toBeInTheDocument();
+});

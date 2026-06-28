@@ -279,6 +279,29 @@ export const chat: Dict = {
   'chat.toolsMenuHead': { vi: 'Công cụ', en: 'Tools', zh: '工具' },
   'chat.toolKindRead': { vi: 'đọc', en: 'read', zh: '读' },
   'chat.toolKindWrite': { vi: 'ghi · cần xác nhận', en: 'write · needs confirm', zh: '写 · 需确认' },
+
+  // --- constellation command-center (radial agent/connector map) ---
+  'chat.constellationTitle': { vi: 'Bản đồ trợ lý', en: 'Assistant map', zh: '助手星图' },
+  'chat.constellationOpen': { vi: 'Bản đồ trợ lý', en: 'Assistant map', zh: '助手星图' },
+  'chat.constellationOpenAria': { vi: 'Mở bản đồ trợ lý', en: 'Open assistant map', zh: '打开助手星图' },
+  'chat.constellationRegionAria': { vi: 'Bản đồ agent và công cụ', en: 'Agents and tools map', zh: 'Agent 与工具星图' },
+  'chat.constellationCloseAria': { vi: 'Đóng bản đồ', en: 'Close map', zh: '关闭星图' },
+  'chat.constellationLegendAgents': { vi: 'Agent', en: 'Agents', zh: 'Agent' },
+  'chat.constellationLegendConnectors': { vi: 'Công cụ', en: 'Connectors', zh: '连接器' },
+  'chat.constellationNodeAria': { vi: 'Chọn {name}', en: 'Focus {name}', zh: '聚焦 {name}' },
+  'chat.constellationEmpty': {
+    vi: 'Chưa có agent hay công cụ nào — kết nối ứng dụng hoặc tạo Custom Agent trước.',
+    en: 'No agents or connectors yet — connect an app or create a Custom Agent first.',
+    zh: '暂无 Agent 或连接器 — 请先连接应用或创建自定义 Agent。',
+  },
+
+  // --- voice command-center ---
+  'chat.voiceOn': { vi: 'Bật giọng nói', en: 'Voice On', zh: '语音开' },
+  'chat.voiceOff': { vi: 'Giọng nói', en: 'Voice', zh: '语音' },
+  'chat.micStartAria': { vi: 'Bắt đầu nói', en: 'Start speaking', zh: '开始说话' },
+  'chat.micStopAria': { vi: 'Dừng nghe', en: 'Stop listening', zh: '停止聆听' },
+  'chat.listening': { vi: 'Đang nghe…', en: 'Listening…', zh: '聆听中…' },
+  'chat.speaking': { vi: 'Đang nói…', en: 'Speaking…', zh: '朗读中…' },
   'chat.toolPickedHint': {
     vi: 'Điền tham số bắt buộc — model sẽ gọi đúng công cụ này.',
     en: 'Fill the required arguments — the model will call exactly this tool.',
