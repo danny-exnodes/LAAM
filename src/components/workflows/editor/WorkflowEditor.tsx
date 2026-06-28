@@ -33,7 +33,7 @@ import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft, Sparkles, Clip
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
-import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
+import { toReactFlow, fromReactFlow, capturePositions, pruneDanglingEdges } from "./graph-serde";
 import { NodesLibraryPanel, NODE_KIND_MIME, NODE_TYPES as LIBRARY_NODE_TYPES, type LibraryMode } from "./NodesLibraryPanel";
 import { NodePalette } from "./NodePalette";
 import { AiGeneratePanel } from "./AiGeneratePanel";
@@ -41,6 +41,7 @@ import { AiReviewPanel } from "./AiReviewPanel";
 import { NodeConfigPanel } from "./NodeConfigPanel";
 import { assertRunnable, collectIssues } from "@/lib/workflow/validate";
 import { layoutPositions } from "./autoLayout";
+import { nodeOutputRef } from "./outputRef";
 import { useT } from "@/i18n/provider";
 import { workflows as dict } from "@/i18n/dictionaries/workflows";
 import type { WfNode, WfNodeKind, WorkflowGraph } from "@/lib/workflow/types";
@@ -107,9 +108,11 @@ type WfNodeData = {
 
 // RF NodeProps data is Record<string, unknown>; we cast to extract our payload.
 function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selected?: boolean }) {
+  const t = useT(dict);
   const { node: wf, status, actionsRef, issues, output } = data as WfNodeData;
   const hasIssues = !!issues?.length && (!status || status === "idle");
   const showOutput = !!selected && !!(output?.outputPreview || output?.error);
+  const ioRef = nodeOutputRef(wf); // {{steps.<id>.output}} — copy-able I/O badge
   const color = KIND_COLORS[wf.kind] ?? "#64748b";
   const label =
     wf.kind === "agent"
@@ -191,6 +194,39 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
         {label}
       </div>
       <div style={{ fontSize: 9, color: "var(--wf-node-id-text)", marginTop: 2 }}>{wf.id}</div>
+
+      {/* I/O badge — the {{steps.<id>.output}} reference, click to copy. Makes data
+          flow legible without opening the config panel (open-agent-builder pattern). */}
+      {ioRef && (
+        <button
+          type="button"
+          data-testid="node-io-badge"
+          className="nodrag"
+          title={t("wf.node.copyOutputRef", { ref: ioRef })}
+          aria-label={t("wf.node.copyOutputRef", { ref: ioRef })}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            navigator.clipboard?.writeText(ioRef);
+          }}
+          style={{
+            marginTop: 4,
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 3,
+            borderRadius: 6,
+            padding: "1px 6px",
+            fontFamily: "monospace",
+            fontSize: 9,
+            color: "var(--color-accent)",
+            background: "var(--accent-muted)",
+            border: "1px solid transparent",
+            cursor: "copy",
+          }}
+        >
+          <Copy size={9} aria-hidden /> output
+        </button>
+      )}
 
       {/* Source handles — condition has two (true/false); all others have one */}
       {wf.kind === "condition" ? (
@@ -469,6 +505,27 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
     [nodes, nodeStatuses, nodeOutputs, issuesByNode],
   );
 
+  // Auto-pan: smoothly recenter the canvas on the node that just started running so
+  // the user follows execution live (open-agent-builder UX). Only on a new running
+  // node — never fights manual panning between transitions.
+  const lastPannedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const running = nodeStatuses && Object.keys(nodeStatuses).find((id) => nodeStatuses[id] === "running");
+    if (!running) {
+      if (!nodeStatuses || Object.keys(nodeStatuses).length === 0) lastPannedRef.current = null; // reset between runs
+      return;
+    }
+    if (running === lastPannedRef.current) return;
+    const rf = nodes.find((n) => n.id === running);
+    if (!rf) return;
+    lastPannedRef.current = running;
+    try {
+      rfInstance.setCenter(rf.position.x, rf.position.y, { zoom: 1, duration: 400 });
+    } catch {
+      /* no viewport yet */
+    }
+  }, [nodeStatuses, nodes, rfInstance]);
+
   // Decorate edges with run status: animate flow while running, redden on source error.
   // Pure derivation (edgeRunDecoration) is unit-tested; the visuals are verified via E2E.
   const edgesWithStatus = useMemo(
@@ -503,7 +560,8 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
         }
         const wf = await res.json() as { name: string; graph: import("@/lib/workflow/types").WorkflowGraph };
         setWfName(wf.name);
-        const rf = toReactFlow(wf.graph);
+        // Defensive: drop edges to nodes that no longer exist before rendering.
+        const rf = toReactFlow(pruneDanglingEdges(wf.graph));
         setNodes(rf.nodes.map((n) => ({ ...n, sourcePosition: Position.Right, targetPosition: Position.Left })));
         setEdges(rf.edges.map((e) => ({ ...DEFAULT_EDGE_OPTIONS, ...e })));
         setLoadState("loaded");

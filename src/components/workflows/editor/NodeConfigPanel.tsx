@@ -1239,7 +1239,11 @@ export function NodeConfigPanel({
   // t is called here (top-level component) and passed to sub-forms as a prop,
   // since sub-forms are local functions and cannot call hooks directly.
   const t = useT(dict);
-  const suggestions = variableSuggestions(allNodes ?? [], edges ?? [], node.id);
+  // A foreach node's body-step forms (which reuse this same `suggestions` array)
+  // can reference the loop's {{item}}/{{index}}, so offer them when this is a foreach.
+  const suggestions = variableSuggestions(allNodes ?? [], edges ?? [], node.id, {
+    inForeachBody: node.kind === "foreach",
+  });
   const [connectors, setConnectors] = useState<ConnectorListItem[]>(connectorsProp ?? []);
   const [mcpServers, setMcpServers] = useState<McpServerItem[]>(mcpServersProp ?? []);
 

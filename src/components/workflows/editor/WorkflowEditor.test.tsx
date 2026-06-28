@@ -111,9 +111,14 @@ vi.mock("@xyflow/react", () => {
       // addNode tests can assert a position was set without caring about
       // viewport-transform math (which is jsdom-irrelevant anyway).
       screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+      fitView: () => {},
+      setCenter: (x: number, y: number) => panCalls.push([x, y]),
     }),
   };
 });
+
+// Records auto-pan setCenter() calls so the "follow execution" test can assert.
+const { panCalls } = vi.hoisted(() => ({ panCalls: [] as Array<[number, number]> }));
 
 // assertRunnable — we spy on it to control pass/fail. collectIssues is the
 // advisory authoring-time validator; default to "no issues" so badges/panel
@@ -681,5 +686,35 @@ describe("WorkflowEditor — per-node run output popover", () => {
     await waitFor(() => screen.getByDisplayValue("My WF"));
     fireEvent.click(screen.getByTestId("node-n1"));
     expect(screen.queryByTestId("node-output-popover")).not.toBeInTheDocument();
+  });
+});
+
+describe("WorkflowEditor — node I/O badge + auto-pan", () => {
+  test("I/O badge shows the {{steps.<id>.output}} ref and copies it on click", async () => {
+    const writeText = vi.fn();
+    Object.assign(navigator, { clipboard: { writeText } }); // jsdom has no clipboard
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    const badge = await screen.findByTestId("node-io-badge");
+    expect(badge.getAttribute("aria-label")).toContain("{{steps.n1.output}}");
+    fireEvent.click(badge);
+    expect(writeText).toHaveBeenCalledWith("{{steps.n1.output}}");
+  });
+
+  test("auto-pans the canvas to a node when it starts running", async () => {
+    panCalls.length = 0;
+    render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor
+          workflowId="wf1"
+          fetchImpl={buildFetch({ name: "My WF", graph: starterGraph })}
+          onSaved={vi.fn()}
+          nodeStatuses={{ n1: "running" }}
+        />
+      </I18nProvider>,
+    );
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    await waitFor(() => expect(panCalls.length).toBeGreaterThan(0));
+    expect(panCalls[0]).toEqual([0, 0]); // n1 is the first node → flow position (0,0)
   });
 });

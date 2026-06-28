@@ -52,4 +52,36 @@ describe("variableSuggestions (flow-aware, upstream-only)", () => {
     // sibling arm "t" is NOT upstream of "f"
     expect(variableSuggestions(brNodes, brEdges, "f")).not.toContain("{{steps.t.output}}");
   });
+
+  test("expands an upstream agent's format-schema top-level fields (code-derived)", () => {
+    // WHY: the engine resolves {{steps.x.output.field}} for a structured-output
+    // agent; the picker must offer those exact fields (read from node.format, not
+    // guessed) so authors don't hand-type dotted paths.
+    const nodes: WfNode[] = [
+      { id: "a", kind: "agent", prompt: "", format: { type: "object", properties: { count: {}, title: {} } } },
+      { id: "b", kind: "agent", prompt: "" },
+    ];
+    const edges = [{ source: "a", target: "b" }];
+    const sug = variableSuggestions(nodes, edges, "b");
+    expect(sug).toContain("{{steps.a.output}}");
+    expect(sug).toContain("{{steps.a.output.count}}");
+    expect(sug).toContain("{{steps.a.output.title}}");
+  });
+
+  test("offers {{item}} and {{index}} only when editing inside a foreach body", () => {
+    const nodes: WfNode[] = [{ id: "s", kind: "agent", prompt: "" }];
+    expect(variableSuggestions(nodes, [], "s")).not.toContain("{{item}}");
+    const inBody = variableSuggestions(nodes, [], "s", { inForeachBody: true });
+    expect(inBody).toContain("{{item}}");
+    expect(inBody).toContain("{{index}}");
+  });
+
+  test("ignores a non-object/array format (no crash, no bogus fields)", () => {
+    const nodes: WfNode[] = [
+      { id: "a", kind: "agent", prompt: "", format: { type: "string" } },
+      { id: "b", kind: "agent", prompt: "" },
+    ];
+    const sug = variableSuggestions(nodes, [{ source: "a", target: "b" }], "b");
+    expect(sug).toEqual(["{{trigger}}", "{{steps.a.output}}"]);
+  });
 });

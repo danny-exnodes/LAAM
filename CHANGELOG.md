@@ -9,6 +9,15 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — R&D round 4: builder legibility (backlog open-agent-builder)
+Bốn pattern adoptable còn lại từ `open-agent-builder`, đều pure-fn + test, **0 dep, 0 migration, hợp engine đông cứng**:
+- **NodeIOBadge (`→ output`):** pill `{{steps.<id>.output}}` trên mỗi node (trừ condition), **bấm để copy** — thấy ngay node xuất gì mà không mở panel. Helper thuần `outputRef.ts` + test.
+- **Auto-pan tới node đang chạy:** khi 1 node chuyển "running" (Test/run), canvas tự `setCenter` mượt vào node đó để theo dõi thực thi. Chỉ pan khi đổi node, không tranh với pan tay.
+- **Edge-cleanup khi load:** `pruneDanglingEdges` (graph-serde) bỏ cạnh trỏ node đã xoá trước khi render — chống ghost-edge/crash từ graph hỏng. Pure + test (giữ nguyên ref khi không có gì để bỏ).
+- **Variable picker mở rộng:** `variableSuggestions` nay (a) bung **field của agent.format** JSON-schema → `{{steps.<id>.output.<field>}}` (code-derived, Rule 13) và (b) thêm `{{item}}`/`{{index}}` khi soạn trong body foreach. Pure + test.
+- **Tests:** +9 (outputRef 2 · graph-serde prune 2 · variableHints 3 · editor io-badge/auto-pan 2); i18n `wf.node.copyOutputRef` vi/en/zh. tsc sạch; full suite xanh trừ 4 test `search.test.ts` đỏ-sẵn không liên quan.
+- **Đã từ chối/hoãn (nêu rõ):** sticky-note node (vi phạm 5 node-kind đông cứng) · ExecutionPanel trong editor (trùng RunWaterfall) · export-to-code/human-approval gate (ngoài phạm vi engine).
+
 ### Đã thêm — R&D round 3: workflow exec-legibility + voice/constellation nâng cao
 **Workflow builder (legibility):**
 - **Popover output/lỗi từng node trên canvas:** khi chọn 1 node đã chạy (Test/run), hiện preview output (hoặc lỗi, nền đỏ) ngay trên node. Frame SSE `workflow_run_step` được mở rộng **additive** với `outputPreview` (cắt ≤280 ký tự **từ output thật** trong `run.ts`, Rule 13) + `error`; module thuần `outputPreview.ts` + `stepsToNodeOutputs` (nodeStatus) đều có test. `BusEvent` vốn open nên 0 đổi hợp đồng.
