@@ -111,13 +111,24 @@ vi.mock("@xyflow/react", () => {
       // addNode tests can assert a position was set without caring about
       // viewport-transform math (which is jsdom-irrelevant anyway).
       screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+      fitView: () => {},
+      setCenter: (x: number, y: number) => panCalls.push([x, y]),
     }),
   };
 });
 
-// assertRunnable — we spy on it to control pass/fail
+// Records auto-pan setCenter() calls so the "follow execution" test can assert.
+const { panCalls } = vi.hoisted(() => ({ panCalls: [] as Array<[number, number]> }));
+
+// assertRunnable — we spy on it to control pass/fail. collectIssues is the
+// advisory authoring-time validator; default to "no issues" so badges/panel
+// don't interfere with the save-path assertions below.
 const mockAssertRunnable = vi.fn();
-vi.mock("@/lib/workflow/validate", () => ({ assertRunnable: (...args: unknown[]) => mockAssertRunnable(...args) }));
+const mockCollectIssues = vi.fn((..._args: unknown[]) => [] as unknown[]);
+vi.mock("@/lib/workflow/validate", () => ({
+  assertRunnable: (...args: unknown[]) => mockAssertRunnable(...args),
+  collectIssues: (...args: unknown[]) => mockCollectIssues(...args),
+}));
 
 // fromReactFlow + toReactFlow — use real implementation
 // (no mock needed; graph-serde is pure and tested separately)
@@ -165,6 +176,7 @@ function renderEditor(fetchImpl: MockFetch = buildFetch({ name: "My WF", graph: 
 beforeEach(() => {
   vi.clearAllMocks();
   mockAssertRunnable.mockReturnValue(undefined); // valid by default
+  mockCollectIssues.mockReturnValue([]); // no authoring issues by default
 });
 
 afterEach(() => {
@@ -580,5 +592,129 @@ describe("WorkflowEditor — config panel dock mode (B)", () => {
     // Now in "float" → the toggle offers the "dock" action; clicking returns to right.
     fireEvent.click(screen.getByRole("button", { name: /gắn panel|dock panel/i }));
     expect(localStorage.getItem("wf-panel-mode")).toBe("right");
+  });
+});
+
+describe("WorkflowEditor — Tidy (auto-layout)", () => {
+  test("Tidy button renders and clicking it marks the graph dirty (Save shows ●)", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    const tidy = screen.getByRole("button", { name: /sắp xếp|tidy/i });
+    fireEvent.click(tidy);
+    // Dirty indicator (●) appears on the Save button after a layout change.
+    await waitFor(() => expect(screen.getByText("●")).toBeInTheDocument());
+  });
+});
+
+describe("WorkflowEditor — Cmd/Ctrl+K node palette", () => {
+  test("Ctrl+K opens the palette; typing filters to a matching kind; Esc closes", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+
+    fireEvent.keyDown(document, { key: "k", ctrlKey: true });
+    const palette = await screen.findByTestId("node-palette");
+    const input = within(palette).getByRole("textbox");
+
+    // Diacritic-folded query "dieu kien" should narrow to the Condition kind only.
+    fireEvent.change(input, { target: { value: "dieu kien" } });
+    expect(within(palette).getByText("Điều kiện")).toBeInTheDocument();
+    expect(within(palette).queryByText("Agent")).not.toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByTestId("node-palette")).not.toBeInTheDocument();
+  });
+
+  test("picking a kind from the palette appends a node", async () => {
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    const before = parseInt(screen.getByTestId("node-count").textContent ?? "0");
+
+    fireEvent.keyDown(document, { key: "k", metaKey: true });
+    const palette = await screen.findByTestId("node-palette");
+    fireEvent.click(within(palette).getByText("Connector"));
+
+    const after = parseInt(screen.getByTestId("node-count").textContent ?? "0");
+    expect(after).toBe(before + 1);
+  });
+});
+
+describe("WorkflowEditor — authoring-time validation surfacing", () => {
+  test("a collected issue shows a node badge AND a clickable issues panel (advisory)", async () => {
+    mockCollectIssues.mockReturnValue([{ nodeId: "n1", code: "orphan", severity: "error" }]);
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+
+    // Per-node advisory badge on the offending node card.
+    expect(screen.getByTestId("node-issue-badge")).toBeInTheDocument();
+    // Aggregate issues panel with the localized message and count.
+    expect(screen.getByText(/Vấn đề \(1\)/)).toBeInTheDocument();
+    expect(screen.getByText(/chưa nối vào luồng/i)).toBeInTheDocument();
+  });
+});
+
+describe("WorkflowEditor — per-node run output popover", () => {
+  function renderWithOutputs(nodeOutputs: Record<string, { outputPreview?: string; error?: string }>, nodeStatuses: Record<string, "idle" | "running" | "success" | "error">) {
+    return render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor
+          workflowId="wf1"
+          fetchImpl={buildFetch({ name: "My WF", graph: starterGraph })}
+          onSaved={vi.fn()}
+          nodeStatuses={nodeStatuses}
+          nodeOutputs={nodeOutputs}
+        />
+      </I18nProvider>,
+    );
+  }
+
+  test("selecting a node with run output shows its (code-derived) preview", async () => {
+    renderWithOutputs({ n1: { outputPreview: "ket qua: 42" } }, { n1: "success" });
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    fireEvent.click(screen.getByTestId("node-n1")); // select the node
+    expect(await screen.findByTestId("node-output-popover")).toHaveTextContent("ket qua: 42");
+  });
+
+  test("a failed node's popover shows the error message", async () => {
+    renderWithOutputs({ n1: { error: "Ollama 500" } }, { n1: "error" });
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    fireEvent.click(screen.getByTestId("node-n1"));
+    expect(await screen.findByTestId("node-output-popover")).toHaveTextContent("Ollama 500");
+  });
+
+  test("no popover when the node has no run output/error", async () => {
+    renderWithOutputs({}, {});
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    fireEvent.click(screen.getByTestId("node-n1"));
+    expect(screen.queryByTestId("node-output-popover")).not.toBeInTheDocument();
+  });
+});
+
+describe("WorkflowEditor — node I/O badge + auto-pan", () => {
+  test("I/O badge shows the {{steps.<id>.output}} ref and copies it on click", async () => {
+    const writeText = vi.fn();
+    Object.assign(navigator, { clipboard: { writeText } }); // jsdom has no clipboard
+    renderEditor();
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    const badge = await screen.findByTestId("node-io-badge");
+    expect(badge.getAttribute("aria-label")).toContain("{{steps.n1.output}}");
+    fireEvent.click(badge);
+    expect(writeText).toHaveBeenCalledWith("{{steps.n1.output}}");
+  });
+
+  test("auto-pans the canvas to a node when it starts running", async () => {
+    panCalls.length = 0;
+    render(
+      <I18nProvider lang="vi">
+        <WorkflowEditor
+          workflowId="wf1"
+          fetchImpl={buildFetch({ name: "My WF", graph: starterGraph })}
+          onSaved={vi.fn()}
+          nodeStatuses={{ n1: "running" }}
+        />
+      </I18nProvider>,
+    );
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+    await waitFor(() => expect(panCalls.length).toBeGreaterThan(0));
+    expect(panCalls[0]).toEqual([0, 0]); // n1 is the first node → flow position (0,0)
   });
 });

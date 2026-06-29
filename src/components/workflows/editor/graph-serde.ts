@@ -30,6 +30,19 @@ export interface RFGraph {
 }
 
 /**
+ * pruneDanglingEdges — drop edges whose source or target node no longer exists.
+ * Defensive cleanup on load: a persisted graph can carry edges to deleted nodes
+ * (corruption / older bugs), which would otherwise render as ghost edges or trip
+ * validation. Pure — returns a new graph; positions/viewport are preserved.
+ */
+export function pruneDanglingEdges(graph: WorkflowGraph): WorkflowGraph {
+  const ids = new Set(graph.nodes.map((n) => n.id));
+  const edges = graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to));
+  if (edges.length === graph.edges.length) return graph; // nothing pruned → same ref
+  return { ...graph, edges };
+}
+
+/**
  * toReactFlow — WorkflowGraph → React Flow nodes + edges.
  *
  * Positions: auto-layout by index (x = col * AUTO_LAYOUT_X,

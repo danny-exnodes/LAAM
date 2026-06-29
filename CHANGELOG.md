@@ -9,6 +9,40 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — R&D round 4: builder legibility (backlog open-agent-builder)
+Bốn pattern adoptable còn lại từ `open-agent-builder`, đều pure-fn + test, **0 dep, 0 migration, hợp engine đông cứng**:
+- **NodeIOBadge (`→ output`):** pill `{{steps.<id>.output}}` trên mỗi node (trừ condition), **bấm để copy** — thấy ngay node xuất gì mà không mở panel. Helper thuần `outputRef.ts` + test.
+- **Auto-pan tới node đang chạy:** khi 1 node chuyển "running" (Test/run), canvas tự `setCenter` mượt vào node đó để theo dõi thực thi. Chỉ pan khi đổi node, không tranh với pan tay.
+- **Edge-cleanup khi load:** `pruneDanglingEdges` (graph-serde) bỏ cạnh trỏ node đã xoá trước khi render — chống ghost-edge/crash từ graph hỏng. Pure + test (giữ nguyên ref khi không có gì để bỏ).
+- **Variable picker mở rộng:** `variableSuggestions` nay (a) bung **field của agent.format** JSON-schema → `{{steps.<id>.output.<field>}}` (code-derived, Rule 13) và (b) thêm `{{item}}`/`{{index}}` khi soạn trong body foreach. Pure + test.
+- **Tests:** +9 (outputRef 2 · graph-serde prune 2 · variableHints 3 · editor io-badge/auto-pan 2); i18n `wf.node.copyOutputRef` vi/en/zh. tsc sạch; full suite xanh trừ 4 test `search.test.ts` đỏ-sẵn không liên quan.
+- **Đã từ chối/hoãn (nêu rõ):** sticky-note node (vi phạm 5 node-kind đông cứng) · ExecutionPanel trong editor (trùng RunWaterfall) · export-to-code/human-approval gate (ngoài phạm vi engine).
+
+### Đã thêm — R&D round 3: workflow exec-legibility + voice/constellation nâng cao
+**Workflow builder (legibility):**
+- **Popover output/lỗi từng node trên canvas:** khi chọn 1 node đã chạy (Test/run), hiện preview output (hoặc lỗi, nền đỏ) ngay trên node. Frame SSE `workflow_run_step` được mở rộng **additive** với `outputPreview` (cắt ≤280 ký tự **từ output thật** trong `run.ts`, Rule 13) + `error`; module thuần `outputPreview.ts` + `stepsToNodeOutputs` (nodeStatus) đều có test. `BusEvent` vốn open nên 0 đổi hợp đồng.
+- **Lưu thành mẫu:** nút "Lưu thành mẫu" ở trang chi tiết → `POST /api/workflows/[id]/save-as-template` (clone nhưng `isTemplate:true`, cột đã có sẵn ⇒ **0 migration**); RBAC gate mutator, owner/template-only. +route test.
+
+**Chat (Jarvis nâng cao):**
+- **Constellation là overlay luôn-hiện:** trước chỉ ở empty-state, nay mở được **mọi lúc** (nút Orbit trên header + nút ở empty-state) dưới dạng modal — không tranh chỗ với transcript.
+- **Waveform giọng nói:** component `VoiceWave` (SVG bars, keyframe `laam-wave` chia sẻ, tắt dưới `prefers-reduced-motion`) hiện khi đang nghe/đang đọc — đúng tinh thần "SPEAKING" của UI tham khảo.
+- **Tests:** +outputPreview 5 · nodeStatus +2 · save-as-template route 5 · editor popover 3; i18n `wf.detail.saveTemplate*` + (constellation/voice đã có). tsc sạch; full suite xanh trừ 4 test `search.test.ts` đỏ-sẵn không liên quan.
+
+### Đã thêm — Chat "Constellation" command-center + giọng nói (R&D round 2)
+Lấy cảm hứng từ UI kiểu Jarvis. Dependency-light (SVG/CSS, **không thêm thư viện 3D**), zero migration, **không thêm network call** (dùng lại dữ liệu đã fetch sẵn).
+- **Bản đồ trợ lý (Constellation):** ở empty-state của /chat, nút "Bản đồ trợ lý" mở một **radial command-center** — Custom Agent ở vòng trong, nhóm Connector/MCP/Internal ở vòng ngoài, quanh một **orb trợ lý phát sáng** (dùng lại `Bloom` + token `--accent`/`--accent-glow`, 1 filter glow `<defs>` chia sẻ). Node là `<button>` thật mang **đúng object nguồn** (Rule 13): bấm tool → đúng đường `onToolPick` cũ; bấm agent → set `customAgentId`. Điều hướng bàn phím (mũi tên/Enter/Esc), a11y, tôn trọng `prefers-reduced-motion`. Layout là module thuần `constellationLayout.ts` (polar→cartesian, ref giữ-nguyên-định-danh) + test.
+- **Giọng nói (Web Speech API):** toggle "Bật giọng nói" + nút mic trong command-center. Mic (SpeechRecognition) → ghép transcript vào composer; trợ lý **đọc to** câu trả lời (SpeechSynthesis) khi stream xong. Module thuần `voice.ts` (`speechSupport` feature-detect · `langToBcp47` map vi/en/zh → BCP-47, Rule 13 · `stripForSpeech`) + test; hook `useVoice` SSR-safe (mọi truy cập `window` trong effect/handler, guard `typeof window`). **Fallback duyên dáng:** trình duyệt không hỗ trợ → ẩn UI giọng nói, chat text như cũ. (Lưu ý: recognition là Chrome/Edge và định tuyến audio qua vendor — caveat hiển thị qua toggle rõ ràng.)
+- **Tests/i18n:** +module test thuần (constellationLayout 6 + voice 6) + 4 test tích hợp ChatClient (toggle, pick tool ground-truth, chọn agent persisted, Esc); key i18n `chat.constellation*`/`chat.voice*` vi/en/zh (parity test tự bao phủ). tsc sạch.
+- **Follow-up (backlog R&D):** workflow-builder execution-legibility (output/error popover + save-as-template), constellation luôn-hiện (floating launcher), connector ngắt kết nối hiện mờ, waveform AnalyserNode đầy đủ, status SSE trực tiếp trên node.
+
+### Đã thêm — Workflow Builder R&D upgrade (authoring 2.0: Tidy · validation · ⌘K · all/any)
+Gói nâng cấp trình dựng workflow (zero-migration, KHÔNG đụng engine — `assertRunnable` vẫn là cổng chạy cứng). Mỗi đơn vị logic là module thuần + test colocated, mọi chuỗi i18n vi/en/zh.
+- **Tidy — tự động sắp xếp canvas:** nút "Sắp xếp" (toolbar) trải node thành cây trái→phải. Engine bảo đảm đồ thị LUÔN là cây (≤1 cạnh vào, 1 start), nên dùng layout phân tầng **thuần, không thêm dependency** (`autoLayout.ts`: rank = đường dài nhất, y = thứ tự DFS để 2 nhánh true/false tách hàng). Chỉ chạy khi bấm → không bao giờ ghi đè vị trí đặt tay; Undo hoàn tác được (snapshot có sẵn ghi vị trí).
+- **Validation tại thời điểm dựng:** `collectIssues(graph)` (sibling thuần của `assertRunnable`, KHÔNG throw) trả về danh sách lỗi **mã hoá ổn định** (`WfIssueCode`) thay vì 1 chuỗi tiếng Việt ném ra. Surface: **badge "!" cố vấn trên node lỗi** + **panel "Vấn đề (N)"** bấm vào nhảy tới node; lỗi trong foreach-body gắn id lồng (`f1/b1`). Sửa luôn **lỗi i18n thật** (thông điệp validate cũ chỉ tiếng Việt bất kể `laam_lang`). **Cố vấn — KHÔNG chặn Save/Test** (assertRunnable vẫn là cổng cứng).
+- **⌘/Ctrl+K — bảng thêm node nhanh:** overlay bàn-phím-trước, lọc **không dấu** (gõ "dieu kien" ra "Điều kiện") qua `nodeSearch.ts` thuần với `labelOf` tiêm vào (i18n-bất-khả-tri, Rule 13); dùng lại `NODE_TYPES` (nguồn chân lý) + đường `addNode` sẵn có, **không thêm dependency** (không cmdk).
+- **Trình dựng điều kiện all/any có cấu trúc:** predicate ghép (all/any) trước rơi về textarea JSON thô; nay có **GroupPredicateEditor đệ quy** (chuyển AND/OR, thêm/xoá điều kiện + nhóm con) qua helpers bất biến `predicateForm.ts` — engine đã hiểu all/any sẵn (`evalPredicate`). Giữ toggle JSON "nâng cao" làm lối thoát. Danh sách op build từ `PREDICATE_OPS` (nguồn chung với Op union → có drift-guard test).
+- **Tests:** +4 module test thuần (autoLayout/nodeSearch/predicateForm + collectIssues đa-lỗi & drift-guard) + 4 test tích hợp editor (Tidy/⌘K/badge). Sửa 1 test foreach **đã cũ từ trước** (giả định body mặc định JSON — nay là step-builder). tsc sạch.
+
 ## [2.5.0] — 2026-06-23 — Cloud-first internal model · message-content search · security guard
 
 ### Đã thêm — Workflow UX & độ tin cậy (digest ground-truth · foreach builder · markdown output)

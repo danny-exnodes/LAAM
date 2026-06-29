@@ -31,6 +31,24 @@ export function stepsToNodeStatuses(
   return out;
 }
 
+/** A node's run output/error preview (carried on the SSE step frame). */
+export type NodeRunOutput = { outputPreview?: string; error?: string };
+
+/**
+ * Fold step events into a nodeId → {outputPreview, error} map (last per node wins),
+ * keeping only nodes that actually produced an output preview or an error — so the
+ * editor only shows a popover where there's something to show.
+ */
+export function stepsToNodeOutputs(
+  steps: ReadonlyArray<{ nodeId: string; outputPreview?: string; error?: string }>,
+): Record<string, NodeRunOutput> {
+  const out: Record<string, NodeRunOutput> = {};
+  for (const s of steps) {
+    if (s.outputPreview || s.error) out[s.nodeId] = { outputPreview: s.outputPreview, error: s.error };
+  }
+  return out;
+}
+
 /**
  * Visual decoration for an edge, derived from its SOURCE node's status + the
  * overall run status:

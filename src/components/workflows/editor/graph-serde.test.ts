@@ -7,7 +7,7 @@
  * These tests are the serialization round-trip contract.
  */
 import { describe, expect, test } from "vitest";
-import { toReactFlow, fromReactFlow, capturePositions } from "./graph-serde";
+import { toReactFlow, fromReactFlow, capturePositions, pruneDanglingEdges } from "./graph-serde";
 import type { WorkflowGraph, WfAgentNode, WfConnectorNode, WfConditionNode, WfForeachNode } from "@/lib/workflow/types";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -59,6 +59,27 @@ function roundTrip(graph: WorkflowGraph): WorkflowGraph {
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
+
+describe("pruneDanglingEdges", () => {
+  test("removes edges whose source or target node is missing", () => {
+    const graph: WorkflowGraph = {
+      nodes: [agentNode, connectorNode], // agent-1, conn-1
+      edges: [
+        { from: "agent-1", to: "conn-1" }, // valid
+        { from: "agent-1", to: "ghost" }, // dangling target
+        { from: "gone", to: "conn-1" }, // dangling source
+      ],
+    };
+    const out = pruneDanglingEdges(graph);
+    expect(out.edges).toEqual([{ from: "agent-1", to: "conn-1" }]);
+    expect(out.nodes).toBe(graph.nodes); // nodes untouched
+  });
+
+  test("returns the SAME reference when nothing is dangling (no needless churn)", () => {
+    const graph: WorkflowGraph = { nodes: [agentNode, connectorNode], edges: [{ from: "agent-1", to: "conn-1" }] };
+    expect(pruneDanglingEdges(graph)).toBe(graph);
+  });
+});
 
 describe("toReactFlow", () => {
   test("maps each WfNode id to an RF node id", () => {

@@ -285,19 +285,55 @@ describe("ConditionForm — structured mode (default for simple predicate)", () 
   });
 });
 
-describe("ConditionForm — JSON mode for nested predicate", () => {
+describe("ConditionForm — structured all/any group builder (nested predicate)", () => {
   const nestedNode: WfConditionNode = {
     id: "cond-2",
     kind: "condition",
     when: { all: [{ left: "{{x}}", op: "gt", right: 0 }, { left: "{{y}}", op: "eq", right: "ok" }] },
   };
 
-  test("starts in JSON mode when predicate is nested (all/any)", () => {
+  test("a nested all/any predicate opens the structured GROUP builder (not raw JSON)", () => {
+    // WHY: compound predicates used to drop to a raw-JSON textarea — the worst
+    // power-user friction. They must now render the all/any builder by default.
     renderPanel(<NodeConfigPanel node={nestedNode} onChange={vi.fn()} />);
-    // JSON textarea (with 'left' in placeholder) should be visible
-    expect(screen.getByPlaceholderText(/left/)).toBeInTheDocument();
-    // No 'Form' toggle because predicate is not a simple comparator
-    expect(screen.queryByRole("button", { name: /^form$/i })).not.toBeInTheDocument();
+    const modeSel = screen.getByLabelText(/Nhóm điều kiện/i) as HTMLSelectElement;
+    expect(modeSel.value).toBe("all");
+    // not in JSON mode
+    expect(screen.queryByPlaceholderText(/"left"/)).not.toBeInTheDocument();
+  });
+
+  test("switching the group mode all→any calls onChange with an `any` group", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={nestedNode} onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText(/Nhóm điều kiện/i), { target: { value: "any" } });
+    const updated = onChange.mock.calls[0][0] as WfConditionNode;
+    expect(updated.when).toHaveProperty("any");
+    expect((updated.when as { any: unknown[] }).any).toHaveLength(2);
+  });
+
+  test("'+ Điều kiện' appends an empty comparator to the group", () => {
+    const onChange = vi.fn();
+    renderPanel(<NodeConfigPanel node={nestedNode} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /\+ Điều kiện/i }));
+    const updated = onChange.mock.calls[0][0] as WfConditionNode;
+    expect((updated.when as { all: unknown[] }).all).toHaveLength(3);
+  });
+
+  test("a simple comparator can be promoted to a group via the switcher", () => {
+    const onChange = vi.fn();
+    const simple: WfConditionNode = { id: "cond-3", kind: "condition", when: { left: "{{x}}", op: "gt", right: 0 } };
+    renderPanel(<NodeConfigPanel node={simple} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: /Nhóm điều kiện/i }));
+    const updated = onChange.mock.calls[0][0] as WfConditionNode;
+    expect(updated.when).toHaveProperty("all");
+    // the original comparator is preserved as the group's only child
+    expect((updated.when as { all: unknown[] }).all).toEqual([{ left: "{{x}}", op: "gt", right: 0 }]);
+  });
+
+  test("JSON escape hatch still reachable from the group builder", () => {
+    renderPanel(<NodeConfigPanel node={nestedNode} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /json/i }));
+    expect(screen.getByPlaceholderText(/"left"/)).toBeInTheDocument();
   });
 });
 
@@ -327,7 +363,9 @@ describe("ForeachForm", () => {
 
   test("invalid body JSON shows parse error", () => {
     renderPanel(<NodeConfigPanel node={feNode} onChange={vi.fn()} />);
-    // The body textarea uses placeholder with 'nodes'
+    // An empty body now defaults to the structured step builder — switch to the
+    // raw-JSON tab first (the body textarea uses a placeholder with 'nodes').
+    fireEvent.click(screen.getByRole("button", { name: /^JSON$/ }));
     const areas = screen.getAllByRole("textbox");
     const bodyArea = areas.find((el) =>
       (el as HTMLTextAreaElement).placeholder?.includes("nodes"),

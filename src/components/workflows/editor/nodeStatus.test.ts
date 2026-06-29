@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { mapStepStatus, stepsToNodeStatuses, edgeRunDecoration } from "./nodeStatus";
+import { mapStepStatus, stepsToNodeStatuses, stepsToNodeOutputs, edgeRunDecoration } from "./nodeStatus";
 
 describe("mapStepStatus — Rule 13 vocab bridge", () => {
   // The exact SSE strings (NOT look-alikes) must map to the badge vocab.
@@ -40,6 +40,25 @@ describe("stepsToNodeStatuses", () => {
 
   test("empty → empty", () => {
     expect(stepsToNodeStatuses([])).toEqual({});
+  });
+});
+
+describe("stepsToNodeOutputs", () => {
+  test("keeps only nodes with an output preview or an error (last per node wins)", () => {
+    expect(
+      stepsToNodeOutputs([
+        { nodeId: "n1", outputPreview: "old" },
+        { nodeId: "n1", outputPreview: "new" }, // last wins
+        { nodeId: "n2", error: "boom" },
+        { nodeId: "n3" }, // nothing to show → omitted
+      ]),
+    ).toEqual({
+      n1: { outputPreview: "new", error: undefined },
+      n2: { outputPreview: undefined, error: "boom" },
+    });
+  });
+  test("empty in → empty out", () => {
+    expect(stepsToNodeOutputs([])).toEqual({});
   });
 });
 

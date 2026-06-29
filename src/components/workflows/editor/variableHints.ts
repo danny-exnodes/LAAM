@@ -13,6 +13,10 @@ export function variableSuggestions(
   allNodes: ReadonlyArray<WfNode>,
   edges: ReadonlyArray<{ source: string; target: string }>,
   currentNodeId: string,
+  opts?: {
+    /** Editing a field inside a foreach body → also offer {{item}} and {{index}}. */
+    inForeachBody?: boolean;
+  },
 ): string[] {
   // target → incoming source ids, then BFS backward from the current node.
   const incoming = new Map<string, string[]>();
@@ -31,7 +35,19 @@ export function variableSuggestions(
   }
   const out = ["{{trigger}}"];
   for (const n of allNodes) {
-    if (ancestors.has(n.id)) out.push(`{{steps.${n.id}.output}}`);
+    if (!ancestors.has(n.id)) continue;
+    out.push(`{{steps.${n.id}.output}}`);
+    // An upstream agent with a structured-output `format` JSON-schema exposes named
+    // fields the engine resolves ({{steps.x.output.field}}). Expand the schema's
+    // top-level properties — CODE-DERIVED from node.format (Rule 13), never guessed.
+    if (n.kind === "agent" && n.format && typeof n.format === "object") {
+      const props = (n.format as { properties?: Record<string, unknown> }).properties;
+      if (props && typeof props === "object" && !Array.isArray(props)) {
+        for (const key of Object.keys(props)) out.push(`{{steps.${n.id}.output.${key}}}`);
+      }
+    }
   }
+  // Inside a foreach body the engine injects the current item + its index.
+  if (opts?.inForeachBody) out.push("{{item}}", "{{index}}");
   return out;
 }
