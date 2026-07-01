@@ -1,11 +1,12 @@
 "use client";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useT } from "@/i18n/provider";
 import { constellation } from "@/i18n/dictionaries/constellation";
 import type { Lang } from "@/i18n/types";
 import Link from "next/link";
 import { buildNodes, type ConstNode } from "@/lib/constellation/nodeModel";
 import { placeNodes } from "@/lib/constellation/field";
+import { ConstellationCanvas } from "./ConstellationCanvas";
 import { ConstellationNodes } from "./ConstellationNodes";
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
@@ -44,6 +45,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     // tool pick + idle-connector handling wired in Task 6 (requestedTool) / toast
   }, []);
 
+  // Constant 0.15 level until Task 5 wires real audio analyser
+  const levelRef = useRef(0.15);
+  const getLevel = useCallback(() => levelRef.current, []);
+
   // suppress unused-var warnings for props used by later tasks
   void greetingName;
   void lang;
@@ -55,6 +60,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       role="application"
       aria-label={t("constellation.regionAria")}
     >
+      {/* Canvas FX layer: z-0, behind all HTML overlays */}
+      <ConstellationCanvas placed={placed} getLevel={getLevel} />
       <Link href="/chat" className="absolute right-4 top-4 z-10 rounded-full border border-[#5bd6ff]/30 bg-[#0a1e34]/60 px-4 py-2 text-sm text-[#a9e9ff]">
         {t("constellation.back")}
       </Link>
@@ -62,7 +69,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         {t("constellation.title")}
       </h1>
       <ConstellationNodes placed={placed} onPick={onPick} t={t} />
-      {/* Canvas, voice, sysinfo, command dock added in later tasks. */}
+      {/* Voice, sysinfo, command dock added in later tasks. */}
     </div>
   );
 }
