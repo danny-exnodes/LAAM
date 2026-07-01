@@ -168,6 +168,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const handleSend = useCallback(() => {
     const msg = command.trim();
     if (!msg) return;
+    setCaption("");
     setCommand("");
     const model = typeof window !== "undefined" ? (localStorage.getItem("laam:chat:model") ?? undefined) : undefined;
     void chat.send({

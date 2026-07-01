@@ -5,6 +5,7 @@ export function useAudioAnalyser() {
   const ctxRef = useRef<AudioContext | null>(null);
   const micAnalyser = useRef<AnalyserNode | null>(null);
   const ttsAnalyser = useRef<AnalyserNode | null>(null);
+  const ttsSource = useRef<MediaElementAudioSourceNode | null>(null);
   const micStream = useRef<MediaStream | null>(null);
   const buf = useRef<Uint8Array<ArrayBuffer>>(new Uint8Array(512) as Uint8Array<ArrayBuffer>);
   const smooth = useRef({ mic: 0.06, tts: 0 });
@@ -36,10 +37,26 @@ export function useAudioAnalyser() {
 
   const attachTts = useCallback((el: HTMLAudioElement) => {
     ensure();
-    if (!ctxRef.current) return;
-    const src = ctxRef.current.createMediaElementSource(el);
-    const an = ctxRef.current.createAnalyser(); an.fftSize = 512;
-    src.connect(an); an.connect(ctxRef.current.destination); ttsAnalyser.current = an;
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    try {
+      ttsSource.current?.disconnect();
+      ttsAnalyser.current?.disconnect();
+    } catch { /* ignore */ }
+    ttsSource.current = null;
+    ttsAnalyser.current = null;
+    try {
+      const src = ctx.createMediaElementSource(el);
+      const an = ctx.createAnalyser();
+      an.fftSize = 512;
+      src.connect(an);
+      an.connect(ctx.destination);
+      ttsSource.current = src;
+      ttsAnalyser.current = an;
+    } catch {
+      ttsSource.current = null;
+      ttsAnalyser.current = null;
+    }
   }, [ensure]);
 
   const rms = (an: AnalyserNode | null) => {
@@ -55,6 +72,10 @@ export function useAudioAnalyser() {
     return { mic: smooth.current.mic, tts: smooth.current.tts };
   }, []);
 
-  useEffect(() => () => { stopMic(); void ctxRef.current?.close(); }, [stopMic]);
+  useEffect(() => () => {
+    stopMic();
+    try { ttsSource.current?.disconnect(); ttsAnalyser.current?.disconnect(); } catch {}
+    void ctxRef.current?.close();
+  }, [stopMic]);
   return { ensure, startMic, stopMic, attachTts, sample };
 }

@@ -56,7 +56,7 @@ export function SysInfoPanel({
           const rev = await fetch(`/api/reverse?lat=${lat}&lng=${lng}`)
             .then((r) => (r.ok ? r.json() : null))
             .catch(() => null) as { address?: string } | null;
-          setWx({ tempC: w.tempC, code: w.code, city: rev?.address ?? "" });
+          setWx({ tempC: w.tempC, code: w.code, city: (rev?.address ?? "").split(",")[0].trim() });
         })
         .catch(() => {});
     };
