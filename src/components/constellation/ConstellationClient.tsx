@@ -91,15 +91,48 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         ? "speaking"
         : "idle";
 
+  // speakReply: prefer neural TTS via /api/tts → meter audio for ripples; fallback to browser TTS
+  const speakReply = useCallback(async (text: string) => {
+    if (!text) return;
+    let usedNeural = false;
+    // Guard: only construct Audio in browser (SSR safety)
+    if (typeof window !== "undefined" && typeof Audio !== "undefined") {
+      try {
+        const res = await fetch("/api/tts", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text, lang }),
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          const el = new Audio(url);
+          audio.attachTts(el);
+          el.onended = () => URL.revokeObjectURL(url);
+          await el.play();
+          usedNeural = true;
+        }
+      } catch {
+        // neural TTS unavailable → fall through to browser TTS
+      }
+    }
+    if (!usedNeural) {
+      voice.speak(text);
+    }
+  }, [lang, audio, voice]);
+
+  // Keep speakReply in a ref so the stream-end effect stays dep-stable
+  const speakRef = useRef(speakReply);
+  speakRef.current = speakReply;
+
   // Speak the caption when streaming transitions true → false
   const prevStreamingRef = useRef(false);
   const captionRef = useRef(caption); captionRef.current = caption;
-  const voiceRef = useRef(voice); voiceRef.current = voice;
   useEffect(() => {
     const wasStreaming = prevStreamingRef.current;
     prevStreamingRef.current = chat.streaming;
-    if (wasStreaming && !chat.streaming && voiceRef.current.support.synthesis && captionRef.current) {
-      voiceRef.current.speak(captionRef.current);
+    if (wasStreaming && !chat.streaming && captionRef.current) {
+      void speakRef.current(captionRef.current);
     }
   }, [chat.streaming]);
 
