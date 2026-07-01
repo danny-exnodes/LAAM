@@ -3,7 +3,7 @@ name: Build & Deploy LAAM
 on:
   push:
     branches:
-      - main
+      - deploy-dev
 
 concurrency:
   group: production
