@@ -311,42 +311,9 @@ function renderChat() {
   );
 }
 
-test("constellation: empty-state shows the Assistant-map toggle", async () => {
+test("empty-state links to the constellation page", async () => {
   vi.stubGlobal("fetch", mockFetchWithAgents());
   renderChat();
-  expect(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" })).toBeInTheDocument();
-});
-
-// Rule 13: clicking a connector node must hand the EXACT catalog tool back through
-// the existing onToolPick path — observable as the real tool name shown in the composer.
-test("constellation: clicking a connector node picks its real tool into the composer", async () => {
-  vi.stubGlobal("fetch", mockFetchWithAgents());
-  renderChat();
-  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
-  // The DAAB (mcp) group node sits on the outer ring.
-  fireEvent.click(await screen.findByRole("button", { name: "Chọn DAAB" }));
-  // Constellation closed + composer now shows the ground-truth tool name.
-  expect(await screen.findByText("mcp__daab__kg_query")).toBeInTheDocument();
-  expect(screen.queryByRole("dialog", { name: "Bản đồ agent và công cụ" })).not.toBeInTheDocument();
-});
-
-test("constellation: clicking an agent node selects that custom agent (persisted)", async () => {
-  localStorage.clear();
-  vi.stubGlobal("fetch", mockFetchWithAgents());
-  renderChat();
-  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Chọn Strategist" }));
-  await waitFor(() => expect(localStorage.getItem("laam:chat:agent")).toBe("ag-1"));
-});
-
-test("constellation: Escape closes the overlay", async () => {
-  vi.stubGlobal("fetch", mockFetchWithAgents());
-  renderChat();
-  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
-  const dialog = await screen.findByRole("dialog", { name: "Bản đồ agent và công cụ" });
-  fireEvent.keyDown(dialog, { key: "Escape" });
-  await waitFor(() =>
-    expect(screen.queryByRole("dialog", { name: "Bản đồ agent và công cụ" })).not.toBeInTheDocument(),
-  );
-  expect(screen.getByRole("button", { name: "Mở bản đồ trợ lý" })).toBeInTheDocument();
+  const links = await screen.findAllByRole("link", { name: /bản đồ trợ lý|assistant/i });
+  expect(links.some((l) => l.getAttribute("href") === "/constellation")).toBe(true);
 });

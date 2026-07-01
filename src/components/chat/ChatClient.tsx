@@ -13,8 +13,8 @@ import { ConversationSidebar } from "./ConversationSidebar";
 import { SettingsPanel } from "./SettingsPanel";
 import { MessageList } from "./MessageList";
 import { Composer } from "./Composer";
-import { Constellation } from "./Constellation";
 import { useVoice } from "./useVoice";
+import Link from "next/link";
 import { ChatExport } from "./ChatExport";
 import { ProactiveCard, type ProactiveAlertView } from "./ProactiveCard";
 import { loadDismissed, dismissAlerts } from "./proactiveDismiss";
@@ -66,7 +66,6 @@ export function ChatClient() {
   const [streaming, setStreaming] = useState(false);
   const [settings, setSettings] = useState<ChatSettings>(DEFAULT_SETTINGS);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [constellationOpen, setConstellationOpen] = useState(false); // radial command-center overlay
   const [voiceOn, setVoiceOn] = useState(false); // speak assistant replies aloud
   const [convOpen, setConvOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false); // F1: /xuat opens the export menu
@@ -843,15 +842,14 @@ export function ChatClient() {
             >
               <PanelLeft size={18} aria-hidden />
             </button>
-            <button
-              type="button"
-              onClick={() => setConstellationOpen(true)}
+            <Link
+              href="/constellation"
               aria-label={t("chat.constellationOpenAria")}
               title={t("chat.constellationTitle")}
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
               <Orbit size={18} aria-hidden />
-            </button>
+            </Link>
             <button
               onClick={() => setSettingsOpen((v) => !v)}
               aria-label={t("chat.setTitle")}
@@ -905,13 +903,12 @@ export function ChatClient() {
             <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-4 py-8 text-center">
               <h2 className="mb-1 text-lg font-bold tracking-tight">{t("chat.emptyTitle")}</h2>
               <p className="mb-4 text-sm leading-relaxed text-neutral-500">{t("chat.empty", { model: modelName })}</p>
-              <button
-                type="button"
-                onClick={() => setConstellationOpen(true)}
+              <Link
+                href="/constellation"
                 className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/40 px-4 py-2 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-muted)]"
               >
                 <Orbit size={16} aria-hidden /> {t("chat.constellationOpen")}
-              </button>
+              </Link>
               <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
                 {SAMPLE_PROMPTS.map(({ key, Icon }) => (
                   <button
@@ -1015,48 +1012,6 @@ export function ChatClient() {
           </div>
         </div>
 
-        {/* Constellation command-center — a modal overlay so it's reachable any time
-            (empty-state or mid-conversation), not just from the empty screen. */}
-        {constellationOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-            onClick={() => setConstellationOpen(false)}
-          >
-            <div
-              className="w-full max-w-2xl rounded-2xl bg-white p-4 shadow-2xl dark:bg-neutral-900"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <Constellation
-                groups={claudeSelected ? [] : toolGroups}
-                agents={customAgents}
-                activeAgentId={settings.customAgentId}
-                onFocusTool={(group, tool) => {
-                  const picked = tool ?? group.tools[0];
-                  if (picked) onToolPick({ tool: picked, groupLabel: group.label });
-                  setConstellationOpen(false);
-                }}
-                onFocusAgent={(id) => {
-                  setSettings((s) => ({ ...s, customAgentId: id }));
-                  setConstellationOpen(false);
-                }}
-                onClose={() => setConstellationOpen(false)}
-                t={t}
-                voiceSupported={voice.support.recognition || voice.support.synthesis}
-                voiceOn={voiceOn}
-                listening={voice.listening}
-                speaking={voice.speaking}
-                onToggleVoice={() =>
-                  setVoiceOn((v) => {
-                    const next = !v;
-                    if (!next) voice.cancelSpeak();
-                    return next;
-                  })
-                }
-                onMic={() => (voice.listening ? voice.stopListening() : voice.startListening())}
-              />
-            </div>
-          </div>
-        )}
       </section>
     </div>
   );
