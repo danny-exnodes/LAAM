@@ -34,9 +34,9 @@ services:
     environment:
       # These override env_file: point at the in-network DB + host Ollama, and
       # tell Auth.js it sits behind the Funnel HTTPS proxy.
-      DATABASE_URL: postgresql://laam:laam@postgres:5432/laam
-      OLLAMA_URL: http://host.docker.internal:11434
-      HOST_METRICS_URL: http://host.docker.internal:47600
+      # DATABASE_URL: postgresql://laam:laam@postgres:5432/laam
+      # OLLAMA_URL: http://host.docker.internal:11434
+      # HOST_METRICS_URL: http://host.docker.internal:47600
       SEARXNG_URL: http://searxng:8080
       AUTH_TRUST_HOST: "true"
       AUTH_URL: https://danny-gaming-pc.tail41dda4.ts.net
@@ -49,6 +49,26 @@ services:
       - default
       - ecosystem-net
     restart: unless-stopped
+
+  # One-shot database migration job
+  migration:
+    image: laam-app:latest
+
+    container_name: laam-v2-migration
+
+    env_file:
+      - .env
+
+    command:
+      - npm
+      - run
+      - db:migrate
+
+    networks:
+      - default
+      - ecosystem-net
+
+    restart: "no"
 
   # Self-hosted metasearch (FOSS, $0) — powers the web_search harness tool. JSON API
   # enabled in searxng/settings.yml; limiter off (single-user). Bound to localhost ONLY

@@ -29,6 +29,7 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV NODE_OPTIONS="--max-old-space-size=4096"
 # --- PDF + OCR: poppler-utils (pdftotext/pdftoppm) + system tesseract + language
 # data. /api/pdf parses PDFs server-side (poppler) so it works on every client
 # device (no browser pdfjs); /api/ocr + the PDF scan tier use tesseract. Needs
