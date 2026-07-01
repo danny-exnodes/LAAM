@@ -92,16 +92,15 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
 
   // Speak the caption when streaming transitions true → false
   const prevStreamingRef = useRef(false);
+  const captionRef = useRef(caption); captionRef.current = caption;
+  const voiceRef = useRef(voice); voiceRef.current = voice;
   useEffect(() => {
     const wasStreaming = prevStreamingRef.current;
     prevStreamingRef.current = chat.streaming;
-    if (wasStreaming && !chat.streaming) {
-      // stream just ended — speak if voice synthesis is available
-      if (voice.support.synthesis && caption) {
-        voice.speak(caption);
-      }
+    if (wasStreaming && !chat.streaming && voiceRef.current.support.synthesis && captionRef.current) {
+      voiceRef.current.speak(captionRef.current);
     }
-  }, [chat.streaming, caption, voice]);
+  }, [chat.streaming]);
 
   // Real audio-reactive level for the canvas
   const getLevel = useCallback(() => {
@@ -129,24 +128,19 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     }
   }, [voiceEnabled, audio, voice]);
 
-  // Read model from localStorage (same key used by constellation settings; absent → omit)
-  const model: string | undefined =
-    typeof window !== "undefined"
-      ? (localStorage.getItem("laam:chat:model") ?? undefined)
-      : undefined;
-
   // Send handler — clears command, fires chat.send with all current context
   const handleSend = useCallback(() => {
     const msg = command.trim();
     if (!msg) return;
     setCommand("");
+    const model = typeof window !== "undefined" ? (localStorage.getItem("laam:chat:model") ?? undefined) : undefined;
     void chat.send({
       message: msg,
       ...(model ? { model } : {}),
       customAgentId: selectedAgentId,
       ...(requestedTool ? { requestedTool } : {}),
     });
-  }, [command, model, selectedAgentId, requestedTool, chat]);
+  }, [command, selectedAgentId, requestedTool, chat]);
 
   // suppress greetingName warning (used by Task 7 SysInfoPanel; needed until then)
   void greetingName;

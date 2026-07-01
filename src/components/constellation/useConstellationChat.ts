@@ -49,9 +49,6 @@ export function useConstellationChat({
             if (f.t === "pending_write") onPendingWrite(f as unknown as PendingWrite);
           }
         }
-        // Final flush after stream ends
-        const fin = splitFrames(raw);
-        onText(fin.text);
       } finally {
         setStreaming(false);
       }
