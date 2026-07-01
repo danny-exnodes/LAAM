@@ -107,6 +107,7 @@ v2/
 - **Search** (`/search`, `GET /api/search?q=`): full-text across agent sessions (org-shared) + your own conversations & workflows.
 - **Chat vision:** image attachments are sent to the (vision-capable) local model — up to 2 images, ≤2 MB each — alongside the existing OCR-text path.
 - **Workflow runs are cancellable:** the run waterfall has a **Huỷ** button (`PATCH /api/workflows/runs/[id]`); the engine stops cleanly before the next node.
+- **Constellation (toàn màn hình):** nút **"Bản đồ trợ lý"** trong Chat mở trang `/constellation` — command-center toàn màn hình với node radial dữ liệu thật (custom agents + nhóm tool/connector), lệnh stream tới `/api/chat`, giọng nói Web Speech + sóng âm phản ứng AnalyserNode, thời tiết thật (Open-Meteo), và neural TTS tuỳ chọn (đặt `CONSTELLATION_TTS_URL`; không đặt → browser TTS).
 - **Quick-tools trong chat:** gõ `/` mở menu **Lệnh nhanh + Công cụ** (gom nhóm LAAM / connector / MCP server, badge đọc-ghi). Chọn tool → điền **tham số bắt buộc** (vd `project_id` UUID) → server gọi đúng tool đó deterministic trước vòng model (tool ghi vẫn qua thẻ xác nhận).
 - **Workflow node MCP + Custom Agents:** workflow có node **MCP** (gọi tool read của MCP server đã trust — write fail-closed) và node **Agent** chọn được **Custom Agent preset** (system prompt tái dùng, quản lý ở **Cài đặt → Custom Agents**, có 3 mẫu nhanh).
 - **Stuck threshold** is configurable via `LAAM_STUCK_MIN` (default 10 min), served by `GET /api/config`.

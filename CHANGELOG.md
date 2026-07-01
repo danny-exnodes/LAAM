@@ -9,6 +9,17 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Trang `/constellation` toàn màn hình (Agent Constellation command-center)
+Trang mới `/constellation` (không chrome ứng dụng, yêu cầu đăng nhập) đạt được từ nút **"Bản đồ trợ lý"** trong Chat. Zero migration, không thêm bảng DB.
+- **Node dữ liệu thật:** custom agent ở vòng trong; nhóm Connector/MCP/Internal ở vòng ngoài; connector chưa kết nối hiện mờ — tất cả mang object nguồn (Rule 13), bấm để chọn agent/tool.
+- **Lệnh & stream thật:** ô nhập lệnh gửi tới `/api/chat` streaming (phân giải frame `splitFrames`, write-gate `pending_write` bảo toàn); phản hồi hiện dạng caption cuộn.
+- **Giọng nói (Web Speech + TTS):** bật mic → STT → gửi lệnh; trả lời được đọc to bằng browser SpeechSynthesis. Canvas AnalyserNode phân tích mic/TTS → vẽ sóng âm + ripple phản ứng âm thanh theo thời gian thực.
+- **Neural TTS tuỳ chọn:** proxy `/api/tts` (`CONSTELLATION_TTS_URL`, POST `{text,lang}` → `audio/wav`; tương thích VietVoice/VietTTS); nếu không đặt → fallback browser TTS.
+- **Thời tiết thật:** Open-Meteo (không cần API key) + lời chào theo giờ + facts xoay vòng.
+- **Đã xoá:** modal Constellation cũ trong Chat (nút "Bản đồ trợ lý" + "Orbit" nay là `<Link>` tới `/constellation`); component `Constellation.tsx`, `constellationLayout.ts`, `VoiceWave.tsx` đã được dọn.
+- **Reduced motion:** toàn bộ animation (canvas, sóng âm, fact) tắt dưới `prefers-reduced-motion`. SSR-safe (mọi truy cập `window`/`AudioContext`/canvas trong effect hoặc guard `typeof window`).
+- **i18n vi/en/zh:** dict `constellation.ts` bao phủ mọi chuỗi; parity test tự bảo vệ.
+
 ### Đã thêm — R&D round 4: builder legibility (backlog open-agent-builder)
 Bốn pattern adoptable còn lại từ `open-agent-builder`, đều pure-fn + test, **0 dep, 0 migration, hợp engine đông cứng**:
 - **NodeIOBadge (`→ output`):** pill `{{steps.<id>.output}}` trên mỗi node (trừ condition), **bấm để copy** — thấy ngay node xuất gì mà không mở panel. Helper thuần `outputRef.ts` + test.
