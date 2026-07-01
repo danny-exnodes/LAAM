@@ -18,6 +18,8 @@ export const constellation: Dict = {
   "constellation.greetEvening": { vi: "Chào buổi tối", en: "Good evening", zh: "晚上好" },
   "constellation.onThisDay": { vi: "HÔM NAY", en: "ON THIS DAY", zh: "历史上的今天" },
   "constellation.connectHint": { vi: "Chưa kết nối — mở Connectors để bật", en: "Not connected — open Connectors to enable", zh: "未连接 — 打开连接器以启用" },
+  "constellation.approve": { vi: "Xác nhận", en: "Approve", zh: "确认" },
+  "constellation.deny": { vi: "Từ chối", en: "Deny", zh: "拒绝" },
   // "on this day" facts (rotated; static, curated)
   "constellation.fact1": { vi: "Tim Berners-Lee đề xuất World Wide Web tại CERN.", en: "Tim Berners-Lee proposed the World Wide Web at CERN.", zh: "蒂姆·伯纳斯-李在 CERN 提出万维网。" },
   "constellation.fact2": { vi: "Kiến trúc Transformer (2017) là nền tảng của phần lớn LLM hiện đại.", en: "The Transformer (2017) underpins most modern LLMs.", zh: "Transformer 架构（2017）是大多数现代大模型的基础。" },

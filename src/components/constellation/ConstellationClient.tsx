@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useT } from "@/i18n/provider";
 import { constellation } from "@/i18n/dictionaries/constellation";
 import type { Lang } from "@/i18n/types";
@@ -8,6 +8,8 @@ import { buildNodes, type ConstNode } from "@/lib/constellation/nodeModel";
 import { placeNodes } from "@/lib/constellation/field";
 import { ConstellationCanvas } from "./ConstellationCanvas";
 import { ConstellationNodes } from "./ConstellationNodes";
+import { CommandDock } from "./CommandDock";
+import { useConstellationChat, type PendingWrite } from "./useConstellationChat";
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
@@ -25,8 +27,17 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>(() =>
     typeof window !== "undefined" ? (localStorage.getItem("laam:chat:agent") ?? undefined) : undefined);
 
-  // command accumulator — will be consumed by CommandDock in Task 6
+  // command input — controlled by both voice transcript and manual typing
   const [command, setCommand] = useState("");
+
+  // caption shows the streaming assistant reply
+  const [caption, setCaption] = useState("");
+
+  // write-gate chip state
+  const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
+
+  // tool requested by node-pick
+  const [requestedTool, setRequestedTool] = useState<{ name: string; args: unknown } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -49,9 +60,18 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     if (n.ref.kind === "agent") {
       setSelectedAgentId(n.ref.agentId);
       localStorage.setItem("laam:chat:agent", n.ref.agentId);
+    } else if (n.ref.kind === "tool") {
+      // Task 6: tool node pick → set requestedTool
+      const tool = n.ref.tool ?? n.ref.group.tools[0];
+      if (tool) {
+        setRequestedTool({ name: tool.name, args: {} });
+      }
     }
-    // tool pick + idle-connector handling wired in Task 6 (requestedTool) / toast
+    // connectorIdle: no dispatch this task (toast is optional per spec)
   }, []);
+
+  // Chat hook
+  const chat = useConstellationChat({ onText: setCaption, onPendingWrite: setPendingWrite });
 
   // Voice + audio
   const audio = useAudioAnalyser();
@@ -61,8 +81,27 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     onTranscript: (txt) => setCommand((p) => (p ? `${p} ${txt}` : txt)),
   });
 
-  // Derive state — "thinking" arrives in Task 6 (streaming flag)
-  const state: State = voice.listening ? "listening" : voice.speaking ? "speaking" : "idle";
+  // State includes "thinking" when streaming
+  const state: State = chat.streaming
+    ? "thinking"
+    : voice.listening
+      ? "listening"
+      : voice.speaking
+        ? "speaking"
+        : "idle";
+
+  // Speak the caption when streaming transitions true → false
+  const prevStreamingRef = useRef(false);
+  useEffect(() => {
+    const wasStreaming = prevStreamingRef.current;
+    prevStreamingRef.current = chat.streaming;
+    if (wasStreaming && !chat.streaming) {
+      // stream just ended — speak if voice synthesis is available
+      if (voice.support.synthesis && caption) {
+        voice.speak(caption);
+      }
+    }
+  }, [chat.streaming, caption, voice]);
 
   // Real audio-reactive level for the canvas
   const getLevel = useCallback(() => {
@@ -90,9 +129,27 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     }
   }, [voiceEnabled, audio, voice]);
 
-  // suppress unused-var warnings for props used by later tasks
+  // Read model from localStorage (same key used by constellation settings; absent → omit)
+  const model: string | undefined =
+    typeof window !== "undefined"
+      ? (localStorage.getItem("laam:chat:model") ?? undefined)
+      : undefined;
+
+  // Send handler — clears command, fires chat.send with all current context
+  const handleSend = useCallback(() => {
+    const msg = command.trim();
+    if (!msg) return;
+    setCommand("");
+    void chat.send({
+      message: msg,
+      ...(model ? { model } : {}),
+      customAgentId: selectedAgentId,
+      ...(requestedTool ? { requestedTool } : {}),
+    });
+  }, [command, model, selectedAgentId, requestedTool, chat]);
+
+  // suppress greetingName warning (used by Task 7 SysInfoPanel; needed until then)
   void greetingName;
-  void command;
 
   const stateLabelKey: Record<State, string> = {
     idle: "constellation.stateIdle",
@@ -117,6 +174,40 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         {t("constellation.title")}
       </h1>
       <ConstellationNodes placed={placed} onPick={onPick} t={t} />
+
+      {/* Write-gate confirm chip */}
+      {pendingWrite && (
+        <div className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 rounded-2xl border border-[#ffce7a]/40 bg-[#08182a]/95 px-6 py-4 text-center">
+          <p className="text-sm font-semibold text-[#ffce7a]">{pendingWrite.title}</p>
+          <p className="max-w-[320px] text-xs text-[#bcd9ec]">{pendingWrite.summary}</p>
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={() => { void chat.confirm(pendingWrite.token, true); setPendingWrite(null); }}
+              className="rounded-xl bg-[#5bd6ff]/20 px-4 py-2 text-xs text-[#a9e9ff]"
+            >
+              {t("constellation.approve")}
+            </button>
+            <button
+              type="button"
+              onClick={() => { void chat.confirm(pendingWrite.token, false); setPendingWrite(null); }}
+              className="rounded-xl bg-[#ff5b6c]/20 px-4 py-2 text-xs text-[#ff9eb5]"
+            >
+              {t("constellation.deny")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CommandDock: controlled input wired to voice transcript + chat.send */}
+      <CommandDock
+        t={t}
+        caption={caption}
+        value={command}
+        onChange={setCommand}
+        onSend={handleSend}
+      />
+
       {/* Voice controls — only shown when Web Speech is available */}
       {(voice.support.recognition || voice.support.synthesis) && (
         <div className="absolute bottom-8 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
