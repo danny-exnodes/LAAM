@@ -29,4 +29,15 @@ describe("ConstellationClient", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Alpha/ }));
     await waitFor(() => expect(localStorage.getItem("laam:chat:agent")).toBe("a1"));
   });
+
+  it("voice toggle control is hidden when Web Speech API is unavailable (jsdom default)", async () => {
+    // jsdom does not implement SpeechRecognition or speechSynthesis — support will be {false,false}
+    renderPage();
+    // Wait for nodes to appear (fetch resolves), confirming the component mounted fully
+    await screen.findByRole("button", { name: /Alpha/ });
+    // State label text (ĐANG NGHE / LISTENING / etc.) should not be present
+    expect(screen.queryByText(/ĐANG NGHE|ĐANG NÓI|SẴN SÀNG|LISTENING|SPEAKING|STANDBY/i)).toBeNull();
+    // The voice toggle button should not be rendered
+    expect(screen.queryByRole("button", { name: /giọng nói|voice/i })).toBeNull();
+  });
 });
