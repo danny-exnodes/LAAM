@@ -1,40 +1,43 @@
 "use client";
-import { useState } from "react";
 import type { Translator } from "@/i18n/types";
 
 /**
- * CommandDock — controlled input + caption display + chat toggle.
+ * CommandDock — caption strip + (when `open`) a controlled command input.
  *
- * Props:
- *   value / onChange — controlled input state (fed by useVoice onTranscript in ConstellationClient).
- *   onSend — caller handles clearing value + dispatching to useConstellationChat.
+ * The Chat / Voice toggles now live in the ConstellationClient control bar,
+ * so this component no longer positions its own toggle button (that stacking
+ * at the same bottom-centre point was the cause of the overlap). It renders
+ * only the caption and, when the command panel is open, the input row.
  */
 export function CommandDock({
   t,
   caption,
+  open,
   value,
   onChange,
   onSend,
 }: {
   t: Translator;
   caption: string;
+  open: boolean;
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
 }) {
-  const [open, setOpen] = useState(false);
-
   return (
     <>
-      {/* Caption strip — shows streaming reply text above the dock */}
-      <div className="absolute bottom-40 left-1/2 z-10 -translate-x-1/2 text-center text-[14px] text-[#dcefff]">
-        {caption}
-      </div>
+      {/* Caption strip — streaming reply text, above the input/bar */}
+      {caption && (
+        <div className="pointer-events-none absolute bottom-44 left-1/2 z-10 max-w-[80vw] -translate-x-1/2 text-center text-[14px] text-[#dcefff]">
+          {caption}
+        </div>
+      )}
 
-      {/* Command input panel — shown when open */}
+      {/* Command input panel — shown when open, above the control bar */}
       {open && (
-        <div className="absolute bottom-20 left-1/2 z-20 flex w-[min(540px,86vw)] -translate-x-1/2 items-center gap-2 rounded-3xl border border-[#5bd6ff]/30 bg-[#08182a]/90 px-4 py-1">
+        <div className="absolute bottom-24 left-1/2 z-20 flex w-[min(540px,86vw)] -translate-x-1/2 items-center gap-2 rounded-3xl border border-[#5bd6ff]/30 bg-[#08182a]/90 px-4 py-1 backdrop-blur-sm">
           <input
+            autoFocus
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && onSend()}
@@ -50,17 +53,6 @@ export function CommandDock({
           </button>
         </div>
       )}
-
-      {/* Chat toggle button */}
-      <div className="absolute bottom-6 left-1/2 z-20 -translate-x-1/2">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="rounded-3xl border border-[#5bd6ff]/20 bg-[#0a1e34]/60 px-4 py-3 text-[13px] text-[#a9e9ff]"
-        >
-          {t("constellation.chat")}
-        </button>
-      </div>
     </>
   );
 }

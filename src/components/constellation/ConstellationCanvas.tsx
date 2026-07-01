@@ -137,9 +137,11 @@ export function ConstellationCanvas({
       // Ported from prototype lines 317–327 (NODES.forEach connection lines block)
       for (let ni = 0; ni < nodes.length; ni++) {
         const p = nodes[ni];
-        // Map origin-centered (-50..50) coords to canvas pixels
-        const px = cx + (p.x / 50) * scale;
-        const py = cy + (p.y / 50) * scale;
+        // Map node coords to the SAME screen position as the HTML node pills
+        // (ConstellationNodes uses left:(50+x)% of width, top:(50+y)% of height),
+        // so the beams actually connect the core to each visible node.
+        const px = cx + (p.x / 100) * W;
+        const py = cy + (p.y / 100) * H;
 
         const dx = px - cx,
           dy = py - cy;
@@ -165,11 +167,16 @@ export function ConstellationCanvas({
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.quadraticCurveTo(cxp, cyp, ex, ey);
-        ctx.lineWidth = (act ? 1.3 : 0.9) * DPR;
+        ctx.lineWidth = (act ? 1.8 : 1.2) * DPR;
+        // Brighter than the prototype's base so the core→node connection reads
+        // clearly against the swarm/glow; a soft glow reinforces the link.
         ctx.strokeStyle = act
-          ? `rgba(255,206,122,${0.28 + flash * 0.4})`
-          : `rgba(91,214,255,${0.16 + flash * 0.3})`;
+          ? `rgba(255,206,122,${0.5 + flash * 0.4})`
+          : `rgba(91,214,255,${0.34 + flash * 0.35})`;
+        ctx.shadowBlur = (act ? 6 : 3) * DPR;
+        ctx.shadowColor = act ? "#ffce7a" : "#5bd6ff";
         ctx.stroke();
+        ctx.shadowBlur = 0;
 
         // Store beam control points for energy flows
         // We look them up by node index in flows, so store in a parallel array
@@ -248,10 +255,14 @@ export function ConstellationCanvas({
       ctx.fill();
 
       // ---- spawn ripples (prototype lines 349–352) ----
-      // In this task level is constant 0.15 (no real audio yet);
-      // keep idle breath-ripple logic so the ring has gentle pulse at rest.
+      // Level is real audio amplitude now: emit ripples from the core when it
+      // rises (listening/speaking) so the gold ring visibly "waves" with voice;
+      // fall back to a gentle idle breath-ripple at rest.
       rippleCD--;
-      if (T % 150 === 0) {
+      if (level > 0.3 && rippleCD <= 0) {
+        spawnRipple(0.4 + level * 0.8);
+        rippleCD = 6;
+      } else if (T % 150 === 0) {
         spawnRipple(0.22); // idle breath pulse
       }
 

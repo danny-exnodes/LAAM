@@ -31,4 +31,21 @@ export const constellation: Dict = {
   "constellation.wxSnow": { vi: "Tuyết", en: "Snow", zh: "雪" },
   "constellation.wxFog": { vi: "Sương mù", en: "Fog", zh: "雾" },
   "constellation.wxStorm": { vi: "Giông", en: "Storm", zh: "雷暴" },
+  // Model switcher
+  "constellation.model": { vi: "Mô hình", en: "Model", zh: "模型" },
+  "constellation.modelAria": { vi: "Chọn mô hình", en: "Select model", zh: "选择模型" },
+  // Boot / loading sequence
+  "constellation.bootTitle": { vi: "LAAM", en: "LAAM", zh: "LAAM" },
+  "constellation.boot1": { vi: "khởi tạo lõi…", en: "initializing core…", zh: "初始化核心…" },
+  "constellation.boot2": { vi: "nạp danh sách agent", en: "loading agents", zh: "加载 agent" },
+  "constellation.boot3": { vi: "kết nối connector · MCP", en: "connecting connectors · MCP", zh: "连接连接器 · MCP" },
+  "constellation.boot4": { vi: "đồng bộ công cụ nội bộ", en: "syncing internal tools", zh: "同步内部工具" },
+  "constellation.boot5": { vi: "hiệu chỉnh dòng năng lượng", en: "calibrating energy flows", zh: "校准能量流" },
+  "constellation.boot6": { vi: "trực tuyến", en: "online", zh: "在线" },
+  // Spoken greeting on load-complete ({name} = user display name)
+  "constellation.greetVoice": {
+    vi: "Chào {name}, Jarvis đang lắng nghe bạn. Hãy cho tôi biết bạn cần gì.",
+    en: "Hi {name}, Jarvis is listening to you. Please tell me what you want.",
+    zh: "你好 {name}，Jarvis 正在聆听。请告诉我你需要什么。",
+  },
 };
