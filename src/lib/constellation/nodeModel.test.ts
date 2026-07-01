@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildNodes } from "./nodeModel";
+import { buildNodes, nodeTint } from "./nodeModel";
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 
-const grp = (id: string, label: string): CatalogGroup => ({ id, type: "connector", label, tools: [{ name: `${id}.t`, description: "", kind: "read", args: [] }] });
+const grp = (id: string, label: string, type: CatalogGroup["type"] = "connector"): CatalogGroup => ({ id, type, label, tools: [{ name: `${id}.t`, description: "", kind: "read", args: [] }] });
 
 describe("buildNodes", () => {
   it("puts agents on the inner ring and marks the selected one active", () => {
@@ -35,5 +35,21 @@ describe("buildNodes", () => {
   it("marks all agents linked when none is selected", () => {
     const nodes = buildNodes({ agents: [{ id: "a1", name: "A" }, { id: "a2", name: "B" }], groups: [], connectors: [], selectedAgentId: undefined });
     expect(nodes.filter(n => n.ref.kind === "agent").every(n => n.state === "linked")).toBe(true);
+  });
+
+  it("nodeTint: connectors/MCP + selected agent are gold, internal + unselected agent are cyan, idle is idle", () => {
+    const nodes = buildNodes({
+      agents: [{ id: "a1", name: "Sel" }, { id: "a2", name: "Other" }],
+      groups: [grp("connector:x", "X", "connector"), grp("mcp:y", "Y", "mcp"), grp("internal", "LAAM", "internal")],
+      connectors: [{ id: "gmail", name: "Gmail", status: "disconnected" }],
+      selectedAgentId: "a1",
+    });
+    const tintOf = (label: string) => nodeTint(nodes.find((n) => n.label === label)!);
+    expect(tintOf("Sel")).toBe("gold"); // selected agent
+    expect(tintOf("Other")).toBe("cyan"); // unselected agent
+    expect(tintOf("X")).toBe("gold"); // connector group
+    expect(tintOf("Y")).toBe("gold"); // MCP group
+    expect(tintOf("LAAM")).toBe("cyan"); // internal group
+    expect(tintOf("Gmail")).toBe("idle"); // disconnected connector
   });
 });

@@ -43,3 +43,18 @@ export function buildNodes(input: {
 
   return [...agentNodes, ...groupNodes, ...idleNodes];
 }
+
+export type NodeTint = "gold" | "cyan" | "idle";
+
+/**
+ * Visual tint for a node, shared by the HTML node overlay and the canvas beams
+ * so a node and its connection line always match. Gold = "live/active": the
+ * selected agent + external connector/MCP groups. Cyan = the internal LAAM
+ * surface and unselected agents. Idle = disconnected connectors.
+ */
+export function nodeTint(n: ConstNode): NodeTint {
+  if (n.state === "idle") return "idle";
+  if (n.state === "active") return "gold";
+  if (n.ref.kind === "tool" && n.ref.group.type !== "internal") return "gold";
+  return "cyan";
+}

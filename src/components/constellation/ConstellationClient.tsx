@@ -89,28 +89,30 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     return () => { alive = false; };
   }, []);
 
-  // ---- model list — INDEPENDENT (never blocks boot); cloud-first (BytePlus → Claude),
-  //      Ollama only as a last resort. A slow/absent Ollama can't stall the page. ----
+  // ---- model list — INDEPENDENT (never blocks boot); CLOUD ONLY (BytePlus → Claude).
+  //      Ollama is intentionally NOT queried: it's unused, and hitting
+  //      /api/ollama/models when the local server is down logs an error in the
+  //      browser console. Default selection is the first BytePlus model. ----
   useEffect(() => {
     let alive = true;
     (async () => {
-      const safe = async (u: string) => {
-        try { const r = await fetch(u, { signal: AbortSignal.timeout(6000) }); return r.ok ? await r.json() : null; } catch { return null; }
-      };
-      const [info, ollama] = await Promise.all([safe("/api/chat/info"), safe("/api/ollama/models")]);
+      let info: { model?: unknown; claudeModels?: unknown; byteplusModels?: unknown } | null = null;
+      try {
+        const r = await fetch("/api/chat/info", { signal: AbortSignal.timeout(6000) });
+        info = r.ok ? await r.json() : null;
+      } catch { info = null; }
       if (!alive) return;
       const str = (m: unknown): m is string => typeof m === "string" && m.length > 0;
       const bp = (Array.isArray(info?.byteplusModels) ? info.byteplusModels : []).filter(str);
       const cl = (Array.isArray(info?.claudeModels) ? info.claudeModels : []).filter(str);
-      const ol = (Array.isArray(ollama?.models) ? ollama.models : []).filter(str);
-      const defaultModel = str(info?.model) ? (info.model as string) : "";
+      const rawModel = info?.model;
+      const defaultModel = str(rawModel) ? rawModel : "";
       const cloud = Array.from(new Set([...bp, ...cl]));
-      const list = cloud.length
-        ? cloud
-        : Array.from(new Set([...ol, ...(defaultModel ? [defaultModel] : [])]));
+      // Only fall back to the deployed default (may be an Ollama model) if no cloud model exists.
+      const list = cloud.length ? cloud : defaultModel ? [defaultModel] : [];
       setModels(list);
       const stored = typeof window !== "undefined" ? localStorage.getItem("laam:chat:model") : null;
-      const def = stored && list.includes(stored) ? stored : (bp[0] ?? cl[0] ?? list[0] ?? "");
+      const def = stored && list.includes(stored) ? stored : (bp[0] ?? cl[0] ?? defaultModel ?? "");
       if (def) {
         setModel(def);
         if (typeof window !== "undefined") localStorage.setItem("laam:chat:model", def);
@@ -126,14 +128,26 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     return () => clearInterval(id);
   }, [booting]);
 
+  // Finalize boot exactly once. `bootFading` is deliberately NOT a dependency:
+  // if it were, `setBootFading(true)` would re-run this effect, whose cleanup
+  // would clearTimeout the pending `setBooting(false)` — leaving booting stuck
+  // true forever (overlay fades to opacity 0 but the control bar never shows).
+  const finalizingRef = useRef(false);
   useEffect(() => {
-    if (!booting || bootFading) return;
-    if (dataLoaded && bootStep >= BOOT_KEYS.length - 1) {
+    if (finalizingRef.current) return;
+    if (booting && dataLoaded && bootStep >= BOOT_KEYS.length - 1) {
+      finalizingRef.current = true;
       setBootFading(true);
       const id = setTimeout(() => setBooting(false), 650);
       return () => clearTimeout(id);
     }
-  }, [booting, bootFading, dataLoaded, bootStep]);
+  }, [booting, dataLoaded, bootStep]);
+
+  // Absolute failsafe: never let the boot overlay trap the UI (e.g. a hung fetch).
+  useEffect(() => {
+    const id = setTimeout(() => setBooting(false), 9000);
+    return () => clearTimeout(id);
+  }, []);
 
   const placed = useMemo(
     () => placeNodes(buildNodes({ agents, groups, connectors, selectedAgentId })),

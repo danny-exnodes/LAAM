@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import type { Placed } from "@/lib/constellation/field";
+import { nodeTint } from "@/lib/constellation/nodeModel";
 
 // Bezier point on a quadratic curve: p0→p1 (control)→p2, parameter t ∈ [0,1]
 function bez(t: number, p0: number, p1: number, p2: number): number {
@@ -163,8 +164,9 @@ export function ConstellationCanvas({
 
         const sx = cx + ux * coreR * 1.05;
         const sy = cy + uy * coreR * 1.05;
-        const ex = px - ux * 15 * DPR;
-        const ey = py - uy * 15 * DPR;
+        // End the beam ON the node ring (~8px radius) so it visibly touches it.
+        const ex = px - ux * 9 * DPR;
+        const ey = py - uy * 9 * DPR;
 
         const mx = (sx + ex) / 2,
           my = (sy + ey) / 2;
@@ -174,19 +176,22 @@ export function ConstellationCanvas({
         const cyp = my + ux * d * 0.22 * perp;
 
         const flash = flashMap.get(p.id) ?? 0;
-        const act = p.state === "active";
+        // Beam colour matches the node's ring tint (gold / cyan / faint idle).
+        const tint = nodeTint(p);
+        const gold = tint === "gold";
+        const idle = tint === "idle";
 
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.quadraticCurveTo(cxp, cyp, ex, ey);
-        ctx.lineWidth = (act ? 1.8 : 1.2) * DPR;
-        // Brighter than the prototype's base so the core→node connection reads
-        // clearly against the swarm/glow; a soft glow reinforces the link.
-        ctx.strokeStyle = act
-          ? `rgba(255,206,122,${0.5 + flash * 0.4})`
-          : `rgba(91,214,255,${0.34 + flash * 0.35})`;
-        ctx.shadowBlur = (act ? 6 : 3) * DPR;
-        ctx.shadowColor = act ? "#ffce7a" : "#5bd6ff";
+        ctx.lineWidth = (gold ? 1.8 : idle ? 0.8 : 1.2) * DPR;
+        ctx.strokeStyle = gold
+          ? `rgba(255,206,122,${0.55 + flash * 0.4})`
+          : idle
+            ? "rgba(140,175,200,0.18)"
+            : `rgba(91,214,255,${0.36 + flash * 0.35})`;
+        ctx.shadowBlur = (gold ? 6 : idle ? 0 : 3) * DPR;
+        ctx.shadowColor = gold ? "#ffce7a" : "#5bd6ff";
         ctx.stroke();
         ctx.shadowBlur = 0;
 
@@ -230,12 +235,12 @@ export function ConstellationCanvas({
         const x = bez(f.t, b[0], b[2], b[4]);
         const y = bez(f.t, b[1], b[3], b[5]);
         const node = nodes[f.ni];
-        const act = node?.state === "active";
+        const gold = node ? nodeTint(node) === "gold" : false;
         ctx.beginPath();
         ctx.arc(x, y, 1.7 * DPR, 0, 6.3);
-        ctx.fillStyle = act ? "rgba(255,217,143,.9)" : "rgba(169,233,255,.85)";
+        ctx.fillStyle = gold ? "rgba(255,217,143,.9)" : "rgba(169,233,255,.85)";
         ctx.shadowBlur = 8 * DPR;
-        ctx.shadowColor = act ? "#ffce7a" : "#5bd6ff";
+        ctx.shadowColor = gold ? "#ffce7a" : "#5bd6ff";
         ctx.fill();
         ctx.shadowBlur = 0;
       }
