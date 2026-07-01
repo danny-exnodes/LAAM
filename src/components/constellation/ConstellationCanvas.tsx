@@ -19,6 +19,9 @@ export function ConstellationCanvas({
   // Keep a fresh reference to the placed array without re-running the effect
   const placedRef = useRef(placed);
   placedRef.current = placed;
+  // Mirror getLevel through a ref so the rAF loop never closes over a stale prop
+  const getLevelRef = useRef(getLevel);
+  getLevelRef.current = getLevel;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -111,8 +114,8 @@ export function ConstellationCanvas({
     const flashMap = new Map<string, number>();
 
     // Periodic random flash on non-idle nodes (matches prototype's setInterval at 2600ms)
-    const flashInterval = reduce
-      ? 0
+    const flashInterval: ReturnType<typeof setInterval> | null = reduce
+      ? null
       : setInterval(() => {
           const nodes = placedRef.current;
           const candidates = nodes.filter((n) => n.state !== "idle");
@@ -124,7 +127,7 @@ export function ConstellationCanvas({
 
     function frame() {
       T++;
-      const level = getLevel();
+      const level = getLevelRef.current();
 
       ctx.clearRect(0, 0, W, H);
 
@@ -285,19 +288,24 @@ export function ConstellationCanvas({
       ctx.strokeStyle = "rgba(255,206,122,.16)";
       ctx.stroke();
 
-      if (!reduce) raf = requestAnimationFrame(frame);
     }
 
-    // Draw one frame immediately (also the only frame under reduced-motion)
-    frame();
-    if (!reduce) raf = requestAnimationFrame(frame);
+    // Outer driver: schedules frame() then re-queues itself — one chain only
+    function loop() {
+      frame();
+      raf = requestAnimationFrame(loop);
+    }
+
+    // Reduced-motion: draw exactly one static frame; no loop.
+    // Full-motion: start the loop once.
+    if (reduce) frame(); else raf = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(raf);
       removeEventListener("resize", onResize);
       if (flashInterval) clearInterval(flashInterval);
     };
-  }, [getLevel]);
+  }, []);
 
   return <canvas ref={ref} className="absolute inset-0 z-0" aria-hidden />;
 }
