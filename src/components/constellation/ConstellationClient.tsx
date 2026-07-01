@@ -35,13 +35,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [groups, setGroups] = useState<CatalogGroup[]>([]);
   const [connectors, setConnectors] = useState<{ id: string; name: string; status: ConnectorStatus }[]>([]);
-  const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>(() =>
-    typeof window !== "undefined" ? (localStorage.getItem("laam:chat:agent") ?? undefined) : undefined);
+  // localStorage-derived state is read AFTER mount (see effects below) so the
+  // SSR HTML and the first client render match — reading it in the initializer
+  // would diverge (server has no localStorage) and break hydration.
+  const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>(undefined);
 
   // Available chat models + the selected one (persisted; consumed by chat.send).
   const [models, setModels] = useState<string[]>([]);
-  const [model, setModel] = useState<string>(() =>
-    typeof window !== "undefined" ? (localStorage.getItem("laam:chat:model") ?? "") : "");
+  const [model, setModel] = useState<string>("");
 
   // Boot / loading gate — interactive controls stay hidden until data loads.
   const [booting, setBooting] = useState(true);
@@ -60,33 +61,60 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // tool requested by node-pick
   const [requestedTool, setRequestedTool] = useState<{ name: string; args: unknown } | null>(null);
 
-  // ---- data load (agents / tools / connectors / models) ----
+  // Hydrate the selected agent from localStorage after mount (SSR-safe).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const s = localStorage.getItem("laam:chat:agent");
+    if (s) setSelectedAgentId(s);
+  }, []);
+
+  // ---- core data load (agents / tools / connectors) — GATES the boot overlay ----
   useEffect(() => {
     let alive = true;
     (async () => {
-      const safe = async (u: string) => { try { const r = await fetch(u); return r.ok ? await r.json() : null; } catch { return null; } };
-      const [a, g, c, ollama, info] = await Promise.all([
+      const safe = async (u: string) => {
+        try { const r = await fetch(u, { signal: AbortSignal.timeout(8000) }); return r.ok ? await r.json() : null; } catch { return null; }
+      };
+      const [a, g, c] = await Promise.all([
         safe("/api/custom-agents"),
         safe("/api/chat/tools"),
         safe("/api/connectors"),
-        safe("/api/ollama/models"),
-        safe("/api/chat/info"),
       ]);
       if (!alive) return;
       setAgents(a?.agents ?? []);
       setGroups(g?.groups ?? []);
       setConnectors((c?.connectors ?? []).map((x: { id: string; name: string; status: ConnectorStatus }) => ({ id: x.id, name: x.name, status: x.status })));
-
-      const merged = [
-        ...(Array.isArray(ollama?.models) ? ollama.models : []),
-        ...(Array.isArray(info?.claudeModels) ? info.claudeModels : []),
-        ...(Array.isArray(info?.byteplusModels) ? info.byteplusModels : []),
-      ].filter((m: unknown): m is string => typeof m === "string" && m.length > 0);
-      const uniq = Array.from(new Set(merged));
-      setModels(uniq);
-      setModel((cur) => cur || (typeof info?.model === "string" ? info.model : "") || uniq[0] || "");
-
       setDataLoaded(true);
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // ---- model list — INDEPENDENT (never blocks boot); cloud-first (BytePlus → Claude),
+  //      Ollama only as a last resort. A slow/absent Ollama can't stall the page. ----
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const safe = async (u: string) => {
+        try { const r = await fetch(u, { signal: AbortSignal.timeout(6000) }); return r.ok ? await r.json() : null; } catch { return null; }
+      };
+      const [info, ollama] = await Promise.all([safe("/api/chat/info"), safe("/api/ollama/models")]);
+      if (!alive) return;
+      const str = (m: unknown): m is string => typeof m === "string" && m.length > 0;
+      const bp = (Array.isArray(info?.byteplusModels) ? info.byteplusModels : []).filter(str);
+      const cl = (Array.isArray(info?.claudeModels) ? info.claudeModels : []).filter(str);
+      const ol = (Array.isArray(ollama?.models) ? ollama.models : []).filter(str);
+      const defaultModel = str(info?.model) ? (info.model as string) : "";
+      const cloud = Array.from(new Set([...bp, ...cl]));
+      const list = cloud.length
+        ? cloud
+        : Array.from(new Set([...ol, ...(defaultModel ? [defaultModel] : [])]));
+      setModels(list);
+      const stored = typeof window !== "undefined" ? localStorage.getItem("laam:chat:model") : null;
+      const def = stored && list.includes(stored) ? stored : (bp[0] ?? cl[0] ?? list[0] ?? "");
+      if (def) {
+        setModel(def);
+        if (typeof window !== "undefined") localStorage.setItem("laam:chat:model", def);
+      }
     })();
     return () => { alive = false; };
   }, []);

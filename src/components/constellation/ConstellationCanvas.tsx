@@ -59,6 +59,11 @@ export function ConstellationCanvas({
     const ripples: { t: number; str: number }[] = [];
     let rippleCD = 0;
 
+    // Node count the flows were last built for. buildFlows() runs at mount when
+    // `placed` is still empty (data not loaded), yielding 0 flows; without this
+    // the flow dots only appear after a resize. Rebuild when the count changes.
+    let flowNodeCount = -1;
+
     function layout() {
       W = canvas.width = innerWidth * DPR;
       H = canvas.height = innerHeight * DPR;
@@ -132,6 +137,13 @@ export function ConstellationCanvas({
       ctx.clearRect(0, 0, W, H);
 
       const nodes = placedRef.current;
+
+      // Flows were built at mount (possibly with 0 nodes); rebuild the moment the
+      // node set changes so the travelling dots appear as soon as data loads.
+      if (nodes.length !== flowNodeCount) {
+        buildFlows();
+        flowNodeCount = nodes.length;
+      }
 
       // ---- connection beams: core → each placed node ----
       // Ported from prototype lines 317–327 (NODES.forEach connection lines block)

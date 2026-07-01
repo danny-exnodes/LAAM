@@ -24,15 +24,24 @@ export function SysInfoPanel({
 }) {
   const [wx, setWx] = useState<{ tempC: number; code: number; city: string } | null>(null);
   const [factIdx, setFactIdx] = useState(0);
+  // Time-of-day greeting is computed AFTER mount only: the server renders in UTC
+  // but the browser is in the user's local zone, so deriving it during render
+  // causes a hydration text mismatch (React #418). null on SSR + first client
+  // render (they match) → set on mount.
+  const [greet, setGreet] = useState<string | null>(null);
 
   const facts = ["constellation.fact1", "constellation.fact2", "constellation.fact3"] as const;
-  const hour = new Date().getHours();
-  const greet =
-    hour < 11
-      ? "constellation.greetMorning"
-      : hour < 18
-        ? "constellation.greetAfternoon"
-        : "constellation.greetEvening";
+
+  useEffect(() => {
+    const hour = new Date().getHours();
+    setGreet(
+      hour < 11
+        ? "constellation.greetMorning"
+        : hour < 18
+          ? "constellation.greetAfternoon"
+          : "constellation.greetEvening",
+    );
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -86,7 +95,11 @@ export function SysInfoPanel({
         </div>
       )}
       <div className="mt-3 font-mono text-[10.5px] uppercase tracking-[3px] text-[#5bd6ff]">
-        {t(greet)},<br />
+        {greet ? (
+          <>
+            {t(greet)},<br />
+          </>
+        ) : null}
         <b className="text-white">{greetingName || "—"}</b>
       </div>
       <div className="mt-3 font-mono text-[8px] uppercase tracking-[2.5px] text-[#3d6480]">
