@@ -55,6 +55,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
 
   // Voice + audio
   const audio = useAudioAnalyser();
+  const { sample } = audio;
   const voice = useVoice({
     lang,
     onTranscript: (txt) => setCommand((p) => (p ? `${p} ${txt}` : txt)),
@@ -65,13 +66,13 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
 
   // Real audio-reactive level for the canvas
   const getLevel = useCallback(() => {
-    const { mic, tts } = audio.sample();
+    const { mic, tts } = sample();
     return voice.listening
       ? Math.max(0.06, mic)
       : voice.speaking
         ? Math.max(0.06, tts * 0.95)
         : 0.15;
-  }, [audio, voice.listening, voice.speaking]);
+  }, [sample, voice.listening, voice.speaking]);
 
   // Voice toggle: enable starts mic + listening; disable stops both
   const [voiceEnabled, setVoiceEnabled] = useState(false);
@@ -119,7 +120,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       {/* Voice controls — only shown when Web Speech is available */}
       {(voice.support.recognition || voice.support.synthesis) && (
         <div className="absolute bottom-8 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-2">
-          <AudioWave state={state} sample={audio.sample} />
+          <AudioWave state={state} sample={sample} />
           <p className="text-xs tracking-[0.25em] text-[#a9e9ff]">
             {t(stateLabelKey[state])}
           </p>

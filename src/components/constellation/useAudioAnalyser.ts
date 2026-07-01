@@ -17,6 +17,7 @@ export function useAudioAnalyser() {
   }, []);
 
   const startMic = useCallback(async () => {
+    if (typeof navigator === "undefined") return;
     ensure();
     if (!navigator.mediaDevices?.getUserMedia || !ctxRef.current) return;
     try {
