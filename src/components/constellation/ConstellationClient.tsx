@@ -95,26 +95,23 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const speakReply = useCallback(async (text: string) => {
     if (!text) return;
     let usedNeural = false;
-    // Guard: only construct Audio in browser (SSR safety)
-    if (typeof window !== "undefined" && typeof Audio !== "undefined") {
-      try {
-        const res = await fetch("/api/tts", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text, lang }),
-        });
-        if (res.ok) {
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          const el = new Audio(url);
-          audio.attachTts(el);
-          el.onended = () => URL.revokeObjectURL(url);
-          await el.play();
-          usedNeural = true;
-        }
-      } catch {
-        // neural TTS unavailable → fall through to browser TTS
+    let url: string | null = null;
+    try {
+      const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, lang }) });
+      if (res.ok && typeof window !== "undefined" && typeof Audio !== "undefined") {
+        const blob = await res.blob();
+        url = URL.createObjectURL(blob);
+        const u = url;
+        const el = new Audio(u);
+        el.onended = () => URL.revokeObjectURL(u);
+        el.onerror = () => URL.revokeObjectURL(u);
+        audio.attachTts(el);
+        await el.play();
+        usedNeural = true;
+        url = null; // ownership handed to el handlers
       }
+    } catch {
+      if (url) URL.revokeObjectURL(url);
     }
     if (!usedNeural) {
       voice.speak(text);
@@ -128,13 +125,6 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // Speak the caption when streaming transitions true → false
   const prevStreamingRef = useRef(false);
   const captionRef = useRef(caption); captionRef.current = caption;
-  useEffect(() => {
-    const wasStreaming = prevStreamingRef.current;
-    prevStreamingRef.current = chat.streaming;
-    if (wasStreaming && !chat.streaming && captionRef.current) {
-      void speakRef.current(captionRef.current);
-    }
-  }, [chat.streaming]);
 
   // Real audio-reactive level for the canvas
   const getLevel = useCallback(() => {
@@ -148,6 +138,18 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
 
   // Voice toggle: enable starts mic + listening; disable stops both
   const [voiceEnabled, setVoiceEnabled] = useState(false);
+  // Ref mirror for voiceEnabled so the stream-end effect can read it without re-subscribing
+  const voiceEnabledRef = useRef(voiceEnabled); voiceEnabledRef.current = voiceEnabled;
+
+  // Stream-end effect: speak caption only when voice is enabled
+  useEffect(() => {
+    const wasStreaming = prevStreamingRef.current;
+    prevStreamingRef.current = chat.streaming;
+    if (wasStreaming && !chat.streaming && voiceEnabledRef.current && captionRef.current) {
+      void speakRef.current(captionRef.current);
+    }
+  }, [chat.streaming]);
+
   const toggleVoice = useCallback(async () => {
     if (!voiceEnabled) {
       audio.ensure();
