@@ -3,13 +3,20 @@
 # ---- deps: install full dependencies for the build ----
 # node:24-alpine (Active LTS) — keep in sync with the dev host's Node/npm major
 # (npm 10 vs 11 write different lockfile dialects → recurring @emnapi npm ci breakage).
-FROM node:24-alpine AS deps
+FROM public.ecr.aws/docker/library/node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
+# ---- migration: database migration image ----
+FROM deps AS migration
+WORKDIR /app
+COPY . .
+CMD ["npm", "run", "db:migrate"]
+
+
 # ---- builder: production build → .next/standalone ----
-FROM node:24-alpine AS builder
+FROM public.ecr.aws/docker/library/node:24-alpine AS builder
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -23,7 +30,7 @@ RUN cp -r .next/static .next/standalone/.next/static \
  && if [ -d public ]; then cp -r public .next/standalone/public; fi
 
 # ---- runner: minimal production image ----
-FROM node:24-alpine AS runner
+FROM public.ecr.aws/docker/library/node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
