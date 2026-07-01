@@ -31,4 +31,9 @@ describe("buildNodes", () => {
     // "connected" ones are represented by their catalog group, not duplicated here
     expect(nodes.find(n => n.label === "Slack")).toBeUndefined();
   });
+
+  it("marks all agents linked when none is selected", () => {
+    const nodes = buildNodes({ agents: [{ id: "a1", name: "A" }, { id: "a2", name: "B" }], groups: [], connectors: [], selectedAgentId: undefined });
+    expect(nodes.filter(n => n.ref.kind === "agent").every(n => n.state === "linked")).toBe(true);
+  });
 });
