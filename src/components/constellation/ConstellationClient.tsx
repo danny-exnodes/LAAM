@@ -15,6 +15,7 @@ import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
+import { SysInfoPanel } from "./SysInfoPanel";
 
 type State = "idle" | "listening" | "thinking" | "speaking";
 
@@ -142,8 +143,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     });
   }, [command, selectedAgentId, requestedTool, chat]);
 
-  // suppress greetingName warning (used by Task 7 SysInfoPanel; needed until then)
-  void greetingName;
+  // greetingName and lang are passed to SysInfoPanel below
 
   const stateLabelKey: Record<State, string> = {
     idle: "constellation.stateIdle",
@@ -167,6 +167,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       <h1 className="absolute left-1/2 top-6 z-10 -translate-x-1/2 text-sm tracking-[0.3em] text-[#a9e9ff]">
         {t("constellation.title")}
       </h1>
+      <SysInfoPanel greetingName={greetingName} t={t} lang={lang} />
       <ConstellationNodes placed={placed} onPick={onPick} t={t} />
 
       {/* Write-gate confirm chip */}
