@@ -52,7 +52,7 @@ services:
 
   # One-shot database migration job
   migration:
-    image: laam-app:latest
+    image: laam-migration:latest
 
     container_name: laam-v2-migration
 

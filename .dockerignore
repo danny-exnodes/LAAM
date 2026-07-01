@@ -13,7 +13,7 @@ out
 .serena
 docs
 collector
-drizzle.config.ts
+# drizzle.config.ts
 **/*.test.ts
 **/*.test.tsx
 vitest.config.*
