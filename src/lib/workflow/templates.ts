@@ -206,6 +206,112 @@ export const TEMPLATES: WorkflowTemplate[] = [
       ],
     },
   },
+  // ── P (2026-07-10): Template SONG SONG — báo cáo đa nguồn → gửi mail ──────────
+  // Kim cương: brief → fan-out 3 nhánh CHẠY SONG SONG (research_laam / research_web /
+  // fetch_tasks) → fan-in synthesis (đọc CẢ 3) → gmail_send (recipient TĨNH, gated).
+  // parallel:true → engine dùng scheduleGraph (validator nới lỏng fan-in/fan-out).
+  // Chạy offline $0 qua dry-run: gmail_send trả mock TRƯỚC gate recipient; 3 nhánh read
+  // chạy thật. Live send: connect Gmail + thêm domain vào WORKFLOW_RECIPIENT_ALLOWLIST.
+  // Rule 13: khối số liệu LAAM đi MỘT hop — body nối {{steps.research_laam.output}} thẳng,
+  // độc lập synthesis (8B không được đổi/bịa số).
+  {
+    id: "multi-source-report-email",
+    name: "Soạn báo cáo đa nguồn → gửi mail (song song)",
+    description:
+      "DAG song song: 1 brief → 3 nhánh research chạy ĐỒNG THỜI (số liệu LAAM · web · công việc) " +
+      "→ tổng hợp → gửi email. Chạy thử offline $0 bằng dry-run (gmail_send được mock). " +
+      "Gửi thật: kết nối Gmail, thêm địa chỉ/ domain vào WORKFLOW_RECIPIENT_ALLOWLIST, sửa `to`, chạy không dry-run.",
+    moatLeaning: true,
+    graph: {
+      parallel: true,
+      nodes: [
+        {
+          id: "brief",
+          kind: "agent",
+          system: "Bạn lập kế hoạch báo cáo vận hành ngắn gọn.",
+          prompt:
+            "Xác định phạm vi một báo cáo vận hành ngắn gồm: (1) sức khoẻ agent LAAM, " +
+            "(2) một tham chiếu/tin tức web liên quan, (3) công việc đang mở. Trả 2-3 câu định hướng.",
+        },
+        // ── FAN-OUT: 3 nhánh chạy SONG SONG ──
+        {
+          id: "research_laam",
+          kind: "agent",
+          system: "Trợ lý vận hành nội bộ. Dùng tool LAAM để đọc số liệu ground-truth.",
+          prompt:
+            "Định hướng: {{steps.brief.output}}\n" +
+            "Gọi tool `laam_metrics_digest`. Trả về NGUYÊN VĂN trường `summary` của kết quả — " +
+            "KHÔNG sửa bất kỳ con số nào, không thêm câu nào khác.",
+        },
+        {
+          id: "research_web",
+          kind: "agent",
+          system: "Bạn tra cứu web ngắn gọn.",
+          prompt:
+            "Định hướng: {{steps.brief.output}}\n" +
+            "Dùng `web_search` tìm 3-5 kết quả liên quan. Liệt kê tiêu đề + URL + trích đoạn ngắn. " +
+            "CHỈ dùng URL trả về từ tool, TUYỆT ĐỐI không bịa link.",
+        },
+        {
+          id: "fetch_tasks",
+          kind: "connector",
+          connectorId: "demo",
+          action: "demo_list_tasks",
+          args: {},
+        },
+        // ── FAN-IN: synthesis đọc CẢ 3 nhánh ──
+        {
+          id: "synthesis",
+          kind: "agent",
+          system: "Bạn tổng hợp báo cáo tiếng Việt mạch lạc, trung thực với dữ liệu nguồn.",
+          prompt:
+            "Soạn một báo cáo tiếng Việt từ 3 nguồn dưới đây.\n\n" +
+            "[NGUỒN 1 — Số liệu LAAM — CHÉP NGUYÊN VĂN, KHÔNG sửa/không tính lại bất kỳ con số nào]:\n" +
+            "{{steps.research_laam.output}}\n\n" +
+            "[NGUỒN 2 — Web — chỉ dùng URL có thật ở đây]:\n" +
+            "{{steps.research_web.output}}\n\n" +
+            "[NGUỒN 3 — Công việc đang mở]:\n" +
+            "{{steps.fetch_tasks.output}}\n\n" +
+            "Cấu trúc: (a) tóm tắt điều hành, (b) sức khoẻ hệ thống (giữ nguyên block số liệu), " +
+            "(c) điểm tin web, (d) việc cần làm.",
+        },
+        // ── SINK: gửi mail (recipient TĨNH, gated; KHÔNG nội suy từ output model) ──
+        {
+          id: "send",
+          kind: "connector",
+          connectorId: "gmail",
+          action: "gmail_send",
+          args: {
+            // PHẢI có trong WORKFLOW_RECIPIENT_ALLOWLIST (full-address HOẶC domain). Đổi thành
+            // địa chỉ thật của bạn trước khi gửi live. TUYỆT ĐỐI không lấy `to` từ {{steps.*}}.
+            to: "reports@exnodes.vn",
+            subject: "Báo cáo đa nguồn LAAM",
+            // Rule 13: nối khối số liệu ground-truth NGUYÊN VĂN vào cuối body — đi một hop,
+            // độc lập với synthesis (phòng 8B đổi/bịa số).
+            body:
+              "{{steps.synthesis.output}}\n\n---\n📊 Số liệu ground-truth (nguyên văn):\n{{steps.research_laam.output}}",
+          },
+        },
+      ],
+      edges: [
+        { from: "brief", to: "research_laam" },
+        { from: "brief", to: "research_web" },
+        { from: "brief", to: "fetch_tasks" }, // fan-out — cần parallel:true
+        { from: "research_laam", to: "synthesis" },
+        { from: "research_web", to: "synthesis" },
+        { from: "fetch_tasks", to: "synthesis" }, // fan-in — cần parallel:true
+        { from: "synthesis", to: "send" },
+      ],
+      positions: {
+        brief: { x: 0, y: 160 },
+        research_laam: { x: 260, y: 0 },
+        research_web: { x: 260, y: 160 },
+        fetch_tasks: { x: 260, y: 320 },
+        synthesis: { x: 520, y: 160 },
+        send: { x: 780, y: 160 },
+      },
+    },
+  },
 ];
 
 export function getTemplate(id: string): WorkflowTemplate | undefined {

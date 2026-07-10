@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { assertLinear, assertRunnable, collectIssues, linearOrder } from "./validate";
 import type { WfIssueCode } from "./validate";
 import type { WorkflowGraph, Predicate } from "./types";
+import { MAX_FANOUT } from "./types";
 
 const codes = (g: WorkflowGraph): WfIssueCode[] => collectIssues(g).map((i) => i.code).sort();
 
@@ -291,6 +292,125 @@ describe("collectIssues (structured, multi-fault, advisory)", () => {
     // neither is flagged fan_in (exactly one in each). assertRunnable also throws.
     expect(found).toContain("no_start");
     expect(() => assertRunnable(cyc)).toThrow();
+  });
+
+  // ── P: nhánh parallel (graph.parallel===true) ──────────────────────────────
+  const parDiamond: WorkflowGraph = {
+    parallel: true,
+    nodes: [
+      { id: "s", kind: "agent", prompt: "x" },
+      { id: "a", kind: "agent", prompt: "x" },
+      { id: "b", kind: "agent", prompt: "x" },
+      { id: "j", kind: "agent", prompt: "{{steps.a.output}} {{steps.b.output}}" },
+    ],
+    edges: [
+      { from: "s", to: "a" }, { from: "s", to: "b" }, { from: "a", to: "j" }, { from: "b", to: "j" },
+    ],
+  };
+
+  test("parallel: diamond (fan-out + fan-in) HỢP LỆ — KHÔNG bị nhầm là cycle (fix false-cycle)", () => {
+    expect(() => assertRunnable(parDiamond)).not.toThrow();
+    expect(collectIssues(parDiamond)).toEqual([]);
+  });
+
+  test("parallel: multi-start hợp lệ", () => {
+    const g: WorkflowGraph = {
+      parallel: true,
+      nodes: [
+        { id: "s1", kind: "agent", prompt: "x" },
+        { id: "s2", kind: "agent", prompt: "y" },
+        { id: "j", kind: "agent", prompt: "{{steps.s1.output}} {{steps.s2.output}}" },
+      ],
+      edges: [{ from: "s1", to: "j" }, { from: "s2", to: "j" }],
+    };
+    expect(() => assertRunnable(g)).not.toThrow();
+    expect(collectIssues(g)).toEqual([]);
+  });
+
+  test("parallel: ref {{steps.X}} tới node KHÔNG phải tổ tiên → throw + code ref_not_ancestor", () => {
+    const g: WorkflowGraph = {
+      parallel: true,
+      nodes: [
+        { id: "a", kind: "agent", prompt: "x" },
+        { id: "b", kind: "agent", prompt: "đọc {{steps.a.output}}" }, // a KHÔNG nối tới b
+      ],
+      edges: [],
+    };
+    expect(() => assertRunnable(g)).toThrow(/tổ tiên|ancestor/i);
+    expect(codes(g)).toContain("ref_not_ancestor");
+  });
+
+  test("parallel: ref tới tổ tiên transitive (a→b→c, c ref a) → hợp lệ", () => {
+    const g: WorkflowGraph = {
+      parallel: true,
+      nodes: [
+        { id: "a", kind: "agent", prompt: "x" },
+        { id: "b", kind: "agent", prompt: "y" },
+        { id: "c", kind: "agent", prompt: "đọc {{steps.a.output}}" },
+      ],
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }],
+    };
+    expect(() => assertRunnable(g)).not.toThrow();
+  });
+
+  test("parallel: fan-out vượt MAX_FANOUT → throw", () => {
+    const targets = Array.from({ length: MAX_FANOUT + 1 }, (_, i) => ({ id: `t${i}`, kind: "agent" as const, prompt: "x" }));
+    const g: WorkflowGraph = {
+      parallel: true,
+      nodes: [{ id: "s", kind: "agent", prompt: "x" }, ...targets],
+      edges: targets.map((t) => ({ from: "s", to: t.id })),
+    };
+    expect(() => assertRunnable(g)).toThrow(/fan-out/i);
+    expect(codes(g)).toContain("multi_out");
+  });
+
+  test("parallel: cycle THẬT (b→c→b) vẫn bị bắt (Kahn)", () => {
+    const g: WorkflowGraph = {
+      parallel: true,
+      nodes: [
+        { id: "a", kind: "agent", prompt: "x" },
+        { id: "b", kind: "agent", prompt: "x" },
+        { id: "c", kind: "agent", prompt: "x" },
+      ],
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "c" }, { from: "c", to: "b" }],
+    };
+    expect(() => assertRunnable(g)).toThrow(/cycle|chu trình/i);
+    expect(codes(g)).toContain("cycle");
+  });
+
+  test("KHÔNG parallel: fan-in vẫn bị TỪ CHỐI (bất biến tuyến tính giữ nguyên)", () => {
+    const g: WorkflowGraph = {
+      nodes: [
+        { id: "a", kind: "agent", prompt: "a" },
+        { id: "b", kind: "agent", prompt: "b" },
+        { id: "c", kind: "agent", prompt: "c" },
+      ],
+      edges: [{ from: "a", to: "c" }, { from: "b", to: "c" }],
+    };
+    expect(() => assertRunnable(g)).toThrow(/merge|fan-in|cạnh vào/i);
+  });
+
+  test("DRIFT GUARD (parallel): collectIssues non-empty iff assertRunnable throws", () => {
+    const refBad: WorkflowGraph = {
+      parallel: true,
+      nodes: [{ id: "a", kind: "agent", prompt: "x" }, { id: "b", kind: "agent", prompt: "{{steps.a.output}}" }],
+      edges: [],
+    };
+    const cyc: WorkflowGraph = {
+      parallel: true,
+      nodes: [{ id: "a", kind: "agent", prompt: "x" }, { id: "b", kind: "agent", prompt: "x" }],
+      edges: [{ from: "a", to: "b" }, { from: "b", to: "a" }],
+    };
+    const cases: WorkflowGraph[] = [parDiamond, refBad, cyc];
+    for (const g of cases) {
+      let threw = false;
+      try {
+        assertRunnable(g);
+      } catch {
+        threw = true;
+      }
+      expect(collectIssues(g).length > 0).toBe(threw);
+    }
   });
 
   test("DRIFT GUARD: collectIssues is non-empty iff assertRunnable throws", () => {
