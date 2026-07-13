@@ -259,6 +259,27 @@ describe("WorkflowEditor", () => {
     expect(body.graph.nodes).toHaveLength(1);
   });
 
+  test("save: toggle Song song → graph.parallel=true trong PATCH (giữ cờ qua round-trip fromReactFlow)", async () => {
+    // WHY: fromReactFlow bỏ cờ parallel; nếu editor không tự giữ, lưu 1 workflow song song
+    // sẽ mất flag → fan-in bị validator từ chối lần chạy sau. Đây là guard cho lỗi đó.
+    const fetchImpl = buildFetch({ name: "My WF", graph: starterGraph });
+    renderEditor(fetchImpl);
+    await waitFor(() => screen.getByDisplayValue("My WF"));
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("parallel-toggle"));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText("Lưu"));
+    });
+
+    const patchCall = fetchImpl.mock.calls.find(
+      ([, opts]) => opts && (opts as RequestInit).method === "PATCH",
+    );
+    const body = JSON.parse((patchCall![1] as RequestInit).body as string) as { graph: WorkflowGraph };
+    expect(body.graph.parallel).toBe(true);
+  });
+
   test("save: assertRunnable throws — shows error, no PATCH", async () => {
     mockAssertRunnable.mockImplementation(() => {
       throw new Error("validate: cycle phát hiện");
