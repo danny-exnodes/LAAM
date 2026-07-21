@@ -4,6 +4,10 @@
 export const FRAME_SEP = "\x1e"; // U+001E record separator
 
 export type ChatFrame =
+  // Heartbeat: thin keep-alive emitted during a model's long reasoning phase so the
+  // SSE never idles (an idle stream gets torn down → empty answer, no error). Carries
+  // no data; the client ignores it. See the byteplus stream loop in /api/chat.
+  | { t: "hb" }
   | { t: "tokens"; i: number; o: number }
   | { t: "tool"; phase: "call" | "result"; c: number; name: string; args?: string; ok?: boolean }
   | { t: "cite"; names: string[] }

@@ -23,6 +23,13 @@ import type { ChatMessage, OllamaChatResponse } from "@/lib/agent/orchestrator";
 // mistaken for a BytePlus model. Add more ids here as the account activates them.
 export const BYTEPLUS_MODELS = [
   "gpt-oss-120b",
+  "deepseek-v4-flash",
+  "deepseek-v4-pro",
+  "dola-seed-2.0-pro",
+  "dola-seed-2.0-lite",
+  "dola-seed-2.0-code",
+  "bytedance-seed-code",
+  "kimi-k2.5",
 ] as const;
 
 export function isBytePlusModel(m: string): boolean {
@@ -237,7 +244,7 @@ export async function* byteplusStream(opts: {
   messages: ChatMessage[];
   options?: SamplingOptions;
   signal?: AbortSignal;
-}): AsyncGenerator<{ delta?: string; usage?: { in: number; out: number } }> {
+}): AsyncGenerator<{ delta?: string; reasoning?: string; usage?: { in: number; out: number } }> {
   const key = apiKey();
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -264,9 +271,15 @@ export async function* byteplusStream(opts: {
       const payload = line.slice(5).trim();
       if (payload === "[DONE]") continue;
       try {
-        const j = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
-        const delta = j?.choices?.[0]?.delta?.content;
+        const j = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+        const d = j?.choices?.[0]?.delta;
+        const delta = d?.content;
         if (typeof delta === "string" && delta.length) yield { delta };
+        // Reasoning models (gpt-oss, deepseek-v4) stream reasoning_content BEFORE any
+        // content — often 30s+ on a large context. Surface it so the route can keep the
+        // client SSE warm; it is NOT part of the answer.
+        const reasoning = d?.reasoning_content;
+        if (typeof reasoning === "string" && reasoning.length) yield { reasoning };
         if (j?.usage) usage = { in: j.usage.prompt_tokens ?? 0, out: j.usage.completion_tokens ?? 0 };
       } catch {
         /* skip a partial / non-JSON line */
