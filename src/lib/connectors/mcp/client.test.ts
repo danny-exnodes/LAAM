@@ -97,6 +97,33 @@ describe("mcp client", () => {
     expect(h.close).toHaveBeenCalledTimes(1);
   });
 
+  test("callTool truncates an oversized all-text result with a visible marker", async () => {
+    // This is a raw-transport BACKSTOP against a truly pathological result (e.g. a runaway
+    // kg_search or a misbehaving MCP server) — the real per-provider shaping happens
+    // downstream in boundOutput (guardrails.ts), not here. WHY: an uncapped result previously
+    // killed the tool-loop with an empty answer; a too-tight cap HERE (48k) later re-shredded
+    // large-but-legitimate results (e.g. a ~78k master record) that a cloud model's boundOutput
+    // bound would otherwise have admitted whole — hence a generous 200k backstop.
+    const big = "x".repeat(250_000);
+    h.callTool.mockResolvedValue({ content: [{ type: "text", text: big }] });
+    const res = (await callTool(cfg, "do", {})) as { text: string };
+    expect(res.text.length).toBeLessThan(big.length);
+    expect(res.text).toContain("rút gọn");
+    expect(res.text.startsWith("x".repeat(200_000))).toBe(true);
+  });
+
+  // INTENT: a large-but-realistic single result (e.g. a big master record, ~78k) must pass
+  // through client.ts UNTRUNCATED — only boundOutput (provider-aware, downstream) decides
+  // whether it's small enough for the chosen model. Regression guard for the bug where
+  // client.ts's OWN cap sat below boundOutput's cloud bound and pre-emptively shredded it.
+  test("callTool does NOT truncate a large-but-realistic result (below the backstop)", async () => {
+    const realistic = "x".repeat(78_000);
+    h.callTool.mockResolvedValue({ content: [{ type: "text", text: realistic }] });
+    const res = (await callTool(cfg, "do", {})) as { text: string };
+    expect(res.text).toBe(realistic);
+    expect(res.text).not.toContain("rút gọn");
+  });
+
   test("callTool returns raw content when a block is non-text", async () => {
     const content: unknown[] = [
       { type: "text", text: "hi" },

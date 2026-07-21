@@ -8,6 +8,11 @@ describe("MarkdownView", () => {
     const { container } = render(<MarkdownView source={md} />);
     expect(container.querySelector("table")).not.toBeNull();
     expect(container.querySelectorAll("td").length).toBe(2);
+    // INTENT: a wide table must sit in the overflow-x wrapper so it scrolls inside
+    // the message instead of overflowing it (the reported "table không hiển thị" fix).
+    const wrap = container.querySelector(".chat-md-tablewrap");
+    expect(wrap).not.toBeNull();
+    expect(wrap?.querySelector("table")).not.toBeNull();
   });
 
   it("renders **bold** as <strong>", () => {
