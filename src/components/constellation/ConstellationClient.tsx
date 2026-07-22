@@ -13,7 +13,8 @@ import { useConstellationChat, type PendingWrite } from "./useConstellationChat"
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
-import { stripForSpeech, chunkForSpeech, speakChunks } from "@/lib/chat/voice";
+import { stripForSpeech } from "@/lib/chat/voice";
+import { playPcmStream } from "@/lib/chat/streamingAudio";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
 import { SysInfoPanel } from "./SysInfoPanel";
@@ -176,8 +177,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     onTranscript: (txt) => setCommand((p) => (p ? `${p} ${txt}` : txt)),
   });
 
-  // Neural TTS (speakReply/speakChunks/playUrl below) is the PRIMARY speaking path — it
-  // never touches `voice.speaking`, which useVoice only sets for the browser-SpeechSynthesis
+  // Neural TTS (speakReply → /api/tts/stream → playPcmStream) is the PRIMARY speaking
+  // path — it never touches `voice.speaking`, which useVoice only sets for the browser-
   // FALLBACK. Without this, `state`/`getLevel` below saw the reply play out with no "speaking"
   // signal at all: the state label never changed and the canvas fell back to a flat level
   // (no pulse) for the whole neural-TTS duration — reported as the wave "biến mất" and the
@@ -199,94 +200,48 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         ? "speaking"
         : "idle";
 
-  // synthChunk: POST one chunk to /api/tts → an object URL for the wav, or null
-  // on any fetch/HTTP failure. No <audio> is created here — playback owns that.
-  const synthChunk = useCallback(async (text: string): Promise<string | null> => {
-    if (typeof window === "undefined") return null;
-    try {
-      const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, lang }) });
-      if (!res.ok) return null;
-      const blob = await res.blob();
-      return URL.createObjectURL(blob);
-    } catch {
-      return null;
-    }
-  }, [lang]);
-
-  // playUrl: play a synthesized wav to completion, metering it for the ripples.
-  // Resolves true when it finishes, false on a playback error.
-  //
-  // Reuses ONE <audio> element for every chunk of a voice session, rather than a fresh
-  // `new Audio(url)` per chunk: WebAudio only allows createMediaElementSource once per
-  // element, and re-attaching a new element on every ~60-char TTS chunk (dozens per
-  // reply) both stutters the canvas animation at each chunk boundary (main-thread graph
-  // rewiring) and leaks memory over a session until the tab crashes (see
-  // useAudioAnalyser.attachTts). Reassigning `.src` and replaying the SAME element avoids
-  // both — attachTts is idempotent once the element is already wired. Reusing one element
-  // is only safe because speakChunks (voice.ts) is the sole caller and awaits each chunk's
-  // play() to settle before requesting the next — a concurrent caller would stomp `.src`.
-  const ttsElRef = useRef<HTMLAudioElement | null>(null);
-  const playUrl = useCallback((url: string): Promise<boolean> => {
-    if (typeof Audio === "undefined") return Promise.resolve(false);
-    if (!ttsElRef.current) ttsElRef.current = new Audio();
-    const el = ttsElRef.current;
-    audio.attachTts(el);
-    return new Promise<boolean>((resolve) => {
-      // onplaying fires once the browser is actually rendering audio frames — NOT the same
-      // moment as el.play() being called, which happens right after synthesis (network +
-      // CPU TTS, ~2-7s per chunk) finishes but before any sound is audible. Flipping
-      // neuralSpeaking here (rather than at the top of speakReply, before synthesis even
-      // starts) keeps the "speaking" animation in sync with real audio: previously it lit up
-      // several seconds early (reported as the effect starting before sound) and then visibly
-      // jumped once real audio finally arrived (reported as a stutter right as playback began).
-      el.onplaying = () => setNeuralSpeaking(true);
-      el.onended = () => resolve(true);
-      el.onerror = () => resolve(false);
-      el.src = url;
-      el.play().catch(() => resolve(false));
-    });
-  }, [audio]);
-
-  // speakReply: prefer neural TTS via /api/tts → meter audio for ripples; fallback to browser TTS.
-  // Strip markdown (tables/headings/etc.) to prose FIRST — /api/tts has no markdown
-  // awareness of its own (unlike useVoice.speak, which already calls stripForSpeech
-  // internally) and would otherwise read raw "|"/"-" table syntax aloud.
-  //
-  // The reply is split into sentence-sized chunks (the CPU /api/tts synth aborts
-  // past 8s, so one big request would time out) and streamed through speakChunks,
-  // which synthesizes the next chunk while the current one plays so there's no
-  // gap between chunks. On failure the remaining text falls back to browser TTS.
+  // speakReply: stream the whole reply through VieNeu (/api/tts/stream) and play it
+  // gaplessly via Web Audio. stripForSpeech FIRST (VieNeu has no markdown awareness).
+  // No client chunking — the server streams frame-by-frame, so first audio lands ~0.2s
+  // in with no chunk-boundary word-drop or gaps. neuralSpeaking flips on the first real
+  // audio frame (onFirstAudio). On any failure, fall back to the browser voice.
   const fellBackRef = useRef(false);
+  const speakAbortRef = useRef<AbortController | null>(null);
   const speakReply = useCallback(async (text: string) => {
     if (!text) return;
     const spoken = stripForSpeech(text);
     if (!spoken) return;
-    const chunks = chunkForSpeech(spoken);
+    const sink = audio.getTtsSink();
+    if (!sink) return;
     fellBackRef.current = false;
-    // neuralSpeaking is set by playUrl's onplaying handler, once audio is actually audible —
-    // not here, before synthesis of even the first chunk has started.
+    speakAbortRef.current?.abort(); // cancel any in-flight playback before starting new
+    const controller = new AbortController();
+    speakAbortRef.current = controller;
     try {
-      await speakChunks(chunks, {
-        synth: synthChunk,
-        play: playUrl,
-        fallback: (t) => { fellBackRef.current = true; voice.speak(t); },
-        revoke: (url) => URL.revokeObjectURL(url),
+      const res = await fetch("/api/tts/stream", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: spoken, lang }),
+        signal: controller.signal,
       });
+      if (!res.ok || !res.body) throw new Error("tts stream failed");
+      await playPcmStream(res.body, {
+        context: sink.context,
+        analyser: sink.analyser,
+        onFirstAudio: () => setNeuralSpeaking(true),
+        signal: controller.signal,
+      });
+    } catch {
+      // Aborted (superseded by a newer reply) is not a failure — don't fall back.
+      if (!controller.signal.aborted) { fellBackRef.current = true; voice.speak(spoken); }
     } finally {
-      // speakChunks calls fallback() synchronously and returns WITHOUT waiting for it:
-      // SpeechSynthesisUtterance's onstart is an async browser callback, not synchronous
-      // with synth.speak(), so clearing neuralSpeaking here on the fallback path would
-      // reopen the exact `speaking=false` gap (flat/frozen animation) this fix targets,
-      // right as neural TTS gives up. Leave it true; the effect above clears it once
-      // voice.speaking actually takes over. Safety net below in case the browser's speech
-      // engine never starts at all (unsupported/silently fails) — must not get stuck "true".
-      if (fellBackRef.current) {
-        setTimeout(() => setNeuralSpeaking(false), 4000);
-      } else {
-        setNeuralSpeaking(false);
-      }
+      // Same handoff rule as before: on the browser-TTS fallback, keep neuralSpeaking
+      // true until voice.speaking takes over (the effect above clears it), with a 4s
+      // safety net; otherwise clear immediately.
+      if (fellBackRef.current) setTimeout(() => setNeuralSpeaking(false), 4000);
+      else setNeuralSpeaking(false);
     }
-  }, [synthChunk, playUrl, voice]);
+  }, [audio, lang, voice]);
 
   const speakRef = useRef(speakReply);
   speakRef.current = speakReply;
