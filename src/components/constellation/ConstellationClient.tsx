@@ -185,6 +185,12 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [neuralSpeaking, setNeuralSpeaking] = useState(false);
   const speaking = voice.speaking || neuralSpeaking;
 
+  // Bridges the fallback handoff (see speakReply below): once voice.speaking itself goes
+  // true, `speaking` is already correctly driven by it, so this clear is redundant-but-safe.
+  useEffect(() => {
+    if (voice.speaking) setNeuralSpeaking(false);
+  }, [voice.speaking]);
+
   const state: State = chat.streaming
     ? "thinking"
     : voice.listening
@@ -242,24 +248,34 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // past 8s, so one big request would time out) and streamed through speakChunks,
   // which synthesizes the next chunk while the current one plays so there's no
   // gap between chunks. On failure the remaining text falls back to browser TTS.
+  const fellBackRef = useRef(false);
   const speakReply = useCallback(async (text: string) => {
     if (!text) return;
     const spoken = stripForSpeech(text);
     if (!spoken) return;
     const chunks = chunkForSpeech(spoken);
+    fellBackRef.current = false;
     setNeuralSpeaking(true);
     try {
       await speakChunks(chunks, {
         synth: synthChunk,
         play: playUrl,
-        fallback: (t) => voice.speak(t),
+        fallback: (t) => { fellBackRef.current = true; voice.speak(t); },
         revoke: (url) => URL.revokeObjectURL(url),
       });
     } finally {
-      // Cleared even on the fallback path: by the time speakChunks resolves after calling
-      // fallback(), useVoice.speak's onstart has (or is about to) set voice.speaking = true,
-      // so `speaking` (voice.speaking || neuralSpeaking) stays true across the handoff.
-      setNeuralSpeaking(false);
+      // speakChunks calls fallback() synchronously and returns WITHOUT waiting for it:
+      // SpeechSynthesisUtterance's onstart is an async browser callback, not synchronous
+      // with synth.speak(), so clearing neuralSpeaking here on the fallback path would
+      // reopen the exact `speaking=false` gap (flat/frozen animation) this fix targets,
+      // right as neural TTS gives up. Leave it true; the effect above clears it once
+      // voice.speaking actually takes over. Safety net below in case the browser's speech
+      // engine never starts at all (unsupported/silently fails) — must not get stuck "true".
+      if (fellBackRef.current) {
+        setTimeout(() => setNeuralSpeaking(false), 4000);
+      } else {
+        setNeuralSpeaking(false);
+      }
     }
   }, [synthChunk, playUrl, voice]);
 
