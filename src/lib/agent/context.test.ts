@@ -36,8 +36,7 @@ describe("buildSystemPrompt", () => {
   });
   test("F3: có tool → ép gọi lại tool khi người dùng yêu cầu tìm/tra cứu LẠI, không dùng dữ liệu cũ trong hội thoại", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "laam_list_agents", kind: "read" }] });
-    expect(p).toContain("tìm") ;
-    expect(p).toContain("lại"); // yêu cầu làm mới ("tìm lại", "tra cứu lại", "kiểm tra lại"...)
+    expect(p).toContain("tìm/tra cứu/kiểm tra LẠI"); // trigger anchored to the refresh verb phrase
     expect(p).toContain("BẮT BUỘC gọi lại công cụ");
     expect(p).toContain("KHÔNG dùng lại kết quả cũ"); // cấm trả lời từ hội thoại/tóm tắt cũ
   });

@@ -70,7 +70,10 @@ export function buildSystemPrompt(input: {
       // F3: explicit re-search MUST go through a fresh tool call, even when the answer already
       // sits in the conversation (verbatim or folded into summarizeMessages' summary) — a prior
       // tool result can be stale, and the user's "lại" (again) is an explicit freshness request.
-      "Khi người dùng yêu cầu tìm/tra cứu/kiểm tra LẠI, hoặc dùng từ như \"lại\" để yêu cầu làm mới thông tin, " +
+      // Anchored to the refresh VERB PHRASE ("tìm/tra/kiểm tra lại", "cập nhật lại kết quả"), not
+      // the bare particle "lại" — that particle is common in unrelated Vietnamese phrasing
+      // ("quay lại", "và lại") and would over-trigger tool calls if matched alone.
+      "Khi người dùng yêu cầu tìm/tra cứu/kiểm tra LẠI, hoặc yêu cầu cập nhật/làm mới lại kết quả, " +
       "BẮT BUỘC gọi lại công cụ tương ứng để lấy dữ liệu mới nhất — KHÔNG dùng lại kết quả cũ trong hội thoại " +
       "hay bản tóm tắt trước đó, kể cả khi bạn nghĩ mình đã biết câu trả lời. " +
       // Trust structured tool output over prose (Rule 13): when a result carries structured data
