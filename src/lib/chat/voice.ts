@@ -104,3 +104,59 @@ export function stripForSpeech(md: string): string {
     .trim();
 }
 
+// A long reply streamed through /tts/stream in ONE request can take far longer to
+// synthesize than any sane upstream timeout (measured: 3651 chars of real VieNeu-CPU
+// output took 149s to generate 266s of audio, vs. the route's 60s cap) — the connection
+// gets killed mid-speech. 280 chars is comfortably short at VieNeu's measured ~41ms/char
+// generation rate (~11.5s worst case per segment), so splitForSpeech's segments each
+// finish streaming well inside any reasonable timeout.
+export const SPEECH_SEGMENT_SOFT_CAP = 280;
+
+function splitSentences(text: string): string[] {
+  const matches = text.match(/[^.!?…]+(?:[.!?…]+|$)\s*/g);
+  return matches ? matches.map((s) => s.trim()).filter(Boolean) : [];
+}
+
+// A stray short fragment (e.g. a lone numbered-list marker like "4." left over when the
+// model ignores VOICE_GUIDE) can get boxed between two near-cap segments and end up in a
+// segment of its own — spoken as an isolated, oddly-clipped utterance. Merge anything
+// under this length into the previous segment instead of leaving it standing alone.
+const MIN_SEGMENT_CHARS = 12;
+
+function mergeTinyFragments(segments: string[]): string[] {
+  const out: string[] = [];
+  for (const seg of segments) {
+    if (seg.length < MIN_SEGMENT_CHARS && out.length) {
+      out[out.length - 1] = `${out[out.length - 1]} ${seg}`;
+    } else {
+      out.push(seg);
+    }
+  }
+  return out;
+}
+
+/**
+ * splitForSpeech — break already-stripped spoken prose into segments short enough to
+ * stream through /tts/stream without risking the upstream timeout, so the client can
+ * play them back-to-back (see ConstellationClient.speakReply). Splits on sentence-ending
+ * punctuation, grouping consecutive short sentences under SPEECH_SEGMENT_SOFT_CAP into
+ * one segment; a single sentence longer than the cap is kept whole rather than cut
+ * mid-clause (the exact word-drop-at-boundary bug this replaces guarded against).
+ */
+export function splitForSpeech(text: string): string[] {
+  const sentences = splitSentences(text);
+  const segments: string[] = [];
+  let current = "";
+  for (const sentence of sentences) {
+    const next = current ? `${current} ${sentence}` : sentence;
+    if (current && next.length > SPEECH_SEGMENT_SOFT_CAP) {
+      segments.push(current);
+      current = sentence;
+    } else {
+      current = next;
+    }
+  }
+  if (current) segments.push(current);
+  return mergeTinyFragments(segments);
+}
+

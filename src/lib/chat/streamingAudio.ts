@@ -44,25 +44,33 @@ export function drainPcmChunk(
   };
 }
 
+/** Shared scheduling position threaded across sequential playPcmStream calls (segments)
+ * so segment 2 picks up exactly where segment 1 left off. Omit for a standalone call. */
+export interface PlaybackCursor {
+  value: number;
+}
+
 export interface PlayPcmDeps {
   context: AudioContext;
   analyser: AnalyserNode; // sources connect here; caller wires analyser -> destination
   onFirstAudio?: () => void;
   signal?: AbortSignal;
+  cursor?: PlaybackCursor;
 }
 
 /**
  * Read a PCM byte stream and play it gaplessly through Web Audio. Each incoming
  * chunk becomes an AudioBuffer scheduled at a running cursor (`max(currentTime,
- * nextStart)` — the max resets the cursor after any underrun so a slow network
+ * cursor.value)` — the max resets the cursor after any underrun so a slow network
  * causes a small gap, not overlapping playback). Resolves when the last buffer
- * ends; `signal` aborts (cancels the reader, stops scheduled nodes).
+ * ends; `signal` aborts (cancels the reader, stops scheduled nodes). Pass the same
+ * `cursor` object across sequential calls to chain segments back-to-back with no gap.
  */
 export async function playPcmStream(body: ReadableStream<Uint8Array>, deps: PlayPcmDeps): Promise<void> {
   const { context, analyser, onFirstAudio, signal } = deps;
+  const cursor = deps.cursor ?? { value: 0 };
   const reader = body.getReader();
   let leftover: Uint8Array = EMPTY;
-  let nextStart = 0;
   let started = false;
   let lastEnd = context.currentTime;
   const sources: AudioBufferSourceNode[] = [];
@@ -82,10 +90,10 @@ export async function playPcmStream(body: ReadableStream<Uint8Array>, deps: Play
       const src = context.createBufferSource();
       src.buffer = buf;
       src.connect(analyser);
-      const startAt = Math.max(context.currentTime, nextStart);
+      const startAt = Math.max(context.currentTime, cursor.value);
       src.start(startAt);
-      nextStart = startAt + buf.duration;
-      lastEnd = nextStart;
+      cursor.value = startAt + buf.duration;
+      lastEnd = cursor.value;
       sources.push(src);
       if (!started) { started = true; onFirstAudio?.(); }
     }

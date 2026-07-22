@@ -115,4 +115,52 @@ describe("playPcmStream", () => {
     expect(onFirstAudio).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
+
+  // INTENT: segmented replies (see voice.splitForSpeech) call playPcmStream once per
+  // segment. Without a shared cursor, each call's local scheduling position resets to
+  // 0, so segment 2 would either overlap segment 1 (both starting near t=0) or need the
+  // caller to somehow know when segment 1 ends. A shared cursor object threaded across
+  // calls lets segment 2 pick up exactly where segment 1 left off — no gap, no overlap.
+  it("chains scheduling across sequential calls via a shared cursor (no gap between segments)", async () => {
+    vi.useFakeTimers();
+    const { ctx, created, sources } = mockContext();
+    const analyser = { connect: vi.fn() } as unknown as AnalyserNode;
+    const cursor = { value: 0 };
+    const chunk = new Uint8Array([0, 0x40, 0, 0xc0]); // 2 int16 samples
+
+    const p1 = playPcmStream(streamOf([chunk]), { context: ctx, analyser, cursor });
+    await vi.runOnlyPendingTimersAsync();
+    sources[sources.length - 1].onended?.();
+    await vi.runAllTimersAsync();
+    await p1;
+
+    const firstSegmentEnd = cursor.value;
+    expect(firstSegmentEnd).toBeGreaterThan(0);
+
+    const p2 = playPcmStream(streamOf([chunk]), { context: ctx, analyser, cursor });
+    await vi.runOnlyPendingTimersAsync();
+    sources[sources.length - 1].onended?.();
+    await vi.runAllTimersAsync();
+    await p2;
+
+    // Second segment's first buffer starts exactly where the first segment ended.
+    expect(created[1].started).toBeCloseTo(firstSegmentEnd, 6);
+    vi.useRealTimers();
+  });
+
+  it("without a cursor, behaves exactly as before (starts fresh at context.currentTime each call)", async () => {
+    vi.useFakeTimers();
+    const { ctx, created, sources } = mockContext();
+    const analyser = { connect: vi.fn() } as unknown as AnalyserNode;
+    const chunk = new Uint8Array([0, 0x40, 0, 0xc0]);
+
+    const p = playPcmStream(streamOf([chunk]), { context: ctx, analyser });
+    await vi.runOnlyPendingTimersAsync();
+    sources[sources.length - 1].onended?.();
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(created[0].started).toBe(0); // ctx.currentTime is 0 in the mock, no cursor carried in
+    vi.useRealTimers();
+  });
 });

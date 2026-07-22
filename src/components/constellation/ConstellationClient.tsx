@@ -13,7 +13,7 @@ import { useConstellationChat, type PendingWrite } from "./useConstellationChat"
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
-import { stripForSpeech } from "@/lib/chat/voice";
+import { stripForSpeech, splitForSpeech } from "@/lib/chat/voice";
 import { playPcmStream } from "@/lib/chat/streamingAudio";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
@@ -184,6 +184,16 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // (no pulse) for the whole neural-TTS duration — reported as the wave "biến mất" and the
   // background looking frozen ("khựng") while Jarvis talks.
   const [neuralSpeaking, setNeuralSpeaking] = useState(false);
+  // Set the instant speakReply starts working a reply (before the first network byte),
+  // cleared on the first real audio frame or once speakReply exits either way. Closes the
+  // gap between "reply text finished streaming" and "neural audio actually starts" (network
+  // + VieNeu-CPU inference latency, measured ~0.3-1s+), during which the core ring's pulse
+  // previously went flat/static — reported as the animation "freezing". Included in the
+  // SAME pulse formula as real speaking (getLevel below), not a separate visual, so there is
+  // no mode-switch jerk when real audio takes over (Max-blends with 0 real amplitude until
+  // then) — unlike the earlier neuralSpeaking-at-synthesis-start attempt (see CHANGELOG),
+  // which fired before ANY request existed and used a different codepath.
+  const [preparingSpeech, setPreparingSpeech] = useState(false);
   const speaking = voice.speaking || neuralSpeaking;
 
   // Bridges the fallback handoff (see speakReply below): once voice.speaking itself goes
@@ -196,50 +206,96 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     ? "thinking"
     : voice.listening
       ? "listening"
-      : speaking
+      : speaking || preparingSpeech
         ? "speaking"
         : "idle";
 
-  // speakReply: stream the whole reply through VieNeu (/api/tts/stream) and play it
-  // gaplessly via Web Audio. stripForSpeech FIRST (VieNeu has no markdown awareness).
-  // No client chunking — the server streams frame-by-frame, so first audio lands ~0.2s
-  // in with no chunk-boundary word-drop or gaps. neuralSpeaking flips on the first real
-  // audio frame (onFirstAudio). On any failure, fall back to the browser voice.
+  // speakReply: stream the reply through VieNeu (/api/tts/stream), split into short
+  // segments (splitForSpeech) and played back-to-back on a shared scheduling cursor so
+  // they join gaplessly. Segmenting keeps every /tts/stream request comfortably inside
+  // the route's timeout regardless of reply length (a single-request stream for a long
+  // reply can need minutes to finish generating and gets killed mid-speech — see
+  // CHANGELOG). The next segment's fetch is kicked off as soon as the current segment's
+  // response headers arrive (not after it finishes playing), so VieNeu — faster than
+  // real-time — usually has the next segment ready before the current one ends.
+  // stripForSpeech FIRST (VieNeu has no markdown awareness). neuralSpeaking flips on the
+  // first real audio frame (onFirstAudio, first segment only). On a genuine failure
+  // (not superseded by a newer reply), fall back to the browser voice for whatever
+  // hasn't already been spoken by neural TTS — not the whole reply again.
   const fellBackRef = useRef(false);
   const speakAbortRef = useRef<AbortController | null>(null);
   const speakReply = useCallback(async (text: string) => {
     if (!text) return;
     const spoken = stripForSpeech(text);
     if (!spoken) return;
-    const sink = audio.getTtsSink();
-    if (!sink) return;
+    const segments = splitForSpeech(spoken);
+    if (!segments.length) return;
+
     fellBackRef.current = false;
     speakAbortRef.current?.abort(); // cancel any in-flight playback before starting new
     const controller = new AbortController();
     speakAbortRef.current = controller;
-    try {
-      const res = await fetch("/api/tts/stream", {
+    // Only the still-current call (not superseded by a newer speakReply) may touch
+    // shared UI state in its cleanup paths — guards against a race where an aborted
+    // call's cleanup runs after a newer call already started (see Task 6 review notes;
+    // preparingSpeech sets synchronously at call-start, unlike neuralSpeaking, so it
+    // needs this guard even though neuralSpeaking's network-bound sets never needed it).
+    const isCurrent = () => speakAbortRef.current === controller;
+    setPreparingSpeech(true);
+
+    const sink = audio.getTtsSink();
+    if (!sink) {
+      // No Web Audio available at all — go straight to the browser fallback instead of
+      // silently speaking nothing.
+      if (isCurrent()) setPreparingSpeech(false);
+      voice.speak(spoken);
+      return;
+    }
+
+    const fetchSegment = (segText: string) =>
+      fetch("/api/tts/stream", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: spoken, lang }),
+        body: JSON.stringify({ text: segText, lang }),
         signal: controller.signal,
       });
-      if (!res.ok || !res.body) throw new Error("tts stream failed");
-      await playPcmStream(res.body, {
-        context: sink.context,
-        analyser: sink.analyser,
-        onFirstAudio: () => setNeuralSpeaking(true),
-        signal: controller.signal,
-      });
+
+    const cursor = { value: 0 };
+    let spokenSegments = 0;
+    let nextFetch: Promise<Response> | null = fetchSegment(segments[0]);
+    try {
+      for (let i = 0; i < segments.length; i++) {
+        if (controller.signal.aborted) return;
+        const res = await nextFetch!;
+        // Kick off the NEXT segment's request now, while THIS one is about to play —
+        // not after it finishes — so it has the whole playback duration to be ready.
+        nextFetch = i + 1 < segments.length ? fetchSegment(segments[i + 1]) : null;
+        if (!res.ok || !res.body) throw new Error("tts stream failed");
+        await playPcmStream(res.body, {
+          context: sink.context,
+          analyser: sink.analyser,
+          cursor,
+          onFirstAudio: i === 0 ? () => { setNeuralSpeaking(true); if (isCurrent()) setPreparingSpeech(false); } : undefined,
+          signal: controller.signal,
+        });
+        spokenSegments = i + 1;
+      }
     } catch {
       // Aborted (superseded by a newer reply) is not a failure — don't fall back.
-      if (!controller.signal.aborted) { fellBackRef.current = true; voice.speak(spoken); }
+      if (!controller.signal.aborted) {
+        fellBackRef.current = true;
+        // Only re-speak what neural TTS hasn't already said, not the whole reply.
+        voice.speak(segments.slice(spokenSegments).join(" ") || spoken);
+      }
     } finally {
-      // Same handoff rule as before: on the browser-TTS fallback, keep neuralSpeaking
-      // true until voice.speaking takes over (the effect above clears it), with a 4s
-      // safety net; otherwise clear immediately.
-      if (fellBackRef.current) setTimeout(() => setNeuralSpeaking(false), 4000);
-      else setNeuralSpeaking(false);
+      if (isCurrent()) {
+        setPreparingSpeech(false);
+        // Same handoff rule as before: on the browser-TTS fallback, keep neuralSpeaking
+        // true until voice.speaking takes over (the effect above clears it), with a 4s
+        // safety net; otherwise clear immediately.
+        if (fellBackRef.current) setTimeout(() => { if (isCurrent()) setNeuralSpeaking(false); }, 4000);
+        else setNeuralSpeaking(false);
+      }
     }
   }, [audio, lang, voice]);
 
@@ -247,19 +303,21 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   speakRef.current = speakReply;
 
   // ---- Real audio-reactive level for the canvas ----
-  // Mic amplitude drives it while listening. While speaking, prefer the real
-  // neural-TTS amplitude (`tts`); browser speechSynthesis is NOT metered, so
-  // fall back to a rhythmic pulse so the core swarm + ring visibly "wave"
-  // whenever a reply is being spoken (mirrors the prototype's voiceEnv pulse).
+  // Mic amplitude drives it while listening. While speaking (or preparingSpeech — see
+  // above), prefer the real neural-TTS amplitude (`tts`); browser speechSynthesis is NOT
+  // metered and there's genuinely no real amplitude yet during preparingSpeech, so fall
+  // back to a rhythmic pulse so the core swarm + ring visibly "wave" whenever a reply is
+  // being spoken or about to be (mirrors the prototype's voiceEnv pulse). Same formula
+  // for both — no visual mode-switch when preparingSpeech hands off to real speaking.
   const getLevel = useCallback(() => {
     const { mic, tts } = sample();
     if (voice.listening) return Math.max(0.06, mic);
-    if (speaking) {
+    if (speaking || preparingSpeech) {
       const pulse = 0.34 + 0.32 * Math.abs(Math.sin(Date.now() / 130));
       return Math.max(0.06, tts * 0.95, pulse);
     }
     return 0.15;
-  }, [sample, voice.listening, speaking]);
+  }, [sample, voice.listening, speaking, preparingSpeech]);
 
   // Voice toggle: enable starts mic + listening; disable stops both.
   const [voiceEnabled, setVoiceEnabled] = useState(false);
