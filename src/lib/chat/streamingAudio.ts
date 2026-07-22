@@ -20,6 +20,17 @@ export const TTS_PREBUFFER_SECONDS = 3;
 // has already passed (which clips the start of the reply).
 const START_LEAD_SECONDS = 0.05;
 
+// Stop draining the stream once this much audio is already scheduled ahead of the play
+// head. This is a MAIN-THREAD fix, not an audio one: a prefetched segment is usually
+// fully buffered by the time we read it, so `reader.read()` resolves as a microtask —
+// and microtasks run to completion without ever yielding to rendering. An unpaced loop
+// therefore builds the whole segment (dozens of AudioBuffers) inside ONE task and froze
+// the page for 1-2s at each segment transition. Waiting on a timer instead yields a real
+// macrotask so the browser can paint, and the resulting backpressure also lets the
+// server pause generating. 6s keeps playback far enough ahead to stay gapless.
+const SCHEDULE_AHEAD_SECONDS = 6;
+const DRAIN_PAUSE_MS = 120;
+
 const EMPTY = new Uint8Array(0);
 
 /** Convert little-endian Int16 PCM bytes to Float32 samples in [-1, 1]. */
@@ -72,6 +83,8 @@ export interface PlayPcmDeps {
   cursor?: PlaybackCursor;
   /** Seconds of audio to buffer before playback starts. Defaults to TTS_PREBUFFER_SECONDS. */
   prebufferSeconds?: number;
+  /** Stop draining once this much audio is scheduled ahead. Defaults to SCHEDULE_AHEAD_SECONDS. */
+  scheduleAheadSeconds?: number;
 }
 
 /**
@@ -89,6 +102,7 @@ export async function playPcmStream(body: ReadableStream<Uint8Array>, deps: Play
   const { context, analyser, onFirstAudio, signal } = deps;
   const cursor = deps.cursor ?? { value: 0 };
   const prebufferSeconds = deps.prebufferSeconds ?? TTS_PREBUFFER_SECONDS;
+  const scheduleAheadSeconds = deps.scheduleAheadSeconds ?? SCHEDULE_AHEAD_SECONDS;
   const reader = body.getReader();
   let leftover: Uint8Array = EMPTY;
   let started = false;
@@ -132,7 +146,14 @@ export async function playPcmStream(body: ReadableStream<Uint8Array>, deps: Play
       const { samples, leftover: rest } = drainPcmChunk(leftover, value);
       leftover = rest;
       if (samples.length === 0) continue;
-      if (started) { schedule(samples); continue; }
+      if (started) {
+        schedule(samples);
+        // Yield the main thread while we're comfortably ahead (see SCHEDULE_AHEAD_SECONDS).
+        while (!signal?.aborted && cursor.value - context.currentTime > scheduleAheadSeconds) {
+          await new Promise((r) => setTimeout(r, DRAIN_PAUSE_MS));
+        }
+        continue;
+      }
       pending.push(samples);
       pendingSeconds += samples.length / TTS_SAMPLE_RATE;
       if (pendingSeconds >= prebufferSeconds) startPlayback();

@@ -198,6 +198,46 @@ describe("playPcmStream", () => {
     vi.useRealTimers();
   });
 
+  // INTENT: a prefetched segment is usually already fully buffered, so reader.read()
+  // resolves as a microtask — and microtasks never yield to rendering. Draining without
+  // pacing therefore builds the whole segment's AudioBuffers inside ONE task and froze the
+  // page for 1-2s at each segment transition. Scheduling must stop once far enough ahead.
+  it("stops draining once scheduleAheadSeconds is buffered, then resumes as playback advances", async () => {
+    vi.useFakeTimers();
+    const { ctx, created, sources } = mockContext();
+    const clock = ctx as unknown as { currentTime: number };
+    const analyser = { connect: vi.fn() } as unknown as AnalyserNode;
+
+    // 20 chunks x 0.5s = 10s of audio, all available immediately (the prefetched case).
+    const chunkSamples = 24000;
+    const chunks = Array.from({ length: 20 }, () => new Uint8Array(chunkSamples * 2));
+    let finished = false;
+    const done = playPcmStream(streamOf(chunks), {
+      context: ctx, analyser, prebufferSeconds: 1, scheduleAheadSeconds: 2,
+    }).then(() => { finished = true; });
+
+    await vi.advanceTimersByTimeAsync(500);
+    // Only what fits in the lead is scheduled — NOT all 20 chunks in one burst.
+    const scheduledWhileHeld = created.length;
+    expect(scheduledWhileHeld).toBeGreaterThan(0);
+    expect(scheduledWhileHeld).toBeLessThan(chunks.length);
+
+    // Advance the play head like real playback: the lead shrinks, draining resumes, and
+    // every chunk eventually lands — pacing delays audio, it never drops it. (The reader
+    // only reaches end-of-stream once playback has caught up, which is the backpressure
+    // working as intended, so the clock has to keep moving for the call to complete.)
+    for (let i = 0; i < 200 && !finished; i++) {
+      clock.currentTime += 0.5;
+      await vi.advanceTimersByTimeAsync(200);
+      sources[sources.length - 1]?.onended?.();
+    }
+    await done;
+
+    expect(created.length).toBeGreaterThan(scheduledWhileHeld);
+    expect(created).toHaveLength(chunks.length);
+    vi.useRealTimers();
+  });
+
   it("plays a stream shorter than the prebuffer as soon as it ends (no indefinite hold)", async () => {
     vi.useFakeTimers();
     const { ctx, created, sources } = mockContext();
