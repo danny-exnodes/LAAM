@@ -89,8 +89,12 @@ class TtsRequest(BaseModel):
     lang: str = "vi"
 
 
-def _voice_for(lang: str):
-    return _engine.get_preset_voice(VOICE_BY_LANG.get(lang, DEFAULT_VOICE))
+def _voice_for(lang: str) -> str:
+    # Pass the preset NAME string straight to infer/infer_stream — vieneu's `voice`
+    # param accepts a str, and this is the proven path from the prior app.py
+    # (`infer(text, voice="Thục Đoan")`). Verified: infer_stream(text, voice="Thục Đoan")
+    # works. No get_preset_voice indirection (simpler; can't AttributeError).
+    return VOICE_BY_LANG.get(lang, DEFAULT_VOICE)
 
 
 def _to_int16_bytes(frame: np.ndarray) -> bytes:
@@ -184,6 +188,8 @@ git commit -m "feat(tts): VieNeu-only service with streaming PCM endpoint, drop 
 
 > **Why no unit test here:** this is pure plumbing — an auth check plus a fetch that pipes `upstream.body` through unbuffered. The existing `/api/tts` route has no unit test either. Correctness is covered by (a) the type-checker, (b) the manual curl smoke below, and (c) Task 6's client wiring exercising it end-to-end. Mocking `next-auth`'s `auth()` for one plumbing branch would be brittle and low-signal (AGENTS Rule 2).
 
+> **Streaming-passthrough risk (verify, don't assume):** the whole feature's benefit rests on this route forwarding `upstream.body` **incrementally**. This Next.js version differs from older ones (CLAUDE.md: "This is NOT the Next.js you know" — read `node_modules/next/dist/docs/` for route-handler streaming before relying on behavior). The `export const dynamic`/`runtime` hints below plus returning the raw `ReadableStream` are the standard approach, but if the platform buffers the body the audio silently loses its ~0.2s head-start with NO test failing — that is exactly what Task 6's time-to-first-audio smoke check exists to catch.
+
 - [ ] **Step 1: Create `src/app/api/tts/stream/route.ts`**
 
 ```ts
@@ -194,9 +200,17 @@ import { auth } from "@/auth";
 // so audio starts ~0.2s in. CONSTELLATION_TTS_URL points at the WAV endpoint
 // (…/tts); the streaming endpoint is that URL + "/stream".
 //
+// force-dynamic + nodejs runtime: never statically optimize/cache this, and use the
+// Node runtime so the fetch ReadableStream body passes through incrementally rather
+// than being buffered. (Next 16 differs from older versions — see the streaming note
+// in Step 0 below.)
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+
 // Generous timeout: it bounds the WHOLE stream, and a long reply can take ~15-20s
 // to fully generate (still streaming the entire time). 60s is comfortably above any
 // realistic single reply while still failing over if the upstream is truly hung.
+// (Edge: a reply whose AUDIO exceeds 60s would be truncated — implausible here.)
 const TTS_STREAM_TIMEOUT_MS = 60000;
 
 export async function POST(req: Request) {
@@ -747,9 +761,17 @@ import { stripForSpeech } from "@/lib/chat/voice";
 import { playPcmStream } from "@/lib/chat/streamingAudio";
 ```
 
-- [ ] **Step 2: Remove `synthChunk`, `playUrl`, and `ttsElRef`**
+- [ ] **Step 2: Remove `synthChunk`, `playUrl`, and `ttsElRef`; fix the stale comment**
 
 Delete the entire `synthChunk` `useCallback` (the block commented "synthChunk: POST one chunk to /api/tts…") and the entire `playUrl` `useCallback` (the block commented "playUrl: play a synthesized wav…", including the `const ttsElRef = useRef<HTMLAudioElement | null>(null);` line just above it). They are replaced by the stream path in Step 3.
+
+Also fix the now-stale comment on the `neuralSpeaking` block (the one that reads "Neural TTS (speakReply/speakChunks/playUrl below) is the PRIMARY speaking path…") — it names the just-deleted `speakChunks`/`playUrl`. Change that first clause to:
+
+```ts
+  // Neural TTS (speakReply → /api/tts/stream → playPcmStream) is the PRIMARY speaking
+  // path — it never touches `voice.speaking`, which useVoice only sets for the browser-
+```
+(keep the rest of that comment block unchanged.)
 
 - [ ] **Step 3: Replace the `speakReply` callback**
 
@@ -879,7 +901,8 @@ sleep 20 && curl -s http://localhost:5002/health   # engine:"vieneu"
 - [ ] **Manual smoke on `/constellation`** (requires `npm run dev` + Docker stack + login)
 
   1. Enable voice, ask a tool-backed question that yields a multi-sentence Vietnamese reply.
-     Expected: audio starts **~0.2s** after the reply text finishes (not ~2s); speech is continuous with **no** mid-reply gaps and **no** dropped/garbled words at former chunk boundaries; the core ripples still react to the voice.
+     Expected: audio starts **~0.2s** after the reply text finishes (not ~2s) — this is the **time-to-first-audio check that catches N1** (if the Next.js route buffers the stream, first audio slips back toward whole-clip latency ~3.5s; if that happens, the streaming passthrough is being buffered — revisit the route's runtime/streaming config against the Next 16 docs). Speech is continuous with **no** mid-reply gaps and **no** dropped/garbled words at former chunk boundaries; the core ripples still react to the voice.
+  1b. **Greeting-on-load check (N3):** reload `/constellation` and wait for boot to finish WITHOUT interacting. The greeting fires before any user gesture, so the `AudioContext` may be `suspended` → the "speaking" animation could show with no sound until the first click. Confirm this is acceptable (it matches the old `<audio>.play()` autoplay limitation); if the silent-but-animating greeting is jarring, note it as a follow-up (e.g. gate the greeting on first gesture) — NOT a blocker for this plan.
   2. Ask something that yields an English reply. Expected: VieNeu speaks it (one engine); audio streams the same way.
   3. Trigger the browser-TTS fallback (e.g. stop the `piper-tts` container: `docker compose stop piper-tts`, then speak). Expected: the reply is still spoken via the browser voice; the "speaking" animation still shows. Restart: `docker compose up -d piper-tts`.
   4. Sanity: open `/chat`, use its voice. Expected: **unchanged** (browser `SpeechSynthesis`, not affected by any of this).
