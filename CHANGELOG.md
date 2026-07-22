@@ -9,6 +9,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã sửa — Jarvis bỏ qua tool call khi người dùng yêu cầu tìm/tra cứu LẠI (F3)
+- Trước đây khi hội thoại đã có sẵn dữ liệu (nguyên văn hoặc trong bản tóm tắt lịch sử), Jarvis có thể trả lời trực tiếp từ dữ liệu cũ thay vì gọi lại công cụ, kể cả khi người dùng yêu cầu rõ ràng "tìm lại"/"tra cứu lại"/"kiểm tra lại" — dữ liệu cũ có thể đã lỗi thời. `buildSystemPrompt` (`src/lib/agent/context.ts`) nay bắt buộc gọi lại công cụ khi phát hiện ý định làm mới, đối xứng với quy tắc bắt buộc gọi công cụ cho write-intent (F1).
+
 ### Đã thêm — Constellation (Jarvis) trả lời theo văn nói khi dùng giọng nói
 - Bỏ bảng/markdown và ID dài, tóm tắt danh sách dài — qua cờ `mode: "voice"` trong `/api/chat`.
 
