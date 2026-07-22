@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { int16ToFloat32, drainPcmChunk } from "./streamingAudio";
+import { describe, it, expect, vi } from "vitest";
+import { int16ToFloat32, drainPcmChunk, playPcmStream } from "./streamingAudio";
 
 // Helper: little-endian Int16 bytes for given sample values.
 function le16(...vals: number[]): Uint8Array {
@@ -51,5 +51,68 @@ describe("drainPcmChunk", () => {
     expect(r2.samples).toHaveLength(1);
     expect(r2.samples[0]).toBeCloseTo(-0.5, 4);
     expect(r2.leftover).toHaveLength(0);
+  });
+});
+
+// Minimal AudioContext mock recording the graph it builds.
+function mockContext() {
+  const created: { length: number; started: number | null }[] = [];
+  const sources: { onended: (() => void) | null }[] = [];
+  const ctx = {
+    currentTime: 0,
+    destination: {},
+    createBuffer: (_ch: number, length: number, _sr: number) => ({
+      length,
+      duration: length / 48000,
+      getChannelData: () => new Float32Array(length),
+    }),
+    createBufferSource: () => {
+      const s: { buffer: unknown; onended: (() => void) | null; connect: () => void; start: (t: number) => void; stop: () => void } = {
+        buffer: null,
+        onended: null,
+        connect: vi.fn(),
+        start: vi.fn((_t: number) => { created.push({ length: (s.buffer as { length: number })?.length ?? 0, started: _t }); }),
+        stop: vi.fn(),
+      };
+      sources.push(s);
+      return s;
+    },
+  } as unknown as AudioContext;
+  return { ctx, created, sources };
+}
+
+// A ReadableStream that yields the given byte chunks.
+function streamOf(chunks: Uint8Array[]): ReadableStream<Uint8Array> {
+  let i = 0;
+  return new ReadableStream({
+    pull(controller) {
+      if (i < chunks.length) controller.enqueue(chunks[i++]);
+      else controller.close();
+    },
+  });
+}
+
+describe("playPcmStream", () => {
+  it("schedules a buffer per chunk, fires onFirstAudio once, and resolves", async () => {
+    vi.useFakeTimers();
+    const { ctx, created, sources } = mockContext();
+    const analyser = { connect: vi.fn() } as unknown as AnalyserNode;
+    const onFirstAudio = vi.fn();
+
+    // two chunks, each 2 samples (4 bytes)
+    const chunk = new Uint8Array([0, 0x40, 0, 0xc0]); // 2 int16 samples
+    const p = playPcmStream(streamOf([chunk, chunk]), { context: ctx, analyser, onFirstAudio });
+
+    // let the async reader loop run
+    await vi.runOnlyPendingTimersAsync();
+    // fire the last source's onended so the completion promise resolves
+    sources[sources.length - 1].onended?.();
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(created).toHaveLength(2);          // one AudioBuffer scheduled per chunk
+    expect(created[0].length).toBe(2);        // 2 samples each
+    expect(onFirstAudio).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 });
