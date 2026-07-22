@@ -61,6 +61,34 @@ services:
     container_name: laam-v2-piper-tts
     ports:
       - "127.0.0.1:5002:5002"
+    # Leave most of the machine to the browser. Uncapped, VieNeu saturated ALL 12 cores
+    # (measured 1374% CPU) and starved Chrome's main thread — the whole page froze for
+    # 1-2s each time a reply was synthesized.
+    #
+    # The thread limits below are NOT optional: an earlier attempt capped `cpus` alone
+    # and was reverted because playback fell apart. Measured cause — the engine still
+    # spawned a thread per host core, so those threads thrashed inside the smaller cgroup
+    # quota and got throttled every period. Matching threads to the quota removes the
+    # thrashing entirely, and capping this way is FASTER than running uncapped.
+    # Measured warm (same text, real time factor = audio produced / wall clock):
+    #   12 cores, unlimited threads -> 0.98x  (and freezes the UI — 1374% CPU)
+    #   10 cores, 10 threads        -> 2.05x
+    #    6 cores,  6 threads        -> 3.63x
+    #    4 cores,  4 threads        -> 3.73x
+    #    3 cores,  3 threads        -> 3.58x   (this config — 9 cores left for the browser)
+    #    2 cores,  2 threads        -> 3.06x
+    # Throughput is nearly flat from 2-6 cores: this model barely parallelizes, so almost
+    # everything above ~3 cores was thrashing overhead, not useful work. 3.58x is far
+    # ahead of playback (the client also prebuffers 3s and prefetches the next segment).
+    # If audio ever starts stuttering, raise BOTH numbers together — never one alone.
+    cpus: 3
+    environment:
+      OMP_NUM_THREADS: "3"
+      MKL_NUM_THREADS: "3"
+      ORT_NUM_THREADS: "3"
+      OPENBLAS_NUM_THREADS: "3"
+      NUMEXPR_NUM_THREADS: "3"
+      TORCH_NUM_THREADS: "3"
     restart: unless-stopped
 
   # Self-hosted metasearch (FOSS, $0) — powers the web_search harness tool. JSON API
