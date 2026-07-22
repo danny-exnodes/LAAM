@@ -176,11 +176,20 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     onTranscript: (txt) => setCommand((p) => (p ? `${p} ${txt}` : txt)),
   });
 
+  // Neural TTS (speakReply/speakChunks/playUrl below) is the PRIMARY speaking path — it
+  // never touches `voice.speaking`, which useVoice only sets for the browser-SpeechSynthesis
+  // FALLBACK. Without this, `state`/`getLevel` below saw the reply play out with no "speaking"
+  // signal at all: the state label never changed and the canvas fell back to a flat level
+  // (no pulse) for the whole neural-TTS duration — reported as the wave "biến mất" and the
+  // background looking frozen ("khựng") while Jarvis talks.
+  const [neuralSpeaking, setNeuralSpeaking] = useState(false);
+  const speaking = voice.speaking || neuralSpeaking;
+
   const state: State = chat.streaming
     ? "thinking"
     : voice.listening
       ? "listening"
-      : voice.speaking
+      : speaking
         ? "speaking"
         : "idle";
 
@@ -238,12 +247,20 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     const spoken = stripForSpeech(text);
     if (!spoken) return;
     const chunks = chunkForSpeech(spoken);
-    await speakChunks(chunks, {
-      synth: synthChunk,
-      play: playUrl,
-      fallback: (t) => voice.speak(t),
-      revoke: (url) => URL.revokeObjectURL(url),
-    });
+    setNeuralSpeaking(true);
+    try {
+      await speakChunks(chunks, {
+        synth: synthChunk,
+        play: playUrl,
+        fallback: (t) => voice.speak(t),
+        revoke: (url) => URL.revokeObjectURL(url),
+      });
+    } finally {
+      // Cleared even on the fallback path: by the time speakChunks resolves after calling
+      // fallback(), useVoice.speak's onstart has (or is about to) set voice.speaking = true,
+      // so `speaking` (voice.speaking || neuralSpeaking) stays true across the handoff.
+      setNeuralSpeaking(false);
+    }
   }, [synthChunk, playUrl, voice]);
 
   const speakRef = useRef(speakReply);
@@ -257,12 +274,12 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const getLevel = useCallback(() => {
     const { mic, tts } = sample();
     if (voice.listening) return Math.max(0.06, mic);
-    if (voice.speaking) {
+    if (speaking) {
       const pulse = 0.34 + 0.32 * Math.abs(Math.sin(Date.now() / 130));
       return Math.max(0.06, tts * 0.95, pulse);
     }
     return 0.15;
-  }, [sample, voice.listening, voice.speaking]);
+  }, [sample, voice.listening, speaking]);
 
   // Voice toggle: enable starts mic + listening; disable stops both.
   const [voiceEnabled, setVoiceEnabled] = useState(false);
