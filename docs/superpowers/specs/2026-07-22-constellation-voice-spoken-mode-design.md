@@ -61,10 +61,14 @@ mode?: "voice" | "text";   // default "text"
 ### 2. System-prompt branch — `buildSystemPrompt`
 
 In [`src/lib/agent/context.ts`](../../../src/lib/agent/context.ts), thread `mode`
-into `buildSystemPrompt`. When `mode === "voice"`:
+into `buildSystemPrompt`. `buildSystemPrompt` composes its result as
+`[base, date, langHint, tools, RENDER_GUIDE]` (context.ts:60). When `mode === "voice"`:
 
 - **Omit `RENDER_GUIDE`** entirely (the ```` ```chart ```` / ```` ```map ```` fenced-block
-  contract) — visual-only, meaningless for TTS.
+  contract) — visual-only, meaningless for TTS. Swap it for `VOICE_GUIDE`.
+- **Keep the tool clause** (context.ts:50–58) unchanged. Jarvis still needs to call
+  tools to fetch real data (e.g. list DAAB projects); voice mode changes *how the
+  answer is spoken*, not *whether tools run*. Only `RENDER_GUIDE` is replaced.
 - **Append a new `VOICE_GUIDE` block** with these rules:
   1. **Speak, don't write.** Short, natural, conversational sentences. No markdown —
      no tables, bullets, headings, or code fences.
@@ -83,6 +87,13 @@ into `buildSystemPrompt`. When `mode === "voice"`:
 - **Language hint (`LANG_HINT`, vi/en/zh) is unchanged.** Voice mode composes *on top
   of* the language instruction, it does not replace it.
 
+**Applicability caveat.** `buildSystemPrompt` only runs on the default-persona and
+custom-agent paths. When a request sets a full `body.system` override,
+`route.ts:433-434` bypasses `buildSystemPrompt` entirely, so `mode` has no effect
+there. This is fine: `/constellation` never sends `system`. With `customAgentId`,
+`buildSystemPrompt` *does* run (the preset only swaps the `base` argument), so voice
+mode composes on top of the persona as expected.
+
 Illustrative contrast (question: "liệt kê các project trong DAAB"):
 
 - **text mode:** a markdown table with `#`, name, UUID, status, created-date columns.
@@ -91,9 +102,16 @@ Illustrative contrast (question: "liệt kê các project trong DAAB"):
 
 ### 3. Client wiring
 
-In `useConstellationChat.send`
-([`src/components/constellation/useConstellationChat.ts`](../../../src/components/constellation/useConstellationChat.ts)),
-add `mode: "voice"` to the POST body. That is the entire client change.
+In [`src/components/constellation/useConstellationChat.ts`](../../../src/components/constellation/useConstellationChat.ts),
+inject `mode: "voice"` inside the shared **`consume`** function's fetch body —
+**not** only in `send`. The hook has two entry points that both route through
+`consume`: `send` (a user question) and `confirm` (approving a pending write,
+lines 64-66). A confirm/approval also yields a spoken reply, so injecting at
+`consume` guarantees *both* are spoken-style. This hook is constellation-only
+(voice-first), so hardcoding `mode: "voice"` here is correct — every request it
+makes is a voice request.
+
+That is the entire client change.
 
 - `stripForSpeech` / `chunkForSpeech` / the TTS path stay as-is. They now receive
   already-clean input, so they simply do less work — no behavior change required.
@@ -126,9 +144,9 @@ summarizes + offers to continue.
 | File | Change |
 |---|---|
 | `src/app/api/chat/route.ts` | Add `mode` to `ChatBody`; pass to `buildSystemPrompt` |
-| `src/lib/agent/context.ts` | `mode` param; `VOICE_GUIDE`; omit `RENDER_GUIDE` in voice |
-| `src/components/constellation/useConstellationChat.ts` | Send `mode: "voice"` |
-| `src/lib/agent/context.test.ts` (or nearest) | Unit tests above |
+| `src/lib/agent/context.ts` | `mode` param; `VOICE_GUIDE`; swap `RENDER_GUIDE`→`VOICE_GUIDE` in voice (keep tool clause) |
+| `src/components/constellation/useConstellationChat.ts` | Inject `mode: "voice"` in `consume` (covers `send` + `confirm`) |
+| `src/lib/agent/context.test.ts` | Unit tests above |
 
 ## Risks
 
