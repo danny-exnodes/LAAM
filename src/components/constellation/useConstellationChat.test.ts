@@ -57,7 +57,7 @@ describe("useConstellationChat", () => {
   });
 
   it("sends mode:'voice' in the POST body on send", async () => {
-    const fetchMock = vi.fn(async () => streamResponse(["ok"]));
+    const fetchMock = vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) => streamResponse(["ok"]));
     vi.stubGlobal("fetch", fetchMock);
     const { result } = renderHook(() =>
       useConstellationChat({ onText: () => {}, onPendingWrite: () => {} })
@@ -68,7 +68,7 @@ describe("useConstellationChat", () => {
   });
 
   it("sends mode:'voice' in the POST body on confirm", async () => {
-    const fetchMock = vi.fn(async () => streamResponse(["done"]));
+    const fetchMock = vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) => streamResponse(["done"]));
     vi.stubGlobal("fetch", fetchMock);
     const { result } = renderHook(() =>
       useConstellationChat({ onText: () => {}, onPendingWrite: () => {} })
