@@ -9,13 +9,17 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
-### Đã sửa — TTS đọc thiếu/lệch chữ so với văn bản hiển thị (chunk cắt giữa cụm liệt kê)
+### Đã thay đổi — Constellation đọc câu trả lời theo LUỒNG (VieNeu streaming), bỏ Piper
+- `/constellation` nay stream cả câu trả lời qua VieNeu `infer_stream` (endpoint `/tts/stream` → PCM Int16LE 48kHz, phát bằng Web Audio `AudioBufferSourceNode`) thay vì cắt chunk ~60 ký tự rồi tải từng WAV. Kết quả: tiếng đầu ra sau ~0.2s (thay vì ~2s), hết đọc-mất-chữ ở biên chunk, hết khựng giữa các đoạn. Một engine VieNeu lo cả tiếng Việt lẫn tiếng Anh — bỏ Piper. Analyser luồng thay `MediaElementAudioSourceNode` (xoá luôn nguồn crash dựng-lại-đồ-thị-mỗi-chunk). (Animation khựng do nghẽn CPU vẫn là việc riêng, chưa xử lý ở đây.)
+- **Thay thế 3 mục vá lỗi bên dưới** (`chunkForSpeech`/`speakChunks`/`playUrl`/`attachTts` với `<audio>` đơn): cơ chế chunk WAV mà chúng vá lỗi đã bị xoá hoàn toàn khỏi code, không còn tồn tại để tái phát các lỗi đó — giữ lại 3 mục dưới đây làm lịch sử debug, không phải mô tả code hiện tại.
+
+### Đã sửa — TTS đọc thiếu/lệch chữ so với văn bản hiển thị (chunk cắt giữa cụm liệt kê) [đã thay bằng streaming, xem mục trên]
 - Mỗi chunk TTS tổng hợp ĐỘC LẬP (không có ngữ điệu liên chunk); `chunkForSpeech`'s word-wrap trước đây chỉ cắt ở khoảng trắng gần sát ngân sách ký tự, có thể để rơi một từ ngắn mồ côi ngay trước dấu phẩy ở biên chunk (vd "...M&A, Cảng" | "Định An v3..." tách rời "Cảng" khỏi "Định An v3") — TTS backend đọc từ mồ côi đó sai/mất. `pushWordWrapped` (`src/lib/chat/voice.ts`) nay ưu tiên cắt tại dấu phẩy/chấm phẩy gần ngân sách để giữ nguyên cụm liệt kê, chỉ lùi về cách cắt cũ khi không có dấu phẩy phù hợp hoặc dấu phẩy quá gần đầu chunk.
 
-### Đã sửa — Animation "đang nói" biến mất/đứng hình/chạy trước khi Constellation dùng neural TTS
+### Đã sửa — Animation "đang nói" biến mất/đứng hình/chạy trước khi Constellation dùng neural TTS [đã thay bằng streaming, xem mục trên]
 - `state`/`getLevel` (animation phản ứng âm thanh + nhãn trạng thái) chỉ dựa vào `voice.speaking` — cờ này chỉ được bật bởi đường fallback browser SpeechSynthesis, không bao giờ được đường TTS thần kinh chính (`speakReply`/`speakChunks`/`playUrl`, qua `/api/tts`) chạm tới. Kết quả: trong lúc Jarvis thực sự đang đọc bằng neural TTS, UI tưởng đang "idle" — animation phẳng (không nhịp đập), nhãn "ĐANG NÓI" không hiện. Thêm cờ `neuralSpeaking`; `speaking = voice.speaking || neuralSpeaking` nay dùng cho cả `state` và `getLevel`. Xử lý cả trường hợp fallback sang browser TTS (giữ `neuralSpeaking` cho đến khi `voice.speaking` thật sự bật, có safety-net 4s tránh kẹt mãi). Sau đó phát hiện thêm: cờ này bật ngay khi bắt đầu tổng hợp (trước khi có âm thanh thật vài giây) khiến animation chạy TRƯỚC âm thanh rồi giật khi âm thanh thật tới — chuyển sang bật ở sự kiện `onplaying` của `<audio>` (âm thanh thực sự phát) thay vì đầu `speakReply`.
 
-### Đã sửa — Chrome crash + animation khựng khi Constellation đọc câu trả lời dài bằng giọng nói
+### Đã sửa — Chrome crash + animation khựng khi Constellation đọc câu trả lời dài bằng giọng nói [đã thay bằng streaming, xem mục trên]
 - `playUrl` tạo mới một `<audio>` cho MỖI chunk TTS (câu trả lời dài chia thành hàng chục chunk ~60 ký tự), và `attachTts` dựng lại toàn bộ đồ thị `MediaElementAudioSourceNode`/`AnalyserNode` trên main thread ở mỗi chunk — vừa gây khựng animation đúng lúc chuyển chunk, vừa tích luỹ tài nguyên WebAudio qua một phiên đọc dài đến mức Chrome crash. `ConstellationClient.tsx` nay tái dùng MỘT `<audio>` cho cả phiên (chỉ đổi `.src`); `useAudioAnalyser.attachTts` (`src/components/constellation/useAudioAnalyser.ts`) nay là no-op khi gọi lại với cùng phần tử — đồ thị chỉ dựng đúng 1 lần/phiên thay vì 1 lần/chunk.
 
 ### Đã sửa — Jarvis bỏ qua tool call khi người dùng yêu cầu tìm/tra cứu LẠI (F3)
