@@ -219,9 +219,17 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // response headers arrive (not after it finishes playing), so VieNeu — faster than
   // real-time — usually has the next segment ready before the current one ends.
   // stripForSpeech FIRST (VieNeu has no markdown awareness). neuralSpeaking flips on the
-  // first real audio frame (onFirstAudio, first segment only). On a genuine failure
-  // (not superseded by a newer reply), fall back to the browser voice for whatever
-  // hasn't already been spoken by neural TTS — not the whole reply again.
+  // first real audio frame. On a genuine failure (not superseded by a newer reply), fall
+  // back to the browser voice for whatever hasn't already been spoken by neural TTS —
+  // not the whole reply again.
+  //
+  // Subtitle display: `caption` (otherwise the growing chat.streaming text) is repurposed
+  // to show ONLY the segment currently being read — cleared while waiting for the first
+  // segment, then swapped to each segment's own text the instant its audio actually
+  // starts (the same onFirstAudio signal, fired per segment via playPcmStream's
+  // prebuffer). Without this, the full reply stayed on screen for the whole read, which
+  // overflows well past a couple of sentences. Fallback-to-browser-voice keeps whatever
+  // was last shown — SpeechSynthesis has no per-segment start signal to sync against.
   const fellBackRef = useRef(false);
   const speakAbortRef = useRef<AbortController | null>(null);
   const speakReply = useCallback(async (text: string) => {
@@ -242,6 +250,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     // needs this guard even though neuralSpeaking's network-bound sets never needed it).
     const isCurrent = () => speakAbortRef.current === controller;
     setPreparingSpeech(true);
+    setCaption("");
 
     const sink = audio.getTtsSink();
     if (!sink) {
@@ -275,7 +284,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
           context: sink.context,
           analyser: sink.analyser,
           cursor,
-          onFirstAudio: i === 0 ? () => { setNeuralSpeaking(true); if (isCurrent()) setPreparingSpeech(false); } : undefined,
+          onFirstAudio: () => {
+            if (i === 0) { setNeuralSpeaking(true); if (isCurrent()) setPreparingSpeech(false); }
+            if (isCurrent()) setCaption(segments[i]);
+          },
           signal: controller.signal,
         });
         spokenSegments = i + 1;
@@ -290,6 +302,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     } finally {
       if (isCurrent()) {
         setPreparingSpeech(false);
+        // Done reading via neural TTS — the subtitle disappears, like a movie's does when
+        // nobody's talking. Leave it showing the last segment during a fallback instead;
+        // there's no per-segment signal for the browser voice to know when it's done.
+        if (!fellBackRef.current) setCaption("");
         // Same handoff rule as before: on the browser-TTS fallback, keep neuralSpeaking
         // true until voice.speaking takes over (the effect above clears it), with a 4s
         // safety net; otherwise clear immediately.
