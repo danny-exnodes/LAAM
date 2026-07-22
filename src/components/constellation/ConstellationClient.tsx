@@ -232,6 +232,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     const el = ttsElRef.current;
     audio.attachTts(el);
     return new Promise<boolean>((resolve) => {
+      // onplaying fires once the browser is actually rendering audio frames — NOT the same
+      // moment as el.play() being called, which happens right after synthesis (network +
+      // CPU TTS, ~2-7s per chunk) finishes but before any sound is audible. Flipping
+      // neuralSpeaking here (rather than at the top of speakReply, before synthesis even
+      // starts) keeps the "speaking" animation in sync with real audio: previously it lit up
+      // several seconds early (reported as the effect starting before sound) and then visibly
+      // jumped once real audio finally arrived (reported as a stutter right as playback began).
+      el.onplaying = () => setNeuralSpeaking(true);
       el.onended = () => resolve(true);
       el.onerror = () => resolve(false);
       el.src = url;
@@ -255,7 +263,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     if (!spoken) return;
     const chunks = chunkForSpeech(spoken);
     fellBackRef.current = false;
-    setNeuralSpeaking(true);
+    // neuralSpeaking is set by playUrl's onplaying handler, once audio is actually audible —
+    // not here, before synthesis of even the first chunk has started.
     try {
       await speakChunks(chunks, {
         synth: synthChunk,
