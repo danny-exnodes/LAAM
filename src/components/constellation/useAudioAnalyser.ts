@@ -1,5 +1,6 @@
 "use client";
 import { useRef, useEffect, useCallback } from "react";
+import { TTS_SAMPLE_RATE } from "@/lib/chat/streamingAudio";
 
 export function useAudioAnalyser() {
   const ctxRef = useRef<AudioContext | null>(null);
@@ -12,7 +13,18 @@ export function useAudioAnalyser() {
   const ensure = useCallback(() => {
     if (typeof window === "undefined") return;
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!ctxRef.current && Ctx) ctxRef.current = new Ctx();
+    if (!ctxRef.current && Ctx) {
+      // Pin the context to the TTS rate. Otherwise it runs at the hardware default
+      // (44100 on many Macs) and every streamed AudioBuffer — dozens of small ones per
+      // reply — gets resampled INDIVIDUALLY, adding an artifact at each buffer boundary
+      // (audible as crackle). Matching rates means no per-buffer resampling at all.
+      // Falls back to the default context if the rate isn't supported.
+      try {
+        ctxRef.current = new Ctx({ sampleRate: TTS_SAMPLE_RATE });
+      } catch {
+        ctxRef.current = new Ctx();
+      }
+    }
     if (ctxRef.current?.state === "suspended") void ctxRef.current.resume();
   }, []);
 

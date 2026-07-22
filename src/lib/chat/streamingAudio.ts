@@ -6,6 +6,20 @@
 
 export const TTS_SAMPLE_RATE = 48000;
 
+// How much audio to accumulate before starting playback. VieNeu-CPU delivers its first
+// chunks SLOWER than real time (measured: ~0.32s of audio per ~0.40s wall early on, only
+// catching up later), so scheduling each chunk the moment it arrives makes the playback
+// cursor fall behind immediately — every later chunk then starts after a gap. Simulated
+// against real measured chunk timings for one 17s segment: prebuffer 0s → 11 underruns
+// (1.89s of gaps, heard as crackling/stutter); 2s → 2; 3s → ZERO. Costs ~2.6s before the
+// first sound on the FIRST segment only — later segments are prefetched during playback,
+// so their data is already buffered and this threshold is met instantly.
+export const TTS_PREBUFFER_SECONDS = 3;
+
+// Small headroom so the very first buffer isn't scheduled at a timestamp the audio thread
+// has already passed (which clips the start of the reply).
+const START_LEAD_SECONDS = 0.05;
+
 const EMPTY = new Uint8Array(0);
 
 /** Convert little-endian Int16 PCM bytes to Float32 samples in [-1, 1]. */
@@ -56,27 +70,60 @@ export interface PlayPcmDeps {
   onFirstAudio?: () => void;
   signal?: AbortSignal;
   cursor?: PlaybackCursor;
+  /** Seconds of audio to buffer before playback starts. Defaults to TTS_PREBUFFER_SECONDS. */
+  prebufferSeconds?: number;
 }
 
 /**
- * Read a PCM byte stream and play it gaplessly through Web Audio. Each incoming
- * chunk becomes an AudioBuffer scheduled at a running cursor (`max(currentTime,
- * cursor.value)` — the max resets the cursor after any underrun so a slow network
- * causes a small gap, not overlapping playback). Resolves when the last buffer
- * ends; `signal` aborts (cancels the reader, stops scheduled nodes). Pass the same
- * `cursor` object across sequential calls to chain segments back-to-back with no gap.
+ * Read a PCM byte stream and play it gaplessly through Web Audio. Buffers
+ * `prebufferSeconds` of audio BEFORE starting (see TTS_PREBUFFER_SECONDS — without this
+ * the cursor falls behind a slower-than-real-time producer and every chunk lands after a
+ * gap, heard as crackling), then schedules each chunk at a running cursor
+ * (`max(currentTime, cursor.value)` — the max resets the cursor after any underrun so a
+ * stall causes a gap, not overlapping playback). A stream shorter than the prebuffer
+ * plays as soon as it ends. Resolves when the last buffer ends; `signal` aborts (cancels
+ * the reader, stops scheduled nodes). Pass the same `cursor` object across sequential
+ * calls to chain segments back-to-back with no gap.
  */
 export async function playPcmStream(body: ReadableStream<Uint8Array>, deps: PlayPcmDeps): Promise<void> {
   const { context, analyser, onFirstAudio, signal } = deps;
   const cursor = deps.cursor ?? { value: 0 };
+  const prebufferSeconds = deps.prebufferSeconds ?? TTS_PREBUFFER_SECONDS;
   const reader = body.getReader();
   let leftover: Uint8Array = EMPTY;
   let started = false;
   let lastEnd = context.currentTime;
   const sources: AudioBufferSourceNode[] = [];
+  // Samples held back until the prebuffer threshold is met.
+  let pending: Float32Array[] = [];
+  let pendingSeconds = 0;
 
   const stopAll = () => { for (const s of sources) { try { s.stop(); } catch { /* already stopped */ } } };
   if (signal) signal.addEventListener("abort", () => { void reader.cancel().catch(() => {}); stopAll(); }, { once: true });
+
+  const schedule = (samples: Float32Array) => {
+    const buf = context.createBuffer(1, samples.length, TTS_SAMPLE_RATE);
+    buf.getChannelData(0).set(samples);
+    const src = context.createBufferSource();
+    src.buffer = buf;
+    src.connect(analyser);
+    const startAt = Math.max(context.currentTime, cursor.value);
+    src.start(startAt);
+    cursor.value = startAt + buf.duration;
+    lastEnd = cursor.value;
+    sources.push(src);
+  };
+
+  // Release everything held back and mark playback started. Nudges the cursor a hair into
+  // the future first so the opening buffer isn't scheduled in the audio thread's past.
+  const startPlayback = () => {
+    started = true;
+    cursor.value = Math.max(cursor.value, context.currentTime + START_LEAD_SECONDS);
+    for (const s of pending) schedule(s);
+    pending = [];
+    pendingSeconds = 0;
+    onFirstAudio?.();
+  };
 
   try {
     for (;;) {
@@ -85,21 +132,17 @@ export async function playPcmStream(body: ReadableStream<Uint8Array>, deps: Play
       const { samples, leftover: rest } = drainPcmChunk(leftover, value);
       leftover = rest;
       if (samples.length === 0) continue;
-      const buf = context.createBuffer(1, samples.length, TTS_SAMPLE_RATE);
-      buf.getChannelData(0).set(samples);
-      const src = context.createBufferSource();
-      src.buffer = buf;
-      src.connect(analyser);
-      const startAt = Math.max(context.currentTime, cursor.value);
-      src.start(startAt);
-      cursor.value = startAt + buf.duration;
-      lastEnd = cursor.value;
-      sources.push(src);
-      if (!started) { started = true; onFirstAudio?.(); }
+      if (started) { schedule(samples); continue; }
+      pending.push(samples);
+      pendingSeconds += samples.length / TTS_SAMPLE_RATE;
+      if (pendingSeconds >= prebufferSeconds) startPlayback();
     }
   } finally {
     try { reader.releaseLock(); } catch { /* already released */ }
   }
+
+  // Stream ended before the prebuffer filled (a short segment) — play what we have.
+  if (!started && pending.length && !signal?.aborted) startPlayback();
 
   if (started && !signal?.aborted && sources.length) {
     const remainingMs = Math.max(0, (lastEnd - context.currentTime) * 1000);

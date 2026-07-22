@@ -148,7 +148,7 @@ describe("playPcmStream", () => {
     vi.useRealTimers();
   });
 
-  it("without a cursor, behaves exactly as before (starts fresh at context.currentTime each call)", async () => {
+  it("without a cursor, starts fresh from context.currentTime plus a small scheduling lead", async () => {
     vi.useFakeTimers();
     const { ctx, created, sources } = mockContext();
     const analyser = { connect: vi.fn() } as unknown as AnalyserNode;
@@ -160,7 +160,61 @@ describe("playPcmStream", () => {
     await vi.runAllTimersAsync();
     await p;
 
-    expect(created[0].started).toBe(0); // ctx.currentTime is 0 in the mock, no cursor carried in
+    // ctx.currentTime is 0 in the mock; the opening buffer is nudged just into the future
+    // so it isn't scheduled at a timestamp the audio thread has already passed.
+    expect(created[0].started).toBeGreaterThan(0);
+    expect(created[0].started).toBeLessThan(0.2);
+    vi.useRealTimers();
+  });
+
+  // INTENT: VieNeu-CPU delivers its first chunks slower than real time, so scheduling each
+  // chunk on arrival makes the cursor fall behind and every later chunk lands after a gap —
+  // heard as crackling. Nothing may be scheduled until prebufferSeconds of audio is held.
+  it("holds playback until prebufferSeconds of audio is buffered, then releases it all", async () => {
+    vi.useFakeTimers();
+    const { ctx, created, sources } = mockContext();
+    const analyser = { connect: vi.fn() } as unknown as AnalyserNode;
+    const onFirstAudio = vi.fn();
+
+    // 4 chunks x 24000 samples = 0.5s each at 48kHz; prebuffer 1s → release on the 2nd.
+    const chunkSamples = 24000;
+    const chunk = new Uint8Array(chunkSamples * 2);
+    const p = playPcmStream(streamOf([chunk, chunk, chunk, chunk]), {
+      context: ctx, analyser, onFirstAudio, prebufferSeconds: 1,
+    });
+    await vi.runOnlyPendingTimersAsync();
+    sources[sources.length - 1].onended?.();
+    await vi.runAllTimersAsync();
+    await p;
+
+    // All four chunks are eventually scheduled — buffering delays audio, never drops it.
+    expect(created).toHaveLength(4);
+    expect(created.every((c) => c.length === chunkSamples)).toBe(true);
+    expect(onFirstAudio).toHaveBeenCalledTimes(1);
+    // Back-to-back with no gaps: each buffer starts exactly where the previous ended.
+    for (let i = 1; i < created.length; i++) {
+      expect(created[i].started).toBeCloseTo(created[i - 1].started! + chunkSamples / 48000, 6);
+    }
+    vi.useRealTimers();
+  });
+
+  it("plays a stream shorter than the prebuffer as soon as it ends (no indefinite hold)", async () => {
+    vi.useFakeTimers();
+    const { ctx, created, sources } = mockContext();
+    const analyser = { connect: vi.fn() } as unknown as AnalyserNode;
+    const onFirstAudio = vi.fn();
+
+    const chunk = new Uint8Array([0, 0x40, 0, 0xc0]); // 2 samples, far below any prebuffer
+    const p = playPcmStream(streamOf([chunk]), {
+      context: ctx, analyser, onFirstAudio, prebufferSeconds: 10,
+    });
+    await vi.runOnlyPendingTimersAsync();
+    sources[sources.length - 1]?.onended?.();
+    await vi.runAllTimersAsync();
+    await p;
+
+    expect(created).toHaveLength(1);
+    expect(onFirstAudio).toHaveBeenCalledTimes(1);
     vi.useRealTimers();
   });
 });
