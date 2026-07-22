@@ -67,6 +67,12 @@ export function buildSystemPrompt(input: {
       // F1: write-intent MUST go through a tool call (Rule 13 — code blocks unbacked claims).
       "Khi người dùng yêu cầu tạo/gửi/sửa/xoá/cập nhật, BẮT BUỘC gọi công cụ tương ứng. " +
       "TUYỆT ĐỐI KHÔNG nói đã tạo/gửi/xoá/cập nhật thành công nếu bạn chưa thực sự gọi công cụ và nhận được kết quả. " +
+      // F3: explicit re-search MUST go through a fresh tool call, even when the answer already
+      // sits in the conversation (verbatim or folded into summarizeMessages' summary) — a prior
+      // tool result can be stale, and the user's "lại" (again) is an explicit freshness request.
+      "Khi người dùng yêu cầu tìm/tra cứu/kiểm tra LẠI, hoặc dùng từ như \"lại\" để yêu cầu làm mới thông tin, " +
+      "BẮT BUỘC gọi lại công cụ tương ứng để lấy dữ liệu mới nhất — KHÔNG dùng lại kết quả cũ trong hội thoại " +
+      "hay bản tóm tắt trước đó, kể cả khi bạn nghĩ mình đã biết câu trả lời. " +
       // Trust structured tool output over prose (Rule 13): when a result carries structured data
       // (JSON, arrays), count/classify from that data — never from a prose summary — and never invent a total.
       "Khi kết quả trả về có dữ liệu cấu trúc (JSON, mảng), hãy đếm và phân loại từ chính dữ liệu cấu trúc đó, không suy từ đoạn văn tóm tắt, và không tự bịa con số tổng."

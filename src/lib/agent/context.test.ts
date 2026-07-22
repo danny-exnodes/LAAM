@@ -34,6 +34,13 @@ describe("buildSystemPrompt", () => {
     expect(p).toContain("TUYỆT ĐỐI"); // hard prohibition
     expect(p).toContain("thành công"); // ...on claiming a write succeeded without a tool result
   });
+  test("F3: có tool → ép gọi lại tool khi người dùng yêu cầu tìm/tra cứu LẠI, không dùng dữ liệu cũ trong hội thoại", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "laam_list_agents", kind: "read" }] });
+    expect(p).toContain("tìm") ;
+    expect(p).toContain("lại"); // yêu cầu làm mới ("tìm lại", "tra cứu lại", "kiểm tra lại"...)
+    expect(p).toContain("BẮT BUỘC gọi lại công cụ");
+    expect(p).toContain("KHÔNG dùng lại kết quả cũ"); // cấm trả lời từ hội thoại/tóm tắt cũ
+  });
   test("KHÔNG few-shot neo tool cụ thể (QW-5 đã gỡ — neo demo_create_task làm tụt write-selection 8B)", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "trello_create_card", kind: "write" }] });
     expect(p).not.toContain("Ví dụ:"); // không few-shot
