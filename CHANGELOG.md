@@ -9,6 +9,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Constellation (Jarvis) trả lời theo văn nói khi dùng giọng nói
+- Bỏ bảng/markdown và ID dài, tóm tắt danh sách dài — qua cờ `mode: "voice"` trong `/api/chat`.
+
 ### Đã thêm — Workflow DAG song song (lấy cảm hứng ComfyUI) + template "báo cáo đa nguồn → gửi mail"
 Nâng engine workflow từ walker **tuyến tính** (1 con trỏ, 1 cạnh/node) lên **bộ lập lịch DAG song song opt-in** — cho phép nhiều agent research/MCP chạy **đồng thời** rồi hội tụ. Thiết kế + biên bản họp: `docs/superpowers/specs/2026-07-10-comfyui-parallel-workflow-design.md`.
 - **Cờ cấp-graph `parallel: true`** (jsonb, **0 migration**). `undefined/false` → giữ nguyên `walkGraph` tuyến tính (BẤT BIẾN); `true` → `scheduleGraph`. Golden test chứng minh graph tuyến tính chạy qua scheduler ở concurrency=1 cho journal + ctx **byte-identical**.
