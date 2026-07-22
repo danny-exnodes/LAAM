@@ -55,4 +55,27 @@ describe("useConstellationChat", () => {
       expect.objectContaining({ token: "TOK", tool: "trello_create_card" })
     );
   });
+
+  it("sends mode:'voice' in the POST body on send", async () => {
+    const fetchMock = vi.fn(async () => streamResponse(["ok"]));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConstellationChat({ onText: () => {}, onPendingWrite: () => {} })
+    );
+    await act(async () => { await result.current.send({ message: "hi", model: "gemma4:e4b" }); });
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.mode).toBe("voice");
+  });
+
+  it("sends mode:'voice' in the POST body on confirm", async () => {
+    const fetchMock = vi.fn(async () => streamResponse(["done"]));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConstellationChat({ onText: () => {}, onPendingWrite: () => {} })
+    );
+    await act(async () => { await result.current.confirm("TOK", true); });
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.mode).toBe("voice");
+    expect(body.confirm).toEqual({ token: "TOK", approve: true });
+  });
 });
