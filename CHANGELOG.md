@@ -9,6 +9,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã sửa — Chrome crash + animation khựng khi Constellation đọc câu trả lời dài bằng giọng nói
+- `playUrl` tạo mới một `<audio>` cho MỖI chunk TTS (câu trả lời dài chia thành hàng chục chunk ~60 ký tự), và `attachTts` dựng lại toàn bộ đồ thị `MediaElementAudioSourceNode`/`AnalyserNode` trên main thread ở mỗi chunk — vừa gây khựng animation đúng lúc chuyển chunk, vừa tích luỹ tài nguyên WebAudio qua một phiên đọc dài đến mức Chrome crash. `ConstellationClient.tsx` nay tái dùng MỘT `<audio>` cho cả phiên (chỉ đổi `.src`); `useAudioAnalyser.attachTts` (`src/components/constellation/useAudioAnalyser.ts`) nay là no-op khi gọi lại với cùng phần tử — đồ thị chỉ dựng đúng 1 lần/phiên thay vì 1 lần/chunk.
+
 ### Đã sửa — Jarvis bỏ qua tool call khi người dùng yêu cầu tìm/tra cứu LẠI (F3)
 - Trước đây khi hội thoại đã có sẵn dữ liệu (nguyên văn hoặc trong bản tóm tắt lịch sử), Jarvis có thể trả lời trực tiếp từ dữ liệu cũ thay vì gọi lại công cụ, kể cả khi người dùng yêu cầu rõ ràng "tìm lại"/"tra cứu lại"/"kiểm tra lại" — dữ liệu cũ có thể đã lỗi thời. `buildSystemPrompt` (`src/lib/agent/context.ts`) nay bắt buộc gọi lại công cụ khi phát hiện ý định làm mới, đối xứng với quy tắc bắt buộc gọi công cụ cho write-intent (F1).
 
