@@ -27,6 +27,18 @@ const RENDER_GUIDE =
   "Hệ thống tự tra toạ độ và vẽ tuyến — đừng tự bịa toạ độ hay số liệu; " +
   "chỉ chèn khối khi câu hỏi thực sự cần biểu đồ hoặc bản đồ.";
 
+// Voice contract: on /constellation the reply is read aloud by TTS. Generate spoken
+// prose, not written markup — no tables/lists/markdown, no read-aloud identifiers,
+// summarize long lists. Replaces RENDER_GUIDE (chart/map are visual-only) in voice mode.
+const VOICE_GUIDE =
+  "Đây là hội thoại bằng giọng nói — câu trả lời của bạn sẽ được đọc thành tiếng. " +
+  "Hãy trả lời như đang NÓI chuyện tự nhiên: câu ngắn, mạch lạc, KHÔNG dùng markdown " +
+  "(không bảng, không gạch đầu dòng, không tiêu đề, không khối mã). " +
+  "KHÔNG đọc ID, UUID, mã băm, mã dài hay đường dẫn — bỏ qua chúng, chỉ nêu khi người dùng hỏi thẳng. " +
+  "Ưu tiên ngắn gọn và tóm tắt. Danh sách ngắn thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
+  "nếu danh sách dài, nêu số lượng và vài mục tiêu biểu rồi hỏi người dùng muốn nghe hết hay tìm mục cụ thể. " +
+  "Đọc số và ngày tháng theo cách người ta nói, đừng đọc dạng máy trừ khi cần chính xác.";
+
 export function buildSystemPrompt(input: {
   lang: string;
   now: number;
@@ -34,6 +46,8 @@ export function buildSystemPrompt(input: {
   // tương thích caller chưa cập nhật — mặc định coi là tool ĐỌC.
   tools: { name: string; kind: ToolKind }[] | string[];
   base?: string;
+  // Voice surface (/constellation): spoken-register output. Absent → "text" (unchanged).
+  mode?: "voice" | "text";
 }): string {
   const base = input.base ?? BASE;
   const date = new Date(input.now).toISOString().slice(0, 10);
@@ -57,5 +71,6 @@ export function buildSystemPrompt(input: {
       // (JSON, arrays), count/classify from that data — never from a prose summary — and never invent a total.
       "Khi kết quả trả về có dữ liệu cấu trúc (JSON, mảng), hãy đếm và phân loại từ chính dữ liệu cấu trúc đó, không suy từ đoạn văn tóm tắt, và không tự bịa con số tổng."
     : "";
-  return [base, `Hôm nay là ${date}.`, langHint, tools, RENDER_GUIDE].filter(Boolean).join(" ");
+  const guide = input.mode === "voice" ? VOICE_GUIDE : RENDER_GUIDE;
+  return [base, `Hôm nay là ${date}.`, langHint, tools, guide].filter(Boolean).join(" ");
 }

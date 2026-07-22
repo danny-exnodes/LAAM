@@ -52,4 +52,31 @@ describe("buildSystemPrompt", () => {
     // map dùng tên địa điểm (client tự tra toạ độ) — không bắt model bịa polyline
     expect(p).toContain("directions");
   });
+  test("voice mode: dùng VOICE_GUIDE, bỏ hợp đồng render trực quan (chart/map)", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [], mode: "voice" });
+    // Voice guide markers
+    expect(p).toContain("giọng nói");        // "Đây là hội thoại bằng giọng nói…"
+    expect(p).toContain("KHÔNG đọc ID");     // drop identifiers rule
+    // Visual render contract must be gone — meaningless for TTS
+    expect(p).not.toContain("```chart");
+    expect(p).not.toContain("```map");
+  });
+  test("voice mode: giữ tiếng Việt (LANG_HINT không bị voice ghi đè) và giữ khối tool", () => {
+    const p = buildSystemPrompt({
+      lang: "vi",
+      now,
+      tools: [{ name: "laam_list_agents", kind: "read" }],
+      mode: "voice",
+    });
+    expect(p).toContain("tiếng Việt");        // LANG_HINT preserved
+    expect(p).toContain("các công cụ sau");   // tool clause preserved
+    expect(p).toContain("laam_list_agents");
+  });
+  test("mode 'text' và mode vắng mặt: prompt y hệt nhau (regression backward-compat)", () => {
+    const withText = buildSystemPrompt({ lang: "vi", now, tools: [], mode: "text" });
+    const withNone = buildSystemPrompt({ lang: "vi", now, tools: [] });
+    expect(withText).toBe(withNone);
+    // và vẫn giữ hợp đồng render như cũ
+    expect(withNone).toContain("```chart");
+  });
 });
