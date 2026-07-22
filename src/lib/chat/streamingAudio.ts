@@ -61,7 +61,7 @@ export interface PlayPcmDeps {
 export async function playPcmStream(body: ReadableStream<Uint8Array>, deps: PlayPcmDeps): Promise<void> {
   const { context, analyser, onFirstAudio, signal } = deps;
   const reader = body.getReader();
-  let leftover = EMPTY;
+  let leftover: Uint8Array = EMPTY;
   let nextStart = 0;
   let started = false;
   let lastEnd = context.currentTime;
