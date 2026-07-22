@@ -61,12 +61,6 @@ services:
     container_name: laam-v2-piper-tts
     ports:
       - "127.0.0.1:5002:5002"
-    # Unlimited by default, onnxruntime uses every host core for inference — on a
-    # 12-core dev machine this contended with the browser's compositor thread during
-    # synthesis, reported as the /constellation canvas animation stuttering right as
-    # each TTS chunk finished generating. Capped so the browser/OS always keep headroom;
-    # raise if synthesis latency becomes the bigger problem.
-    cpus: "4"
     restart: unless-stopped
 
   # Self-hosted metasearch (FOSS, $0) — powers the web_search harness tool. JSON API
