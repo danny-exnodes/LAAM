@@ -6,6 +6,7 @@ export function useAudioAnalyser() {
   const micAnalyser = useRef<AnalyserNode | null>(null);
   const ttsAnalyser = useRef<AnalyserNode | null>(null);
   const ttsSource = useRef<MediaElementAudioSourceNode | null>(null);
+  const ttsEl = useRef<HTMLAudioElement | null>(null);
   const micStream = useRef<MediaStream | null>(null);
   const buf = useRef<Uint8Array<ArrayBuffer>>(new Uint8Array(512) as Uint8Array<ArrayBuffer>);
   const smooth = useRef({ mic: 0.06, tts: 0 });
@@ -39,12 +40,20 @@ export function useAudioAnalyser() {
     ensure();
     const ctx = ctxRef.current;
     if (!ctx) return;
+    // WebAudio allows createMediaElementSource ONCE per <audio> element, and Chromium has been
+    // observed not fully releasing a MediaElementAudioSourceNode's graph even after .disconnect()
+    // — calling this per TTS chunk (dozens of times per spoken reply) both stalls the render loop
+    // at every chunk boundary and leaks memory over a session, eventually crashing the tab. The
+    // caller is expected to reuse ONE long-lived element for the whole voice session; when it does,
+    // this is a no-op after the first call — the graph is wired exactly once.
+    if (ttsEl.current === el && ttsSource.current) return;
     try {
       ttsSource.current?.disconnect();
       ttsAnalyser.current?.disconnect();
     } catch { /* ignore */ }
     ttsSource.current = null;
     ttsAnalyser.current = null;
+    ttsEl.current = null;
     try {
       const src = ctx.createMediaElementSource(el);
       const an = ctx.createAnalyser();
@@ -53,9 +62,11 @@ export function useAudioAnalyser() {
       an.connect(ctx.destination);
       ttsSource.current = src;
       ttsAnalyser.current = an;
+      ttsEl.current = el;
     } catch {
       ttsSource.current = null;
       ttsAnalyser.current = null;
+      ttsEl.current = null;
     }
   }, [ensure]);
 

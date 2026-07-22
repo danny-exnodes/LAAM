@@ -13,6 +13,7 @@ import { useConstellationChat, type PendingWrite } from "./useConstellationChat"
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
+import { stripForSpeech, chunkForSpeech, speakChunks } from "@/lib/chat/voice";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
 import { SysInfoPanel } from "./SysInfoPanel";
@@ -183,30 +184,65 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         ? "speaking"
         : "idle";
 
-  // speakReply: prefer neural TTS via /api/tts → meter audio for ripples; fallback to browser TTS.
-  const speakReply = useCallback(async (text: string) => {
-    if (!text) return;
-    let usedNeural = false;
-    let url: string | null = null;
+  // synthChunk: POST one chunk to /api/tts → an object URL for the wav, or null
+  // on any fetch/HTTP failure. No <audio> is created here — playback owns that.
+  const synthChunk = useCallback(async (text: string): Promise<string | null> => {
+    if (typeof window === "undefined") return null;
     try {
       const res = await fetch("/api/tts", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, lang }) });
-      if (res.ok && typeof window !== "undefined" && typeof Audio !== "undefined") {
-        const blob = await res.blob();
-        url = URL.createObjectURL(blob);
-        const u = url;
-        const el = new Audio(u);
-        el.onended = () => URL.revokeObjectURL(u);
-        el.onerror = () => URL.revokeObjectURL(u);
-        audio.attachTts(el);
-        await el.play();
-        usedNeural = true;
-        url = null;
-      }
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
     } catch {
-      if (url) URL.revokeObjectURL(url);
+      return null;
     }
-    if (!usedNeural) voice.speak(text);
-  }, [lang, audio, voice]);
+  }, [lang]);
+
+  // playUrl: play a synthesized wav to completion, metering it for the ripples.
+  // Resolves true when it finishes, false on a playback error.
+  //
+  // Reuses ONE <audio> element for every chunk of a voice session, rather than a fresh
+  // `new Audio(url)` per chunk: WebAudio only allows createMediaElementSource once per
+  // element, and re-attaching a new element on every ~60-char TTS chunk (dozens per
+  // reply) both stutters the canvas animation at each chunk boundary (main-thread graph
+  // rewiring) and leaks memory over a session until the tab crashes (see
+  // useAudioAnalyser.attachTts). Reassigning `.src` and replaying the SAME element avoids
+  // both — attachTts is idempotent once the element is already wired.
+  const ttsElRef = useRef<HTMLAudioElement | null>(null);
+  const playUrl = useCallback((url: string): Promise<boolean> => {
+    if (typeof Audio === "undefined") return Promise.resolve(false);
+    if (!ttsElRef.current) ttsElRef.current = new Audio();
+    const el = ttsElRef.current;
+    audio.attachTts(el);
+    return new Promise<boolean>((resolve) => {
+      el.onended = () => resolve(true);
+      el.onerror = () => resolve(false);
+      el.src = url;
+      el.play().catch(() => resolve(false));
+    });
+  }, [audio]);
+
+  // speakReply: prefer neural TTS via /api/tts → meter audio for ripples; fallback to browser TTS.
+  // Strip markdown (tables/headings/etc.) to prose FIRST — /api/tts has no markdown
+  // awareness of its own (unlike useVoice.speak, which already calls stripForSpeech
+  // internally) and would otherwise read raw "|"/"-" table syntax aloud.
+  //
+  // The reply is split into sentence-sized chunks (the CPU /api/tts synth aborts
+  // past 8s, so one big request would time out) and streamed through speakChunks,
+  // which synthesizes the next chunk while the current one plays so there's no
+  // gap between chunks. On failure the remaining text falls back to browser TTS.
+  const speakReply = useCallback(async (text: string) => {
+    if (!text) return;
+    const spoken = stripForSpeech(text);
+    if (!spoken) return;
+    const chunks = chunkForSpeech(spoken);
+    await speakChunks(chunks, {
+      synth: synthChunk,
+      play: playUrl,
+      fallback: (t) => voice.speak(t),
+      revoke: (url) => URL.revokeObjectURL(url),
+    });
+  }, [synthChunk, playUrl, voice]);
 
   const speakRef = useRef(speakReply);
   speakRef.current = speakReply;
