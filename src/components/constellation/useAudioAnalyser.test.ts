@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 
@@ -32,17 +32,19 @@ function mockAudioContext() {
 }
 
 describe("useAudioAnalyser.attachTts", () => {
-  let restoreAudioContext: () => void;
+  let original: unknown;
   beforeEach(() => {
     const { ctx } = mockAudioContext();
-    const original = (window as unknown as { AudioContext?: unknown }).AudioContext;
+    original = (window as unknown as { AudioContext?: unknown }).AudioContext;
     // Must be `new`-able (arrow functions can't be constructors).
     (window as unknown as { AudioContext: unknown }).AudioContext = vi.fn(function AudioContextMock() {
       return ctx;
     });
-    restoreAudioContext = () => {
-      (window as unknown as { AudioContext: unknown }).AudioContext = original;
-    };
+  });
+  afterEach(() => {
+    // Runs even if an assertion above throws — a bare end-of-test restore would leak
+    // the mock into later tests on failure.
+    (window as unknown as { AudioContext: unknown }).AudioContext = original;
   });
 
   it("wires the audio graph once per element, not once per chunk (repeat calls with the SAME element are a no-op)", () => {
@@ -58,7 +60,10 @@ describe("useAudioAnalyser.attachTts", () => {
     // window.AudioContext is a fresh mock per test; grab the instance actually used.
     const ctxInstance = (window as unknown as { AudioContext: ReturnType<typeof vi.fn> }).AudioContext.mock.results[0].value;
     expect(ctxInstance.createMediaElementSource).toHaveBeenCalledTimes(1);
-    restoreAudioContext();
+    // Both nodes are gated by the SAME early return — pin createAnalyser too so a future
+    // refactor that splits the guard (skips the source but still rebuilds the analyser
+    // per chunk) can't silently reintroduce the reported animation stutter.
+    expect(ctxInstance.createAnalyser).toHaveBeenCalledTimes(1);
   });
 
   it("re-wires the graph when attaching a genuinely different element", () => {
@@ -73,6 +78,6 @@ describe("useAudioAnalyser.attachTts", () => {
 
     const ctxInstance = (window as unknown as { AudioContext: ReturnType<typeof vi.fn> }).AudioContext.mock.results[0].value;
     expect(ctxInstance.createMediaElementSource).toHaveBeenCalledTimes(2);
-    restoreAudioContext();
+    expect(ctxInstance.createAnalyser).toHaveBeenCalledTimes(2);
   });
 });

@@ -207,7 +207,9 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // reply) both stutters the canvas animation at each chunk boundary (main-thread graph
   // rewiring) and leaks memory over a session until the tab crashes (see
   // useAudioAnalyser.attachTts). Reassigning `.src` and replaying the SAME element avoids
-  // both — attachTts is idempotent once the element is already wired.
+  // both — attachTts is idempotent once the element is already wired. Reusing one element
+  // is only safe because speakChunks (voice.ts) is the sole caller and awaits each chunk's
+  // play() to settle before requesting the next — a concurrent caller would stomp `.src`.
   const ttsElRef = useRef<HTMLAudioElement | null>(null);
   const playUrl = useCallback((url: string): Promise<boolean> => {
     if (typeof Audio === "undefined") return Promise.resolve(false);
