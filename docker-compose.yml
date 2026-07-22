@@ -38,6 +38,7 @@ services:
       OLLAMA_URL: http://host.docker.internal:11434
       HOST_METRICS_URL: http://host.docker.internal:47600
       SEARXNG_URL: http://searxng:8080
+      CONSTELLATION_TTS_URL: http://piper-tts:5002/tts
       AUTH_TRUST_HOST: "true"
       AUTH_URL: https://danny-gaming-pc.tail41dda4.ts.net
       NODE_ENV: production
@@ -48,6 +49,24 @@ services:
       # resolves to the shared infra-pg (DATABASE_URL itself is unchanged).
       - default
       - ecosystem-net
+    restart: unless-stopped
+
+  # Self-hosted Piper TTS (FOSS, MIT) — backs CONSTELLATION_TTS_URL for the
+  # /constellation voice command-center. Bound to localhost ONLY (internal
+  # dependency, never exposed). Dev (host `npm run dev`) reaches it at
+  # http://localhost:5002/tts; the prod app container reaches it in-network at
+  # http://piper-tts:5002/tts (see the app service's env override above).
+  piper-tts:
+    build: ./piper-tts
+    container_name: laam-v2-piper-tts
+    ports:
+      - "127.0.0.1:5002:5002"
+    # Unlimited by default, onnxruntime uses every host core for inference — on a
+    # 12-core dev machine this contended with the browser's compositor thread during
+    # synthesis, reported as the /constellation canvas animation stuttering right as
+    # each TTS chunk finished generating. Capped so the browser/OS always keep headroom;
+    # raise if synthesis latency becomes the bigger problem.
+    cpus: "4"
     restart: unless-stopped
 
   # Self-hosted metasearch (FOSS, $0) — powers the web_search harness tool. JSON API
