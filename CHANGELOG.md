@@ -9,9 +9,6 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
-### Đã sửa — Animation Constellation khựng do container piper-tts chiếm hết CPU lúc tổng hợp
-- `piper-tts` (VieNeu-TTS, ONNX, CPU-only) không giới hạn CPU — mặc định onnxruntime dùng hết mọi core host để suy luận. Trên máy dev 12 core, việc này tranh chấp CPU thật với thread compositor của trình duyệt đúng lúc tổng hợp mỗi chunk (Docker Desktop trên macOS chạy container trong VM chia sẻ core vật lý với host qua hypervisor) — khớp đúng thời điểm animation bị khựng mà người dùng báo cáo. Giới hạn `cpus: "4"` cho service `piper-tts` (`docker-compose.yml`) để luôn còn dư CPU cho trình duyệt/OS; đổi lại tổng hợp mỗi chunk có thể chậm hơn một chút khi máy đang tải nặng. **Cần `docker compose up -d piper-tts` (hoặc restart container) để áp dụng.**
-
 ### Đã sửa — TTS đọc thiếu/lệch chữ so với văn bản hiển thị (chunk cắt giữa cụm liệt kê)
 - Mỗi chunk TTS tổng hợp ĐỘC LẬP (không có ngữ điệu liên chunk); `chunkForSpeech`'s word-wrap trước đây chỉ cắt ở khoảng trắng gần sát ngân sách ký tự, có thể để rơi một từ ngắn mồ côi ngay trước dấu phẩy ở biên chunk (vd "...M&A, Cảng" | "Định An v3..." tách rời "Cảng" khỏi "Định An v3") — TTS backend đọc từ mồ côi đó sai/mất. `pushWordWrapped` (`src/lib/chat/voice.ts`) nay ưu tiên cắt tại dấu phẩy/chấm phẩy gần ngân sách để giữ nguyên cụm liệt kê, chỉ lùi về cách cắt cũ khi không có dấu phẩy phù hợp hoặc dấu phẩy quá gần đầu chunk.
 
