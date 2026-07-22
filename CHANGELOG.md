@@ -9,6 +9,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã sửa — Animation "đang nói" biến mất/đứng hình khi Constellation dùng neural TTS
+- `state`/`getLevel` (animation phản ứng âm thanh + nhãn trạng thái) chỉ dựa vào `voice.speaking` — cờ này chỉ được bật bởi đường fallback browser SpeechSynthesis, không bao giờ được đường TTS thần kinh chính (`speakReply`/`speakChunks`/`playUrl`, qua `/api/tts`) chạm tới. Kết quả: trong lúc Jarvis thực sự đang đọc bằng neural TTS, UI tưởng đang "idle" — animation phẳng (không nhịp đập), nhãn "ĐANG NÓI" không hiện. Thêm cờ `neuralSpeaking` bọc quanh `speakChunks`; `speaking = voice.speaking || neuralSpeaking` nay dùng cho cả `state` và `getLevel`. Xử lý cả trường hợp fallback sang browser TTS (giữ `neuralSpeaking` cho đến khi `voice.speaking` thật sự bật, có safety-net 4s tránh kẹt mãi).
+
 ### Đã sửa — Chrome crash + animation khựng khi Constellation đọc câu trả lời dài bằng giọng nói
 - `playUrl` tạo mới một `<audio>` cho MỖI chunk TTS (câu trả lời dài chia thành hàng chục chunk ~60 ký tự), và `attachTts` dựng lại toàn bộ đồ thị `MediaElementAudioSourceNode`/`AnalyserNode` trên main thread ở mỗi chunk — vừa gây khựng animation đúng lúc chuyển chunk, vừa tích luỹ tài nguyên WebAudio qua một phiên đọc dài đến mức Chrome crash. `ConstellationClient.tsx` nay tái dùng MỘT `<audio>` cho cả phiên (chỉ đổi `.src`); `useAudioAnalyser.attachTts` (`src/components/constellation/useAudioAnalyser.ts`) nay là no-op khi gọi lại với cùng phần tử — đồ thị chỉ dựng đúng 1 lần/phiên thay vì 1 lần/chunk.
 
