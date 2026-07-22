@@ -52,4 +52,35 @@ describe("useAudioAnalyser.getTtsSink", () => {
     expect(analyser.connect).toHaveBeenCalledWith(ctxInstance.destination);
     expect(sink!.analyser).toBe(analyser);
   });
+
+  // INTENT: React effect cleanup does NOT run when the page is refreshed or navigated
+  // away from — the browser tears the document down instead. Without an explicit
+  // pagehide release, the AudioContext (and its hold on the audio output device) is left
+  // for the browser to reclaim asynchronously, so the next page load builds a fresh
+  // context while the old one is still winding down. That is why a refresh behaved worse
+  // than a cold browser start.
+  it("releases the AudioContext on pagehide, since effect cleanup never runs on refresh", () => {
+    const { result } = renderHook(() => useAudioAnalyser());
+    result.current.getTtsSink();
+    const AudioCtor = (window as unknown as { AudioContext: ReturnType<typeof vi.fn> }).AudioContext;
+    const ctxInstance = AudioCtor.mock.results[0].value;
+    expect(ctxInstance.close).not.toHaveBeenCalled();
+
+    window.dispatchEvent(new Event("pagehide"));
+
+    expect(ctxInstance.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("builds a fresh context after a pagehide release (bfcache restore still works)", () => {
+    const { result } = renderHook(() => useAudioAnalyser());
+    result.current.getTtsSink();
+    window.dispatchEvent(new Event("pagehide"));
+
+    const AudioCtor = (window as unknown as { AudioContext: ReturnType<typeof vi.fn> }).AudioContext;
+    const before = AudioCtor.mock.calls.length;
+    const sink = result.current.getTtsSink();
+
+    expect(AudioCtor.mock.calls.length).toBe(before + 1); // not reusing the released context
+    expect(sink).not.toBeNull();
+  });
 });

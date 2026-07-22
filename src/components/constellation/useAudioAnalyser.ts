@@ -76,10 +76,30 @@ export function useAudioAnalyser() {
     return { mic: smooth.current.mic, tts: smooth.current.tts };
   }, []);
 
-  useEffect(() => () => {
+  // Tear down the audio graph and hand the output device back. Refs are nulled so a
+  // later ensure()/getTtsSink() builds a fresh graph (e.g. after a bfcache restore).
+  const release = useCallback(() => {
     stopMic();
-    try { ttsAnalyser.current?.disconnect(); } catch {}
-    void ctxRef.current?.close();
+    try { ttsAnalyser.current?.disconnect(); } catch { /* already disconnected */ }
+    const ctx = ctxRef.current;
+    ctxRef.current = null;
+    ttsAnalyser.current = null;
+    // close() rejects if the context is already closed, and not every implementation
+    // returns a promise at all — normalise so neither case escapes as an unhandled error.
+    try { void Promise.resolve(ctx?.close()).catch(() => { /* already closed */ }); }
+    catch { /* already closed */ }
   }, [stopMic]);
+
+  // React effect cleanup does NOT run on a page refresh or navigation — the browser tears
+  // the document down instead — so without this the AudioContext and mic stream were left
+  // holding the audio output device while the next page load built a new context on top.
+  // A cold browser start had no such leftover, which is exactly why refreshing behaved
+  // worse than reopening Chrome. `pagehide` fires for both unload and bfcache entry.
+  useEffect(() => {
+    window.addEventListener("pagehide", release);
+    return () => window.removeEventListener("pagehide", release);
+  }, [release]);
+
+  useEffect(() => () => release(), [release]);
   return { ensure, startMic, stopMic, getTtsSink, sample };
 }
