@@ -149,6 +149,7 @@ type ChatBody = {
   images?: string[]; // W3 vision: raw base64 (không prefix data:), validate qua imagesError
   attachments?: unknown; // preview metadata để lưu + hiện lại sau reload (sanitizeAttachments)
   requestedTool?: { name?: unknown; args?: unknown }; // P1 quick-tools: tool user đã chọn (pre-dispatch deterministic)
+  mode?: "voice" | "text"; // /constellation sends "voice" → spoken-register prompt (buildSystemPrompt). Absent → "text".
 };
 
 // W3 vision caps (server, trần cứng): ≤2 ảnh/lượt, mỗi ảnh ≤ ~2.8MB base64
@@ -286,7 +287,8 @@ export async function POST(req: Request) {
   const userId = session.user.id;
 
   const rawBody = ((await req.json().catch(() => null)) ?? {}) as Record<string, unknown>;
-  if (isConfirmBody(rawBody)) return handleConfirm(req, rawBody.confirm, userId);
+  if (isConfirmBody(rawBody))
+    return handleConfirm(req, rawBody.confirm, userId, (rawBody as { mode?: "voice" | "text" }).mode);
   const body = rawBody as ChatBody;
 
   // stripNul: nội dung đính kèm nhị phân (PDF đọc-nhầm-thành-text…) chứa NUL → Postgres
@@ -443,6 +445,7 @@ export async function POST(req: Request) {
         // handleConfirm) — liệt kê tool + "BẮT BUỘC gọi công cụ" cho model không
         // có tool sẽ làm nó bịa cú pháp tool / claim sai.
         tools: isClaudeModel(model) ? [] : tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+        mode: body.mode,
         // Persona base (or undefined → default BASE) per resolveAgentBase precedence.
         base: resolveAgentBase(hasSystemOverride, agentPreset),
       });
@@ -1197,6 +1200,7 @@ async function handleConfirm(
   req: Request,
   confirm: { token: string; approve: boolean },
   userId: string,
+  mode?: "voice" | "text", // spoken-register narration of the write result on /constellation
 ): Promise<Response> {
   const now = Date.now();
   const opened = openPendingWrite(confirm.token, now);
@@ -1217,7 +1221,7 @@ async function handleConfirm(
     .where(eq(chatMessages.conversationId, convId))
     .orderBy(asc(chatMessages.createdAt));
   const lang = readLang(req); // tri-lingual: narrate the result in the user's language
-  const system = buildSystemPrompt({ lang, now, tools: [] });
+  const system = buildSystemPrompt({ lang, now, tools: [], mode });
 
   const { onEvent, frames: confirmFrames } = makeFrameCollector(INTERNAL_NAMES);
   const readAllow = await mcpReadAllow(userId);
