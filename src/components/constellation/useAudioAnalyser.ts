@@ -33,7 +33,18 @@ export function useAudioAnalyser() {
     ensure();
     if (!navigator.mediaDevices?.getUserMedia || !ctxRef.current) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Echo cancellation is load-bearing for barge-in: it removes Jarvis's own TTS
+      // (played through ctx.destination) from the mic so the VAD + barge-in gate react
+      // to the user, not to Jarvis. noiseSuppression/autoGainControl + mono match the
+      // constraints Silero's MicVAD uses, keeping both mic consumers consistent.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
       micStream.current = stream;
       const src = ctxRef.current.createMediaStreamSource(stream);
       const an = ctxRef.current.createAnalyser(); an.fftSize = 512;
