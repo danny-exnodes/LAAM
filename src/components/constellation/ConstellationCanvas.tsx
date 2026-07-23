@@ -12,14 +12,13 @@ function bez(t: number, p0: number, p1: number, p2: number): number {
 export function ConstellationCanvas({
   placed,
   getLevel,
-  thinking = false,
+  mode = "idle",
 }: {
   placed: Placed[];
   getLevel: () => number;
-  /** True while a reply is being generated (before Javis starts talking) — swaps the
-   * core ring to a bright blue-white and spins the swarm faster, so the UI reads as
-   * "actively working" instead of looking frozen during the wait. */
-  thinking?: boolean;
+  /** Turn state → ring tint. listening = red-white, thinking = blue-white, speaking/idle
+   * = gold. Eased so transitions between tints stay smooth (no hard swap). */
+  mode?: "idle" | "listening" | "thinking" | "speaking";
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   // Keep a fresh reference to the placed array without re-running the effect
@@ -28,9 +27,9 @@ export function ConstellationCanvas({
   // Mirror getLevel through a ref so the rAF loop never closes over a stale prop
   const getLevelRef = useRef(getLevel);
   getLevelRef.current = getLevel;
-  // Mirror thinking through a ref for the same reason
-  const thinkingRef = useRef(thinking);
-  thinkingRef.current = thinking;
+  // Mirror mode through a ref so the rAF loop never closes over a stale prop.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -68,10 +67,11 @@ export function ConstellationCanvas({
     const ripples: { t: number; str: number }[] = [];
     let rippleCD = 0;
 
-    // Eased 0→1 factor toward the current `thinking` target, instead of switching the
-    // swarm speed / ring tint instantly on the boolean flip — a hard if/else swap read
-    // as a jump-cut rather than a state transition.
+    // Eased 0→1 factors toward the current mode's tint. Two factors (thinking blue-white,
+    // listening red-white) ease independently so any transition between the three tints
+    // is smooth rather than a jump-cut. speaking/idle = neither factor = gold.
     let thinkFactor = 0;
+    let listenFactor = 0;
 
     // Node count the flows were last built for. buildFlows() runs at mount when
     // `placed` is still empty (data not loaded), yielding 0 flows; without this
@@ -148,7 +148,9 @@ export function ConstellationCanvas({
       T++;
       const level = getLevelRef.current();
       // Ease toward the thinking target (~0.35s to settle at 60fps) rather than snapping.
-      thinkFactor += ((thinkingRef.current ? 1 : 0) - thinkFactor) * 0.08;
+      const m = modeRef.current;
+      thinkFactor += ((m === "thinking" ? 1 : 0) - thinkFactor) * 0.08;
+      listenFactor += ((m === "listening" ? 1 : 0) - listenFactor) * 0.08;
 
       ctx.clearRect(0, 0, W, H);
 
@@ -305,15 +307,15 @@ export function ConstellationCanvas({
       }
 
       // ---- draw ripples (prototype lines 354–357) ----
-      // Ring/ripple tint eases between gold (rest/speaking) and bright blue-white
-      // (thinking) with thinkFactor, instead of snapping the instant streaming flips —
-      // note this only recolors the ring; its width/glow intensity below still comes
-      // from `level` alone, which thinking never touches, so the halo stays still.
-      const gR = 255, gG = 206, gB = 122; // gold
+      // Base gold, then blend toward thinking (blue-white) and listening (red-white) by
+      // their eased factors. They're mutually exclusive in practice (one mode at a time),
+      // so the factor not active is ~0 and doesn't muddy the colour.
+      const gR = 255, gG = 206, gB = 122; // gold (idle / speaking)
       const tR = 180, tG = 232, tB = 255; // thinking blue-white
-      const ringR = Math.round(gR + (tR - gR) * thinkFactor);
-      const ringG = Math.round(gG + (tG - gG) * thinkFactor);
-      const ringB = Math.round(gB + (tB - gB) * thinkFactor);
+      const lR = 255, lG = 120, lB = 130; // listening warm red-white (coral, harmonizes w/ gold)
+      const ringR = Math.round(gR + (tR - gR) * thinkFactor + (lR - gR) * listenFactor);
+      const ringG = Math.round(gG + (tG - gG) * thinkFactor + (lG - gG) * listenFactor);
+      const ringB = Math.round(gB + (tB - gB) * thinkFactor + (lB - gB) * listenFactor);
       const ringRGB = `${ringR},${ringG},${ringB}`;
       const ringGlow = `rgb(${ringRGB})`;
       for (let ri = ripples.length - 1; ri >= 0; ri--) {
