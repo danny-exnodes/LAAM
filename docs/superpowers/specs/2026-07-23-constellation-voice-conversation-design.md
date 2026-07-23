@@ -33,7 +33,7 @@ and re-opens the mic; and if the user talks over Jarvis, it stops and listens.
   turn (like ChatGPT voice mode).
 - **Echo-safe.** Jarvis's own TTS must never be transcribed back as user input.
 - **Minimal turn-state cue** via the core ring only (no reinstated waveform/label — the
-  user deliberately removed those): `listening` = pale-blue gentle breath, `thinking` =
+  user deliberately removed those): `listening` = warm red-white gentle breath, `thinking` =
   blue-white fast (exists), `speaking` = gold (exists).
 - **Swappable STT.** STT sits behind a small `SttProvider` interface so a self-hosted
   Whisper backend can replace Web Speech later without touching the turn-taking, VAD, or
@@ -201,11 +201,14 @@ The I/O shell that wires the pure reducer to the live objects it already receive
 **4. `ConstellationCanvas` visual cue**
 Generalize the current `thinking?: boolean` prop to a small mode signal so the ring can show
 three eased tints instead of two:
-- `listening` → pale blue, gentle breathing (driven by low mic level; distinct from the
-  fast blue-white of thinking).
+- `listening` → **bright red-white**, gentle breathing (driven by low mic level). Use a warm
+  red leaning slightly coral, e.g. base `rgb(255,120,130)` easing toward white at the pulse
+  peak, glow ~`#ff8a95` — NOT a pure alarm-red, so it harmonizes with the page's gold accent
+  and deep-blue field. Distinct hue from the blue-white `thinking`, so the two never read alike.
 - `thinking` → blue-white, fast swarm (unchanged).
 - `speaking` → gold (unchanged).
-Keep the eased `thinkFactor`-style interpolation so transitions stay smooth (no hard swap).
+Keep the eased `thinkFactor`-style interpolation (now a small per-mode factor) so transitions
+between all three tints stay smooth — no hard swap. Exact red is tuned during the smoke pass.
 
 **5. `ConstellationClient` wiring**
 - Replace the `onTranscript: setCommand` behavior with the conversation hook when voice mode
