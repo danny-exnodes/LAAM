@@ -18,6 +18,8 @@ import { playPcmStream } from "@/lib/chat/streamingAudio";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
 import { SysInfoPanel } from "./SysInfoPanel";
+import { createWebSpeechStt } from "@/lib/chat/stt";
+import { useVoiceConversation } from "./useVoiceConversation";
 
 type State = "idle" | "listening" | "thinking" | "speaking";
 
@@ -172,6 +174,9 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // Chat hook — onText streams the growing full reply into fullReplyRef (not shown on
   // screen); only speakReply's per-segment setCaption calls ever reach the UI.
   const fullReplyRef = useRef("");
+  // Mirrors convState for getLevel (declared before it's read; see Step 7 in the plan) —
+  // getLevel needs the current hands-free listening state without depending on convState.
+  const convStateRef = useRef<"idle" | "listening" | "thinking" | "speaking" | "off">("off");
   const chat = useConstellationChat({
     onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
@@ -182,8 +187,16 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const { sample } = audio;
   const voice = useVoice({
     lang,
-    onTranscript: (txt) => setCommand((p) => (p ? `${p} ${txt}` : txt)),
+    onTranscript: (txt) => {
+      // In hands-free mode the conversation hook drives STT; don't also fill the box.
+      if (voiceEnabledRef.current) return;
+      setCommand((p) => (p ? `${p} ${txt}` : txt));
+    },
   });
+
+  // STT provider for hands-free conversation. Created once; swap createWebSpeechStt for a
+  // future createWhisperStt without touching the conversation hook.
+  const sttRef = useRef(createWebSpeechStt());
 
   // Neural TTS (speakReply → /api/tts/stream → playPcmStream) is the PRIMARY speaking
   // path — it never touches `voice.speaking`, which useVoice only sets for the browser-
@@ -341,6 +354,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // on ConstellationCanvas instead — see the eased thinkFactor there.
   const getLevel = useCallback(() => {
     const { mic, tts } = sample();
+    if (convStateRef.current === "listening") return Math.max(0.06, mic);
     if (voice.listening) return Math.max(0.06, mic);
     if (speaking || preparingSpeech) {
       const pulse = 0.34 + 0.32 * Math.abs(Math.sin(Date.now() / 130));
@@ -376,10 +390,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     if (!voiceEnabled) {
       audio.ensure();
       await audio.startMic();
-      voice.startListening();
       setVoiceEnabled(true);
     } else {
-      voice.stopListening();
       audio.stopMic();
       voice.cancelSpeak();
       setVoiceEnabled(false);
@@ -406,6 +418,41 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     });
   }, [command, model, selectedAgentId, requestedTool, chat, voice]);
 
+  // Submit an arbitrary utterance (voice turn) through the same path as manual send,
+  // including the "cut Jarvis off before a new turn" behavior.
+  const submitText = useCallback(
+    (msg: string) => {
+      const text = msg.trim();
+      if (!text) return;
+      speakAbortRef.current?.abort();
+      voice.cancelSpeak();
+      setCaption("");
+      fullReplyRef.current = "";
+      void chat.send({
+        message: text,
+        ...(model ? { model } : {}),
+        customAgentId: selectedAgentId,
+        ...(requestedTool ? { requestedTool } : {}),
+      });
+    },
+    [chat, model, selectedAgentId, requestedTool, voice],
+  );
+
+  const { convState } = useVoiceConversation({
+    enabled: voiceEnabled,
+    lang,
+    stt: sttRef.current,
+    sample,
+    isReplying: chat.streaming,
+    isSpeaking: speaking, // voice.speaking || neuralSpeaking (already derived above)
+    onSubmit: submitText,
+    onBargeIn: () => {
+      speakAbortRef.current?.abort();
+      voice.cancelSpeak();
+    },
+  });
+  convStateRef.current = convState;
+
   const onModelChange = useCallback((m: string) => {
     setModel(m);
     if (typeof window !== "undefined") localStorage.setItem("laam:chat:model", m);
@@ -419,6 +466,16 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   };
 
   const voiceSupported = voice.support.recognition || voice.support.synthesis;
+
+  // Ring tint source: in hands-free mode the conversation state drives it; otherwise fall
+  // back to the manual-typing behavior (thinking while streaming, else idle/speaking gold).
+  const canvasMode: "idle" | "listening" | "thinking" | "speaking" =
+    convState !== "off"
+      ? convState
+      : chat.streaming
+        ? "thinking"
+        : "idle";
+
   const btnBase = "rounded-full border px-4 py-3 text-[13px] transition";
   const btnOff = "border-[#5bd6ff]/20 bg-[#0a1e34]/60 text-[#a9e9ff] hover:border-[#5bd6ff]/40";
   const btnOn = "border-[#ffce7a]/50 bg-[#ffce7a]/15 text-[#ffd98f]";
@@ -431,7 +488,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       aria-label={t("constellation.regionAria")}
     >
       {/* Canvas + nodes render underneath the boot overlay so they're ready on reveal */}
-      <ConstellationCanvas placed={placed} getLevel={getLevel} thinking={chat.streaming} />
+      <ConstellationCanvas placed={placed} getLevel={getLevel} mode={canvasMode} />
       <Link href="/chat" className="absolute right-4 top-4 z-10 rounded-full border border-[#5bd6ff]/30 bg-[#0a1e34]/60 px-4 py-2 text-sm text-[#a9e9ff]">
         {t("constellation.back")}
       </Link>
