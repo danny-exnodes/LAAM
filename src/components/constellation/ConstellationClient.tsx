@@ -350,7 +350,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // NOTE: `level` intentionally does NOT react to chat.streaming ("thinking") — it
   // drives the ring's width/glow/ripples, and pulsing those the same way as speaking
   // made the thinking cue look identical to Javis talking. The thinking indicator
-  // (faster swarm + blue-white ring tint) is driven by the separate `thinking` prop
+  // (faster swarm + blue-white ring tint) is driven by the separate `mode` prop
   // on ConstellationCanvas instead — see the eased thinkFactor there.
   const getLevel = useCallback(() => {
     const { mic, tts } = sample();
