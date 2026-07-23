@@ -134,6 +134,12 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
     let sustainedSince = 0; // when both gates first held together
 
     void MicVAD.new({
+      // Self-hosted (see public/vad/): onnxruntime-web's dynamic import of its wasm
+      // loader doesn't resolve through Turbopack/webpack from the library's own default
+      // relative paths, 404ing under /_next/static/chunks/ in dev. Absolute paths force
+      // plain-fetch loading instead of a bundler-resolved import.
+      baseAssetPath: "/vad/",
+      onnxWASMBasePath: "/vad/",
       onSpeechStart: () => {
         vadSpeaking = true;
       },
