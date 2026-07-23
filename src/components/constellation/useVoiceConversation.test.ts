@@ -82,3 +82,28 @@ describe("useVoiceConversation — no-speech fallback timing", () => {
     expect(view.result.current.convState).toBe("listening");
   });
 });
+
+describe("useVoiceConversation — enable guard cuts TTS in flight", () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); vi.clearAllMocks(); });
+
+  it("calls onBargeIn when enabled while a TTS attempt is still preparing (isSpeaking false, isPreparingSpeech true)", () => {
+    // isSpeaking is FALSE during the ~3s neural-TTS prebuffer window even though a TTS
+    // attempt is in flight; the guard must consult isPreparingSpeech too, or it opens the
+    // recognizer on top of Jarvis's audio (Echo-rule violation). Stable onBargeIn spy so we
+    // assert on the exact fn the enable effect closes over after the enabled change.
+    const s = makeStt();
+    const onBargeIn = vi.fn();
+    const props = (over: Partial<Props> = {}): Props => ({ ...baseProps(s.stt), onBargeIn, ...over });
+
+    const view = renderHook((p: Props) => useVoiceConversation(p), {
+      initialProps: props({ enabled: false, isSpeaking: false, isPreparingSpeech: true }),
+    });
+    // Mounted disabled → the enable branch never fires yet.
+    expect(onBargeIn).not.toHaveBeenCalled();
+
+    // User clicks "Giọng nói" while the boot greeting is still in its prebuffer window.
+    view.rerender(props({ enabled: true, isSpeaking: false, isPreparingSpeech: true }));
+    expect(onBargeIn).toHaveBeenCalledTimes(1);
+  });
+});

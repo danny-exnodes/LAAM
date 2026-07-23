@@ -393,6 +393,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       setVoiceEnabled(true);
     } else {
       audio.stopMic();
+      // Abort neural TTS (the PRIMARY speaking path) before the browser-fallback
+      // cancel — same ordering as handleSend/submitText — so disabling mid-turn
+      // actually stops Jarvis instead of leaving his reply playing.
+      speakAbortRef.current?.abort();
       voice.cancelSpeak();
       setVoiceEnabled(false);
     }

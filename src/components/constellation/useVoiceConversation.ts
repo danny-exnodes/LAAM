@@ -80,7 +80,7 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
   // cut that speech first so we don't open the recognizer on top of his voice.
   useEffect(() => {
     if (opts.enabled && stateRef.current === "off") {
-      if (opts.isSpeaking) opts.onBargeIn();
+      if (opts.isSpeaking || opts.isPreparingSpeech) opts.onBargeIn();
       dispatch.current("enable");
     }
     if (!opts.enabled && stateRef.current !== "off") dispatch.current("disable");
