@@ -60,4 +60,19 @@ describe("createWebSpeechStt", () => {
     inst.onend?.();
     expect(onFinal).toHaveBeenCalledWith("");
   });
+
+  it("calls onFinal('') when r.start() throws synchronously", () => {
+    class FakeRecognitionThrows extends FakeRecognition {
+      start = vi.fn(() => {
+        throw new Error("InvalidStateError");
+      });
+    }
+
+    const win = fakeWindow(FakeRecognitionThrows);
+    const stt = createWebSpeechStt(win);
+    const onFinal = vi.fn();
+    stt.start("vi", onFinal);
+
+    expect(onFinal).toHaveBeenCalledWith("");
+  });
 });

@@ -86,7 +86,8 @@ export function createWebSpeechStt(win = getWin()): SttProvider {
       try {
         r.start();
       } catch {
-        /* start races are non-fatal */
+        /* start() threw synchronously; signal completion so caller can retry */
+        onFinal("");
       }
     },
     stop() {
