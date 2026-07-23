@@ -59,13 +59,37 @@ loop. Two structural facts remove this:
 
 1. **The recognizer only runs while Jarvis is silent.** In the state machine, STT is active
    **only** during `listening`. During `speaking` it is stopped, so it never hears Jarvis.
-2. **Barge-in is detected by a VAD on our own AEC'd stream, not by the recognizer.** We take
-   a `getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })` stream
-   and run a real voice-activity detector (Silero via `@ricky0123/vad-web`) on it. With AEC
-   removing Jarvis's speaker output from that stream, the VAD sees the user's real voice, so
-   barge-in triggers on genuine speech rather than on Jarvis's echo or on raw room energy.
+2. **Barge-in is detected by a VAD on our own AEC'd stream, not by the recognizer.** We run a
+   real voice-activity detector (Silero via `@ricky0123/vad-web`) on a mic stream captured
+   with `echoCancellation: true`. With AEC removing Jarvis's speaker output from that stream,
+   the VAD sees the user's real voice, so barge-in triggers on genuine speech rather than on
+   Jarvis's echo or on raw room energy.
+
+   **Reuse the existing mic stream — do not open a second one.** `useAudioAnalyser.startMic()`
+   already calls `getUserMedia({ audio: true })` today and feeds an `AnalyserNode`. The change
+   is to add `echoCancellation`/`noiseSuppression` constraints to *that* capture and tap the
+   same `MediaStream` for the VAD — one mic, not two.
 
 So the STT engine choice is independent of the echo problem. Web Speech is fine for v1.
+
+### Division of labor (Web Speech vs VAD) — why each exists
+
+These overlap partially; the split is deliberate so neither is doing redundant work:
+
+- **End-of-turn / auto-submit is driven primarily by Web Speech's own endpointing.**
+  `SpeechRecognition` (`continuous: false`) already fires `onresult` + `onend` after the user
+  stops talking, returning the final transcript. That is the submit trigger during
+  `listening`. No VAD is required to *end a turn*.
+- **The VAD's load-bearing job is barge-in** — the one thing Web Speech cannot do, because STT
+  is off while Jarvis speaks. The VAD runs during `speaking` on the AEC'd stream and reports a
+  genuine speech onset → cut TTS. Raw RMS metering (already available via
+  `useAudioAnalyser.sample().mic`) was considered and rejected for this: even on an AEC'd
+  stream, residual echo + room noise make a bare energy threshold fire on Jarvis's own audio
+  or on door-slams; Silero discriminates speech from noise, which is exactly what barge-in
+  needs to feel right.
+- **Secondary VAD use:** it also gives a tunable silence hangover as a refinement over the
+  browser's fixed endpointing, if the default proves too eager. Optional; not the reason it's
+  in v1.
 
 ## Architecture
 
@@ -76,24 +100,24 @@ Voice toggle ON
 useVoiceConversation({ chat, voice(stt), audio, speakReply, enabled, lang })
   │   owns: conversation state machine + VAD wiring + barge-in + turn loop
   │
-  ├── VAD (Silero / @ricky0123/vad-web) on getUserMedia(echoCancellation:true)
-  │     • speech-start / speech-end (with silence hangover) events
-  │     • runs in BOTH listening (→ end-of-turn) and speaking (→ barge-in)
+  ├── VAD (Silero / @ricky0123/vad-web) on the EXISTING AEC'd mic stream
+  │     • primary job: barge-in during `speaking` (speech onset → cut TTS)
+  │     • secondary: optional tunable silence hangover during `listening`
   │
   ├── SttProvider (v1 = WebSpeechStt, wraps existing useVoice recognition)
-  │     • active only during `listening`
-  │     • yields the final transcript for the turn
+  │     • active only during `listening`; its own endpointing ends the turn
+  │     • yields the final transcript → auto-submit
   │
   ├── chat.send(...)         (existing) → chat.streaming drives `thinking`
   └── speakReply(fullReply)  (existing) → neural TTS → `speaking`
 
 State machine:
   off ──enable──▶ listening
-  listening ──VAD speech-end + transcript──▶ thinking(chat.streaming)
+  listening ──STT endpointing: final transcript──▶ thinking(chat.streaming)
   thinking ──reply done──▶ speaking(speakReply)
   speaking ──TTS ends──▶ listening
-  speaking ──VAD speech-start (barge-in)──▶ cut TTS ──▶ listening
-  (any) ──disable──▶ off  (tear down: stop STT, stop VAD, cut TTS)
+  speaking ──VAD speech onset (barge-in)──▶ cut TTS ──▶ listening
+  (any) ──disable──▶ off  (tear down: stop STT, stop VAD, cut TTS, release mic)
 ```
 
 ### Components
@@ -103,8 +127,12 @@ The deterministic core, following the existing `@/lib/chat/voice.ts` pattern (pu
 thin I/O hook). Contains:
 - `ConvState = "off" | "listening" | "thinking" | "speaking"`.
 - A pure transition function `nextConvState(state, event)` where events are
-  `enable | disable | speechEnd | replyStarted | replyStreaming | replyDone | speaking­Ended | bargeIn`.
-- Constants: `SILENCE_HANGOVER_MS` (end-of-turn), `BARGE_IN_MIN_SPEECH_MS` (VAD must report
+  `enable | disable | transcriptFinal | replyDone | speakingEnded | bargeIn`.
+  (`transcriptFinal` = STT endpointing produced a non-empty turn; `replyDone` = the reply
+  finished streaming; `speakingEnded` = TTS playback ended; `bargeIn` = VAD onset while
+  speaking.)
+- Constants: `SILENCE_HANGOVER_MS` (optional VAD end-of-turn refinement),
+  `BARGE_IN_MIN_SPEECH_MS` (VAD must report
   sustained speech this long before cutting TTS, to reject blips).
 - Guard helpers, e.g. `shouldSubmit(transcript)` (non-empty after trim).
 
@@ -126,11 +154,12 @@ same interface — the only file that changes to swap engines.
 **3. `useVoiceConversation` (new hook)**
 The I/O shell that wires the pure reducer to the live objects it already receives from
 `ConstellationClient` (`chat`, the STT provider, `audio`, `speakReply`). Owns:
-- The VAD instance (create on enable, destroy on disable).
-- Subscribing VAD `onSpeechStart`/`onSpeechEnd` and routing them through the reducer.
+- The VAD instance (create on enable, destroy on disable), fed by the existing AEC'd mic
+  stream from `useAudioAnalyser` — not a second `getUserMedia`.
 - Starting/stopping the `SttProvider` on entering/leaving `listening`.
-- On `speechEnd` in `listening`: harvest transcript → `chat.send` (auto-submit).
-- On `bargeIn` in `speaking`: `speakAbortRef.abort()` + `voice.cancelSpeak()` → `listening`.
+- On STT `onFinal` in `listening`: harvest transcript → `chat.send` (auto-submit).
+- On VAD speech-onset in `speaking` (barge-in): `speakAbortRef.abort()` +
+  `voice.cancelSpeak()` → `listening`.
 - After `speakReply` resolves (TTS ended) and still enabled → back to `listening`.
 - Exposing the current `ConvState` for the visual cue.
 
@@ -151,15 +180,17 @@ Keep the eased `thinkFactor`-style interpolation so transitions stay smooth (no 
 
 ## Turn-boundary + barge-in detail
 
-- **End-of-turn (submit):** VAD reports speech, then silence for `SILENCE_HANGOVER_MS` →
-  `speechEnd`. On `speechEnd` in `listening`, `SttProvider.stop()` flushes the final
-  transcript; if non-empty, auto-submit. VAD (not the browser's own endpointer) owns the
-  timing so "vài giây" is tunable.
-- **Barge-in:** during `speaking`, VAD `onSpeechStart` sustained ≥ `BARGE_IN_MIN_SPEECH_MS`
-  → cut TTS and transition to `listening` (which starts a fresh STT turn). AEC on the VAD
-  stream is what makes this fire on the user, not on Jarvis.
-- **Two concurrent mic consumers** during `listening` (Web Speech's internal capture + our
-  `getUserMedia` for the VAD) is acceptable in browsers; the VAD stream is the AEC'd one.
+- **End-of-turn (submit):** primary signal is Web Speech's own endpointing — after the user
+  stops, `SpeechRecognition` fires the final `onresult`/`onend`. If non-empty, auto-submit.
+  The VAD's silence hangover (`SILENCE_HANGOVER_MS`) is an optional refinement if the browser
+  default proves too eager; it is not required to end a turn.
+- **Barge-in:** during `speaking`, VAD speech onset sustained ≥ `BARGE_IN_MIN_SPEECH_MS` → cut
+  TTS and transition to `listening` (which starts a fresh STT turn). AEC on the mic stream is
+  what makes this fire on the user, not on Jarvis.
+- **Two concurrent mic consumers** during `listening` (Web Speech's internal capture + the
+  existing `useAudioAnalyser` stream that also feeds the VAD) is acceptable in browsers. This
+  is not new — the analyser stream already exists today; v1 only adds AEC constraints to it
+  and taps it for the VAD.
 
 ## Error handling / edge cases
 
@@ -173,14 +204,18 @@ Keep the eased `thinkFactor`-style interpolation so transitions stay smooth (no 
   + `cancelSpeak()`, release the getUserMedia tracks, state → `off`.
 - **Rapid successive turns / barge-in during synthesis:** existing supersede rules hold
   (`speakAbortRef` aborts prior TTS; `chat.send` supersedes the in-flight reply).
+- **Barge-in first-word clip:** the word that trips the VAD is spoken *before* STT starts, so
+  the first word of a barge-in utterance may be lost. Accepted for v1 (users naturally repeat
+  when interrupting). If it grates in the smoke test, mitigate by starting STT a beat earlier.
 - **Unmount:** full teardown (mirror the existing `useVoice` unmount cleanup).
 
 ## Testing
 
 - **`conversation.ts`** — unit-test every transition of `nextConvState` (enable/disable from
-  each state, speechEnd only submits from `listening`, bargeIn only cuts from `speaking`,
-  replyDone → speaking, speakingEnded → listening) and the guards (`shouldSubmit` rejects
-  empty/whitespace). This is where the intent lives, so these are the load-bearing tests.
+  each state, `transcriptFinal` only submits from `listening`, `bargeIn` only cuts from
+  `speaking`, `replyDone` → speaking, `speakingEnded` → listening) and the guards
+  (`shouldSubmit` rejects empty/whitespace). This is where the intent lives, so these are the
+  load-bearing tests.
 - **`stt.ts`** — test `WebSpeechStt` behind a mocked `SpeechRecognition` (start/stop/final
   callback, supported() gating). The interface is what a future Whisper impl must satisfy.
 - **VAD / hook / canvas** — not unit-tested in jsdom (no AudioContext / Web Speech / VAD
