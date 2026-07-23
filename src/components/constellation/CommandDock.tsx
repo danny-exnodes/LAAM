@@ -28,14 +28,17 @@ export function CommandDock({
     <>
       {/* Caption strip — streaming reply text, above the input/bar */}
       {caption && (
-        <div className="pointer-events-none absolute bottom-44 left-1/2 z-10 max-w-[80vw] -translate-x-1/2 text-center text-[14px] text-[#dcefff]">
+        <div
+          className="pointer-events-none absolute bottom-14 left-1/2 z-10 max-w-[80vw] -translate-x-1/2 text-center text-[14px] text-[#eaf9ff]"
+          style={{ textShadow: "0 0 16px rgba(150,225,255,.85), 0 0 34px rgba(91,214,255,.5)" }}
+        >
           {caption}
         </div>
       )}
 
       {/* Command input panel — shown when open, above the control bar */}
       {open && (
-        <div className="absolute bottom-24 left-1/2 z-20 flex w-[min(540px,86vw)] -translate-x-1/2 items-center gap-2 rounded-3xl border border-[#5bd6ff]/30 bg-[#08182a]/90 px-4 py-1 backdrop-blur-sm">
+        <div className="absolute bottom-24 right-4 z-20 flex w-[min(540px,86vw)] items-center gap-2 rounded-3xl border border-[#5bd6ff]/30 bg-[#08182a]/90 px-4 py-1 backdrop-blur-sm">
           <input
             autoFocus
             value={value}

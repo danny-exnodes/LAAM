@@ -389,6 +389,12 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const handleSend = useCallback(() => {
     const msg = command.trim();
     if (!msg) return;
+    // Submitting a new message cuts off whatever Javis is still saying from the
+    // previous reply — abort() stops the neural-TTS fetch/playback (speakReply's
+    // finally block resets preparingSpeech/neuralSpeaking), cancelSpeak() covers the
+    // browser-fallback path abort() alone doesn't reach.
+    speakAbortRef.current?.abort();
+    voice.cancelSpeak();
     setCaption("");
     fullReplyRef.current = "";
     setCommand("");
@@ -398,7 +404,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       customAgentId: selectedAgentId,
       ...(requestedTool ? { requestedTool } : {}),
     });
-  }, [command, model, selectedAgentId, requestedTool, chat]);
+  }, [command, model, selectedAgentId, requestedTool, chat, voice]);
 
   const onModelChange = useCallback((m: string) => {
     setModel(m);
@@ -454,19 +460,22 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       {/* Interactive controls — only after boot completes */}
       {!booting && (
         <>
-          {/* Waveform + state label, above the control bar */}
+          {/* Waveform + state label — hidden per request (keep only the caption sub
+              text on screen); left commented instead of removed so it's easy to bring
+              back if the state indicator is wanted again later.
           {voiceSupported && (
-            <div className="pointer-events-none absolute bottom-28 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1">
+            <div className="pointer-events-none absolute bottom-8 left-1/2 z-10 flex -translate-x-1/2 flex-col items-center gap-1">
               <AudioWave state={state} sample={sample} />
               <p className="text-xs tracking-[0.25em] text-[#a9e9ff]">{t(stateLabelKey[state])}</p>
             </div>
           )}
+          */}
 
           {/* Caption + command input panel */}
           <CommandDock t={t} caption={caption} open={chatOpen} value={command} onChange={setCommand} onSend={handleSend} />
 
           {/* Unified control bar: model · chat · voice — single row, no overlap */}
-          <div className="absolute bottom-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2">
+          <div className="absolute bottom-6 right-4 z-20 flex items-center gap-2">
             {models.length > 0 && (
               <select
                 aria-label={t("constellation.modelAria")}

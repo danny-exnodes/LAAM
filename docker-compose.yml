@@ -38,7 +38,7 @@ services:
       OLLAMA_URL: http://host.docker.internal:11434
       HOST_METRICS_URL: http://host.docker.internal:47600
       SEARXNG_URL: http://searxng:8080
-      CONSTELLATION_TTS_URL: http://piper-tts:5002/tts
+      CONSTELLATION_TTS_URL: http://vieneu-tts:5002/tts
       AUTH_TRUST_HOST: "true"
       AUTH_URL: https://danny-gaming-pc.tail41dda4.ts.net
       NODE_ENV: production
@@ -51,14 +51,16 @@ services:
       - ecosystem-net
     restart: unless-stopped
 
-  # Self-hosted Piper TTS (FOSS, MIT) — backs CONSTELLATION_TTS_URL for the
+  # Self-hosted VieNeu TTS (FOSS, MIT) — backs CONSTELLATION_TTS_URL for the
   # /constellation voice command-center. Bound to localhost ONLY (internal
   # dependency, never exposed). Dev (host `npm run dev`) reaches it at
   # http://localhost:5002/tts; the prod app container reaches it in-network at
-  # http://piper-tts:5002/tts (see the app service's env override above).
-  piper-tts:
-    build: ./piper-tts
-    container_name: laam-v2-piper-tts
+  # http://vieneu-tts:5002/tts (see the app service's env override above).
+  # Renamed from piper-tts (2026-07-23): Piper was dropped in favor of VieNeu for
+  # both languages (see app.py) and the folder/service name had gone stale.
+  vieneu-tts:
+    build: ./vieneu-tts
+    container_name: laam-v2-vieneu-tts
     ports:
       - "127.0.0.1:5002:5002"
     # Leave most of the machine to the browser. Uncapped, VieNeu saturated ALL 12 cores
