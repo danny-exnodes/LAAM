@@ -56,6 +56,17 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
     if (next === prev) return;
     stateRef.current = next;
     setConvState(next);
+    // TEMP diagnostic (see VAD effect below) — pins down exactly which event drives an
+    // unexpected transition (e.g. "flips to listening while Jarvis is still talking"
+    // must be speakingEnded or bargeIn; this shows which, plus isSpeaking at that instant).
+    console.log("[barge-in spike] dispatch", {
+      event,
+      prev,
+      next,
+      isSpeaking: optsRef.current.isSpeaking,
+      isPreparingSpeech: optsRef.current.isPreparingSpeech,
+      isReplying: optsRef.current.isReplying,
+    });
 
     const { stt, lang } = optsRef.current;
     if (next === "listening") {
@@ -177,30 +188,38 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
       },
       onSpeechEnd: () => {
         vadSpeaking = false;
-        sustainedSince = 0;
-        lastPassAt = 0;
+        // Do NOT reset sustainedSince/lastPassAt here. Silero segments a continuous
+        // interruption into multiple per-phrase onSpeechStart/onSpeechEnd spans (a
+        // breath or a brief pause between words ends one span and starts another) —
+        // resetting on every span boundary wiped out genuine multi-word interruption
+        // progress every time (observed live: never sustained past ~200ms despite the
+        // gap-tolerance fix below, because THIS reset fired on every Gate-A dropout
+        // regardless of it). The frame loop's own gap tolerance decides whether the gap
+        // between spans is long enough to count as the user having actually stopped.
       },
       onVADMisfire: () => {
-        vadSpeaking = false;
-        sustainedSince = 0;
-        lastPassAt = 0;
+        vadSpeaking = false; // same reasoning — let the frame loop's gap tolerance decide
       },
       onFrameProcessed: () => {
-        if (stateRef.current !== "speaking" || !vadSpeaking) {
+        if (stateRef.current !== "speaking") {
           sustainedSince = 0;
           lastPassAt = 0;
           return;
         }
         const { mic, tts } = optsRef.current.sample();
-        const passes = passesBargeInGate(mic, tts);
+        // Both gates in ONE combined pass/miss so a Gate-A span boundary and a Gate-B
+        // RMS dip are treated identically by the same gap-tolerance logic below.
+        const passes = vadSpeaking && passesBargeInGate(mic, tts);
         const now = performance.now();
         if (now - lastSpikeLog > 400) {
           lastSpikeLog = now;
-          console.log("[barge-in spike] frame while speaking+vadSpeaking", {
+          console.log("[barge-in spike] frame while speaking", {
             mic,
             tts,
+            vadSpeaking,
             threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * tts,
-            passesGateB: passes,
+            passesGateB: passesBargeInGate(mic, tts),
+            passes,
             sustainedMs: sustainedSince ? now - sustainedSince : 0,
           });
         }
@@ -216,6 +235,7 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
         if (sustainedSince !== 0 && now - sustainedSince >= BARGE_IN_MIN_SPEECH_MS) {
           sustainedSince = 0;
           lastPassAt = 0;
+          console.log("[barge-in spike] FIRING bargeIn", { mic, tts });
           optsRef.current.onBargeIn();
           dispatch.current("bargeIn");
         }
