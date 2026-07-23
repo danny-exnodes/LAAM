@@ -29,6 +29,13 @@ export const BARGE_IN_BASE = 0.08;
 export const BARGE_IN_TTS_K = 0.12;
 // Both barge-in gates must hold at least this long before TTS is cut (rejects blips).
 export const BARGE_IN_MIN_SPEECH_MS = 250;
+// Real speech's RMS envelope isn't flat — it dips between syllables/words well within
+// a single utterance. A hard reset on any one failing frame (~30ms) meant a genuine
+// 250ms+ utterance almost never accumulated an unbroken streak (observed in a live
+// session: scattered passing frames, max unbroken streak ~190ms, barge-in never fired).
+// Tolerate gaps up to this long between passing frames before treating the streak as
+// over; only a gap LONGER than this counts as real silence.
+export const BARGE_IN_GAP_TOLERANCE_MS = 200;
 
 export function nextConvState(state: ConvState, event: ConvEvent): ConvState {
   if (event === "disable") return "off";
