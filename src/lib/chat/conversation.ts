@@ -23,9 +23,14 @@ export type ConvEvent =
 // (base=0.14, k=0.9) was solving a problem that barely exists on this hardware, while
 // making the threshold (e.g. ~0.7 at tts=0.7) far higher than real speech picked up by
 // a room mic ever reaches — barge-in essentially never fired. Real speech RMS in the
-// same session commonly ran 0.15–0.5+. These values keep >2x margin over the observed
-// echo floor at every tts level while staying well under typical real-speech levels.
-export const BARGE_IN_BASE = 0.08;
+// same session commonly ran 0.15–0.5+.
+//
+// base was first set to 0.08 (>2x the ~0.02 echo floor), but a live self-interrupt was
+// then observed at mic=0.129 against a threshold of 0.121 — a borderline reading (room
+// noise / residual echo bordering the line), well below the 0.15+ genuine-speech floor.
+// Raised base to 0.11 so the threshold sits clearly above that borderline band (0.118–
+// 0.199 across observed tts levels) while staying well under real speech's range.
+export const BARGE_IN_BASE = 0.11;
 export const BARGE_IN_TTS_K = 0.12;
 // Both barge-in gates must hold NET this long before TTS is cut (rejects blips).
 export const BARGE_IN_MIN_SPEECH_MS = 250;
