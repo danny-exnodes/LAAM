@@ -15,6 +15,7 @@ import {
   nextConvState,
   shouldSubmit,
   passesBargeInGate,
+  updateRecentMaxTts,
   BARGE_IN_BASE,
   BARGE_IN_TTS_K,
   BARGE_IN_MIN_SPEECH_MS,
@@ -149,24 +150,26 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
   // paused/resumed by `dispatch` above so its own mic capture only runs during `speaking`
   // (see the pause/resume block there). Barge-in uses a leaky-bucket accumulator, not a
   // streak timer: Gate A (Silero `vadSpeaking`, from onSpeechStart/End/Misfire) AND Gate B
-  // (`passesBargeInGate`, mic loud vs current TTS, echo-robust) combine into one per-frame
-  // pass/fail; a passing frame ADDS to `goodMs` (capped at BARGE_IN_MIN_SPEECH_MS), a
-  // failing frame DRAINS it BARGE_IN_DECAY_RATE times faster — see conversation.ts for why
-  // (a hard reset-on-any-miss never accumulated real speech's naturally uneven envelope;
-  // a "tolerate gaps" streak instead let one loud blip coast a self-interrupt through
-  // silence). onFrameProcessed fires every ~30ms frame — the steady clock for both gates.
+  // (`passesBargeInGate`, mic loud vs the RECENT-MAX tts — echo-lag-robust) combine into
+  // one per-frame pass/fail; a passing frame ADDS to `goodMs` (capped at
+  // BARGE_IN_MIN_SPEECH_MS), a failing frame DRAINS it BARGE_IN_DECAY_RATE times faster —
+  // see conversation.ts for why (a hard reset-on-any-miss never accumulated real speech's
+  // naturally uneven envelope; a "tolerate gaps" streak instead let one loud blip coast a
+  // self-interrupt through silence; and the instantaneous-tts gate let delayed speaker
+  // echo self-interrupt, which the recent-max reference fixes). onFrameProcessed fires
+  // every ~30ms frame — the steady clock for the gates AND the recent-max tts decay.
   const vadRef = useRef<MicVAD | null>(null);
   useEffect(() => {
     if (!opts.enabled) return;
     let disposed = false;
     let vadSpeaking = false; // Gate A
     let goodMs = 0; // accrued net "sustained loud speech" duration
+    let recentMaxTts = 0; // decaying max tts — the echo-lag-aware reference for Gate B
     let lastFrameAt = 0; // for computing each frame's real elapsed dt
 
     // TEMP diagnostic — the AEC spike (plan Task 3 Step 5) needs real mic/speaker
-    // hardware, which no agent has. Logs once per Silero speech-onset while Jarvis is
-    // speaking, so BARGE_IN_BASE/BARGE_IN_TTS_K in conversation.ts can be tuned from
-    // real numbers. Remove once barge-in is confirmed working and thresholds are set.
+    // hardware, which no agent has. Logs so the barge-in gate can be verified/tuned from
+    // real numbers. Remove once barge-in is confirmed working.
     let lastSpikeLog = 0;
     void MicVAD.new({
       // Self-hosted (see public/vad/): onnxruntime-web's dynamic import of its wasm
@@ -177,15 +180,6 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
       onnxWASMBasePath: "/vad/",
       onSpeechStart: () => {
         vadSpeaking = true;
-        if (stateRef.current === "speaking") {
-          const { mic, tts } = optsRef.current.sample();
-          console.log("[barge-in spike] Silero onSpeechStart while speaking", {
-            mic,
-            tts,
-            threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * tts,
-            passesGateB: passesBargeInGate(mic, tts),
-          });
-        }
       },
       // Silero segments a continuous interruption into multiple per-phrase spans (a
       // breath or brief pause ends one span, starts another) — `goodMs` is a net
@@ -200,16 +194,20 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
       onFrameProcessed: () => {
         if (stateRef.current !== "speaking") {
           goodMs = 0;
+          recentMaxTts = 0;
           lastFrameAt = 0;
           return;
         }
         const { mic, tts } = optsRef.current.sample();
-        const passes = vadSpeaking && passesBargeInGate(mic, tts);
         const now = performance.now();
         // Cap dt so a tab-throttled/backgrounded gap (or the first frame) can't inject a
         // huge single accrual or drain step.
         const dt = lastFrameAt ? Math.min(now - lastFrameAt, 100) : 30;
         lastFrameAt = now;
+        recentMaxTts = updateRecentMaxTts(recentMaxTts, tts, dt);
+        // Gate B compares mic against the recent TTS PEAK (which the currently-arriving
+        // echo reflects), not the instantaneous tts (already-decayed → let echo through).
+        const passes = vadSpeaking && passesBargeInGate(mic, recentMaxTts);
         goodMs = passes
           ? Math.min(BARGE_IN_MIN_SPEECH_MS, goodMs + dt)
           : Math.max(0, goodMs - dt * BARGE_IN_DECAY_RATE);
@@ -218,16 +216,16 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
           console.log("[barge-in spike] frame while speaking", {
             mic,
             tts,
+            recentMaxTts,
             vadSpeaking,
-            threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * tts,
-            passesGateB: passesBargeInGate(mic, tts),
+            threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * recentMaxTts,
             passes,
             goodMs,
           });
         }
         if (goodMs >= BARGE_IN_MIN_SPEECH_MS) {
           goodMs = 0;
-          console.log("[barge-in spike] FIRING bargeIn", { mic, tts });
+          console.log("[barge-in spike] FIRING bargeIn", { mic, tts, recentMaxTts });
           optsRef.current.onBargeIn();
           dispatch.current("bargeIn");
         }

@@ -14,24 +14,33 @@ export type ConvEvent =
   | "bargeIn"; // user spoke over Jarvis (both barge-in gates held)
 
 // Barge-in Gate B threshold: the mic RMS (already smoothed by useAudioAnalyser) must
-// exceed base + k*ttsLevel to count as the user talking over Jarvis.
+// exceed base + k*ttsRef to count as the user talking over Jarvis — where `ttsRef` is the
+// RECENT-MAX tts (see updateRecentMaxTts), NOT the instantaneous tts.
 //
-// Tuned from a real AEC spike (Task 3 Step 5, run live against actual hardware — see
-// CHANGELOG): with echoCancellation on, the idle/echo mic floor stays ~0.02 REGARDLESS
-// of how loud tts gets (observed up to tts≈0.7 with mic still ~0.02) — AEC suppresses
-// leaked Jarvis audio almost completely, so the original defensive 1:1-ish slope
-// (base=0.14, k=0.9) was solving a problem that barely exists on this hardware, while
-// making the threshold (e.g. ~0.7 at tts=0.7) far higher than real speech picked up by
-// a room mic ever reaches — barge-in essentially never fired. Real speech RMS in the
-// same session commonly ran 0.15–0.5+.
-//
-// base was first set to 0.08 (>2x the ~0.02 echo floor), but a live self-interrupt was
-// then observed at mic=0.129 against a threshold of 0.121 — a borderline reading (room
-// noise / residual echo bordering the line), well below the 0.15+ genuine-speech floor.
-// Raised base to 0.11 so the threshold sits clearly above that borderline band (0.118–
-// 0.199 across observed tts levels) while staying well under real speech's range.
-export const BARGE_IN_BASE = 0.11;
-export const BARGE_IN_TTS_K = 0.12;
+// Why recent-max, and why k jumped back up to ~1.2: the speaker→air→mic echo path is
+// DELAYED. The leaked echo arriving in the mic at time T reflects the TTS that played
+// ~100–200ms EARLIER. A live self-interrupt was captured firing at mic=0.777 while the
+// *instantaneous* tts read only 0.248 — because that 0.777 was the delayed echo of a TTS
+// PEAK (~0.74) from ~150ms before, by which point the instantaneous tts had already
+// decayed. Comparing mic against the instantaneous tts therefore fundamentally can't
+// reject echo (the reference is misaligned in time); comparing against the recent-max
+// tts (which still holds that 0.74 peak) can. With that alignment fixed, the coupling k
+// can be the real echo leak ratio (observed worst case mic/peak ≈ 1.05 during an AEC
+// re-convergence transient), so base + k*ttsRef sits ABOVE the leaked echo at every
+// moment — echo can no longer cross it, which is what makes speaker-mode self-interrupts
+// impossible by construction (the "never tự ngắt trên loa" goal) without any separate
+// speaker-vs-headphone detection. The unavoidable cost of rejecting echo this way: while
+// Jarvis is loud, a real interruption's mic (~0.15–0.5) also sits under base+k*ttsRef, so
+// barge-in accrues credit mainly as Jarvis's TTS dips between phrases (ttsRef falls, the
+// threshold drops, the user's voice clears it). On headphones there is no echo so this is
+// strictly safe; barge-in there simply waits for the same natural dips.
+export const BARGE_IN_BASE = 0.1;
+export const BARGE_IN_TTS_K = 1.2;
+// Recent-max tts window: the mic-vs-tts comparison uses the MAX tts over roughly this
+// window, so a still-arriving echo is measured against the TTS peak that actually caused
+// it (~100–200ms earlier). Long enough to cover the echo path delay, short enough that a
+// genuine Jarvis pause lets the reference fall so a real interruption can register.
+export const RECENT_TTS_WINDOW_MS = 300;
 // Both barge-in gates must hold NET this long before TTS is cut (rejects blips).
 export const BARGE_IN_MIN_SPEECH_MS = 250;
 // Barge-in uses a leaky-bucket accumulator, not a plain streak timer: a passing frame
@@ -79,6 +88,20 @@ export function shouldSubmit(transcript: string): boolean {
   return transcript.trim().length > 0;
 }
 
-export function passesBargeInGate(mic: number, tts: number): boolean {
-  return mic > BARGE_IN_BASE + BARGE_IN_TTS_K * tts;
+// Gate B: is the mic louder than the leaked echo of `ttsRef` could account for? Pass the
+// RECENT-MAX tts (updateRecentMaxTts) as `ttsRef`, not the instantaneous tts, so a still-
+// arriving echo is compared to the TTS peak that caused it rather than a value that has
+// already decayed (the time-misalignment that let echo self-interrupt — see the constants
+// above).
+export function passesBargeInGate(mic: number, ttsRef: number): boolean {
+  return mic > BARGE_IN_BASE + BARGE_IN_TTS_K * ttsRef;
+}
+
+// Decaying max of the tts level over RECENT_TTS_WINDOW_MS: a new tts sample instantly
+// raises it; otherwise it decays linearly, reaching 0 from a peak of 1.0 after one full
+// window. Keeps the barge-in gate referencing the recent TTS PEAK (which the currently-
+// arriving echo reflects), not the instantaneous — possibly-already-dropped — tts.
+export function updateRecentMaxTts(prev: number, tts: number, dtMs: number): number {
+  const decayed = Math.max(0, prev - dtMs / RECENT_TTS_WINDOW_MS);
+  return Math.max(decayed, tts);
 }
