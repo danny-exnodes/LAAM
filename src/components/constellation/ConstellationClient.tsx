@@ -56,7 +56,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [command, setCommand] = useState("");
   // chat command panel open/closed (toggle lives in the control bar)
   const [chatOpen, setChatOpen] = useState(false);
-  // caption shows the streaming assistant reply
+  // caption shows ONLY the segment currently being spoken (set inside speakReply) — the
+  // full growing reply text is intentionally never rendered here; it overflowed the screen
+  // while streaming, before speech even started. The full text is still captured (below,
+  // via fullReplyRef) so speakReply has something to read once streaming ends.
   const [caption, setCaption] = useState("");
   // write-gate chip state
   const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
@@ -166,8 +169,13 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     // connectorIdle: no dispatch (optional toast per spec)
   }, []);
 
-  // Chat hook
-  const chat = useConstellationChat({ onText: setCaption, onPendingWrite: setPendingWrite });
+  // Chat hook — onText streams the growing full reply into fullReplyRef (not shown on
+  // screen); only speakReply's per-segment setCaption calls ever reach the UI.
+  const fullReplyRef = useRef("");
+  const chat = useConstellationChat({
+    onText: (text) => { fullReplyRef.current = text; },
+    onPendingWrite: setPendingWrite,
+  });
 
   // Voice + audio
   const audio = useAudioAnalyser();
@@ -223,13 +231,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // back to the browser voice for whatever hasn't already been spoken by neural TTS —
   // not the whole reply again.
   //
-  // Subtitle display: `caption` (otherwise the growing chat.streaming text) is repurposed
-  // to show ONLY the segment currently being read — cleared while waiting for the first
-  // segment, then swapped to each segment's own text the instant its audio actually
-  // starts (the same onFirstAudio signal, fired per segment via playPcmStream's
-  // prebuffer). Without this, the full reply stayed on screen for the whole read, which
-  // overflows well past a couple of sentences. Fallback-to-browser-voice keeps whatever
-  // was last shown — SpeechSynthesis has no per-segment start signal to sync against.
+  // Subtitle display: `caption` shows ONLY the segment currently being read — cleared
+  // while waiting for the first segment, then swapped to each segment's own text the
+  // instant its audio actually starts (the same onFirstAudio signal, fired per segment
+  // via playPcmStream's prebuffer). The full reply text is never rendered anywhere on
+  // this page (see fullReplyRef above) — it used to sit on screen as `caption` for the
+  // whole streaming phase, overflowing well past a couple of sentences before speech even
+  // started. Fallback-to-browser-voice keeps whatever was last shown — SpeechSynthesis has
+  // no per-segment start signal to sync against.
   const fellBackRef = useRef(false);
   const speakAbortRef = useRef<AbortController | null>(null);
   const speakReply = useCallback(async (text: string) => {
@@ -325,6 +334,11 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // back to a rhythmic pulse so the core swarm + ring visibly "wave" whenever a reply is
   // being spoken or about to be (mirrors the prototype's voiceEnv pulse). Same formula
   // for both — no visual mode-switch when preparingSpeech hands off to real speaking.
+  // NOTE: `level` intentionally does NOT react to chat.streaming ("thinking") — it
+  // drives the ring's width/glow/ripples, and pulsing those the same way as speaking
+  // made the thinking cue look identical to Javis talking. The thinking indicator
+  // (faster swarm + blue-white ring tint) is driven by the separate `thinking` prop
+  // on ConstellationCanvas instead — see the eased thinkFactor there.
   const getLevel = useCallback(() => {
     const { mic, tts } = sample();
     if (voice.listening) return Math.max(0.06, mic);
@@ -339,14 +353,13 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const voiceEnabledRef = useRef(voiceEnabled); voiceEnabledRef.current = voiceEnabled;
 
-  // Speak the caption when streaming transitions true → false (voice-enabled only).
+  // Speak the full reply when streaming transitions true → false (voice-enabled only).
   const prevStreamingRef = useRef(false);
-  const captionRef = useRef(caption); captionRef.current = caption;
   useEffect(() => {
     const wasStreaming = prevStreamingRef.current;
     prevStreamingRef.current = chat.streaming;
-    if (wasStreaming && !chat.streaming && voiceEnabledRef.current && captionRef.current) {
-      void speakRef.current(captionRef.current);
+    if (wasStreaming && !chat.streaming && voiceEnabledRef.current && fullReplyRef.current) {
+      void speakRef.current(fullReplyRef.current);
     }
   }, [chat.streaming]);
 
@@ -377,6 +390,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     const msg = command.trim();
     if (!msg) return;
     setCaption("");
+    fullReplyRef.current = "";
     setCommand("");
     void chat.send({
       message: msg,
@@ -411,7 +425,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       aria-label={t("constellation.regionAria")}
     >
       {/* Canvas + nodes render underneath the boot overlay so they're ready on reveal */}
-      <ConstellationCanvas placed={placed} getLevel={getLevel} />
+      <ConstellationCanvas placed={placed} getLevel={getLevel} thinking={chat.streaming} />
       <Link href="/chat" className="absolute right-4 top-4 z-10 rounded-full border border-[#5bd6ff]/30 bg-[#0a1e34]/60 px-4 py-2 text-sm text-[#a9e9ff]">
         {t("constellation.back")}
       </Link>
