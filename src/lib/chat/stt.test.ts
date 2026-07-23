@@ -74,5 +74,11 @@ describe("createWebSpeechStt", () => {
     stt.start("vi", onFinal);
 
     expect(onFinal).toHaveBeenCalledWith("");
+    expect(onFinal).toHaveBeenCalledTimes(1);
+
+    // The dead recognizer must not remain "active": a later stop() must not
+    // re-fire onFinal for the same already-failed turn.
+    stt.stop();
+    expect(onFinal).toHaveBeenCalledTimes(1);
   });
 });

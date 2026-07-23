@@ -88,6 +88,8 @@ export function createWebSpeechStt(win = getWin()): SttProvider {
       } catch {
         /* start() threw synchronously; signal completion so caller can retry */
         onFinal("");
+        rec = null;
+        provider._rec = null;
       }
     },
     stop() {
