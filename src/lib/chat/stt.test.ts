@@ -50,4 +50,14 @@ describe("createWebSpeechStt", () => {
     stt.stop();
     expect(inst.stop).toHaveBeenCalled();
   });
+
+  it("onend fires onFinal('') when the turn produced no result", () => {
+    const win = fakeWindow(FakeRecognition);
+    const stt = createWebSpeechStt(win);
+    const onFinal = vi.fn();
+    stt.start("vi", onFinal);
+    const inst = (stt as unknown as { _rec: FakeRecognition })._rec;
+    inst.onend?.();
+    expect(onFinal).toHaveBeenCalledWith("");
+  });
 });
