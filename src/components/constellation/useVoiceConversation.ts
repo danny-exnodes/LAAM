@@ -18,7 +18,7 @@ import {
   BARGE_IN_BASE,
   BARGE_IN_TTS_K,
   BARGE_IN_MIN_SPEECH_MS,
-  BARGE_IN_GAP_TOLERANCE_MS,
+  BARGE_IN_DECAY_RATE,
   type ConvState,
   type ConvEvent,
 } from "@/lib/chat/conversation";
@@ -147,20 +147,21 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
 
   // Silero VAD — barge-in ONLY. Created once while enabled, destroyed on disable/unmount;
   // paused/resumed by `dispatch` above so its own mic capture only runs during `speaking`
-  // (see the pause/resume block there). Barge-in needs BOTH gates held for a total of
-  // BARGE_IN_MIN_SPEECH_MS, tolerating gaps up to BARGE_IN_GAP_TOLERANCE_MS between
-  // passing frames (real speech's RMS envelope dips between syllables — a hard reset on
-  // any single failing ~30ms frame meant a genuine utterance almost never accumulated an
-  // unbroken streak): Gate A = Silero currently hears speech (`vadSpeaking`, maintained
-  // from onSpeechStart/End/Misfire); Gate B = mic loud vs current TTS (`passesBargeInGate`,
-  // echo-robust). onFrameProcessed fires every ~30ms frame — the steady clock for both.
+  // (see the pause/resume block there). Barge-in uses a leaky-bucket accumulator, not a
+  // streak timer: Gate A (Silero `vadSpeaking`, from onSpeechStart/End/Misfire) AND Gate B
+  // (`passesBargeInGate`, mic loud vs current TTS, echo-robust) combine into one per-frame
+  // pass/fail; a passing frame ADDS to `goodMs` (capped at BARGE_IN_MIN_SPEECH_MS), a
+  // failing frame DRAINS it BARGE_IN_DECAY_RATE times faster — see conversation.ts for why
+  // (a hard reset-on-any-miss never accumulated real speech's naturally uneven envelope;
+  // a "tolerate gaps" streak instead let one loud blip coast a self-interrupt through
+  // silence). onFrameProcessed fires every ~30ms frame — the steady clock for both gates.
   const vadRef = useRef<MicVAD | null>(null);
   useEffect(() => {
     if (!opts.enabled) return;
     let disposed = false;
     let vadSpeaking = false; // Gate A
-    let sustainedSince = 0; // when the current "mostly holding" streak began (0 = none)
-    let lastPassAt = 0; // last frame both gates held (0 = no streak in progress)
+    let goodMs = 0; // accrued net "sustained loud speech" duration
+    let lastFrameAt = 0; // for computing each frame's real elapsed dt
 
     // TEMP diagnostic — the AEC spike (plan Task 3 Step 5) needs real mic/speaker
     // hardware, which no agent has. Logs once per Silero speech-onset while Jarvis is
@@ -186,31 +187,32 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
           });
         }
       },
+      // Silero segments a continuous interruption into multiple per-phrase spans (a
+      // breath or brief pause ends one span, starts another) — `goodMs` is a net
+      // accumulator, not a streak, so a brief Gate-A dropout just drains a little
+      // rather than wiping all progress; no reset needed here.
       onSpeechEnd: () => {
         vadSpeaking = false;
-        // Do NOT reset sustainedSince/lastPassAt here. Silero segments a continuous
-        // interruption into multiple per-phrase onSpeechStart/onSpeechEnd spans (a
-        // breath or a brief pause between words ends one span and starts another) —
-        // resetting on every span boundary wiped out genuine multi-word interruption
-        // progress every time (observed live: never sustained past ~200ms despite the
-        // gap-tolerance fix below, because THIS reset fired on every Gate-A dropout
-        // regardless of it). The frame loop's own gap tolerance decides whether the gap
-        // between spans is long enough to count as the user having actually stopped.
       },
       onVADMisfire: () => {
-        vadSpeaking = false; // same reasoning — let the frame loop's gap tolerance decide
+        vadSpeaking = false;
       },
       onFrameProcessed: () => {
         if (stateRef.current !== "speaking") {
-          sustainedSince = 0;
-          lastPassAt = 0;
+          goodMs = 0;
+          lastFrameAt = 0;
           return;
         }
         const { mic, tts } = optsRef.current.sample();
-        // Both gates in ONE combined pass/miss so a Gate-A span boundary and a Gate-B
-        // RMS dip are treated identically by the same gap-tolerance logic below.
         const passes = vadSpeaking && passesBargeInGate(mic, tts);
         const now = performance.now();
+        // Cap dt so a tab-throttled/backgrounded gap (or the first frame) can't inject a
+        // huge single accrual or drain step.
+        const dt = lastFrameAt ? Math.min(now - lastFrameAt, 100) : 30;
+        lastFrameAt = now;
+        goodMs = passes
+          ? Math.min(BARGE_IN_MIN_SPEECH_MS, goodMs + dt)
+          : Math.max(0, goodMs - dt * BARGE_IN_DECAY_RATE);
         if (now - lastSpikeLog > 400) {
           lastSpikeLog = now;
           console.log("[barge-in spike] frame while speaking", {
@@ -220,21 +222,11 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
             threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * tts,
             passesGateB: passesBargeInGate(mic, tts),
             passes,
-            sustainedMs: sustainedSince ? now - sustainedSince : 0,
+            goodMs,
           });
         }
-        if (passes) {
-          if (sustainedSince === 0) sustainedSince = now;
-          lastPassAt = now;
-        } else if (lastPassAt !== 0 && now - lastPassAt > BARGE_IN_GAP_TOLERANCE_MS) {
-          // Failing for longer than the tolerance — treat as real silence, not a blip.
-          sustainedSince = 0;
-          lastPassAt = 0;
-        }
-        // else: a brief miss inside tolerance — keep the streak alive.
-        if (sustainedSince !== 0 && now - sustainedSince >= BARGE_IN_MIN_SPEECH_MS) {
-          sustainedSince = 0;
-          lastPassAt = 0;
+        if (goodMs >= BARGE_IN_MIN_SPEECH_MS) {
+          goodMs = 0;
           console.log("[barge-in spike] FIRING bargeIn", { mic, tts });
           optsRef.current.onBargeIn();
           dispatch.current("bargeIn");

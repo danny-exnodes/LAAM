@@ -27,15 +27,29 @@ export type ConvEvent =
 // echo floor at every tts level while staying well under typical real-speech levels.
 export const BARGE_IN_BASE = 0.08;
 export const BARGE_IN_TTS_K = 0.12;
-// Both barge-in gates must hold at least this long before TTS is cut (rejects blips).
+// Both barge-in gates must hold NET this long before TTS is cut (rejects blips).
 export const BARGE_IN_MIN_SPEECH_MS = 250;
-// Real speech's RMS envelope isn't flat — it dips between syllables/words well within
-// a single utterance. A hard reset on any one failing frame (~30ms) meant a genuine
-// 250ms+ utterance almost never accumulated an unbroken streak (observed in a live
-// session: scattered passing frames, max unbroken streak ~190ms, barge-in never fired).
-// Tolerate gaps up to this long between passing frames before treating the streak as
-// over; only a gap LONGER than this counts as real silence.
-export const BARGE_IN_GAP_TOLERANCE_MS = 200;
+// Barge-in uses a leaky-bucket accumulator, not a plain streak timer: a passing frame
+// (~30ms) ADDS to an accrued "good" duration, capped at BARGE_IN_MIN_SPEECH_MS; a
+// failing frame DRAINS it at this multiple of the frame time. Two live-hardware findings
+// drove this:
+//  1. A hard reset on ANY single failing frame meant real speech (whose RMS envelope
+//     dips between syllables, and whose VAD segments a continuous interruption into
+//     multiple onSpeechStart/onSpeechEnd phrase spans) almost never accumulated an
+//     unbroken streak — observed max ~190ms, barge-in never fired.
+//  2. The opposite fix (tolerate any gap under N ms between passes, à la a pure
+//     "streak survives small gaps" timer) went too far the other way: it anchors the
+//     250ms timer to the FIRST pass and then tolerates an unlimited run of near-misses
+//     afterward, so one loud blip (echo, a cough, a consonant) could coast a self-
+//     interrupt through mostly-silent frames — observed firing with mic≈0.018 (the
+//     idle floor) because an earlier single frame had passed.
+// Draining faster than accrual (>1) means net loudness must be SUSTAINED, not merely
+// "recently touched once" — isolated spikes bleed back to 0 within a single failing
+// frame (any rate ≥1 already does that, since pass/fail frames are the same duration),
+// while genuine speech (mostly passing, brief dips) keeps net-accruing. 1.5 needs a
+// ~60% pass rate to net-accrue — meaningfully selective without demanding an
+// unrealistically clean signal from a room mic.
+export const BARGE_IN_DECAY_RATE = 1.5;
 
 export function nextConvState(state: ConvState, event: ConvEvent): ConvState {
   if (event === "disable") return "off";
