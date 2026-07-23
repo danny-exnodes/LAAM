@@ -151,7 +151,7 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
         vadSpeaking = true;
         if (stateRef.current === "speaking") {
           const { mic, tts } = optsRef.current.sample();
-          console.debug("[barge-in spike] Silero onSpeechStart while speaking", {
+          console.log("[barge-in spike] Silero onSpeechStart while speaking", {
             mic,
             tts,
             threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * tts,
@@ -177,7 +177,7 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
         const now = performance.now();
         if (now - lastSpikeLog > 400) {
           lastSpikeLog = now;
-          console.debug("[barge-in spike] frame while speaking+vadSpeaking", {
+          console.log("[barge-in spike] frame while speaking+vadSpeaking", {
             mic,
             tts,
             threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * tts,
@@ -204,12 +204,12 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
         }
         vadRef.current = vad;
         void vad.start();
-        console.debug("[barge-in spike] MicVAD started — barge-in armed");
+        console.log("[barge-in spike] MicVAD started — barge-in armed");
       })
       .catch((err) => {
         // TEMP diagnostic (see above) — fail soft either way, but log WHY so a silent
         // barge-in failure is distinguishable from "threshold too strict".
-        console.debug("[barge-in spike] MicVAD failed to start — barge-in unavailable", err);
+        console.log("[barge-in spike] MicVAD failed to start — barge-in unavailable", err);
       });
 
     return () => {
