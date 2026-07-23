@@ -15,6 +15,8 @@ import {
   nextConvState,
   shouldSubmit,
   passesBargeInGate,
+  BARGE_IN_BASE,
+  BARGE_IN_TTS_K,
   BARGE_IN_MIN_SPEECH_MS,
   type ConvState,
   type ConvEvent,
@@ -133,6 +135,11 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
     let vadSpeaking = false; // Gate A
     let sustainedSince = 0; // when both gates first held together
 
+    // TEMP diagnostic — the AEC spike (plan Task 3 Step 5) needs real mic/speaker
+    // hardware, which no agent has. Logs once per Silero speech-onset while Jarvis is
+    // speaking, so BARGE_IN_BASE/BARGE_IN_TTS_K in conversation.ts can be tuned from
+    // real numbers. Remove once barge-in is confirmed working and thresholds are set.
+    let lastSpikeLog = 0;
     void MicVAD.new({
       // Self-hosted (see public/vad/): onnxruntime-web's dynamic import of its wasm
       // loader doesn't resolve through Turbopack/webpack from the library's own default
@@ -142,6 +149,15 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
       onnxWASMBasePath: "/vad/",
       onSpeechStart: () => {
         vadSpeaking = true;
+        if (stateRef.current === "speaking") {
+          const { mic, tts } = optsRef.current.sample();
+          console.debug("[barge-in spike] Silero onSpeechStart while speaking", {
+            mic,
+            tts,
+            threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * tts,
+            passesGateB: passesBargeInGate(mic, tts),
+          });
+        }
       },
       onSpeechEnd: () => {
         vadSpeaking = false;
@@ -157,12 +173,24 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
           return;
         }
         const { mic, tts } = optsRef.current.sample();
-        if (!passesBargeInGate(mic, tts)) {
+        const passes = passesBargeInGate(mic, tts);
+        const now = performance.now();
+        if (now - lastSpikeLog > 400) {
+          lastSpikeLog = now;
+          console.debug("[barge-in spike] frame while speaking+vadSpeaking", {
+            mic,
+            tts,
+            threshold: BARGE_IN_BASE + BARGE_IN_TTS_K * tts,
+            passesGateB: passes,
+            sustainedMs: sustainedSince ? now - sustainedSince : 0,
+          });
+        }
+        if (!passes) {
           sustainedSince = 0;
           return;
         }
-        if (sustainedSince === 0) sustainedSince = performance.now();
-        else if (performance.now() - sustainedSince >= BARGE_IN_MIN_SPEECH_MS) {
+        if (sustainedSince === 0) sustainedSince = now;
+        else if (now - sustainedSince >= BARGE_IN_MIN_SPEECH_MS) {
           sustainedSince = 0;
           optsRef.current.onBargeIn();
           dispatch.current("bargeIn");
@@ -176,9 +204,12 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
         }
         vadRef.current = vad;
         void vad.start();
+        console.debug("[barge-in spike] MicVAD started — barge-in armed");
       })
-      .catch(() => {
-        /* VAD load/mic failure → fail soft; barge-in unavailable, loop still works */
+      .catch((err) => {
+        // TEMP diagnostic (see above) — fail soft either way, but log WHY so a silent
+        // barge-in failure is distinguishable from "threshold too strict".
+        console.debug("[barge-in spike] MicVAD failed to start — barge-in unavailable", err);
       });
 
     return () => {
