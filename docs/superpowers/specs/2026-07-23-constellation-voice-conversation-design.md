@@ -59,18 +59,48 @@ loop. Two structural facts remove this:
 
 1. **The recognizer only runs while Jarvis is silent.** In the state machine, STT is active
    **only** during `listening`. During `speaking` it is stopped, so it never hears Jarvis.
-2. **Barge-in is detected by a VAD on our own AEC'd stream, not by the recognizer.** We run a
-   real voice-activity detector (Silero via `@ricky0123/vad-web`) on a mic stream captured
-   with `echoCancellation: true`. With AEC removing Jarvis's speaker output from that stream,
-   the VAD sees the user's real voice, so barge-in triggers on genuine speech rather than on
-   Jarvis's echo or on raw room energy.
+2. **Barge-in is detected on our own mic stream, gated TWICE, not by the recognizer.**
+
+   **The trap:** Silero VAD detects *speech in general* — and Jarvis's TTS leaking from the
+   speakers **is speech**. So a VAD alone cannot tell "the user interrupted" from "the VAD
+   heard Jarvis." If echo isn't removed, barge-in false-fires on Jarvis and cuts him off the
+   instant he starts. Browser `echoCancellation` helps but is NOT guaranteed to fully cancel
+   Web-Audio TTS played through loud external speakers (it is tuned for voice-call playback,
+   ~20–30 dB of cancellation; headphones are near-perfect, loud speakers can leak residual).
+   **This AEC behavior is the single riskiest assumption in the design** — see the de-risk
+   step below.
+
+   **Two gates, both required, to fire barge-in during `speaking`:**
+   - **Gate A — speech-likeness:** Silero VAD (`@ricky0123/vad-web`) on the AEC'd mic stream
+     reports a speech onset (rejects door-slams / non-speech noise).
+   - **Gate B — echo-reference threshold:** we already know exactly when and how loudly Jarvis
+     is playing, via `useAudioAnalyser.sample().tts` (the TTS analyser's RMS). Require the mic
+     level to exceed a *dynamic* threshold `BARGE_IN_BASE + BARGE_IN_TTS_K * ttsLevel`, so
+     residual echo (which scales with `ttsLevel`) cannot clear the bar — only the user's real
+     voice, louder than the leaked echo, can. This gate does not depend on AEC working; it
+     uses the known reference signal directly.
+
+   Gate B is what makes barge-in survive imperfect AEC. Both must hold, sustained ≥
+   `BARGE_IN_MIN_SPEECH_MS`, before TTS is cut.
 
    **Reuse the existing mic stream — do not open a second one.** `useAudioAnalyser.startMic()`
    already calls `getUserMedia({ audio: true })` today and feeds an `AnalyserNode`. The change
    is to add `echoCancellation`/`noiseSuppression` constraints to *that* capture and tap the
-   same `MediaStream` for the VAD — one mic, not two.
+   same `MediaStream` for the VAD — one mic, not two. The `tts` reference for Gate B already
+   exists in `sample()`; no new plumbing.
 
 So the STT engine choice is independent of the echo problem. Web Speech is fine for v1.
+
+### De-risk the AEC assumption FIRST (implementation ordering)
+
+Because barge-in's viability hinges on how much of Jarvis's TTS leaks into the mic, the plan
+must **start with a spike test**, before building the loop: with `echoCancellation: true`,
+play a TTS reply and log `sample().mic` vs `sample().tts` while the user stays silent. If mic
+stays low while tts is high → AEC works, Gate B is a light safety net. If mic tracks tts →
+AEC is weak on this setup, and Gate B's `BARGE_IN_TTS_K` becomes the primary defense (tune it
+so silent-user echo never crosses the threshold). Either way the spike test tells us the real
+numbers before we commit to the full build — barge-in is not declared "done" until the loop
+runs without self-interrupting on speakers at normal volume.
 
 ### Division of labor (Web Speech vs VAD) — why each exists
 
@@ -81,12 +111,11 @@ These overlap partially; the split is deliberate so neither is doing redundant w
   stops talking, returning the final transcript. That is the submit trigger during
   `listening`. No VAD is required to *end a turn*.
 - **The VAD's load-bearing job is barge-in** — the one thing Web Speech cannot do, because STT
-  is off while Jarvis speaks. The VAD runs during `speaking` on the AEC'd stream and reports a
-  genuine speech onset → cut TTS. Raw RMS metering (already available via
-  `useAudioAnalyser.sample().mic`) was considered and rejected for this: even on an AEC'd
-  stream, residual echo + room noise make a bare energy threshold fire on Jarvis's own audio
-  or on door-slams; Silero discriminates speech from noise, which is exactly what barge-in
-  needs to feel right.
+  is off while Jarvis speaks. But a VAD *alone* is not enough (Jarvis's TTS is itself speech —
+  see Key Insight), and a *bare* static RMS threshold alone is also not enough (residual echo
+  and door-slams cross it). Barge-in therefore combines both: Silero (Gate A: is it speech?)
+  AND a TTS-referenced dynamic RMS threshold (Gate B: is it louder than Jarvis's own leaked
+  audio right now?). Neither gate alone is reliable; together they are.
 - **Secondary VAD use:** it also gives a tunable silence hangover as a refinement over the
   browser's fixed endpointing, if the default proves too eager. Optional; not the reason it's
   in v1.
@@ -129,12 +158,17 @@ thin I/O hook). Contains:
 - A pure transition function `nextConvState(state, event)` where events are
   `enable | disable | transcriptFinal | replyDone | speakingEnded | bargeIn`.
   (`transcriptFinal` = STT endpointing produced a non-empty turn; `replyDone` = the reply
-  finished streaming; `speakingEnded` = TTS playback ended; `bargeIn` = VAD onset while
-  speaking.)
+  finished streaming; `speakingEnded` = TTS playback ended; `bargeIn` = both barge-in gates
+  held while speaking.)
 - Constants: `SILENCE_HANGOVER_MS` (optional VAD end-of-turn refinement),
-  `BARGE_IN_MIN_SPEECH_MS` (VAD must report
-  sustained speech this long before cutting TTS, to reject blips).
-- Guard helpers, e.g. `shouldSubmit(transcript)` (non-empty after trim).
+  `BARGE_IN_MIN_SPEECH_MS` (both gates must hold this long before cutting TTS, to reject
+  blips), `BARGE_IN_BASE` + `BARGE_IN_TTS_K` (Gate B dynamic threshold:
+  `mic > BARGE_IN_BASE + BARGE_IN_TTS_K * ttsLevel`).
+- Pure guard helpers, testable without a browser:
+  - `shouldSubmit(transcript)` — non-empty after trim.
+  - `passesBargeInGate(mic, ttsLevel)` — the Gate B threshold check. This is the load-bearing
+    echo-rejection logic, so it gets its own unit tests (silent-user echo below threshold does
+    NOT pass; real user speech above it does).
 
 Testable without a browser (no Web Speech / AudioContext / VAD needed for the reducer).
 
@@ -158,7 +192,8 @@ The I/O shell that wires the pure reducer to the live objects it already receive
   stream from `useAudioAnalyser` — not a second `getUserMedia`.
 - Starting/stopping the `SttProvider` on entering/leaving `listening`.
 - On STT `onFinal` in `listening`: harvest transcript → `chat.send` (auto-submit).
-- On VAD speech-onset in `speaking` (barge-in): `speakAbortRef.abort()` +
+- Barge-in during `speaking`: poll VAD onset AND `passesBargeInGate(sample().mic, sample().tts)`
+  each frame; when both hold ≥ `BARGE_IN_MIN_SPEECH_MS`, `speakAbortRef.abort()` +
   `voice.cancelSpeak()` → `listening`.
 - After `speakReply` resolves (TTS ended) and still enabled → back to `listening`.
 - Exposing the current `ConvState` for the visual cue.
@@ -184,9 +219,11 @@ Keep the eased `thinkFactor`-style interpolation so transitions stay smooth (no 
   stops, `SpeechRecognition` fires the final `onresult`/`onend`. If non-empty, auto-submit.
   The VAD's silence hangover (`SILENCE_HANGOVER_MS`) is an optional refinement if the browser
   default proves too eager; it is not required to end a turn.
-- **Barge-in:** during `speaking`, VAD speech onset sustained ≥ `BARGE_IN_MIN_SPEECH_MS` → cut
-  TTS and transition to `listening` (which starts a fresh STT turn). AEC on the mic stream is
-  what makes this fire on the user, not on Jarvis.
+- **Barge-in:** during `speaking`, fire only when BOTH gates hold (Gate A: Silero speech onset;
+  Gate B: `mic > BARGE_IN_BASE + BARGE_IN_TTS_K * ttsLevel`) sustained ≥ `BARGE_IN_MIN_SPEECH_MS`
+  → cut TTS and transition to `listening` (fresh STT turn). Gate A rejects non-speech noise;
+  Gate B rejects Jarvis's own leaked audio even when AEC is imperfect. See the Key Insight
+  section for why a VAD alone is insufficient (Jarvis's TTS is itself speech).
 - **Two concurrent mic consumers** during `listening` (Web Speech's internal capture + the
   existing `useAudioAnalyser` stream that also feeds the VAD) is acceptable in browsers. This
   is not new — the analyser stream already exists today; v1 only adds AEC constraints to it
@@ -213,9 +250,11 @@ Keep the eased `thinkFactor`-style interpolation so transitions stay smooth (no 
 
 - **`conversation.ts`** — unit-test every transition of `nextConvState` (enable/disable from
   each state, `transcriptFinal` only submits from `listening`, `bargeIn` only cuts from
-  `speaking`, `replyDone` → speaking, `speakingEnded` → listening) and the guards
-  (`shouldSubmit` rejects empty/whitespace). This is where the intent lives, so these are the
-  load-bearing tests.
+  `speaking`, `replyDone` → speaking, `speakingEnded` → listening) and the guards. Especially
+  `passesBargeInGate`: assert that a silent user under high `ttsLevel` (echo) does NOT pass,
+  and real user speech above the dynamic threshold does — this encodes the WHY (Jarvis must
+  not interrupt himself). `shouldSubmit` rejects empty/whitespace. These are the load-bearing
+  tests.
 - **`stt.ts`** — test `WebSpeechStt` behind a mocked `SpeechRecognition` (start/stop/final
   callback, supported() gating). The interface is what a future Whisper impl must satisfy.
 - **VAD / hook / canvas** — not unit-tested in jsdom (no AudioContext / Web Speech / VAD
@@ -230,7 +269,13 @@ Keep the eased `thinkFactor`-style interpolation so transitions stay smooth (no 
   on Google's servers, so the user's machine stays light (the explicitly requested
   constraint). This does not compete with VieNeu-TTS's CPU budget or Ollama's GPU.
 
-## Open questions
+## Open questions / primary risk
 
-None blocking. Tunables (`SILENCE_HANGOVER_MS`, `BARGE_IN_MIN_SPEECH_MS`, VAD sensitivity)
-are set to sensible defaults in code and adjusted during the manual smoke pass.
+- **AEC effectiveness on this setup is the one real risk** and is resolved by the spike test
+  (first plan step), not by discussion — it produces the actual `mic`-vs-`tts` numbers that set
+  `BARGE_IN_BASE`/`BARGE_IN_TTS_K`. If AEC turns out very weak AND Gate B can't separate user
+  from echo on loud speakers, the honest fallback is headphones-recommended for barge-in (still
+  a full conversation loop; only over-loud-speaker interruption degrades). This is the only
+  scenario where v1 barge-in is "good but not perfect," and it is bounded.
+- Remaining tunables (`SILENCE_HANGOVER_MS`, `BARGE_IN_MIN_SPEECH_MS`, Silero sensitivity) get
+  sensible code defaults, adjusted during the manual smoke pass. Non-blocking.
