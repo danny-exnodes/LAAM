@@ -14,12 +14,19 @@ export type ConvEvent =
   | "bargeIn"; // user spoke over Jarvis (both barge-in gates held)
 
 // Barge-in Gate B threshold: the mic RMS (already smoothed by useAudioAnalyser) must
-// exceed base + k*ttsLevel to count as the user talking over Jarvis. Because residual
-// echo scales with ttsLevel, this bar rises exactly when Jarvis is loud, so leaked audio
-// can't clear it — only the user's real, louder voice can. Starting values; tuned during
-// the smoke pass against the AEC spike numbers from Task 3.
-export const BARGE_IN_BASE = 0.14;
-export const BARGE_IN_TTS_K = 0.9;
+// exceed base + k*ttsLevel to count as the user talking over Jarvis.
+//
+// Tuned from a real AEC spike (Task 3 Step 5, run live against actual hardware — see
+// CHANGELOG): with echoCancellation on, the idle/echo mic floor stays ~0.02 REGARDLESS
+// of how loud tts gets (observed up to tts≈0.7 with mic still ~0.02) — AEC suppresses
+// leaked Jarvis audio almost completely, so the original defensive 1:1-ish slope
+// (base=0.14, k=0.9) was solving a problem that barely exists on this hardware, while
+// making the threshold (e.g. ~0.7 at tts=0.7) far higher than real speech picked up by
+// a room mic ever reaches — barge-in essentially never fired. Real speech RMS in the
+// same session commonly ran 0.15–0.5+. These values keep >2x margin over the observed
+// echo floor at every tts level while staying well under typical real-speech levels.
+export const BARGE_IN_BASE = 0.08;
+export const BARGE_IN_TTS_K = 0.12;
 // Both barge-in gates must hold at least this long before TTS is cut (rejects blips).
 export const BARGE_IN_MIN_SPEECH_MS = 250;
 
