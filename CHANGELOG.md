@@ -9,6 +9,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Constellation: chế độ hội thoại voice rảnh tay (Jarvis)
+- `/constellation` nay có chế độ nói chuyện liên tục: bật "Giọng nói" là vào vòng lặp nghe → tự gửi khi ngừng nói → Jarvis đọc trả lời → tự nghe lượt tiếp, không cần bấm. Nói chen khi Jarvis đang đọc sẽ ngắt Jarvis ngay (barge-in kiểu ChatGPT), chống tự-ngắt bằng 2 cổng (Silero VAD + ngưỡng động theo mức TTS). STT qua `SttProvider` có thể thay bằng Whisper self-host sau. Vòng tròn lõi báo lượt bằng màu: nghe = đỏ-trắng, xử lý = xanh-trắng, nói = vàng.
+
 ### Đã thay đổi — Constellation đọc câu trả lời theo LUỒNG (VieNeu streaming), bỏ Piper
 - `/constellation` nay stream cả câu trả lời qua VieNeu `infer_stream` (endpoint `/tts/stream` → PCM Int16LE 48kHz, phát bằng Web Audio `AudioBufferSourceNode`) thay vì cắt chunk ~60 ký tự rồi tải từng WAV. Kết quả: tiếng đầu ra sau ~0.2s (thay vì ~2s), hết đọc-mất-chữ ở biên chunk, hết khựng giữa các đoạn. Một engine VieNeu lo cả tiếng Việt lẫn tiếng Anh — bỏ Piper. Analyser luồng thay `MediaElementAudioSourceNode` (xoá luôn nguồn crash dựng-lại-đồ-thị-mỗi-chunk). (Animation khựng do nghẽn CPU vẫn là việc riêng, chưa xử lý ở đây.)
 - **Thay thế 3 mục vá lỗi bên dưới** (`chunkForSpeech`/`speakChunks`/`playUrl`/`attachTts` với `<audio>` đơn): cơ chế chunk WAV mà chúng vá lỗi đã bị xoá hoàn toàn khỏi code, không còn tồn tại để tái phát các lỗi đó — giữ lại 3 mục dưới đây làm lịch sử debug, không phải mô tả code hiện tại.
