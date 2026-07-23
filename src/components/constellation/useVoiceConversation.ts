@@ -26,6 +26,9 @@ interface Opts {
   stt: SttProvider;
   sample: () => { mic: number; tts: number };
   isReplying: boolean;
+  // Maps to the caller's `preparingSpeech`: true while a TTS attempt (fetch + prebuffer)
+  // is in flight, even before isSpeaking flips true.
+  isPreparingSpeech: boolean;
   isSpeaking: boolean;
   onSubmit: (text: string) => void;
   onBargeIn: () => void;
@@ -92,14 +95,22 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
     if (was && !opts.isSpeaking) dispatch.current("speakingEnded");
   }, [opts.isSpeaking]);
 
-  // A reply that finishes streaming but never starts speaking (empty/failed TTS) must not
-  // strand us in `thinking`. When streaming ends while still thinking, give speech a beat;
-  // if it hasn't started, fall back to listening.
-  const prevReplying = useRef(false);
+  // A reply that finishes streaming AND finishes its TTS attempt (preparingSpeech) but
+  // never actually starts speaking (empty reply, no audio sink, or a genuine TTS failure)
+  // must not strand us in `thinking`. Track combined "busy" — still generating reply text,
+  // OR still working the TTS call (fetch + prebuffer, which can run several seconds past
+  // isReplying going false) — so the safety net only evaluates once BOTH are certain to
+  // be done, instead of racing the ~3s neural-TTS prebuffer window (TTS_PREBUFFER_SECONDS
+  // in streamingAudio.ts). If speech starts before preparingSpeech clears (the normal
+  // path), isSpeaking is already true by the time this effect re-runs, so the guard below
+  // is a no-op. Effect cleanup (via the dependency change when preparingSpeech itself
+  // flips) cancels a stale timer exactly like it already does for isReplying alone.
+  const wasBusy = useRef(false);
   useEffect(() => {
-    const was = prevReplying.current;
-    prevReplying.current = opts.isReplying;
-    if (was && !opts.isReplying && stateRef.current === "thinking") {
+    const busy = opts.isReplying || opts.isPreparingSpeech;
+    const was = wasBusy.current;
+    wasBusy.current = busy;
+    if (was && !busy && stateRef.current === "thinking") {
       const t = setTimeout(() => {
         if (stateRef.current === "thinking" && !optsRef.current.isSpeaking) {
           dispatch.current("replyEndedNoSpeech");
@@ -107,7 +118,7 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
       }, 1200);
       return () => clearTimeout(t);
     }
-  }, [opts.isReplying]);
+  }, [opts.isReplying, opts.isPreparingSpeech]);
 
   // Silero VAD — barge-in ONLY. Created once while enabled, destroyed on disable/unmount.
   // It runs continuously but ACTS only during `speaking`. Barge-in needs BOTH gates held

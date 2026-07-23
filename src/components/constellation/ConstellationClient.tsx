@@ -444,6 +444,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     stt: sttRef.current,
     sample,
     isReplying: chat.streaming,
+    isPreparingSpeech: preparingSpeech,
     isSpeaking: speaking, // voice.speaking || neuralSpeaking (already derived above)
     onSubmit: submitText,
     onBargeIn: () => {
