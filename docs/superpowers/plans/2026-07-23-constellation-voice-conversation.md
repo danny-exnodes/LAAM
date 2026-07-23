@@ -447,7 +447,7 @@ to:
 - [ ] **Step 2: Run the existing analyser tests**
 
 Run: `npx vitest run src/components/constellation/useAudioAnalyser.test.ts`
-Expected: PASS — the tests mock `getUserMedia` and don't assert the constraint object; if any test asserts `{ audio: true }` exactly, update that assertion to the new object.
+Expected: PASS unchanged — the existing tests only exercise `getTtsSink` and never assert the `getUserMedia` constraint object, so widening the audio constraints touches no assertion. (Verified against the current test file.)
 
 - [ ] **Step 3: Type-check**
 
@@ -546,6 +546,7 @@ import {
   passesBargeInGate,
   BARGE_IN_MIN_SPEECH_MS,
   type ConvState,
+  type ConvEvent,
 } from "@/lib/chat/conversation";
 
 interface Opts {
@@ -572,7 +573,7 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
   // Central dispatch: run the pure reducer, then perform the side effects that the NEW
   // state requires (start/stop STT). Everything funnels through here so the machine and
   // the I/O never disagree.
-  const dispatch = useRef((event: Parameters<typeof nextConvState>[1]) => {
+  const dispatch = useRef((event: ConvEvent) => {
     const prev = stateRef.current;
     const next = nextConvState(prev, event);
     if (next === prev) return;
@@ -580,27 +581,34 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
     setConvState(next);
 
     const { stt, lang } = optsRef.current;
-    // Entering listening → open a fresh STT turn. Leaving listening → close it.
     if (next === "listening") {
-      stt.start(lang, (text) => {
-        if (stateRef.current === "listening" && shouldSubmit(text)) {
+      // Open an STT turn. `onFinal` is a NAMED handler so the empty-result retry reopens
+      // the turn with the SAME callback (a fresh no-op callback would make later real
+      // utterances never submit — the bug this shape avoids).
+      const onFinal = (text: string) => {
+        if (stateRef.current !== "listening") return;
+        if (shouldSubmit(text)) {
           optsRef.current.onSubmit(text);
           dispatch.current("transcriptFinal");
-        } else if (stateRef.current === "listening") {
-          // empty result — reopen the mic for another try (backoff avoids a tight loop)
+        } else {
           setTimeout(() => {
-            if (stateRef.current === "listening") stt.start(lang, () => {});
+            if (stateRef.current === "listening") stt.start(lang, onFinal);
           }, 300);
         }
-      });
+      };
+      stt.start(lang, onFinal);
     } else if (prev === "listening") {
       stt.stop();
     }
   });
 
-  // Enable / disable.
+  // Enable / disable. If enabling while Jarvis is still speaking (e.g. the load greeting),
+  // cut that speech first so we don't open the recognizer on top of his voice.
   useEffect(() => {
-    if (opts.enabled && stateRef.current === "off") dispatch.current("enable");
+    if (opts.enabled && stateRef.current === "off") {
+      if (opts.isSpeaking) opts.onBargeIn();
+      dispatch.current("enable");
+    }
     if (!opts.enabled && stateRef.current !== "off") dispatch.current("disable");
   }, [opts.enabled]);
 
@@ -630,25 +638,33 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
     }
   }, [opts.isReplying]);
 
-  // VAD lifecycle: create once when enabled, destroy on disable/unmount. Barge-in only.
+  // Silero VAD — barge-in ONLY. Created once while enabled, destroyed on disable/unmount.
+  // It runs continuously but ACTS only during `speaking`. Barge-in needs BOTH gates held
+  // for BARGE_IN_MIN_SPEECH_MS: Gate A = Silero currently hears speech (`vadSpeaking`,
+  // maintained from onSpeechStart/End/Misfire); Gate B = mic loud vs current TTS
+  // (`passesBargeInGate`, echo-robust). onFrameProcessed fires every ~30ms frame — the
+  // steady clock for the sustained-duration check.
   const vadRef = useRef<MicVAD | null>(null);
   useEffect(() => {
     if (!opts.enabled) return;
     let disposed = false;
-    let sustainedSince = 0;
+    let vadSpeaking = false; // Gate A
+    let sustainedSince = 0; // when both gates first held together
 
     void MicVAD.new({
-      // Silero fires onSpeechStart at speech onset. We confirm barge-in with Gate B
-      // (mic loud relative to current TTS) sustained for BARGE_IN_MIN_SPEECH_MS, so
-      // Jarvis's own leaked audio never cuts him off. Only acts during `speaking`.
       onSpeechStart: () => {
-        if (stateRef.current !== "speaking") return;
-        const { mic, tts } = optsRef.current.sample();
-        if (!passesBargeInGate(mic, tts)) return;
-        sustainedSince = performance.now();
+        vadSpeaking = true;
+      },
+      onSpeechEnd: () => {
+        vadSpeaking = false;
+        sustainedSince = 0;
+      },
+      onVADMisfire: () => {
+        vadSpeaking = false;
+        sustainedSince = 0;
       },
       onFrameProcessed: () => {
-        if (stateRef.current !== "speaking") {
+        if (stateRef.current !== "speaking" || !vadSpeaking) {
           sustainedSince = 0;
           return;
         }
@@ -658,7 +674,7 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
           return;
         }
         if (sustainedSince === 0) sustainedSince = performance.now();
-        if (performance.now() - sustainedSince >= BARGE_IN_MIN_SPEECH_MS) {
+        else if (performance.now() - sustainedSince >= BARGE_IN_MIN_SPEECH_MS) {
           sustainedSince = 0;
           optsRef.current.onBargeIn();
           dispatch.current("bargeIn");
@@ -671,7 +687,7 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
           return;
         }
         vadRef.current = vad;
-        vad.start();
+        void vad.start();
       })
       .catch(() => {
         /* VAD load/mic failure → fail soft; barge-in unavailable, loop still works */
@@ -697,12 +713,16 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
 }
 ```
 
-> Note on `onFrameProcessed`: `@ricky0123/vad-web`'s `MicVAD` exposes a per-frame callback; it is used here to poll Gate B for the sustained-duration check. If the installed version names it differently, use its per-frame hook (the library processes ~30ms frames). The barge-in decision itself is the tested `passesBargeInGate`.
+> **`MicVAD` API (verified against `@ricky0123/vad-web@0.0.29` type defs):** `MicVAD.new(opts): Promise<MicVAD>`; instance `start(): Promise<void>`, `pause(): Promise<void>`, `destroy(): void`. Callbacks: `onSpeechStart()`, `onSpeechEnd(audio: Float32Array)`, `onVADMisfire()`, `onFrameProcessed(probabilities, frame)` (a no-arg handler is an assignable subtype, so `() => {…}` type-checks). By default `MicVAD` opens its OWN `getUserMedia` with `echoCancellation`/`noiseSuppression`/`autoGainControl` on — so its stream is AEC'd like the analyser's; we deliberately do NOT share the analyser's stream (its lifecycle is owned by `useAudioAnalyser`; sharing risks double-stop on destroy).
+
+> **Assets:** with no CSP in this app, `MicVAD`'s default CDN asset paths (ONNX model + ort wasm + worklet) load fine. If the smoke test shows a console error loading the worklet/model, self-host: copy `node_modules/@ricky0123/vad-web/dist/*` and `node_modules/onnxruntime-web/dist/*.wasm` into `public/vad/`, then pass `baseAssetPath: "/vad/"` and `onnxWASMBasePath: "/vad/"` to `MicVAD.new`.
+
+> **Concurrent mic captures:** while `listening`, three consumers touch the mic (the analyser's `getUserMedia`, `MicVAD`'s `getUserMedia`, and Web Speech's internal capture). Browsers allow this; watch for device-contention warnings in the smoke pass. If it misbehaves, pause `MicVAD` outside `speaking` (add a `convState`-keyed effect calling `vad.start()`/`vad.pause()`).
 
 - [ ] **Step 4: Type-check**
 
 Run: `npx tsc --noEmit -p tsconfig.json 2>&1 | grep -i useVoiceConversation`
-Expected: no output (if `onFrameProcessed` is not in the lib's types, switch to the version's per-frame callback name and re-run).
+Expected: no output.
 
 - [ ] **Step 5: Commit**
 
@@ -1069,3 +1089,10 @@ git commit -m "docs(constellation): note hands-free voice conversation mode"
 - **Resource light (one small dep, no container)** → Task 4 (only `@ricky0123/vad-web`).
 
 Deviation from spec, intentional: the reducer events are `speakingStarted/speakingEnded/replyEndedNoSpeech` (observable TTS signals) rather than the spec's `replyDone`, because the client already drives `speakReply` off the `chat.streaming` transition — the hook observes speech start/stop instead of re-deriving reply-done. Barge-in constant `SILENCE_HANGOVER_MS` from the spec is omitted (YAGNI): end-of-turn rides Web Speech endpointing in v1; add it only if the smoke pass shows the browser default is too eager.
+
+Correctness fixes applied during plan self-review (verified against code + the `@ricky0123/vad-web@0.0.29` type defs):
+- **Empty-transcript retry** reuses the SAME named `onFinal` handler (a fresh no-op callback would have made every later utterance fail to submit).
+- **Enable-while-speaking** (e.g. turning voice on during the load greeting) cuts the in-flight TTS first, so the recognizer never opens on top of Jarvis's voice.
+- **`MicVAD` callbacks** use the real API (`onSpeechStart`/`onSpeechEnd`/`onVADMisfire`/`onFrameProcessed`) with `vadSpeaking` (Gate A) tracked across them; the per-frame callback is the sustained-duration clock.
+- **Concurrent-mic reality** (analyser + MicVAD + Web Speech during `listening`) is documented with a pause-MicVAD-outside-speaking fallback if device contention appears.
+- **VAD assets** load from the library's CDN default (no CSP in this app); a self-host recipe is included if the worklet/model fails to load.
