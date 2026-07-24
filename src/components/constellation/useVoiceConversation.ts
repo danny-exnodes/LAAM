@@ -112,6 +112,22 @@ export function useVoiceConversation(opts: Opts): { convState: ConvState } {
     if (!opts.enabled && stateRef.current !== "off") dispatch.current("disable");
   }, [opts.enabled]);
 
+  // A turn can also start from the TEXT BOX while hands-free voice is on (the user typed
+  // and hit Gửi instead of speaking). Without this the machine stayed in `listening` —
+  // recognizer OPEN — for the whole reply, so Jarvis's own TTS was transcribed and
+  // auto-submitted as the next turn, and `speakingStarted` was a no-op because no
+  // listening→speaking edge exists. Treating "a reply started while we were listening" as
+  // the same turn-start as a final transcript makes typed and spoken turns share ONE
+  // lifecycle, so chat and voice work independently and can be used interchangeably.
+  const prevReplyingEdge = useRef(false);
+  useEffect(() => {
+    const was = prevReplyingEdge.current;
+    prevReplyingEdge.current = opts.isReplying;
+    if (!was && opts.isReplying && stateRef.current === "listening") {
+      dispatch.current("replyStarted");
+    }
+  }, [opts.isReplying]);
+
   // Observe TTS start/stop → drive thinking→speaking→listening.
   const prevSpeaking = useRef(false);
   useEffect(() => {

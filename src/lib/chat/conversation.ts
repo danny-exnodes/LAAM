@@ -8,6 +8,7 @@ export type ConvEvent =
   | "enable" // user turned voice mode on
   | "disable" // user turned voice mode off (or teardown)
   | "transcriptFinal" // STT produced a non-empty final transcript for the turn
+  | "replyStarted" // a turn began from OUTSIDE STT (the user typed + sent while voice was on)
   | "speakingStarted" // neural TTS actually began playing the reply
   | "speakingEnded" // TTS finished
   | "replyEndedNoSpeech" // the reply finished but produced nothing to speak
@@ -71,7 +72,10 @@ export function nextConvState(state: ConvState, event: ConvEvent): ConvState {
     case "off":
       return event === "enable" ? "listening" : "off";
     case "listening":
-      return event === "transcriptFinal" ? "thinking" : "listening";
+      // `replyStarted` is the typed-message twin of `transcriptFinal`: both mean "a turn
+      // just began", so typing while hands-free voice is on follows the exact same
+      // lifecycle (and, crucially, closes the recognizer for the duration of the reply).
+      return event === "transcriptFinal" || event === "replyStarted" ? "thinking" : "listening";
     case "thinking":
       if (event === "speakingStarted") return "speaking";
       if (event === "replyEndedNoSpeech") return "listening";

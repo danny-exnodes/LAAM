@@ -31,6 +31,19 @@ describe("nextConvState", () => {
     expect(nextConvState("thinking", "speakingStarted")).toBe("speaking");
   });
 
+  // A turn started by TYPING while hands-free voice is on must follow the same lifecycle
+  // as a spoken one — otherwise the machine stays in `listening` with the recognizer open
+  // and transcribes Jarvis's own reply back as the next turn.
+  it("replyStarted advances listening → thinking (typed message while voice is on)", () => {
+    expect(nextConvState("listening", "replyStarted")).toBe("thinking");
+  });
+
+  it("replyStarted is ignored outside listening (a spoken turn already left it)", () => {
+    expect(nextConvState("thinking", "replyStarted")).toBe("thinking");
+    expect(nextConvState("speaking", "replyStarted")).toBe("speaking");
+    expect(nextConvState("off", "replyStarted")).toBe("off");
+  });
+
   it("replyEndedNoSpeech returns thinking → listening (nothing to say)", () => {
     expect(nextConvState("thinking", "replyEndedNoSpeech")).toBe("listening");
   });

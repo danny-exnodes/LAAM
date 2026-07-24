@@ -171,14 +171,21 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     // connectorIdle: no dispatch (optional toast per spec)
   }, []);
 
-  // Chat hook — onText streams the growing full reply into fullReplyRef (not shown on
-  // screen); only speakReply's per-segment setCaption calls ever reach the UI.
+  // Chat hook — onText streams the growing full reply into fullReplyRef so speakReply has
+  // the finished text to read. It ALSO drives the caption when voice is OFF: nothing will
+  // ever speak the reply then, and speakReply (the only other caller of setCaption) is
+  // gated on voiceEnabled — so without this the reply was never shown OR spoken and text
+  // chat looked completely dead (only the "thinking" ring). With voice ON the caption
+  // stays owned by speakReply's per-segment subtitle.
   const fullReplyRef = useRef("");
   // Mirrors convState for getLevel (declared before it's read; see Step 7 in the plan) —
   // getLevel needs the current hands-free listening state without depending on convState.
   const convStateRef = useRef<"idle" | "listening" | "thinking" | "speaking" | "off">("off");
   const chat = useConstellationChat({
-    onText: (text) => { fullReplyRef.current = text; },
+    onText: (text) => {
+      fullReplyRef.current = text;
+      if (!voiceEnabledRef.current) setCaption(text);
+    },
     onPendingWrite: setPendingWrite,
   });
 
@@ -481,9 +488,12 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         ? "thinking"
         : "idle";
 
-  const btnBase = "rounded-full border px-4 py-3 text-[13px] transition";
-  const btnOff = "border-[#5bd6ff]/20 bg-[#0a1e34]/60 text-[#a9e9ff] hover:border-[#5bd6ff]/40";
-  const btnOn = "border-[#ffce7a]/50 bg-[#ffce7a]/15 text-[#ffd98f]";
+  const btnBase =
+    "rounded-full border px-4 py-2.5 text-[12.5px] font-medium tracking-wide transition-all duration-200 " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5bd6ff]/50";
+  const btnOff =
+    "border-white/10 bg-white/[0.03] text-[#a9e9ff]/90 hover:border-[#5bd6ff]/40 hover:bg-white/[0.06] hover:text-[#eaf9ff]";
+  const btnOn = "border-[#ffce7a]/60 bg-[#ffce7a]/15 text-[#ffd98f] shadow-[0_0_18px_rgba(255,206,122,.22)]";
 
   return (
     <div
@@ -494,7 +504,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     >
       {/* Canvas + nodes render underneath the boot overlay so they're ready on reveal */}
       <ConstellationCanvas placed={placed} getLevel={getLevel} mode={canvasMode} />
-      <Link href="/chat" className="absolute right-4 top-4 z-10 rounded-full border border-[#5bd6ff]/30 bg-[#0a1e34]/60 px-4 py-2 text-sm text-[#a9e9ff]">
+      <Link
+        href="/chat"
+        className="absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-[#a9e9ff]/90 backdrop-blur-md transition-colors hover:border-[#5bd6ff]/40 hover:bg-white/[0.06] hover:text-[#eaf9ff]"
+      >
         {t("constellation.back")}
       </Link>
       <h1 className="absolute left-1/2 top-6 z-10 -translate-x-1/2 text-sm tracking-[0.3em] text-[#a9e9ff]">
@@ -505,14 +518,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
 
       {/* Write-gate confirm chip */}
       {pendingWrite && (
-        <div className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 rounded-2xl border border-[#ffce7a]/40 bg-[#08182a]/95 px-6 py-4 text-center">
+        <div className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 rounded-2xl border border-[#ffce7a]/30 bg-[#08182a]/95 px-6 py-4 text-center shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur-xl">
           <p className="text-sm font-semibold text-[#ffce7a]">{pendingWrite.title}</p>
           <p className="max-w-[320px] text-xs text-[#bcd9ec]">{pendingWrite.summary}</p>
           <div className="flex gap-3">
-            <button type="button" onClick={() => { void chat.confirm(pendingWrite.token, true); setPendingWrite(null); }} className="rounded-xl bg-[#5bd6ff]/20 px-4 py-2 text-xs text-[#a9e9ff]">
+            <button type="button" onClick={() => { void chat.confirm(pendingWrite.token, true); setPendingWrite(null); }} className="rounded-xl bg-[#5bd6ff]/20 px-4 py-2 text-xs text-[#a9e9ff] transition-colors hover:bg-[#5bd6ff]/30">
               {t("constellation.approve")}
             </button>
-            <button type="button" onClick={() => { void chat.confirm(pendingWrite.token, false); setPendingWrite(null); }} className="rounded-xl bg-[#ff5b6c]/20 px-4 py-2 text-xs text-[#ff9eb5]">
+            <button type="button" onClick={() => { void chat.confirm(pendingWrite.token, false); setPendingWrite(null); }} className="rounded-xl bg-[#ff5b6c]/20 px-4 py-2 text-xs text-[#ff9eb5] transition-colors hover:bg-[#ff5b6c]/30">
               {t("constellation.deny")}
             </button>
           </div>
@@ -537,13 +550,13 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
           <CommandDock t={t} caption={caption} open={chatOpen} value={command} onChange={setCommand} onSend={handleSend} />
 
           {/* Unified control bar: model · chat · voice — single row, no overlap */}
-          <div className="absolute bottom-6 right-4 z-20 flex items-center gap-2">
+          <div className="absolute bottom-6 right-4 z-20 flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.55)] backdrop-blur-xl">
             {models.length > 0 && (
               <select
                 aria-label={t("constellation.modelAria")}
                 value={model}
                 onChange={(e) => onModelChange(e.target.value)}
-                className="max-w-[42vw] truncate rounded-full border border-[#5bd6ff]/20 bg-[#0a1e34]/70 px-3 py-2.5 text-[12px] text-[#a9e9ff] outline-none"
+                className="max-w-[38vw] truncate rounded-full border border-transparent bg-transparent px-3 py-2 text-[12px] text-[#a9e9ff]/90 outline-none transition-colors hover:border-white/10"
               >
                 {models.map((m) => (
                   <option key={m} value={m} className="bg-[#0a1e34] text-[#eaf6ff]">{m}</option>
