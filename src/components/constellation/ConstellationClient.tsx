@@ -171,21 +171,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     // connectorIdle: no dispatch (optional toast per spec)
   }, []);
 
-  // Chat hook — onText streams the growing full reply into fullReplyRef so speakReply has
-  // the finished text to read. It ALSO drives the caption when voice is OFF: nothing will
-  // ever speak the reply then, and speakReply (the only other caller of setCaption) is
-  // gated on voiceEnabled — so without this the reply was never shown OR spoken and text
-  // chat looked completely dead (only the "thinking" ring). With voice ON the caption
-  // stays owned by speakReply's per-segment subtitle.
+  // Chat hook — onText streams the growing full reply into fullReplyRef (not shown on
+  // screen); only speakReply's per-segment setCaption calls ever reach the UI.
   const fullReplyRef = useRef("");
   // Mirrors convState for getLevel (declared before it's read; see Step 7 in the plan) —
   // getLevel needs the current hands-free listening state without depending on convState.
   const convStateRef = useRef<"idle" | "listening" | "thinking" | "speaking" | "off">("off");
   const chat = useConstellationChat({
-    onText: (text) => {
-      fullReplyRef.current = text;
-      if (!voiceEnabledRef.current) setCaption(text);
-    },
+    onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
   });
 
@@ -374,12 +367,19 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const voiceEnabledRef = useRef(voiceEnabled); voiceEnabledRef.current = voiceEnabled;
 
-  // Speak the full reply when streaming transitions true → false (voice-enabled only).
+  // Speak the full reply when streaming transitions true → false.
+  //
+  // Deliberately NOT gated on `voiceEnabled`: the two dock buttons are both INPUT modes —
+  // "Trò chuyện" types, "Giọng nói" adds the microphone — while speaking is Javis's output
+  // channel either way. Gating this on voiceEnabled meant a typed question got no spoken
+  // answer at all (and, since the caption only ever shows what speakReply is reading, no
+  // visible answer either), which read as text chat being broken. The load greeting below
+  // was never gated, so this also removes that inconsistency.
   const prevStreamingRef = useRef(false);
   useEffect(() => {
     const wasStreaming = prevStreamingRef.current;
     prevStreamingRef.current = chat.streaming;
-    if (wasStreaming && !chat.streaming && voiceEnabledRef.current && fullReplyRef.current) {
+    if (wasStreaming && !chat.streaming && fullReplyRef.current) {
       void speakRef.current(fullReplyRef.current);
     }
   }, [chat.streaming]);

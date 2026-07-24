@@ -26,13 +26,10 @@ export function CommandDock({
 }) {
   return (
     <>
-      {/* Caption strip — the spoken segment while Javis reads, or (voice off) the whole
-          streaming reply, which is the only place text chat surfaces an answer. Capped +
-          scrollable because a full reply is exactly what used to overflow the screen when
-          it was rendered unbounded; whitespace-pre-wrap keeps the reply's own line breaks. */}
+      {/* Caption strip — streaming reply text, above the input/bar */}
       {caption && (
         <div
-          className="absolute bottom-14 left-1/2 z-10 max-h-[34vh] max-w-[80vw] -translate-x-1/2 overflow-y-auto whitespace-pre-wrap text-center text-[14px] text-[#eaf9ff]"
+          className="pointer-events-none absolute bottom-14 left-1/2 z-10 max-w-[80vw] -translate-x-1/2 text-center text-[14px] text-[#eaf9ff]"
           style={{ textShadow: "0 0 16px rgba(150,225,255,.85), 0 0 34px rgba(91,214,255,.5)" }}
         >
           {caption}
