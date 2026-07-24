@@ -4,9 +4,12 @@ import { useT } from "@/i18n/provider";
 import { constellation } from "@/i18n/dictionaries/constellation";
 import type { Lang } from "@/i18n/types";
 import Link from "next/link";
+import { MessageSquare, Mic, MicOff } from "lucide-react";
 import { buildNodes, type ConstNode } from "@/lib/constellation/nodeModel";
 import { placeNodes } from "@/lib/constellation/field";
 import { ConstellationCanvas } from "./ConstellationCanvas";
+import { SonicWaveformCanvas } from "./SonicWaveformCanvas";
+import { ParticleFieldBackground } from "./ParticleFieldBackground";
 import { ConstellationNodes } from "./ConstellationNodes";
 import { CommandDock } from "./CommandDock";
 import { useConstellationChat, type PendingWrite } from "./useConstellationChat";
@@ -489,7 +492,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         : "idle";
 
   const btnBase =
-    "rounded-full border px-4 py-2.5 text-[12.5px] font-medium tracking-wide transition-all duration-200 " +
+    "flex h-10 w-10 items-center justify-center rounded-full border transition-all duration-200 " +
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5bd6ff]/50";
   const btnOff =
     "border-white/10 bg-white/[0.03] text-[#a9e9ff]/90 hover:border-[#5bd6ff]/40 hover:bg-white/[0.06] hover:text-[#eaf9ff]";
@@ -503,6 +506,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       aria-label={t("constellation.regionAria")}
     >
       {/* Canvas + nodes render underneath the boot overlay so they're ready on reveal */}
+      <SonicWaveformCanvas color="91,214,255" />
+      <ParticleFieldBackground />
       <ConstellationCanvas placed={placed} getLevel={getLevel} mode={canvasMode} />
       <Link
         href="/chat"
@@ -556,19 +561,33 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
                 aria-label={t("constellation.modelAria")}
                 value={model}
                 onChange={(e) => onModelChange(e.target.value)}
-                className="max-w-[38vw] truncate rounded-full border border-transparent bg-transparent px-3 py-2 text-[12px] text-[#a9e9ff]/90 outline-none transition-colors hover:border-white/10"
+                className="w-[120px] truncate rounded-full border border-transparent bg-transparent px-3 py-2 text-[12px] text-[#a9e9ff]/90 outline-none transition-colors hover:border-white/10"
               >
                 {models.map((m) => (
                   <option key={m} value={m} className="bg-[#0a1e34] text-[#eaf6ff]">{m}</option>
                 ))}
               </select>
             )}
-            <button type="button" onClick={() => setChatOpen((o) => !o)} className={`${btnBase} ${chatOpen ? btnOn : btnOff}`}>
-              {t("constellation.chat")}
+            <button
+              type="button"
+              onClick={() => setChatOpen((o) => !o)}
+              aria-pressed={chatOpen}
+              title={t("constellation.chat")}
+              aria-label={t("constellation.chat")}
+              className={`${btnBase} ${chatOpen ? btnOn : btnOff}`}
+            >
+              <MessageSquare size={17} strokeWidth={2} />
             </button>
             {voiceSupported && (
-              <button type="button" onClick={toggleVoice} aria-pressed={voiceEnabled} className={`${btnBase} ${voiceEnabled ? btnOn : btnOff}`}>
-                {t("constellation.voice")}
+              <button
+                type="button"
+                onClick={toggleVoice}
+                aria-pressed={voiceEnabled}
+                title={t("constellation.voice")}
+                aria-label={t("constellation.voice")}
+                className={`${btnBase} ${voiceEnabled ? btnOn : btnOff}`}
+              >
+                {voiceEnabled ? <Mic size={17} strokeWidth={2} /> : <MicOff size={17} strokeWidth={2} />}
               </button>
             )}
           </div>

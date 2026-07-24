@@ -181,9 +181,10 @@ export function ConstellationCanvas({
 
         const sx = cx + ux * coreR * 1.05;
         const sy = cy + uy * coreR * 1.05;
-        // End the beam ON the node ring (~8px radius) so it visibly touches it.
-        const ex = px - ux * 9 * DPR;
-        const ey = py - uy * 9 * DPR;
+        // End the beam ON the node ring (~13px radius — rings got bigger, see
+        // ConstellationNodes' ringStyle) so it visibly touches it.
+        const ex = px - ux * 13 * DPR;
+        const ey = py - uy * 13 * DPR;
 
         const mx = (sx + ex) / 2,
           my = (sy + ey) / 2;
@@ -335,22 +336,37 @@ export function ConstellationCanvas({
       }
 
       // ---- CORE RING (prototype lines 359–361) — gold at rest/speaking, bright
-      // blue-white while thinking, so the wait for a reply reads as active. ----
+      // blue-white while thinking, so the wait for a reply reads as active.
+      // Neon-tube look: a big soft outer bloom + a mid glow + a near-white hot
+      // core line — three widening/dimming passes is what reads as a lit neon
+      // tube rather than a single flat stroke with blur. ----
+      const hot = `rgb(${Math.round(ringR + (255 - ringR) * 0.75)},${Math.round(ringG + (255 - ringG) * 0.75)},${Math.round(ringB + (255 - ringB) * 0.75)})`;
+
+      // wide outer bloom
       ctx.beginPath();
       ctx.arc(cx, cy, coreR, 0, 6.3);
-      ctx.lineWidth = (4 + level * 5) * DPR;
-      ctx.strokeStyle = `rgba(${ringRGB},.9)`;
-      ctx.shadowBlur = (16 + level * 26) * DPR;
+      ctx.lineWidth = (20 + level * 16) * DPR;
+      ctx.strokeStyle = `rgba(${ringRGB},.22)`;
+      ctx.shadowBlur = (60 + level * 70) * DPR;
+      ctx.shadowColor = ringGlow;
+      ctx.stroke();
+      // mid glow
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR, 0, 6.3);
+      ctx.lineWidth = (10 + level * 10) * DPR;
+      ctx.strokeStyle = `rgba(${ringRGB},.5)`;
+      ctx.shadowBlur = (36 + level * 48) * DPR;
+      ctx.shadowColor = ringGlow;
+      ctx.stroke();
+      // hot near-white core — the "lit tube" itself
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR, 0, 6.3);
+      ctx.lineWidth = (3 + level * 4) * DPR;
+      ctx.strokeStyle = hot;
+      ctx.shadowBlur = (24 + level * 32) * DPR;
       ctx.shadowColor = ringGlow;
       ctx.stroke();
       ctx.shadowBlur = 0;
-      // outer faint halo ring
-      ctx.beginPath();
-      ctx.arc(cx, cy, coreR * 1.13, 0, 6.3);
-      ctx.lineWidth = 1 * DPR;
-      ctx.strokeStyle = `rgba(${ringRGB},.16)`;
-      ctx.stroke();
-
     }
 
     // Outer driver: schedules frame() then re-queues itself — one chain only
