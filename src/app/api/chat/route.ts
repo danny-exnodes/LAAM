@@ -49,6 +49,22 @@ const TOOL_LOOP_ERR: Record<"vi" | "en" | "zh", string> = {
   en: `Lost connection to Ollama (${OLLAMA_URL}) while running tools. Please try again.`,
   zh: `调用工具时无法连接 Ollama（${OLLAMA_URL}）。请重试。`,
 };
+
+// Injected as a final user turn when the tool loop was force-stopped (backstop), so the
+// model writes an answer from what it already gathered instead of reasoning about more tools.
+const SYNTH_NUDGE: Record<"vi" | "en" | "zh", string> = {
+  vi: "Đã đủ dữ liệu từ các công cụ ở trên. Bây giờ hãy TRẢ LỜI trực tiếp câu hỏi dựa trên dữ liệu đó — KHÔNG gọi thêm công cụ, KHÔNG suy luận dài, viết câu trả lời ngay.",
+  en: "You have enough data from the tools above. Now ANSWER the question directly from it — do NOT call more tools, do NOT reason at length, write the answer now.",
+  zh: "上述工具已提供足够数据。现在请直接据此回答问题——不要再调用工具，不要长篇推理，立即给出答案。",
+};
+
+// Shown when a turn completes but the model returned NO answer text (e.g. a reasoning
+// model that used its whole budget thinking). Fail loud, never a blank bubble.
+const EMPTY_REPLY: Record<"vi" | "en" | "zh", string> = {
+  vi: "Mô hình không trả về nội dung (có thể do suy luận quá dài hoặc câu hỏi quá phức tạp). Vui lòng thử lại, hỏi ngắn gọn hơn, hoặc đổi mô hình.",
+  en: "The model returned no content (possibly too much reasoning or an over-complex prompt). Please retry, ask more concisely, or switch models.",
+  zh: "模型未返回任何内容（可能推理过长或问题过于复杂）。请重试、简化问题或更换模型。",
+};
 // C1: Claude (Anthropic API, org key) rớt TRƯỚC khi có delta nào → notice 3 thứ
 // tiếng kèm code lỗi ('auth'|'rate_limit'|'overloaded'|'connection'; lỗi bất ngờ
 // ngoài 4 loại — vd 400 schema — hiển thị 'api'); KHÔNG tự fallback Ollama
@@ -86,6 +102,19 @@ const CHAT_MAX_ROUNDS = Math.max(1, Number(process.env.CHAT_MAX_ROUNDS) || DEFAU
 // BytePlus has a large window so it evicts far later (≈115k tokens, mirrors Anthropic's
 // 100k clear trigger) — env-tunable.
 const BYTEPLUS_TOOL_BUDGET_CHARS = Math.max(REPLAY_BUDGET_CHARS, Number(process.env.BYTEPLUS_TOOL_BUDGET_CHARS) || 400_000);
+// Per-result output bound (chars) for boundOutput, provider-aware. A large-context cloud
+// model admits a whole single result intact — sized with margin above the largest real
+// master record measured so far (kg_get_master_record — Cảng Định An v3's is ~78k wrapped,
+// Dasin's ~46k), and well below the round budget (BYTEPLUS_TOOL_BUDGET_CHARS, 400k+) so a
+// few large results in one round still fit. client.ts's own MAX_RESULT_CHARS is a much
+// higher raw-transport backstop (200k) so it never re-shreds a payload this bound would
+// otherwise admit whole. A 16k local model keeps boundOutput's own tight (8k) default.
+// Without this, the tight default replaced the whole master record with a "re-query
+// narrower" note that made a single-object result (unnarrowable) flail on search, or — if
+// only client.ts's cap was raised without this one — left a mid-size record still shredded.
+const CLOUD_RESULT_BOUND = 120_000;
+const resultBound = (model: string): number | undefined =>
+  isBytePlusModel(model) || isClaudeModel(model) ? CLOUD_RESULT_BOUND : undefined;
 // Honest "stopped early" notice (Rule 12) appended when the loop is force-terminated by
 // the backstop or a stuck repeat — never silently truncate.
 const LOOP_TRUNCATED: Record<"vi" | "en" | "zh", string> = {
@@ -583,6 +612,7 @@ function streamMainTurn(opts: {
         const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
           internal: INTERNAL_TOOLS,
           readAllow,
+          maxBytes: resultBound(payload.model),
         });
         // Tool round transport: BytePlus /chat/completions (non-stream) → OllamaChatResponse.
         const callByteplus = (messages: ChatMessage[], roundTools: typeof tools): Promise<OllamaChatResponse> =>
@@ -626,6 +656,14 @@ function streamMainTurn(opts: {
           return;
         }
 
+        // Backstop nudge: when the tool loop was force-stopped (maxRounds), convo ends on
+        // a tool result — a reasoning model then "thinks about the next tool" and emits
+        // reasoning_content only, no answer (seen: 455 out-tokens, 0 content). Append an
+        // explicit "answer now, no more tools" turn so the final stream produces content.
+        if (hitBackstop) {
+          convo = [...convo, { role: "user", content: SYNTH_NUDGE[lang as keyof typeof SYNTH_NUDGE] ?? SYNTH_NUDGE.vi }];
+        }
+
         // F1 (Rule 13): a write never executes in the main turn — it suspends above.
         const guardWrites = looksLikeWriteIntent(userText);
         const writeBacked = toolTurns.some(
@@ -637,6 +675,7 @@ function streamMainTurn(opts: {
         let tokensIn = 0;
         let tokensOut = 0;
         let gotUsage = false; // billed provider: omit token frame if usage never arrived (no fake $0)
+        let hbCount = 0;
         try {
           for await (const ev of byteplusStream({ model: payload.model, messages: convo, options: payload.options, signal: reqSignal })) {
             if (ev.delta) {
@@ -648,6 +687,13 @@ function streamMainTurn(opts: {
                   /* client aborted */
                 }
               }
+            }
+            // Reasoning models stream reasoning_content (often 30s+) BEFORE any answer
+            // content. During that window no answer bytes flow, so without a keep-alive
+            // the client/proxy tears down the idle SSE → empty reply, no error. Emit a
+            // thin heartbeat frame (throttled; client ignores it) to keep the stream warm.
+            if (ev.reasoning && !guardWrites && (hbCount++ % 8) === 0) {
+              try { controller.enqueue(enc.encode(encodeFrame({ t: "hb" }))); } catch { /* aborted */ }
             }
             if (ev.usage) {
               gotUsage = true;
@@ -677,6 +723,50 @@ function streamMainTurn(opts: {
             return;
           }
           console.error(`[chat] byteplus stream failed (conv=${convId})`, e);
+        }
+        // ONE-SHOT RETRY: a reasoning model can burn its whole final-answer turn on
+        // reasoning_content and emit ZERO visible content even on a NATURAL completion
+        // (not just the hitBackstop case above) — confirmed by manually resending the same
+        // question afterward always succeeding. Nudge it to answer directly and retry the
+        // final stream exactly once before giving up (still fail loud below if this ALSO
+        // comes back empty — Rule 12).
+        if (!full && !reqSignal?.aborted) {
+          console.warn(`[chat] byteplus stream produced no content, retrying once (conv=${convId}, model=${payload.model})`);
+          const retryConvo = [...convo, { role: "user", content: SYNTH_NUDGE[lang as keyof typeof SYNTH_NUDGE] ?? SYNTH_NUDGE.vi }];
+          try {
+            for await (const ev of byteplusStream({ model: payload.model, messages: retryConvo, options: payload.options, signal: reqSignal })) {
+              if (ev.delta) {
+                full += ev.delta;
+                if (!guardWrites) {
+                  try {
+                    controller.enqueue(enc.encode(ev.delta));
+                  } catch {
+                    /* client aborted */
+                  }
+                }
+              }
+              if (ev.reasoning && !guardWrites && (hbCount++ % 8) === 0) {
+                try { controller.enqueue(enc.encode(encodeFrame({ t: "hb" }))); } catch { /* aborted */ }
+              }
+              if (ev.usage) {
+                gotUsage = true;
+                tokensIn += ev.usage.in;
+                tokensOut += ev.usage.out;
+              }
+            }
+          } catch (e) {
+            console.error(`[chat] byteplus retry stream failed (conv=${convId})`, e);
+          }
+        }
+        // Fail loud (Rule 12): the stream ended cleanly but produced ZERO answer content
+        // (e.g. a reasoning model that spent its whole budget on reasoning_content, or a
+        // stream torn down without a formal client abort). Show a labelled notice instead
+        // of a silent blank bubble so an empty turn is never mistaken for success.
+        if (!full && !reqSignal?.aborted) {
+          console.error(`[chat] byteplus stream produced no content after retry (conv=${convId}, model=${payload.model})`);
+          const note = EMPTY_REPLY[lang as keyof typeof EMPTY_REPLY] ?? EMPTY_REPLY.vi;
+          full = note;
+          if (!guardWrites) { try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ } }
         }
         if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
         // Backstop/repeat force-terminated the loop → append an honest notice (Rule 12).
@@ -717,6 +807,7 @@ function streamMainTurn(opts: {
       const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
         internal: INTERNAL_TOOLS,
         readAllow,
+        maxBytes: resultBound(payload.model),
       });
       const callOllama = async (
         messages: ChatMessage[],
@@ -1134,6 +1225,7 @@ async function handleConfirm(
     internal: INTERNAL_TOOLS,
     confirmedAction: { name: signed.name, args: signed.args },
     readAllow,
+    maxBytes: resultBound(typeof signed.model === "string" && signed.model.trim() ? signed.model : MODEL),
   });
   const outcome = await runResume(
     signed,

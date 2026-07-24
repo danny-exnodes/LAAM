@@ -96,7 +96,7 @@ export function MessageItem({
         ) : isAssistant ? (
           <>
             <ToolTrace items={msg.toolTrace} />
-            <ChatMarkdown source={msg.content} />
+            <ChatMarkdown source={msg.content} className="chat-md" />
             <Citations names={msg.cites} />
             {msg.pendingWrite && onConfirm && (
               <ConfirmCard

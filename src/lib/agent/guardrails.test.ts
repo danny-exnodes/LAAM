@@ -58,6 +58,23 @@ describe("boundOutput", () => {
     expect(JSON.stringify(out).length).toBeLessThanOrEqual(2400);
   });
 
+  // INTENT (Rule 9): một single-object result KHÔNG-mảng vừa trong maxBytes phải qua NGUYÊN VẸN.
+  // Đây là ca master record (kg_get_master_record) — Cảng Định An v3's là ~78k (đo thật, lớn hơn
+  // Dasin's ~46k, chính là ca làm lộ ra CLOUD_RESULT_BOUND cũ (60k) còn quá chật). Với default 8k
+  // nó bị thay bằng preview+note "gọi lại hẹp hơn" (vô nghĩa với 1 record → model flail); với
+  // trần cloud hiện tại (120k) nó lọt trọn để model đọc được ## risk / redFlags. Phải fail nếu ai
+  // hạ trần về dưới một payload thực tế đã đo được.
+  test("object đơn lớn (master record, ~78k) qua nguyên vẹn khi maxBytes đủ cao — KHÔNG shred", () => {
+    const record = { master_record: { record_body: "## risk\n" + "x".repeat(78_000) + "\nredFlags" } };
+    const raw = boundOutput(record, 120_000) as Record<string, unknown>;
+    expect(raw).toEqual(record); // nguyên vẹn — không _truncated, không note
+    expect((raw as { _truncated?: boolean })._truncated).toBeUndefined();
+    // Ngược lại: default 8k thì CHÍNH record đó bị thay bằng preview+note (regression cũ).
+    const shredded = boundOutput(record) as Record<string, unknown>;
+    expect(shredded._truncated).toBe(true);
+    expect(String(shredded.note)).toContain("RÚT GỌN");
+  });
+
   test("mảng trần lớn → { sample, total, shown } hợp lệ", () => {
     const arr = Array.from({ length: 100 }, (_, i) => ({ n: i, pad: "y".repeat(30) }));
     const out = boundOutput(arr, 500) as Record<string, unknown>;

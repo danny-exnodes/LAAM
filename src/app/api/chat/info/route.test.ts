@@ -7,6 +7,7 @@ const h = vi.hoisted(() => ({
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => h.authResult) }));
 
 import { GET } from "./route";
+import { BYTEPLUS_MODELS } from "@/lib/llm/byteplus";
 
 afterEach(() => {
   h.authResult = null;
@@ -52,7 +53,7 @@ describe("GET /api/chat/info", () => {
     vi.stubEnv("BYTEPLUS_API_KEY", "bp-test");
     h.authResult = { user: { id: "u1" } };
     const body = await (await GET()).json();
-    expect(body.byteplusModels).toEqual(["gpt-oss-120b"]);
+    expect(body.byteplusModels).toEqual([...BYTEPLUS_MODELS]);
   });
 
   test("byteplusModels = [] khi không có BYTEPLUS_API_KEY", async () => {

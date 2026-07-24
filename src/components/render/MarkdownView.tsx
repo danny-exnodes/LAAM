@@ -35,6 +35,16 @@ const components: Components = {
   pre(props) {
     return <>{(props as { children?: React.ReactNode }).children}</>;
   },
+  // Wrap tables in an overflow-x container so a wide table (e.g. a financial
+  // breakdown) scrolls inside the message instead of overflowing it. Styling
+  // lives in .chat-md / .chat-md-tablewrap (globals.css).
+  table(props) {
+    return (
+      <div className="chat-md-tablewrap">
+        <table>{(props as { children?: React.ReactNode }).children}</table>
+      </div>
+    );
+  },
 };
 
 export function MarkdownView({ source, className }: { source: string; className?: string }) {

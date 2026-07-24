@@ -247,3 +247,52 @@ body::after {
     animation: none;
   }
 }
+
+/* Chat assistant markdown — Tailwind's preflight strips default element styling, so
+   react-markdown output (tables / headings / lists) renders bare (cells jammed, no
+   spacing). This restores a compact, theme-aware typographic set scoped to .chat-md.
+   Subtle fills use color-mix on currentColor so they adapt to light/dark automatically;
+   borders reuse the app's --border-* tokens. Wide tables scroll inside .chat-md-tablewrap
+   (added by MarkdownView's table override) so a message never overflows horizontally. */
+.chat-md { line-height: 1.6; overflow-wrap: anywhere; }
+.chat-md > :first-child { margin-top: 0; }
+.chat-md > :last-child { margin-bottom: 0; }
+
+.chat-md h1, .chat-md h2, .chat-md h3, .chat-md h4 { font-weight: 600; line-height: 1.3; margin: 1.2em 0 0.5em; }
+.chat-md h1 { font-size: 1.35em; }
+.chat-md h2 { font-size: 1.2em; }
+.chat-md h3 { font-size: 1.08em; }
+.chat-md h4 { font-size: 1em; }
+
+.chat-md p { margin: 0.6em 0; }
+.chat-md ul, .chat-md ol { margin: 0.6em 0; padding-left: 1.4em; }
+.chat-md ul { list-style: disc; }
+.chat-md ol { list-style: decimal; }
+.chat-md li { margin: 0.25em 0; }
+.chat-md li > ul, .chat-md li > ol { margin: 0.25em 0; }
+
+.chat-md a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
+.chat-md blockquote { margin: 0.7em 0; padding: 0.2em 0 0.2em 0.9em; border-left: 3px solid var(--border-strong); opacity: 0.85; }
+.chat-md hr { margin: 1em 0; border: 0; border-top: 1px solid var(--border-subtle); }
+.chat-md :not(pre) > code { font-size: 0.85em; padding: 0.12em 0.35em; border-radius: 0.35em; background: color-mix(in oklab, currentColor 10%, transparent); }
+
+/* Tables — the reported symptom. `width: max-content` let a long-content column (e.g. a
+   full contract clause) stretch the whole table arbitrarily wide instead of wrapping — the
+   .chat-md-tablewrap scroll became the ONLY way to read it. `width: 100%` + a per-cell
+   max-width + wrapping makes long content wrap inside its column instead; the tablewrap
+   scroll stays as a fallback for genuinely many-column tables. */
+.chat-md-tablewrap { overflow-x: auto; margin: 0.7em 0; }
+.chat-md table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+/* --border-subtle (alpha .1 in dark) was too faint to read as a rule at table
+   scale — --border-strong is the visible-grid tier. */
+.chat-md th, .chat-md td {
+  border: 1px solid var(--border-strong);
+  padding: 0.4em 0.65em;
+  text-align: left;
+  vertical-align: top;
+  max-width: 32ch;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.chat-md thead th { background: color-mix(in oklab, currentColor 12%, transparent); font-weight: 600; }
+.chat-md tbody tr:nth-child(even) { background: color-mix(in oklab, currentColor 6%, transparent); }
