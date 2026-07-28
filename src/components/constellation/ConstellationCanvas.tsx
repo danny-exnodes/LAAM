@@ -308,12 +308,14 @@ export function ConstellationCanvas({
       }
 
       // ---- draw ripples (prototype lines 354–357) ----
-      // Base gold, then blend toward thinking (blue-white) and listening (red-white) by
+      // Base gold, then blend toward thinking (blue-white) and listening (green) by
       // their eased factors. They're mutually exclusive in practice (one mode at a time),
       // so the factor not active is ~0 and doesn't muddy the colour.
+      // Listening was red/coral before — read as an error/alert state, not "I'm
+      // hearing you", so it was changed to green.
       const gR = 255, gG = 206, gB = 122; // gold (idle / speaking)
       const tR = 180, tG = 232, tB = 255; // thinking blue-white
-      const lR = 255, lG = 120, lB = 130; // listening warm red-white (coral, harmonizes w/ gold)
+      const lR = 110, lG = 255, lB = 160; // listening green
       const ringR = Math.round(gR + (tR - gR) * thinkFactor + (lR - gR) * listenFactor);
       const ringG = Math.round(gG + (tG - gG) * thinkFactor + (lG - gG) * listenFactor);
       const ringB = Math.round(gB + (tB - gB) * thinkFactor + (lB - gB) * listenFactor);
