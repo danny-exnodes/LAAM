@@ -33,7 +33,9 @@ export function useConstellationChat({
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ ...body, conversationId: convId.current }),
+          // This hook is the /constellation (voice-first) client: every request is a voice
+          // request. Inject here so BOTH send and confirm carry mode → spoken-register replies.
+          body: JSON.stringify({ mode: "voice", ...body, conversationId: convId.current }),
         });
         convId.current = res.headers.get("x-conversation-id") ?? convId.current;
         const reader = res.body!.getReader();

@@ -27,6 +27,18 @@ const RENDER_GUIDE =
   "Hệ thống tự tra toạ độ và vẽ tuyến — đừng tự bịa toạ độ hay số liệu; " +
   "chỉ chèn khối khi câu hỏi thực sự cần biểu đồ hoặc bản đồ.";
 
+// Voice contract: on /constellation the reply is read aloud by TTS. Generate spoken
+// prose, not written markup — no tables/lists/markdown, no read-aloud identifiers,
+// summarize long lists. Replaces RENDER_GUIDE (chart/map are visual-only) in voice mode.
+const VOICE_GUIDE =
+  "Đây là hội thoại bằng giọng nói — câu trả lời của bạn sẽ được đọc thành tiếng. " +
+  "Hãy trả lời như đang NÓI chuyện tự nhiên: câu ngắn, mạch lạc, KHÔNG dùng markdown " +
+  "(không bảng, không gạch đầu dòng, không tiêu đề, không khối mã). " +
+  "KHÔNG đọc ID, UUID, mã băm, mã dài hay đường dẫn — bỏ qua chúng, chỉ nêu khi người dùng hỏi thẳng. " +
+  "Ưu tiên ngắn gọn và tóm tắt. Danh sách ngắn thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
+  "nếu danh sách dài, nêu số lượng và vài mục tiêu biểu rồi hỏi người dùng muốn nghe hết hay tìm mục cụ thể. " +
+  "Đọc số và ngày tháng theo cách người ta nói, đừng đọc dạng máy trừ khi cần chính xác.";
+
 export function buildSystemPrompt(input: {
   lang: string;
   now: number;
@@ -34,6 +46,8 @@ export function buildSystemPrompt(input: {
   // tương thích caller chưa cập nhật — mặc định coi là tool ĐỌC.
   tools: { name: string; kind: ToolKind }[] | string[];
   base?: string;
+  // Voice surface (/constellation): spoken-register output. Absent → "text" (unchanged).
+  mode?: "voice" | "text";
 }): string {
   const base = input.base ?? BASE;
   const date = new Date(input.now).toISOString().slice(0, 10);
@@ -53,9 +67,19 @@ export function buildSystemPrompt(input: {
       // F1: write-intent MUST go through a tool call (Rule 13 — code blocks unbacked claims).
       "Khi người dùng yêu cầu tạo/gửi/sửa/xoá/cập nhật, BẮT BUỘC gọi công cụ tương ứng. " +
       "TUYỆT ĐỐI KHÔNG nói đã tạo/gửi/xoá/cập nhật thành công nếu bạn chưa thực sự gọi công cụ và nhận được kết quả. " +
+      // F3: explicit re-search MUST go through a fresh tool call, even when the answer already
+      // sits in the conversation (verbatim or folded into summarizeMessages' summary) — a prior
+      // tool result can be stale, and the user's "lại" (again) is an explicit freshness request.
+      // Anchored to the refresh VERB PHRASE ("tìm/tra/kiểm tra lại", "cập nhật lại kết quả"), not
+      // the bare particle "lại" — that particle is common in unrelated Vietnamese phrasing
+      // ("quay lại", "và lại") and would over-trigger tool calls if matched alone.
+      "Khi người dùng yêu cầu tìm/tra cứu/kiểm tra LẠI, hoặc yêu cầu cập nhật/làm mới lại kết quả, " +
+      "BẮT BUỘC gọi lại công cụ tương ứng để lấy dữ liệu mới nhất — KHÔNG dùng lại kết quả cũ trong hội thoại " +
+      "hay bản tóm tắt trước đó, kể cả khi bạn nghĩ mình đã biết câu trả lời. " +
       // Trust structured tool output over prose (Rule 13): when a result carries structured data
       // (JSON, arrays), count/classify from that data — never from a prose summary — and never invent a total.
       "Khi kết quả trả về có dữ liệu cấu trúc (JSON, mảng), hãy đếm và phân loại từ chính dữ liệu cấu trúc đó, không suy từ đoạn văn tóm tắt, và không tự bịa con số tổng."
     : "";
-  return [base, `Hôm nay là ${date}.`, langHint, tools, RENDER_GUIDE].filter(Boolean).join(" ");
+  const guide = input.mode === "voice" ? VOICE_GUIDE : RENDER_GUIDE;
+  return [base, `Hôm nay là ${date}.`, langHint, tools, guide].filter(Boolean).join(" ");
 }

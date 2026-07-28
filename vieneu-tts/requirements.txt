@@ -1,0 +1,6 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+# VieNeu covers BOTH vi + en; Piper removed. numpy is a VieNeu dep, pinned-open here
+# because app.py imports it directly for the float32->Int16 PCM conversion.
+vieneu==3.2.3
+numpy

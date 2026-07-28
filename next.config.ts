@@ -34,7 +34,10 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(self)" },
+          // microphone=(self): /constellation and /chat use getUserMedia (Web Speech STT,
+          // AEC'd level metering, Silero VAD for barge-in) — microphone=() blocked it
+          // outright site-wide (blanket policy overrides any user permission grant).
+          { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=(self)" },
           { key: "Strict-Transport-Security", value: "max-age=15552000; includeSubDomains" },
         ],
       },

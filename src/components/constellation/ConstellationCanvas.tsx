@@ -12,9 +12,13 @@ function bez(t: number, p0: number, p1: number, p2: number): number {
 export function ConstellationCanvas({
   placed,
   getLevel,
+  mode = "idle",
 }: {
   placed: Placed[];
   getLevel: () => number;
+  /** Turn state → ring tint. listening = red-white, thinking = blue-white, speaking/idle
+   * = gold. Eased so transitions between tints stay smooth (no hard swap). */
+  mode?: "idle" | "listening" | "thinking" | "speaking";
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   // Keep a fresh reference to the placed array without re-running the effect
@@ -23,6 +27,9 @@ export function ConstellationCanvas({
   // Mirror getLevel through a ref so the rAF loop never closes over a stale prop
   const getLevelRef = useRef(getLevel);
   getLevelRef.current = getLevel;
+  // Mirror mode through a ref so the rAF loop never closes over a stale prop.
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -59,6 +66,12 @@ export function ConstellationCanvas({
     // Ripples: expanding gold rings from the core
     const ripples: { t: number; str: number }[] = [];
     let rippleCD = 0;
+
+    // Eased 0→1 factors toward the current mode's tint. Two factors (thinking blue-white,
+    // listening red-white) ease independently so any transition between the three tints
+    // is smooth rather than a jump-cut. speaking/idle = neither factor = gold.
+    let thinkFactor = 0;
+    let listenFactor = 0;
 
     // Node count the flows were last built for. buildFlows() runs at mount when
     // `placed` is still empty (data not loaded), yielding 0 flows; without this
@@ -134,6 +147,10 @@ export function ConstellationCanvas({
     function frame() {
       T++;
       const level = getLevelRef.current();
+      // Ease toward the thinking target (~0.35s to settle at 60fps) rather than snapping.
+      const m = modeRef.current;
+      thinkFactor += ((m === "thinking" ? 1 : 0) - thinkFactor) * 0.08;
+      listenFactor += ((m === "listening" ? 1 : 0) - listenFactor) * 0.08;
 
       ctx.clearRect(0, 0, W, H);
 
@@ -164,9 +181,10 @@ export function ConstellationCanvas({
 
         const sx = cx + ux * coreR * 1.05;
         const sy = cy + uy * coreR * 1.05;
-        // End the beam ON the node ring (~8px radius) so it visibly touches it.
-        const ex = px - ux * 9 * DPR;
-        const ey = py - uy * 9 * DPR;
+        // End the beam ON the node ring (~13px radius — rings got bigger, see
+        // ConstellationNodes' ringStyle) so it visibly touches it.
+        const ex = px - ux * 13 * DPR;
+        const ey = py - uy * 13 * DPR;
 
         const mx = (sx + ex) / 2,
           my = (sy + ey) / 2;
@@ -227,8 +245,11 @@ export function ConstellationCanvas({
       }
 
       // ---- energy flows along beams (prototype lines 332–335) ----
+      // Thinking speeds these up too (thinkFactor), same as level already does for
+      // listening/speaking — so the beam dots racing into the core read as "working"
+      // during the wait, not just the swarm inside the ring.
       for (const f of flows) {
-        f.t -= f.sp * (0.6 + level);
+        f.t -= f.sp * (0.6 + level + thinkFactor * 0.6);
         if (f.t < 0) f.t += 1;
         if (!f._b) continue;
         const b = f._b;
@@ -246,15 +267,18 @@ export function ConstellationCanvas({
       }
 
       // ---- swarm (prototype lines 337–343) ----
-      const rot = T * 0.0016;
+      // Thinking: spin faster and wobble/glow harder, eased by thinkFactor so the
+      // speed-up itself is a transition, not an instant jump when streaming starts/ends.
+      const rot = T * 0.0016 * (1 + thinkFactor * 3.3);
+      const wobAmp = (reduce ? 0 : 0.04) * (1 + thinkFactor * 1.8);
       for (let i = 0; i < swarm.length; i++) {
         const p = swarm[i];
         const aa = p.a + rot * p.sp;
-        const wob = reduce ? 0 : Math.sin(T * 0.05 * p.sp + p.ph) * 0.04;
+        const wob = reduce ? 0 : Math.sin(T * 0.05 * p.sp + p.ph) * wobAmp;
         const rr = (p.r + wob) * coreR * 0.92;
         const x = cx + Math.cos(aa) * rr;
         const y = cy + Math.sin(aa) * rr;
-        const al = (1 - p.r * 0.7) * (0.5 + level * 0.5);
+        const al = Math.min(1, (1 - p.r * 0.7) * (0.5 + level * 0.5 + thinkFactor * 0.3));
         ctx.beginPath();
         ctx.arc(x, y, p.size * DPR, 0, 6.3);
         ctx.fillStyle = `rgba(${150 + p.r * 60},${210 + p.r * 30},255,${al})`;
@@ -284,6 +308,19 @@ export function ConstellationCanvas({
       }
 
       // ---- draw ripples (prototype lines 354–357) ----
+      // Base gold, then blend toward thinking (blue-white) and listening (green) by
+      // their eased factors. They're mutually exclusive in practice (one mode at a time),
+      // so the factor not active is ~0 and doesn't muddy the colour.
+      // Listening was red/coral before — read as an error/alert state, not "I'm
+      // hearing you", so it was changed to green.
+      const gR = 255, gG = 206, gB = 122; // gold (idle / speaking)
+      const tR = 180, tG = 232, tB = 255; // thinking blue-white
+      const lR = 110, lG = 255, lB = 160; // listening green
+      const ringR = Math.round(gR + (tR - gR) * thinkFactor + (lR - gR) * listenFactor);
+      const ringG = Math.round(gG + (tG - gG) * thinkFactor + (lG - gG) * listenFactor);
+      const ringB = Math.round(gB + (tB - gB) * thinkFactor + (lB - gB) * listenFactor);
+      const ringRGB = `${ringR},${ringG},${ringB}`;
+      const ringGlow = `rgb(${ringRGB})`;
       for (let ri = ripples.length - 1; ri >= 0; ri--) {
         const rp = ripples[ri];
         rp.t += 0.014;
@@ -296,26 +333,42 @@ export function ConstellationCanvas({
         ctx.beginPath();
         ctx.arc(cx, cy, rad, 0, 6.3);
         ctx.lineWidth = (2.4 * (1 - rp.t) + 0.4) * DPR;
-        ctx.strokeStyle = `rgba(255,206,122,${a})`;
+        ctx.strokeStyle = `rgba(${ringRGB},${a})`;
         ctx.stroke();
       }
 
-      // ---- GOLD CORE RING (prototype lines 359–361) ----
+      // ---- CORE RING (prototype lines 359–361) — gold at rest/speaking, bright
+      // blue-white while thinking, so the wait for a reply reads as active.
+      // Neon-tube look: a big soft outer bloom + a mid glow + a near-white hot
+      // core line — three widening/dimming passes is what reads as a lit neon
+      // tube rather than a single flat stroke with blur. ----
+      const hot = `rgb(${Math.round(ringR + (255 - ringR) * 0.75)},${Math.round(ringG + (255 - ringG) * 0.75)},${Math.round(ringB + (255 - ringB) * 0.75)})`;
+
+      // wide outer bloom
       ctx.beginPath();
       ctx.arc(cx, cy, coreR, 0, 6.3);
-      ctx.lineWidth = (4 + level * 5) * DPR;
-      ctx.strokeStyle = "rgba(255,206,122,.9)";
-      ctx.shadowBlur = (16 + level * 26) * DPR;
-      ctx.shadowColor = "#ffce7a";
+      ctx.lineWidth = (20 + level * 16) * DPR;
+      ctx.strokeStyle = `rgba(${ringRGB},.22)`;
+      ctx.shadowBlur = (60 + level * 70) * DPR;
+      ctx.shadowColor = ringGlow;
+      ctx.stroke();
+      // mid glow
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR, 0, 6.3);
+      ctx.lineWidth = (10 + level * 10) * DPR;
+      ctx.strokeStyle = `rgba(${ringRGB},.5)`;
+      ctx.shadowBlur = (36 + level * 48) * DPR;
+      ctx.shadowColor = ringGlow;
+      ctx.stroke();
+      // hot near-white core — the "lit tube" itself
+      ctx.beginPath();
+      ctx.arc(cx, cy, coreR, 0, 6.3);
+      ctx.lineWidth = (3 + level * 4) * DPR;
+      ctx.strokeStyle = hot;
+      ctx.shadowBlur = (24 + level * 32) * DPR;
+      ctx.shadowColor = ringGlow;
       ctx.stroke();
       ctx.shadowBlur = 0;
-      // outer faint halo ring
-      ctx.beginPath();
-      ctx.arc(cx, cy, coreR * 1.13, 0, 6.3);
-      ctx.lineWidth = 1 * DPR;
-      ctx.strokeStyle = "rgba(255,206,122,.16)";
-      ctx.stroke();
-
     }
 
     // Outer driver: schedules frame() then re-queues itself — one chain only
