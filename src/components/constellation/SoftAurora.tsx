@@ -162,6 +162,12 @@ interface SoftAuroraProps {
   colorSpeed?: number;
   enableMouseInteraction?: boolean;
   mouseInfluence?: number;
+  /** Polled every frame (0..~0.6, e.g. live TTS amplitude while speaking) —
+   * eased toward and used to boost speed/brightness, so the aurora visibly
+   * animates faster/brighter while the assistant talks. Read via a ref
+   * (NOT a prop dependency) so it can change every frame without tearing
+   * down and recreating the ogl renderer. */
+  getIntensity?: () => number;
   className?: string;
 }
 
@@ -180,9 +186,12 @@ export function SoftAurora({
   colorSpeed = 1.0,
   enableMouseInteraction = true,
   mouseInfluence = 0.25,
+  getIntensity,
   className = "absolute inset-0 z-0",
 }: SoftAuroraProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const getIntensityRef = useRef(getIntensity);
+  getIntensityRef.current = getIntensity;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -246,11 +255,20 @@ export function SoftAurora({
       gl.canvas.addEventListener("mouseleave", handleMouseLeave);
     }
 
-    let animationFrameId: number;
+    let animationFrameId = 0;
+    let currentBoost = 0;
 
     function update(time: number) {
-      animationFrameId = requestAnimationFrame(update);
       program.uniforms.uTime.value = time * 0.001;
+
+      // eases toward live intensity (e.g. TTS amplitude while speaking) and
+      // boosts uSpeed/uBrightness — uSpeed already scales how fast the noise
+      // scrolls (see `t = uSpeed * 0.4 * uTime` in the fragment shader), so
+      // this is enough to read as "animating faster" without touching uTime.
+      const targetBoost = getIntensityRef.current?.() ?? 0;
+      currentBoost += (targetBoost - currentBoost) * 0.08;
+      program.uniforms.uSpeed.value = speed * (1 + currentBoost * 0.8);
+      program.uniforms.uBrightness.value = brightness * (1 + currentBoost * 0.7);
 
       if (enableMouseInteraction) {
         currentMouse[0] += 0.05 * (targetMouse[0] - currentMouse[0]);
@@ -264,10 +282,39 @@ export function SoftAurora({
 
       renderer.render({ scene: mesh });
     }
-    animationFrameId = requestAnimationFrame(update);
+    // Cap to 60fps: `uTime` is driven off the real rAF timestamp (not a
+    // per-call accumulator), so throttling how often we call update() only
+    // reduces draw-call rate — it does NOT change the animation's visual
+    // speed. This is the most fill-rate-costly of this page's canvases
+    // (full-screen per-pixel noise, 3 octaves x 2 layers), so it matters
+    // most here: it never stops while the tab is visible, so 15+ minutes
+    // idle is enough sustained GPU load to spin up the fan.
+    const FRAME_INTERVAL_MS = 1000 / 60;
+    let lastFrameAt = 0;
+    function loop(now: number) {
+      animationFrameId = requestAnimationFrame(loop);
+      if (now - lastFrameAt < FRAME_INTERVAL_MS) return;
+      lastFrameAt = now;
+      update(now);
+    }
+    // A full-screen fragment shader is the most fill-rate-costly of this
+    // page's canvases (per-pixel noise, 3 octaves x 2 layers) — stop the
+    // loop entirely while the tab is backgrounded instead of burning GPU
+    // cycles on invisible frames.
+    function onVisibilityChange() {
+      if (document.hidden) {
+        cancelAnimationFrame(animationFrameId);
+        animationFrameId = 0;
+      } else if (!animationFrameId) {
+        animationFrameId = requestAnimationFrame(loop);
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    if (!document.hidden) animationFrameId = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(animationFrameId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("resize", resize);
       if (enableMouseInteraction) {
         gl.canvas.removeEventListener("mousemove", handleMouseMove);
