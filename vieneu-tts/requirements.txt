@@ -3,4 +3,9 @@ uvicorn[standard]==0.34.0
 # VieNeu covers BOTH vi + en; Piper removed. numpy is a VieNeu dep, pinned-open here
 # because app.py imports it directly for the float32->Int16 PCM conversion.
 vieneu==3.2.3
+# Pinned explicitly (not left as vieneu's transitive dep): 0.7.20 (what vieneu==3.2.3
+# resolves to unpinned) classifies language per-WHOLE-TEXT and mixes up ambiguous
+# alnum tokens ("v3", "C4K") next to Vietnamese proper nouns even after diacritics are
+# stripped (see app.py's _prepare_text). 0.7.29+ fixed that — verified empirically.
+sea-g2p>=0.7.29
 numpy

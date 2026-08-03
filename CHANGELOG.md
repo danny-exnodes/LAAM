@@ -9,6 +9,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Constellation: giọng đọc tiếng Anh riêng ("Emma") khi UI ở chế độ EN
+- Trước đây `VOICE_BY_LANG` trong `vieneu-tts/app.py` map cả `vi` lẫn `en` về cùng preset "Thục Đoan" (VieNeu không có sẵn giọng tiếng Anh nào trong 14 preset built-in) — cố ý để dành seam cho sau ("Emma tạm thời chưa cần", spec 2026-07-22). Nay khi UI chuyển sang tiếng Anh, `/constellation` đọc bằng giọng "Emma" (clone từ `tts-samples/piper-en-1.wav` qua tính năng voice cloning của VieNeu), thay vì đọc tiếng Anh bằng giọng Thục Đoan. Embedding được tính sẵn (offline, 1 lần) và lưu ở `vieneu-tts/voices/emma-voice.json` — container vẫn torch-free, không cần tải model lúc chạy; xem `vieneu-tts/voices/README.md` để tạo lại giọng từ mẫu khác.
+
 ### Đã thêm — Constellation: chế độ hội thoại voice rảnh tay (Jarvis)
 - `/constellation` nay có chế độ nói chuyện liên tục: bật "Giọng nói" là vào vòng lặp nghe → tự gửi khi ngừng nói → Jarvis đọc trả lời → tự nghe lượt tiếp, không cần bấm. Nói chen khi Jarvis đang đọc sẽ ngắt Jarvis ngay (barge-in kiểu ChatGPT), chống tự-ngắt bằng 2 cổng (Silero VAD + ngưỡng động theo mức TTS). STT qua `SttProvider` có thể thay bằng Whisper self-host sau. Vòng tròn lõi báo lượt bằng màu: nghe = đỏ-trắng, xử lý = xanh-trắng, nói = vàng.
 - Sửa lỗi voice không nhận được sau khi triển khai: header `Permissions-Policy` toàn site chặn `microphone=()` (giờ `microphone=(self)`); model Silero VAD/onnxruntime-web 404 do không resolve qua Turbopack (giờ tự host ở `public/vad/`). Ngưỡng barge-in (`BARGE_IN_BASE`/`BARGE_IN_TTS_K`) được đo lại từ AEC spike thật (Task 3) — AEC giữ mic nền ~0.02 bất kể TTS to cỡ nào, nên hạ từ (0.14, 0.9) xuống (0.08, 0.12) để giọng nói thật vượt ngưỡng được, thay vì ngưỡng cũ gần như không bao giờ đạt.
