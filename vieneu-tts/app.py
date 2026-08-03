@@ -24,7 +24,7 @@ from vieneu import Vieneu
 
 # "Emma" preset loaded at startup (see load_engine) — VieNeu ships no English-named
 # preset (all 14 built-ins are Vietnamese speakers), so `en` gets its own voice cloned
-# from an English reference clip (tts-samples/vieneu-emma.wav) rather than reusing a
+# from an English reference clip (tts-samples/piper-en-1.wav) rather than reusing a
 # Vietnamese preset. voices/emma-voice.json holds the precomputed speaker embedding +
 # reference codes (plain numbers, no torch needed to load); voices/en-emma-ref.wav is
 # kept only as the source clip for regenerating it — see voices/README.md.
