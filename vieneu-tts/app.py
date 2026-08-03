@@ -24,10 +24,11 @@ from vieneu import Vieneu
 
 # "Emma" preset loaded at startup (see load_engine) — VieNeu ships no English-named
 # preset (all 14 built-ins are Vietnamese speakers), so `en` gets its own voice cloned
-# from an English reference clip (tts-samples/piper-en-1.wav) rather than reusing a
-# Vietnamese preset. voices/emma-voice.json holds the precomputed speaker embedding +
-# reference codes (plain numbers, no torch needed to load); voices/en-emma-ref.wav is
-# kept only as the source clip for regenerating it — see voices/README.md.
+# from an English reference clip (tts-samples/ElevenLabs_Text_to_Speech_audio.wav)
+# rather than reusing a Vietnamese preset. voices/emma-voice.json holds the
+# precomputed speaker embedding + reference codes (plain numbers, no torch needed
+# to load); voices/en-emma-ref.wav is kept only as the source clip for
+# regenerating it — see voices/README.md.
 EN_VOICE_NAME = "Emma"
 EMMA_VOICE_FILE = Path(__file__).parent / "voices" / "emma-voice.json"
 VOICE_BY_LANG = {"vi": "Thục Đoan", "en": EN_VOICE_NAME}
