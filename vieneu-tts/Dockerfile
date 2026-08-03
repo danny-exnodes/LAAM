@@ -12,10 +12,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
+COPY voices/ voices/
 
 # Warm the VieNeu-TTS v3-Turbo ONNX checkpoint into the image at build time
 # (it's pulled via huggingface_hub on first `Vieneu()` call) so the running
-# container needs no internet access and no first-request cold start.
+# container needs no internet access and no first-request cold start. The
+# "Emma" English voice (voices/emma-voice.json — a precomputed embedding, not
+# raw audio) is loaded from app.py's startup hook; no torch needed at runtime.
 RUN python -c "from vieneu import Vieneu; Vieneu()"
 
 EXPOSE 5002

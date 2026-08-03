@@ -44,8 +44,8 @@ export const constellation: Dict = {
   "constellation.boot6": { vi: "trực tuyến", en: "online", zh: "在线" },
   // Spoken greeting on load-complete ({name} = user display name)
   "constellation.greetVoice": {
-    vi: "Chào {name}, Jarvis đang lắng nghe bạn. Hãy cho tôi biết bạn cần gì.",
-    en: "Hi {name}, Jarvis is listening to you. Please tell me what you want.",
-    zh: "你好 {name}，Jarvis 正在聆听。请告诉我你需要什么。",
+    vi: "Chào {name}, Larvis đang lắng nghe bạn. Hãy cho tôi biết bạn cần gì.",
+    en: "Hi {name}, Larvis is listening to you. Please tell me what you want.",
+    zh: "你好 {name}，Larvis 正在聆听。请告诉我你需要什么。",
   },
 };
