@@ -342,6 +342,37 @@ describe("onView", () => {
 
     expect(onView).not.toHaveBeenCalled();
   });
+
+  // Review finding: the drilldown-branch collection site (deriveFromToolResult(plan.name,
+  // detail, ...) near the drilldown detail push) was implemented but never exercised — the
+  // 3 tests above only drive the MAIN dispatch branch. This test configures drilldownPairs
+  // so the drilldown branch actually runs, and makes the LIST result deliberately NOT
+  // descriptor-worthy (1 record, <2 keys) so the only possible source of the emitted view is
+  // the drilldown branch's plan.name/detail — proving that specific code path, not just "the
+  // loop ran and onView fired from somewhere".
+  test("drilldown: descriptor phát ra là của BƯỚC CHI TIẾT (plan.name/detail), không phải bước liệt kê", async () => {
+    const drilldownPairs = [
+      { listTool: "x_list_projects", idField: "id", nameField: "name", detailTool: "x_get_master_record", idArg: "project_id" },
+    ];
+    const listResult = { projects: [{ id: "id-dasin", name: "Dasin" }] }; // 1 record — không dựng được descriptor
+    const askDetail: ChatMessage[] = [
+      { role: "system", content: "SYS" },
+      { role: "user", content: "Cho mình thông tin chi tiết project Dasin" },
+    ];
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "x_list_projects", arguments: {} } }] } })
+      .mockResolvedValueOnce({ message: { content: "Xong." } });
+    const dispatch = vi.fn(async (name: string) => (name === "x_list_projects" ? listResult : rows("detail")));
+    const onView = vi.fn();
+
+    await runToolRounds(askDetail, tools, { callOllama, dispatch }, { drilldownPairs, onView });
+
+    expect(onView).toHaveBeenCalledTimes(1);
+    expect(onView).toHaveBeenCalledWith(
+      expect.objectContaining({ source: expect.objectContaining({ toolName: "x_get_master_record" }) }),
+    );
+  });
 });
 
 describe("seedRequestedTool (P1 - user picked tool, code dispatches)", () => {
