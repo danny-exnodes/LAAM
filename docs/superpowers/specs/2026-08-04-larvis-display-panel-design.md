@@ -4,8 +4,9 @@
 **Trạng thái:** design đã duyệt, chưa có plan
 **Phạm vi:**
 
-- `extractForSpeech` — **cả hai** client Larvis (`ConstellationClient.tsx`, `ConstellationV2Client.tsx`), vì cả hai đang import `stripForSpeech`.
-- `DisplayPanel` + pill — **chỉ `/constellation` (v1)**, nơi user đang thực sự dùng. v2 nhận panel sau, khi v1 đã chạy ổn — không dựng hai lần.
+- `extractForSpeech` — hàm **mới** trong `src/lib/chat/voice.ts`, **chỉ `/constellation` (v1)** dùng.
+- `stripForSpeech` — **giữ nguyên, không đổi hành vi**. `ConstellationV2Client.tsx` tiếp tục dùng nó. Lý do: extract *bỏ* bảng khỏi lời nói, nên client nào không có panel mà dùng extract thì user **mất trắng** dữ liệu — v2 chưa có panel nên phải giữ đường `tablesToProse` cũ.
+- `DisplayPanel` + pill — **chỉ v1**, nơi user đang thực sự dùng. v2 nhận cả panel lẫn `extractForSpeech` sau, trong một lượt thay đổi riêng.
 - Text chat (`ChatClient.tsx`) **không đụng tới**: nó đã render bảng/chart inline.
 
 ## Vấn đề
@@ -93,7 +94,7 @@ Câu như "so sánh iPhone và Android" không gọi tool nào; model tự viế
 export function extractForSpeech(md: string): { speech: string; descriptors: ViewDescriptor[] }
 ```
 
-**Chỉ đổi nhánh xử lý bảng và chart.** Mọi việc khác `stripForSpeech` đang làm — gỡ header, `**bold**`, danh sách đánh số, link — **giữ nguyên không đụng**. Đây là hàm đã được dùng ở cả hai client Larvis, sửa quá tay là hỏng phần đọc văn xuôi vốn đang chạy tốt.
+`extractForSpeech` là hàm **thêm mới**, không sửa `stripForSpeech`. Phần dọn văn xuôi (gỡ header, `**bold**`, danh sách, link, code fence) **dùng chung** một helper nội bộ để hai hàm không trôi khác nhau — chỉ khác ở chỗ bảng đi đâu: `stripForSpeech` → `tablesToProse`, `extractForSpeech` → descriptor + cắt khỏi lời nói.
 
 Bổ sung một nhánh bắt block ` ```chart ` (JSON Chart.js — dạng model đang xuất sẵn, xem `ChartBlock.tsx`).
 
