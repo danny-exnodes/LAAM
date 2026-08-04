@@ -48,10 +48,14 @@ export const constellation: Dict = {
     en: "Hi {name}, Larvis is listening to you. Please tell me what you want.",
     zh: "你好 {name}，Larvis 正在聆听。请告诉我你需要什么。",
   },
+  // Câu trỏ panel — code chèn vào CUỐI lời nói khi lượt đó có khối hiển thị.
+  // Cố ý KHÔNG nói "bảng": một lượt có thể ra bảng, ra biểu đồ, hoặc cả hai — nói cứng
+  // "bảng" là nói sai với lượt chỉ có biểu đồ. Và đây là câu BỔ SUNG, không thay cho nội
+  // dung: phần đọc trước đó đã phải tự trả lời xong câu hỏi (xem VOICE_GUIDE).
   "constellation.viewPointer": {
-    vi: "Bảng đang hiện trên màn hình.",
-    en: "The table is on screen now.",
-    zh: "表格已显示在屏幕上。",
+    vi: "Bạn có thể xem chi tiết hơn ở phần hiển thị bên trên.",
+    en: "You can see more detail in the panel above.",
+    zh: "您可以在上方的面板中查看更多详细信息。",
   },
   "constellation.viewPill": { vi: "Xem bảng", en: "View table", zh: "查看表格" },
   "constellation.viewClose": { vi: "Đóng bảng", en: "Close table", zh: "关闭表格" },

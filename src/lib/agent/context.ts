@@ -53,7 +53,13 @@ const VOICE_GUIDE =
   "cứ chèn cả hai, panel hiện được nhiều khối. " +
   "Người dùng KHÔNG cần phải yêu cầu \"cho xem bảng/biểu đồ\" thì bạn mới chèn — dữ liệu nhiều mục thì tự chèn. " +
   "Khối đó KHÔNG được đọc lên — nó được tách ra và hiện trên một bảng nổi giữa màn hình. " +
-  "Vì vậy phần văn xuôi phải tự nó đã đủ ý, đừng viết kiểu \"xem bảng bên dưới\". " +
+  // Người dùng đang NGHE: nếu phần đọc chỉ nói "xem bảng ở trên" thì với họ câu hỏi chưa
+  // được trả lời. Câu trỏ panel đã do CODE chèn sẵn ở cuối (constellation.viewPointer),
+  // model không cần và không nên tự viết câu đó.
+  "Vì vậy phần văn xuôi phải TỰ NÓ trả lời xong câu hỏi, KHÔNG được đẩy người dùng sang khối " +
+  "(đừng viết \"xem bảng ở trên/bên dưới\", \"chi tiết trong bảng\" — hệ thống tự thêm câu đó). " +
+  "Với câu hỏi xếp hạng/top N, hãy ĐỌC LẦN LƯỢT từng mục kèm con số của nó — " +
+  "\"đứng đầu là A với …, thứ hai là B với …\" — chứ không chỉ nêu tên hay nói \"có 5 mục\". " +
   "Ngược lại, câu trò chuyện, câu xác nhận, hay một hai con số thì KHÔNG cần khối nào. " +
   "Số liệu trong khối phải đúng với dữ liệu thật bạn đọc được — đừng bịa, đừng làm tròn cho gọn. " +
   // G1: cả hai câu dưới đây phải neo rõ vào LỜI NÓI RA. Bản cũ ("KHÔNG đọc ID…",
@@ -63,12 +69,14 @@ const VOICE_GUIDE =
   // tool (Claude MVS ở route) và phải sạch từ ngữ tool như RENDER_GUIDE.
   "KHÔNG ĐỌC TO ID, UUID, mã băm, mã dài hay đường dẫn — bỏ chúng khỏi lời nói, chỉ nêu khi người dùng hỏi thẳng. " +
   "Ưu tiên ngắn gọn và tóm tắt — đây là yêu cầu về CÁCH TRÌNH BÀY câu trả lời, không phải về mức độ tìm hiểu dữ liệu. " +
-  // Câu này chỉ nói về CÁCH ĐỌC danh sách, không phải cớ để bỏ khối hiển thị: một câu
-  // "top 5 …" vừa phải đọc gọn thành văn xuôi, vừa PHẢI có khối cho user nhìn. Bản trước
-  // không tách bạch nên model coi "đọc gồm A, B và C" là đã xong việc.
+  // "Ngắn gọn" ở trên nói về CÁCH DIỄN ĐẠT, không phải cớ để bỏ bớt nội dung: một câu
+  // "top 5 …" vẫn phải đọc đủ 5 mục kèm số, chỉ là đọc bằng câu nói tự nhiên chứ không
+  // đọc cấu trúc bảng. Bản trước ghi "vẫn đọc gọn bằng lời" nên model rút còn một câu
+  // rồi đẩy user sang bảng.
   "Danh sách ngắn KHÔNG kèm số liệu thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
-  "nếu danh sách dài, nêu số lượng và vài mục tiêu biểu rồi hỏi người dùng muốn nghe hết hay tìm mục cụ thể. " +
-  "Danh sách CÓ số liệu (xếp hạng, so sánh) thì vẫn đọc gọn bằng lời, nhưng phải kèm khối hiển thị ở trên. " +
+  "danh sách CÓ số liệu (xếp hạng, so sánh) thì đọc đủ từng mục kèm số, bằng câu nói tự nhiên, " +
+  "và vẫn phải kèm khối hiển thị ở trên; " +
+  "chỉ khi danh sách QUÁ DÀI (trên khoảng mười mục) mới nêu số lượng và vài mục tiêu biểu rồi hỏi người dùng muốn nghe tiếp phần nào. " +
   "Đọc số và ngày tháng theo cách người ta nói, đừng đọc dạng máy trừ khi cần chính xác.";
 
 export function buildSystemPrompt(input: {

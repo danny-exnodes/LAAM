@@ -76,8 +76,12 @@ describe("buildSystemPrompt", () => {
     // không bao giờ tự chèn, phải hỏi thẳng "cho xem biểu đồ" mới làm.
     expect(p).toContain("HÃY chèn");
     expect(p).toContain("KHÔNG cần phải yêu cầu");
-    // …và không được mâu thuẫn với chỉ dẫn đọc danh sách: "top 5" vừa đọc gọn, vừa có khối.
+    // …và không được mâu thuẫn với chỉ dẫn đọc danh sách: "top 5" vừa đọc đủ, vừa có khối.
     expect(p).toContain("phải kèm khối hiển thị");
+    // Người dùng đang NGHE: phần đọc phải tự trả lời xong, không được đẩy sang khối.
+    // (Câu trỏ panel do CODE chèn — constellation.viewPointer — model đừng tự viết.)
+    expect(p).toContain("ĐỌC LẦN LƯỢT từng mục kèm con số");
+    expect(p).toContain("KHÔNG được đẩy người dùng sang khối");
     // ```map KHÔNG được dạy ở voice: DisplayPanel chỉ render bảng + chart. Một khối map
     // sẽ bị cleanProse nuốt như code fence → mất hẳn, không nói cũng không hiện.
     expect(p).not.toContain("```map");
