@@ -5,6 +5,7 @@
 // Chart.js groups values by dataset; recharts wants one row object per label, so
 // chartToRecharts() transposes labels×datasets into rows + a series descriptor.
 
+import { useMemo } from "react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -109,7 +110,12 @@ export function chartToRecharts(raw: string): ChartModel {
 export function ChartBlock({ raw }: { raw: string }) {
   const theme = useChartTheme();
   const axisTick = { fontSize: 11, fill: theme.axis };
-  const model = chartToRecharts(raw);
+  // Memo theo `raw`: chat re-render MỌI message theo từng token streaming; parse lại
+  // ở đây tức là đưa recharts rows/series identity MỚI mỗi render → JavascriptAnimate
+  // (effect deps không ổn định phía recharts 3.x) cleanup+restart animation liên tục,
+  // có điều kiện timing (tab ẩn / reduced-motion) sẽ tự nuôi thành vòng lặp
+  // "Maximum update depth exceeded". Identity ổn định cắt nguồn churn đó.
+  const model = useMemo(() => chartToRecharts(raw), [raw]);
   if ("error" in model) {
     // S5: don't lose the model's content — show it under the error for inspection.
     return (
@@ -130,7 +136,7 @@ export function ChartBlock({ raw }: { raw: string }) {
             <PieChart>
               <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Pie data={rows} dataKey="value" nameKey="name" outerRadius="80%">
+              <Pie data={rows} dataKey="value" nameKey="name" outerRadius="80%" isAnimationActive={false}>
                 {rows.map((_, i) => (
                   <Cell key={i} fill={(sliceColors ?? PALETTE)[i % (sliceColors ?? PALETTE).length]} />
                 ))}
@@ -144,7 +150,7 @@ export function ChartBlock({ raw }: { raw: string }) {
               <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {series.map((s) => (
-                <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2.5} dot={{ r: 3, fill: s.color }}>
+                <Line key={s.key} type="monotone" dataKey={s.key} name={s.label} stroke={s.color} strokeWidth={2.5} dot={{ r: 3, fill: s.color }} isAnimationActive={false}>
                   {series.length === 1 && <LabelList dataKey={s.key} position="top" fontSize={11} fill={theme.axis} />}
                 </Line>
               ))}
@@ -157,7 +163,7 @@ export function ChartBlock({ raw }: { raw: string }) {
               <Tooltip contentStyle={theme.tooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               {series.map((s) => (
-                <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={64}>
+                <Bar key={s.key} dataKey={s.key} name={s.label} fill={s.color} radius={[3, 3, 0, 0]} maxBarSize={64} isAnimationActive={false}>
                   {/* S4: value labels so bars are readable without reading the axis (single-series only, to avoid clutter) */}
                   {series.length === 1 && <LabelList dataKey={s.key} position="top" fontSize={11} fill={theme.axis} />}
                 </Bar>
