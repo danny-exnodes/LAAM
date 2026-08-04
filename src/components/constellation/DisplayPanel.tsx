@@ -75,9 +75,12 @@ export function DisplayPanel({
       aria-hidden={!open}
       className={[
         "absolute left-[11%] right-[11%] top-[13%] z-30 max-h-[74vh] overflow-y-auto rounded-2xl",
-        // Nền mờ hơn hẳn (0.92 → 0.55) để thấy được sao/sóng phía sau; bù lại tăng
-        // backdrop-blur (xl → 2xl) và thêm viền sáng trong để chữ vẫn đọc rõ trên nền động.
-        "border border-[#5bd6ff]/25 bg-[#08182a]/55 backdrop-blur-2xl",
+        // Nền mờ hơn hẳn (0.92 → 0.55) để thấy được sao/sóng phía sau; viền sáng trong
+        // (inset highlight, ở shadow dưới) giữ chữ đọc được trên nền động.
+        // backdrop-blur giữ ở `lg` (16px), KHÔNG lên 2xl (40px): phía sau panel là canvas
+        // WebGL vẽ lại liên tục, nên mỗi khung hình trình duyệt phải blur lại toàn bộ vùng
+        // nền — bán kính càng lớn càng đắt, và đó là thứ làm cả trang khựng lúc panel hiện.
+        "border border-[#5bd6ff]/25 bg-[#08182a]/55 backdrop-blur-lg",
         "p-4 text-[#eaf6ff]",
         // Quầng vàng mềm hơn nền cũ — nền trong rồi thì shadow đậm sẽ thành viền cứng.
         "shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_0_0_1px_rgba(255,196,80,0.30),0_0_34px_rgba(255,196,80,0.18),0_18px_44px_rgba(0,0,0,0.40)]",

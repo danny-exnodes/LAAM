@@ -192,18 +192,22 @@ body::after {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(420%); }
 }
-/* Larvis display panel (constellation): "hiện hình" ra khỏi nền sao — mờ + nhoè +
-   thu nhỏ nhẹ rồi nét dần, thay vì trượt vào như panel thường. Vào chậm hơn ra
-   (0.34s vs 0.2s) và dùng ease-out-expo để cảm giác dừng lại dứt khoát.
-   Ra nhanh + nhoè mạnh hơn: đóng thì phải dứt khoát, không kéo dài.
-   PANEL_EXIT_MS trong DisplayPanel.tsx phải ≥ thời lượng laam-panel-out. */
+/* Larvis display panel (constellation): nổi lên từ nền sao — mờ + thu nhỏ nhẹ rồi
+   bung ra. Vào chậm hơn ra (0.34s vs 0.2s), ease-out-expo cho cảm giác dừng dứt khoát.
+   PANEL_EXIT_MS trong DisplayPanel.tsx phải ≥ thời lượng laam-panel-out.
+
+   CHỈ opacity + transform. KHÔNG animate `filter: blur()` ở đây: panel là element
+   lớn (78% bề ngang, tới 74vh) và đã có `backdrop-blur` — animate blur trên nó bắt
+   trình duyệt rasterize lại cả vùng nền MỖI KHUNG HÌNH, chồng lên vòng lặp WebGL của
+   ParticleFieldBackground → cả trang khựng đúng lúc panel hiện ra (đã đo bằng mắt,
+   bản đầu có blur trong keyframe). */
 @keyframes laam-panel-in {
-  from { opacity: 0; transform: translateY(-12px) scale(0.96); filter: blur(12px); }
-  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  from { opacity: 0; transform: translate3d(0, -12px, 0) scale(0.96); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
 }
 @keyframes laam-panel-out {
-  from { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-  to { opacity: 0; transform: translateY(-8px) scale(0.98); filter: blur(10px); }
+  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  to { opacity: 0; transform: translate3d(0, -8px, 0) scale(0.98); }
 }
 .anim-panel-in { animation: laam-panel-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-panel-out { animation: laam-panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
