@@ -58,7 +58,7 @@ export function parseDrilldownPairs(raw: string | undefined | null): DrilldownPa
 }
 
 // MCP trả kết quả dạng { text: "<chuỗi JSON>" }; tool nội bộ trả object thuần. Nhận cả hai.
-function unwrap(result: unknown): unknown {
+export function unwrapToolResult(result: unknown): unknown {
   if (result && typeof result === "object" && typeof (result as { text?: unknown }).text === "string") {
     try {
       return JSON.parse((result as { text: string }).text);
@@ -90,7 +90,7 @@ function findEntities(payload: unknown, pair: DrilldownPair): Array<Record<strin
 // Trả bước tra cứu tiếp theo, hoặc null khi không đủ chắc chắn. Mơ hồ (hai tên khớp dài
 // bằng nhau) → null: thà để model tự xoay còn hơn code kéo về đúng-một-nửa dữ liệu sai.
 export function planDrilldown(pair: DrilldownPair, result: unknown, userMessage: string): DrilldownPlan | null {
-  const entities = findEntities(unwrap(result), pair);
+  const entities = findEntities(unwrapToolResult(result), pair);
   if (!entities.length) return null;
   const haystack = userMessage.toLowerCase();
 
