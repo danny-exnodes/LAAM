@@ -33,4 +33,23 @@ describe("buildPreview", () => {
     const p = buildPreview("future_write", { url: "x?token=abc123def456ghi" });
     expect(p.fields[0].value).toContain("‹redacted›");
   });
+  // Card là thứ user duyệt TRƯỚC khi cho phép ghi (Rule 13) — args dạng object (vd
+  // `values` của kg_insert_datasource_row) phải hiện đúng nội dung JSON, không phải
+  // "[object Object]" (che mất chính dữ liệu sắp được ghi).
+  test("args là object/array → render JSON, không phải [object Object]", () => {
+    const p = buildPreview("mcp__daab__kg_insert_datasource_row", {
+      table: "customers",
+      values: { customer_id: "CUS-1", first_name: "Lan" },
+      tags: ["a", "b"],
+    });
+    const values = p.fields.find((f) => f.label === "values")!.value;
+    expect(values).not.toContain("[object Object]");
+    expect(values).toContain('"customer_id":"CUS-1"');
+    expect(p.fields.find((f) => f.label === "tags")!.value).toBe('["a","b"]');
+  });
+  test("secret NESTED trong object vẫn bị redact trước khi render JSON", () => {
+    const p = buildPreview("future_write", { cfg: { url: "x?token=abc123def456ghi" } });
+    expect(p.fields[0].value).toContain("‹redacted›");
+    expect(p.fields[0].value).not.toContain("abc123def456ghi");
+  });
 });
