@@ -18,6 +18,7 @@ import { resolveKind } from "@/lib/agent/safety/policy";
 import { looksLikeWriteIntent, guardWriteClaim } from "@/lib/agent/safety/write-claim-guard";
 import { claudeStream, isClaudeModel, ClaudeUnavailableError } from "@/lib/llm/claude";
 import { isBytePlusModel, byteplusChat, byteplusStream, BytePlusUnavailableError } from "@/lib/llm/byteplus";
+import { replayBudgetFor } from "@/lib/chat/replay-budget";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
@@ -358,9 +359,11 @@ export async function POST(req: Request) {
   const now = Date.now();
   const lang = readLang(req);
 
-  // --- Summarize (SP-3): bound lịch sử replay theo char-budget dẫn xuất từ num_ctx. ---
+  // --- Summarize (SP-3): bound lịch sử replay theo char-budget PROVIDER-AWARE ---
+  // (lib/chat/replay-budget). Budget cũ dẫn xuất từ num_ctx 16k local áp cho cả cloud
+  // từng nén hội thoại phân tích thành summary từ ~turn 15 dù cửa sổ cloud ~128k.
   const plan = planHistory(history as HistoryMsg[], convSummary, convWatermark, {
-    budgetChars: REPLAY_BUDGET_CHARS,
+    budgetChars: replayBudgetFor(model, REPLAY_BUDGET_CHARS),
   });
   let effectiveSummary = convSummary;
   if (plan.needsSummary) {

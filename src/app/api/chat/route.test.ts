@@ -439,6 +439,10 @@ describe("C1 Claude provider MVS", () => {
     vi.stubEnv("BYTEPLUS_API_KEY", "");
     vi.stubEnv("INTERNAL_MODEL", "");
     vi.stubEnv("DEFAULT_CHAT_MODEL", "qwen-local");
+    // Ép budget replay cloud xuống floor (= budget local) để fixture ~50k chars vẫn
+    // vượt ngưỡng và kích summarize — test này kiểm MODEL nào summarize, không kiểm
+    // NGƯỠNG cloud (ngưỡng có test riêng ở lib/chat/replay-budget.test.ts).
+    vi.stubEnv("CLOUD_REPLAY_BUDGET_CHARS", "1");
     mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const big = "x".repeat(10_000);
     const longHistory = [
