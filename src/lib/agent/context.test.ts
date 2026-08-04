@@ -67,7 +67,10 @@ describe("buildSystemPrompt", () => {
     // (Trước đây voice cấm hẳn markdown và panel do code tự suy từ tool result — cách đó
     // hiện panel cho cả bước tra cứu nội bộ không liên quan tới câu trả lời.)
     expect(p).toContain("```chart");
-    expect(p).toContain("TỐI ĐA MỘT khối"); // 1 panel/lượt — chốt ngay ở prompt
+    // Cho phép NHIỀU khối: /chat hiện cả bảng lẫn chart cho một câu "top 5 …". Bản trước
+    // ghi "TỐI ĐA MỘT khối" → model chọn chart, bỏ bảng, user mất phần số chính xác.
+    expect(p).toContain("CẢ BẢNG LẪN BIỂU ĐỒ");
+    expect(p).not.toContain("TỐI ĐA MỘT khối");
     expect(p).toContain("KHÔNG được đọc lên"); // khối bị tách khỏi lời nói, không đọc
     // Trigger phải MỆNH LỆNH: bản đầu viết "bạn được chèn" (tuỳ chọn) → model gần như
     // không bao giờ tự chèn, phải hỏi thẳng "cho xem biểu đồ" mới làm.

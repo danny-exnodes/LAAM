@@ -16,13 +16,15 @@ export type Density = "focus" | "detail";
 const FOCUS_ROWS = 3; // liếc mắt đọc được; detail hiện hết những gì descriptor giữ
 
 export function DisplayPanel({
-  view,
+  views,
   density,
   onClose,
   onToggleDensity,
   agentLabel,
 }: {
-  view: ViewDescriptor;
+  // Một lượt có thể vừa có bảng vừa có chart — /chat hiện cả hai, panel cũng phải vậy.
+  // Trước đây prop là MỘT descriptor nên model trả 2 khối thì user chỉ thấy 1.
+  views: ViewDescriptor[];
   density: Density;
   onClose: () => void;
   onToggleDensity: () => void;
@@ -36,36 +38,36 @@ export function DisplayPanel({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const rows = view.rows ?? [];
-  const shown = density === "focus" ? rows.slice(0, FOCUS_ROWS) : rows;
-  const columns = view.columns ?? [];
-  const chartRaw = descriptorToChartRaw(view);
+  const head = views[0];
 
   // Ranh giới tin cậy: số từ tool là số code lấy được; số từ model là model kể lại.
   // Hai thứ đó không được trông giống nhau trên màn hình.
   // Chỉ đếm dòng khi dòng có nghĩa. Descriptor kind="chart" (nguồn B) có đúng 1 "dòng"
   // là chuỗi JSON — in "· 1 ·" ra badge là con số vô nghĩa, tệ hơn không in.
-  const countable = view.kind === "table" || view.kind === "record";
+  // Đếm cộng dồn qua các descriptor đếm được (bảng + chart trong cùng lượt).
+  const countableRows = views
+    .filter((v) => v.kind === "table" || v.kind === "record")
+    .reduce((n, v) => n + (v.rows?.length ?? 0), 0);
   const badge =
-    view.source.type === "tool"
+    head.source.type === "tool"
       ? [
           agentLabel,
-          countable ? String(rows.length) : null,
-          new Date(view.source.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          countableRows > 0 ? String(countableRows) : null,
+          new Date(head.source.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         ].filter(Boolean).join(" · ")
       : t("constellation.viewSourceAi");
 
   return (
     <section
       role="region"
-      aria-label={view.title}
+      aria-label={head.title}
       className="pointer-events-auto absolute left-[11%] right-[11%] top-[13%] z-30 max-h-[74vh] overflow-y-auto rounded-2xl border border-[#5bd6ff]/30 bg-[#08182a]/[0.92] p-4 text-[#eaf6ff] shadow-[0_0_0_1.5px_rgba(255,196,80,0.45),0_0_30px_rgba(255,196,80,0.30),0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl"
     >
       <div className="mb-2 flex items-start gap-2">
         <span className="rounded-full border border-emerald-400/40 bg-emerald-400/15 px-2 py-0.5 text-[10px] text-emerald-300">
           {badge}
         </span>
-        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{view.title}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{head.title}</h2>
         <button
           type="button"
           onClick={onToggleDensity}
@@ -84,6 +86,31 @@ export function DisplayPanel({
         </button>
       </div>
 
+      {views.map((v, i) => (
+        <ViewBlock key={i} view={v} density={density} t={t} />
+      ))}
+    </section>
+  );
+}
+
+// Thân của MỘT descriptor. Tách ra để panel map qua nhiều descriptor mà không nhân bản
+// markup — một lượt có thể vừa có bảng vừa có chart.
+function ViewBlock({
+  view,
+  density,
+  t,
+}: {
+  view: ViewDescriptor;
+  density: Density;
+  t: (key: string, vars?: Record<string, string>) => string;
+}) {
+  const rows = view.rows ?? [];
+  const shown = density === "focus" ? rows.slice(0, FOCUS_ROWS) : rows;
+  const columns = view.columns ?? [];
+  const chartRaw = descriptorToChartRaw(view);
+
+  return (
+    <>
       {columns.length > 0 && (
         <div className="max-h-[38vh] overflow-auto">
           <table className="w-full border-collapse text-[12px]">
@@ -137,6 +164,6 @@ export function DisplayPanel({
           <ChartBlock raw={chartRaw} />
         </div>
       )}
-    </section>
+    </>
   );
 }

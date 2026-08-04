@@ -46,10 +46,11 @@ const VOICE_GUIDE =
   // khi thật sự đáng nhìn" — model hiểu là tuỳ chọn nên gần như không bao giờ chèn, phải
   // hỏi thẳng "cho xem biểu đồ" nó mới làm.
   "Khi câu trả lời chứa dữ liệu NHIỀU MỤC — xếp hạng/top N, so sánh nhiều đối tượng, " +
-  "số liệu theo thời gian, hay từ ba dòng dữ liệu trở lên — HÃY chèn TỐI ĐA MỘT khối hiển thị: " +
-  "hoặc một bảng markdown (khi cần thấy con số chính xác), hoặc một khối ```chart " +
+  "số liệu theo thời gian, hay từ ba dòng dữ liệu trở lên — HÃY chèn khối hiển thị: " +
+  "một bảng markdown (để thấy con số chính xác) và/hoặc một khối ```chart " +
   'chứa JSON kiểu Chart.js: {"type":"bar|line|pie","title":"…","data":{"labels":[…],"datasets":[{"label":"…","data":[…]}]}} ' +
-  "(khi cần thấy chênh lệch/xu hướng). " +
+  "(để thấy chênh lệch/xu hướng). Với dữ liệu xếp hạng, CẢ BẢNG LẪN BIỂU ĐỒ đều hữu ích — " +
+  "cứ chèn cả hai, panel hiện được nhiều khối. " +
   "Người dùng KHÔNG cần phải yêu cầu \"cho xem bảng/biểu đồ\" thì bạn mới chèn — dữ liệu nhiều mục thì tự chèn. " +
   "Khối đó KHÔNG được đọc lên — nó được tách ra và hiện trên một bảng nổi giữa màn hình. " +
   "Vì vậy phần văn xuôi phải tự nó đã đủ ý, đừng viết kiểu \"xem bảng bên dưới\". " +
