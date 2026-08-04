@@ -2,6 +2,8 @@
 // execute→dispatch. onEvent phát ở makeDispatch (chokepoint), không lặp ở đây.
 import type { ConnectorTool } from "@/lib/connectors/types";
 import { evictOldToolResults } from "./loop-context";
+import { planDrilldown, type DrilldownPair } from "./drilldown";
+import { PendingWriteSignal } from "@/lib/agent/safety/gate";
 
 // W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
 // Ollama multimodal. Optional/additive: vắng mặt ⇒ wire-format y như cũ.
@@ -21,6 +23,16 @@ export type ToolRoundsDeps = {
 // khi thật sự đã web_search → đường chat thường (không web_search) không bị động.
 const WEB_READ_NUDGE =
   "Bạn có thể gọi web_read với một URL ở trên để đọc nội dung đầy đủ trước khi trả lời.";
+
+// G4 grounding guard: model trả lời NGAY ở vòng 0 với 0 tool call trong khi tool đọc
+// dữ liệu thật đang có sẵn → câu trả lời đó không có gì chống lưng (đo trên gpt-oss-120b:
+// có lượt bịa nguyên hồ sơ một dự án, kèm cả tên người phụ trách). Hỏi lại ĐÚNG MỘT lần
+// với lời nhắc này. Điều kiện kích hoạt thuần CẤU TRÚC (vòng 0 + 0 tool call + có tool),
+// KHÔNG phân loại ý định người dùng bằng model hay bằng danh sách từ khoá (Rule 5).
+// Vế "nếu không cần thì trả lời trực tiếp" là đường thoát cho chitchat: câu chào vẫn
+// được trả lời thẳng, chỉ tốn thêm một vòng ngắn (đo: lượt chitchat ~1.5-1.8s).
+const GROUNDING_NUDGE =
+  "Câu hỏi này có thể cần dữ liệu thật từ hệ thống. Nếu cần, hãy gọi công cụ phù hợp trước khi trả lời; nếu không cần thì trả lời trực tiếp.";
 
 // Kết quả web_search có chứa URL không? (shape: { results: [{ url, ... }] })
 function searchResultHasUrl(result: unknown): boolean {
@@ -66,6 +78,7 @@ const REPEAT_THRESHOLD = 3; // same tool+args this many times → stuck → stop
 const DEFAULT_TOOL_BUDGET_CHARS = 37_000;
 
 export type ToolRoundsOpts = {
+  drilldownPairs?: DrilldownPair[]; // D2: cặp "tool liệt kê → tool chi tiết" (config, mặc định tắt)
   maxRounds?: number;
   budgetChars?: number; // evict oldest tool results when the convo exceeds this
   keepRecent?: number; // tool results kept verbatim during eviction (default 3)
@@ -105,6 +118,12 @@ export async function runToolRounds(
   const keepRecent = opts.keepRecent ?? 3;
   let convo: ChatMessage[] = messages.slice();
   let webReadNudged = convoHasWebRead(convo);
+  let groundingNudged = false; // G4: one-shot latch — nhắc grounding tối đa 1 lần/lượt
+  const drilldownPairs = opts.drilldownPairs ?? [];
+  // Câu hỏi của lượt này = message user CUỐI trong lịch sử truyền vào (drilldown khớp tên
+  // theo câu người dùng vừa hỏi, không phải theo cả hội thoại).
+  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  let drilledDown = false;
   const seen = new Map<string, number>(); // repeat-detection: tool+args → count
 
   for (let i = 0; i < maxRounds; i++) {
@@ -132,6 +151,28 @@ export async function runToolRounds(
         const result = await deps.dispatch(name, args);
         convo.push({ role: "tool", content: JSON.stringify(result) });
         if (name === "web_search" && searchResultHasUrl(result)) sawWebSearchWithUrl = true;
+        // D2: tool liệt kê vừa chạy + câu hỏi nhắc đúng tên một mục trong kết quả →
+        // CODE đi tiếp bước chi tiết (xem drilldown.ts). Một lần/lượt: nếu không, model
+        // gọi lại tool liệt kê là lại kéo thêm một bản ghi chi tiết nữa.
+        if (!drilledDown) {
+          const pair = drilldownPairs.find((p) => p.listTool === name);
+          const plan = pair && lastUserMessage ? planDrilldown(pair, result, lastUserMessage) : null;
+          if (plan) {
+            drilledDown = true;
+            // Fail-soft: tool chi tiết hỏng thì lượt vẫn trả lời được bằng dữ liệu liệt kê
+            // đã có (nếu để ném, cả lượt chết dù bước này chỉ là bước làm giàu thêm).
+            // PendingWriteSignal KHÔNG bị nuốt: cặp drilldown cấu hình nhầm sang tool ghi
+            // phải nổ ra ngoài để route suspend chờ xác nhận (Rule 12).
+            try {
+              const detail = await deps.dispatch(plan.name, plan.args);
+              convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: plan.name, arguments: plan.args } }] });
+              convo.push({ role: "tool", content: JSON.stringify(detail) });
+            } catch (e) {
+              if (e instanceof PendingWriteSignal) throw e;
+              console.warn(`[drilldown] ${plan.name} lỗi — bỏ qua bước chi tiết`, e);
+            }
+          }
+        }
       }
       if (sawWebSearchWithUrl && !webReadNudged) {
         convo.push({ role: "tool", content: WEB_READ_NUDGE });
@@ -144,6 +185,14 @@ export async function runToolRounds(
         opts.onBackstop?.();
         break;
       }
+      continue;
+    }
+    if (!isLastRound && i === 0 && tools.length > 0 && !groundingNudged) {
+      // G4: trả lời ngay ở vòng đầu mà chưa chạm dữ liệu nào → nhắc 1 lần rồi hỏi lại.
+      // Latch giữ đúng MỘT lần/lượt: model không chịu gọi tool ở vòng 2 thì thoát bình
+      // thường (giữ câu trả lời), không quay vòng tới backstop.
+      groundingNudged = true;
+      convo.push({ role: "tool", content: GROUNDING_NUDGE });
       continue;
     }
     if (isLastRound) opts.onBackstop?.(); // reached the backstop round → forced text → honest signal

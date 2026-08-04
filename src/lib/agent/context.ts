@@ -34,8 +34,14 @@ const VOICE_GUIDE =
   "Đây là hội thoại bằng giọng nói — câu trả lời của bạn sẽ được đọc thành tiếng. " +
   "Hãy trả lời như đang NÓI chuyện tự nhiên: câu ngắn, mạch lạc, KHÔNG dùng markdown " +
   "(không bảng, không gạch đầu dòng, không tiêu đề, không khối mã). " +
-  "KHÔNG đọc ID, UUID, mã băm, mã dài hay đường dẫn — bỏ qua chúng, chỉ nêu khi người dùng hỏi thẳng. " +
-  "Ưu tiên ngắn gọn và tóm tắt. Danh sách ngắn thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
+  // G1: cả hai câu dưới đây phải neo rõ vào LỜI NÓI RA. Bản cũ ("KHÔNG đọc ID…",
+  // "Ưu tiên ngắn gọn") bị model hiểu là chỉ dẫn về mức độ TRA CỨU: nó dừng sau 1 tool
+  // liệt kê và né luôn các tool nhận UUID → trả lời nông/bịa (đo: 3/17 lượt voice hỏng,
+  // 0/6 lượt text). Không nhắc "công cụ" ở đây — VOICE_GUIDE còn dùng cho đường KHÔNG
+  // tool (Claude MVS ở route) và phải sạch từ ngữ tool như RENDER_GUIDE.
+  "KHÔNG ĐỌC TO ID, UUID, mã băm, mã dài hay đường dẫn — bỏ chúng khỏi lời nói, chỉ nêu khi người dùng hỏi thẳng. " +
+  "Ưu tiên ngắn gọn và tóm tắt — đây là yêu cầu về CÁCH TRÌNH BÀY câu trả lời, không phải về mức độ tìm hiểu dữ liệu. " +
+  "Danh sách ngắn thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
   "nếu danh sách dài, nêu số lượng và vài mục tiêu biểu rồi hỏi người dùng muốn nghe hết hay tìm mục cụ thể. " +
   "Đọc số và ngày tháng theo cách người ta nói, đừng đọc dạng máy trừ khi cần chính xác.";
 
@@ -78,7 +84,17 @@ export function buildSystemPrompt(input: {
       "hay bản tóm tắt trước đó, kể cả khi bạn nghĩ mình đã biết câu trả lời. " +
       // Trust structured tool output over prose (Rule 13): when a result carries structured data
       // (JSON, arrays), count/classify from that data — never from a prose summary — and never invent a total.
-      "Khi kết quả trả về có dữ liệu cấu trúc (JSON, mảng), hãy đếm và phân loại từ chính dữ liệu cấu trúc đó, không suy từ đoạn văn tóm tắt, và không tự bịa con số tổng."
+      "Khi kết quả trả về có dữ liệu cấu trúc (JSON, mảng), hãy đếm và phân loại từ chính dữ liệu cấu trúc đó, không suy từ đoạn văn tóm tắt, và không tự bịa con số tổng." +
+      // G1: chỉ voice — gỡ hiểu nhầm "nói ngắn ⇒ tra cứu ít" mà VOICE_GUIDE gây ra.
+      // Đặt trong KHỐI TOOL (không trong VOICE_GUIDE) để đường không-tool vẫn sạch từ
+      // ngữ tool. Câu cuối nhắm đúng lỗi đã đo: model coi một kết quả liệt kê tổng quan
+      // là đã trả lời xong câu hỏi "chi tiết về X".
+      (input.mode === "voice"
+        ? " Yêu cầu nói ngắn gọn và không đọc ID ở trên CHỈ áp dụng cho câu chữ đọc lên: " +
+          "KHÔNG được vì thế mà giảm số bước tra cứu, và vẫn phải dùng ID/UUID làm tham số khi gọi công cụ. " +
+          "Khi người dùng hỏi chi tiết về một đối tượng cụ thể, một kết quả liệt kê tổng quan thường CHƯA đủ — " +
+          "hãy tra tiếp bằng công cụ chi tiết rồi mới tóm tắt bằng lời."
+        : "")
     : "";
   const guide = input.mode === "voice" ? VOICE_GUIDE : RENDER_GUIDE;
   return [base, `Hôm nay là ${date}.`, langHint, tools, guide].filter(Boolean).join(" ");

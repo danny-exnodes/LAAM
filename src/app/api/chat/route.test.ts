@@ -806,7 +806,10 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       "data: [DONE]\n\n";
     const fetchMock = vi
       .fn()
-      // round 1: OpenAI non-stream, NO tool_calls → tool-loop ends after one round
+      // round 1: OpenAI non-stream, NO tool_calls
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
+      // round 2: G4 grounding guard hỏi lại ĐÚNG một lần khi vòng 0 không chạm tool nào;
+      // vẫn không tool_calls → loop kết thúc (chitchat không bị ép gọi tool).
       .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
       // final completion: OpenAI SSE
       .mockResolvedValueOnce({
@@ -834,7 +837,7 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       expect(fetchMock.mock.calls[0][0]).toContain("/chat/completions"); // BytePlus, not Ollama
       expect(text).toContain("chào"); // streamed delta reached the user
       expect(text).toContain('"t":"tokens"'); // usage → token frame
-      expect(fetchMock).toHaveBeenCalledTimes(2); // round + completion, no Ollama
+      expect(fetchMock).toHaveBeenCalledTimes(3); // round + G4 hỏi lại 1 lần + completion, no Ollama
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
