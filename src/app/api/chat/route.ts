@@ -27,6 +27,7 @@ import { callModelText } from "@/lib/llm/internal";
 import { notifyWritePending } from "@/lib/notifications";
 import { stripNul } from "@/lib/chat/attach";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
+import { parseDrilldownPairs } from "@/lib/agent/drilldown";
 import {
   detectAlerts,
   selectNewAlerts,
@@ -98,6 +99,10 @@ const REPLAY_BUDGET_CHARS = Math.max(8000, Math.floor((NUM_CTX - 3072 - 2560) * 
 // Run-until-done tool loop: the agent finishes on natural completion; CHAT_MAX_ROUNDS is
 // only a runaway backstop (default 25, orchestrator clamps to its hard ceiling).
 const CHAT_MAX_ROUNDS = Math.max(1, Number(process.env.CHAT_MAX_ROUNDS) || DEFAULT_MAX_ROUNDS);
+// D2: cặp "tool liệt kê → tool chi tiết" cho bước tra cứu xác định (xem lib/agent/drilldown.ts).
+// Khai báo ở env chứ KHÔNG hardcode trong code: connector (DAAB…) là thứ cắm từ ngoài vào,
+// LAAM không được biết tên tool của riêng connector nào. Không đặt env ⇒ tính năng tắt.
+const DRILLDOWN_PAIRS = parseDrilldownPairs(process.env.TOOL_DRILLDOWN_PAIRS);
 // In-loop tool-result eviction budget. Local Ollama shares the replay budget (16k window);
 // BytePlus has a large window so it evicts far later (≈115k tokens, mirrors Anthropic's
 // 100k clear trigger) — env-tunable.
@@ -628,6 +633,7 @@ function streamMainTurn(opts: {
         try {
           if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
           convo = await runToolRounds(payload.messages, tools, { callOllama: callByteplus, dispatch }, {
+            drilldownPairs: DRILLDOWN_PAIRS,
             maxRounds: CHAT_MAX_ROUNDS,
             budgetChars: BYTEPLUS_TOOL_BUDGET_CHARS,
             onBackstop: () => { hitBackstop = true; },
@@ -840,6 +846,7 @@ function streamMainTurn(opts: {
         // → tool frame tự emit, write vẫn suspend PendingWriteSignal vào catch dưới).
         if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
         convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch }, {
+          drilldownPairs: DRILLDOWN_PAIRS,
           maxRounds: CHAT_MAX_ROUNDS,
           budgetChars: REPLAY_BUDGET_CHARS,
           onBackstop: () => { hitBackstop = true; },

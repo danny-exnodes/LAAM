@@ -806,7 +806,10 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       "data: [DONE]\n\n";
     const fetchMock = vi
       .fn()
-      // round 1: OpenAI non-stream, NO tool_calls → tool-loop ends after one round
+      // round 1: OpenAI non-stream, NO tool_calls
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
+      // round 2: G4 grounding guard hỏi lại ĐÚNG một lần khi vòng 0 không chạm tool nào;
+      // vẫn không tool_calls → loop kết thúc (chitchat không bị ép gọi tool).
       .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
       // final completion: OpenAI SSE
       .mockResolvedValueOnce({
@@ -834,7 +837,7 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       expect(fetchMock.mock.calls[0][0]).toContain("/chat/completions"); // BytePlus, not Ollama
       expect(text).toContain("chào"); // streamed delta reached the user
       expect(text).toContain('"t":"tokens"'); // usage → token frame
-      expect(fetchMock).toHaveBeenCalledTimes(2); // round + completion, no Ollama
+      expect(fetchMock).toHaveBeenCalledTimes(3); // round + G4 hỏi lại 1 lần + completion, no Ollama
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
@@ -868,6 +871,92 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       expect(fetchMock).not.toHaveBeenCalled();
       const assistantRows = captured.values.filter((v) => (v as { role?: string }).role === "assistant") as { content?: string }[];
       expect(assistantRows.some((v) => String(v.content).includes("Không gọi được BytePlus API"))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  // Fixture SSE cho gọi byteplusStream giả — chuỗi các `data:` frame + [DONE].
+  function sseBody(sse: string) {
+    return {
+      getReader: () => {
+        let sent = false;
+        return { read: async () => (sent ? { done: true as const, value: undefined } : ((sent = true), { done: false as const, value: new TextEncoder().encode(sse) })) };
+      },
+    };
+  }
+  const noToolRound = { ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) };
+  // Round 1 + G4 grounding-guard hỏi lại (round 2) — cả hai không tool_calls → tool-loop kết
+  // thúc, y hệt test "runs the tool-loop..." ở trên. Đơn giản hoá phần chung cho 2 test dưới.
+  function bareTurnFetch(...finals: unknown[]) {
+    return vi.fn().mockResolvedValueOnce(noToolRound).mockResolvedValueOnce(noToolRound).mockResolvedValueOnce(finals[0]).mockResolvedValueOnce(finals[1]);
+  }
+
+  // D2b — soi ra qua investigation "final-completion trả rỗng": byteplusStream() (bước hoàn
+  // tất, KHÔNG có tools trong request — lib/llm/byteplus.ts:242-247) chỉ đọc delta.content;
+  // nếu model tự sinh tool_calls (hoặc chỉ reasoning_content) ở BƯỚC NÀY, generator không yield
+  // gì → `full` rỗng. route.ts ĐÃ có phòng thủ (comment "ONE-SHOT RETRY" + "Fail loud") nhưng
+  // KHÔNG có test nào xác nhận — hai test này đóng lỗ hổng đó (Rule 9: test phải đỏ nếu logic
+  // retry/fail-loud bị xoá, không chỉ đo hành vi hiện tại).
+  test("D2b: hoàn tất đầu tiên RỖNG (model burn hết vào reasoning) → retry 1 lần, dùng nội dung retry", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "bp-key");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    _db = fakeChainDb({ values: [] });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Hoàn tất lần 1: chỉ reasoning_content, KHÔNG content → full rỗng sau vòng này.
+    const emptySse = 'data: {"choices":[{"delta":{"reasoning_content":"đang nghĩ..."}}]}\n\n' + "data: [DONE]\n\n";
+    // Retry (sau SYNTH_NUDGE): có content thật.
+    const retrySse = 'data: {"choices":[{"delta":{"content":"Câu trả lời sau khi nhắc lại."}}]}\n\n' + "data: [DONE]\n\n";
+    const fetchMock = bareTurnFetch({ ok: true, status: 200, body: sseBody(emptySse) }, { ok: true, status: 200, body: sseBody(retrySse) });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: BP_MODEL }),
+        }),
+      );
+      const text = await res.text();
+      expect(fetchMock).toHaveBeenCalledTimes(4); // round + G4 + hoàn tất rỗng + retry
+      expect(text).toContain("Câu trả lời sau khi nhắc lại.");
+      expect(text).not.toContain("không trả về nội dung"); // KHÔNG rơi vào fail-loud — retry đã cứu được
+      // Retry phải kèm SYNTH_NUDGE ("KHÔNG gọi thêm công cụ") — nudge sai thì retry cũng dễ rỗng lại.
+      const retryBody = JSON.parse(fetchMock.mock.calls[3][1].body as string);
+      expect(retryBody.messages.at(-1).content).toContain("KHÔNG gọi thêm công cụ");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  test("D2b: CẢ hoàn tất lẫn retry đều RỖNG → fail loud (notice rõ ràng), KHÔNG bong bóng rỗng lặng lẽ", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "bp-key");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const emptySse = "data: [DONE]\n\n"; // không delta nào — mô phỏng model tự sinh tool_calls dù không có tools
+    const fetchMock = bareTurnFetch({ ok: true, status: 200, body: sseBody(emptySse) }, { ok: true, status: 200, body: sseBody(emptySse) });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: BP_MODEL }),
+        }),
+      );
+      const text = await res.text();
+      expect(fetchMock).toHaveBeenCalledTimes(4); // round + G4 + hoàn tất rỗng + retry rỗng, KHÔNG lặp mãi
+      expect(text).toContain("không trả về nội dung"); // EMPTY_REPLY — Rule 12, không phải bong bóng trắng
+      const assistantRows = captured.values.filter((v) => (v as { role?: string }).role === "assistant") as { content?: string }[];
+      expect(assistantRows.some((v) => String(v.content).includes("không trả về nội dung"))).toBe(true); // persist, không mất lượt
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();

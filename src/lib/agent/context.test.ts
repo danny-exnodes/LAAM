@@ -62,10 +62,42 @@ describe("buildSystemPrompt", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [], mode: "voice" });
     // Voice guide markers
     expect(p).toContain("giọng nói");        // "Đây là hội thoại bằng giọng nói…"
-    expect(p).toContain("KHÔNG đọc ID");     // drop identifiers rule
+    expect(p).toContain("KHÔNG ĐỌC TO ID");  // drop identifiers rule — scoped to SPEECH
     // Visual render contract must be gone — meaningless for TTS
     expect(p).not.toContain("```chart");
     expect(p).not.toContain("```map");
+    // C1: voice + KHÔNG tool (đường Claude MVS ở route) vẫn phải SẠCH từ ngữ tool —
+    // nói về "gọi công cụ" với model không có tool sẽ làm nó bịa cú pháp tool.
+    expect(p).not.toContain("công cụ");
+    expect(p).not.toContain("Công cụ");
+  });
+
+  // G1 — voice mode ĐANG làm model dừng tra cứu sớm. Đo thực tế trên gpt-oss-120b:
+  // 3/17 lượt voice trả lời nông hoặc bịa, 0/6 lượt text. Hai câu trong VOICE_GUIDE là
+  // thủ phạm: "ưu tiên ngắn gọn" (model hiểu là tra cứu ít) và "KHÔNG đọc ID/UUID"
+  // (trong khi tool đi sâu BẮT BUỘC nhận project_id là UUID). Tách bạch: ngắn gọn +
+  // giấu ID chỉ áp dụng cho LỜI NÓI RA, không áp dụng cho số bước tra cứu.
+  test("G1: voice + có tool → nói ngắn KHÔNG được rút gọn tra cứu; ID vẫn dùng làm tham số tool", () => {
+    const p = buildSystemPrompt({
+      lang: "vi",
+      now,
+      tools: [{ name: "kg_get_master_record", kind: "read" }],
+      mode: "voice",
+    });
+    expect(p).toContain("KHÔNG được vì thế mà giảm số bước tra cứu");
+    expect(p).toContain("vẫn phải dùng ID/UUID làm tham số khi gọi công cụ");
+    // Kết quả liệt kê tổng quan KHÔNG được coi là đã trả lời xong câu hỏi "chi tiết".
+    expect(p).toContain("CHƯA đủ");
+  });
+
+  test("G1: mode text KHÔNG dính chỉ dẫn dành riêng cho voice (chỉ voice mới cần)", () => {
+    const p = buildSystemPrompt({
+      lang: "vi",
+      now,
+      tools: [{ name: "kg_get_master_record", kind: "read" }],
+      mode: "text",
+    });
+    expect(p).not.toContain("KHÔNG được vì thế mà giảm số bước tra cứu");
   });
   test("voice mode: giữ tiếng Việt (LANG_HINT không bị voice ghi đè) và giữ khối tool", () => {
     const p = buildSystemPrompt({
