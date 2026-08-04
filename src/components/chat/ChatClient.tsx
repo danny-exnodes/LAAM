@@ -143,6 +143,19 @@ export function ChatClient() {
     if (restored) setSettings((s) => ({ ...s, customAgentId: restored! }));
   }, []);
 
+  // D3 — deep-link tiếp tục hội thoại từ /constellation: nút "Mở trong Chat" (back-link)
+  // gửi ?conv=<id> sang đây. Trước đây trang luôn mở trắng (activeId=null) bất kể URL —
+  // giờ mở đúng hội thoại đó, cùng cách đọc window.location.search như ?agent= ở trên.
+  useEffect(() => {
+    let conv: string | null = null;
+    try {
+      conv = new URLSearchParams(window.location.search).get("conv");
+    } catch {
+      /* no window — ignore */
+    }
+    if (conv) void openConv(conv);
+  }, []);
+
   // P3 chat persona: persist the selection so it survives reloads. Skip the initial
   // mount run so it doesn't clear storage before the restore effect's state lands
   // (avoids a spurious removeItem→setItem churn on every mount).
@@ -843,7 +856,9 @@ export function ChatClient() {
               <PanelLeft size={18} aria-hidden />
             </button>
             <Link
-              href="/constellation"
+              // D3: mang theo hội thoại đang mở để /constellation tiếp tục đúng thread
+              // bằng giọng nói thay vì luôn tạo mới (xem useConstellationChat.ts).
+              href={activeId ? `/constellation?conv=${activeId}` : "/constellation"}
               aria-label={t("chat.constellationOpenAria")}
               title={t("chat.constellationTitle")}
               className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"

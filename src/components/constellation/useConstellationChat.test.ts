@@ -78,4 +78,30 @@ describe("useConstellationChat", () => {
     expect(body.mode).toBe("voice");
     expect(body.confirm).toEqual({ token: "TOK", approve: true });
   });
+
+  // D3 — deep-link tiếp tục hội thoại: /chat truyền ?conv=<id> sang /constellation.
+  // WHY: trước đây convId luôn khởi tạo undefined mỗi lần trang mount → mỗi lần bấm
+  // icon Orbit là một hội thoại mới toanh, kể cả đang có sẵn hội thoại đang mở ở /chat
+  // (xác nhận với người dùng: đúng là chủ đích v1 "no deep-link param", nay bổ sung).
+  it("initialConversationId → lượt gửi ĐẦU TIÊN mang theo id đó, không tạo hội thoại mới", async () => {
+    const fetchMock = vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) => streamResponse(["ok"]));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConstellationChat({ onText: () => {}, onPendingWrite: () => {}, initialConversationId: "existing-conv-1" })
+    );
+    await act(async () => { await result.current.send({ message: "tiếp tục nhé", model: "gemma4:e4b" }); });
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.conversationId).toBe("existing-conv-1");
+  });
+
+  it("expose conversationId hiện tại — ban đầu theo initialConversationId, sau đó theo header server trả về", async () => {
+    const fetchMock = vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) => streamResponse(["ok"]));
+    vi.stubGlobal("fetch", fetchMock);
+    const { result } = renderHook(() =>
+      useConstellationChat({ onText: () => {}, onPendingWrite: () => {} })
+    );
+    expect(result.current.conversationId).toBeUndefined(); // không có initial, chưa gửi gì
+    await act(async () => { await result.current.send({ message: "hi", model: "gemma4:e4b" }); });
+    expect(result.current.conversationId).toBe("c1"); // header x-conversation-id của streamResponse
+  });
 });

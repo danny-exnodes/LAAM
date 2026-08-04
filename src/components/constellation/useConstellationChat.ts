@@ -19,12 +19,24 @@ type SendOpts = {
 export function useConstellationChat({
   onText,
   onPendingWrite,
+  // D3: hội thoại đang mở sẵn (deep-link ?conv=<id> từ /chat) — lượt gửi ĐẦU TIÊN sẽ
+  // tiếp tục đúng hội thoại đó thay vì server tự tạo mới. Vắng mặt ⇒ hành vi cũ.
+  initialConversationId,
 }: {
   onText: (full: string) => void;
   onPendingWrite: (pw: PendingWrite) => void;
+  initialConversationId?: string;
 }) {
   const [streaming, setStreaming] = useState(false);
-  const convId = useRef<string | undefined>(undefined);
+  // convId: ref cho consume() đọc/ghi tức thời (tránh closure cũ — consume chỉ
+  // memo theo [onText, onPendingWrite], không theo convId). conversationId: state
+  // SONG SONG chỉ để expose ra ngoài — dùng ref.current trực tiếp ở return KHÔNG đủ:
+  // streaming đi false→true→false trong 1 lượt gửi nét về ĐÚNG giá trị ban đầu, nên
+  // React (auto-batch) có thể bỏ qua commit render đó, và result/UI ngoài sẽ không
+  // thấy convId mới dù ref đã đổi. setConversationId() là một thay đổi giá trị THẬT
+  // (undefined→id), không rơi vào bẫy bailout đó.
+  const convId = useRef<string | undefined>(initialConversationId);
+  const [conversationId, setConversationId] = useState<string | undefined>(initialConversationId);
 
   const consume = useCallback(
     async (body: Record<string, unknown>) => {
@@ -37,7 +49,9 @@ export function useConstellationChat({
           // request. Inject here so BOTH send and confirm carry mode → spoken-register replies.
           body: JSON.stringify({ mode: "voice", ...body, conversationId: convId.current }),
         });
-        convId.current = res.headers.get("x-conversation-id") ?? convId.current;
+        const next = res.headers.get("x-conversation-id") ?? convId.current;
+        convId.current = next;
+        setConversationId(next);
         const reader = res.body!.getReader();
         const dec = new TextDecoder();
         let raw = "";
@@ -68,5 +82,5 @@ export function useConstellationChat({
     [consume]
   );
 
-  return { send, confirm, streaming };
+  return { send, confirm, streaming, conversationId };
 }

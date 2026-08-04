@@ -180,9 +180,20 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // Mirrors convState for getLevel (declared before it's read; see Step 7 in the plan) —
   // getLevel needs the current hands-free listening state without depending on convState.
   const convStateRef = useRef<"idle" | "listening" | "thinking" | "speaking" | "off">("off");
+  // D3: /chat truyền hội thoại đang mở qua ?conv=<id> khi điều hướng sang đây (nút Orbit)
+  // — lượt gửi voice ĐẦU TIÊN tiếp tục đúng hội thoại đó thay vì luôn tạo mới. Đọc trực
+  // tiếp window.location.search (không dùng hook useSearchParams của next/navigation) để
+  // khớp đúng cách ?agent=/localStorage restore đã làm trong ChatClient.tsx — an toàn SSR
+  // vì đây LÀ giá trị khởi tạo lười của useRef bên trong hook, cần có ngay ở lần render
+  // đầu (không thể đợi một useEffect chạy sau).
+  const initialConversationId =
+    typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("conv") ?? undefined)
+      : undefined;
   const chat = useConstellationChat({
     onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
+    initialConversationId,
   });
 
   // Voice + audio
@@ -510,7 +521,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       <ParticleFieldBackground />
       <ConstellationCanvas placed={placed} getLevel={getLevel} mode={canvasMode} />
       <Link
-        href="/chat"
+        // D3: mang theo hội thoại vừa nói (nếu có) để /chat mở đúng transcript, không
+        // phải trang trắng — chat.conversationId là state THẬT (không phải ref đọc trực
+        // tiếp, xem useConstellationChat.ts) nên luôn phản ánh đúng lượt gửi gần nhất.
+        href={chat.conversationId ? `/chat?conv=${chat.conversationId}` : "/chat"}
         className="absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-[#a9e9ff]/90 backdrop-blur-md transition-colors hover:border-[#5bd6ff]/40 hover:bg-white/[0.06] hover:text-[#eaf9ff]"
       >
         {t("constellation.back")}
