@@ -74,7 +74,11 @@ export function DisplayPanel({
       // khi animation ra chạy xong, nhưng không còn là nội dung "đang hiện" nữa.
       aria-hidden={!open}
       className={[
-        "absolute left-[11%] right-[11%] top-[13%] z-30 max-h-[74vh] overflow-y-auto rounded-2xl",
+        // left/right 11% lo phần lề trên màn hẹp; max-w + mx-auto chặn trên màn rộng —
+        // không có nó thì ở 2900px panel kéo tới ~2270px, bảng giãn hết cỡ và cột chart
+        // rời rạc, mắt phải quét ngang cả màn hình. mx-auto (chứ không phải
+        // -translate-x-1/2) vì transform đã bị keyframe vào/ra chiếm.
+        "absolute left-[11%] right-[11%] top-[13%] mx-auto max-w-5xl z-30 max-h-[74vh] overflow-y-auto rounded-2xl",
         // Nền mờ hơn hẳn (0.92 → 0.55) để thấy được sao/sóng phía sau; viền sáng trong
         // (inset highlight, ở shadow dưới) giữ chữ đọc được trên nền động.
         // backdrop-blur giữ ở `lg` (16px), KHÔNG lên 2xl (40px): phía sau panel là canvas
