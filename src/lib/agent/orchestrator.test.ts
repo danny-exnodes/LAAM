@@ -298,6 +298,52 @@ describe("runToolRounds", () => {
   });
 });
 
+// Task 2 — Larvis display panel wiring. onView gom descriptor suốt lượt (có thể có
+// hàng chục tool result) và chỉ phát ĐÚNG MỘT LẦN sau khi vòng lặp kết thúc, chọn
+// bảng/biểu đồ CUỐI CÙNG (pickTurnView) — để drilldown list→detail hiện bước chi
+// tiết chứ không phải bước liệt kê ban đầu.
+describe("onView", () => {
+  const rows = (tag: string) => [{ name: `${tag}-1`, n: 1 }, { name: `${tag}-2`, n: 2 }];
+
+  test("gọi ĐÚNG MỘT LẦN cho cả lượt, dù có nhiều tool result", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "list", arguments: {} } }] } })
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "detail", arguments: {} } }] } })
+      .mockResolvedValueOnce({ message: { content: "xong" } });
+    const dispatch = vi.fn(async (name: string) => rows(name));
+    const onView = vi.fn();
+
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onView });
+
+    expect(onView).toHaveBeenCalledTimes(1);
+  });
+
+  test("chọn tool result CUỐI CÙNG — bước chi tiết, không phải bước liệt kê", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "list", arguments: {} } }] } })
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "detail", arguments: {} } }] } })
+      .mockResolvedValueOnce({ message: { content: "xong" } });
+    const dispatch = vi.fn(async (name: string) => rows(name));
+    const onView = vi.fn();
+
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onView });
+
+    expect(onView).toHaveBeenCalledWith(expect.objectContaining({ source: expect.objectContaining({ toolName: "detail" }) }));
+  });
+
+  test("KHÔNG gọi khi lượt không có tool result nào dựng được descriptor", async () => {
+    const callOllama = vi.fn(async () => ({ message: { content: "chào bạn" } }));
+    const dispatch = vi.fn(async () => ({}));
+    const onView = vi.fn();
+
+    await runToolRounds(baseMessages, [], { callOllama, dispatch }, { onView });
+
+    expect(onView).not.toHaveBeenCalled();
+  });
+});
+
 describe("seedRequestedTool (P1 - user picked tool, code dispatches)", () => {
   test("append dung shape tool-turn cua runToolRounds + dispatch dung args", async () => {
     const convo: ChatMessage[] = [{ role: "user", content: "tra cuu ca hoi" }];
