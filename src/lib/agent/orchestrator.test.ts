@@ -280,6 +280,39 @@ describe("runToolRounds", () => {
     expect(out.some((m) => m.role === "tool" && String(m.content).includes("cùng tham số"))).toBe(true);
   });
 
+  // Polling tools (…_status) repeat the SAME args by design while waiting on an async
+  // job (kg_query_datasource_status long-poll) — the fixed threshold of 3 was cutting
+  // real analysis turns mid-poll. Same-args polls below the poll threshold must keep
+  // dispatching and end naturally.
+  test("repeat-guard — *_status same args 5× là poll hợp lệ, không bị coi là kẹt", async () => {
+    let n = 0;
+    const callOllama = vi.fn(async () =>
+      n < 5
+        ? (n++, { message: { content: "", tool_calls: [{ function: { name: "mcp__daab__kg_query_datasource_status", arguments: { id: "q-1", wait_seconds: 20 } } }] } })
+        : { message: { content: "Kết quả đây." } },
+    );
+    const dispatch = vi.fn(async () => ({ status: "running" }));
+    const onBackstop = vi.fn();
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onBackstop });
+    expect(dispatch).toHaveBeenCalledTimes(5); // mọi poll đều được dispatch
+    expect(onBackstop).not.toHaveBeenCalled(); // kết thúc tự nhiên
+  });
+
+  // …but a poll that NEVER completes is still a stuck loop: the higher poll threshold
+  // must eventually fire so the turn ends with an honest signal instead of burning
+  // rounds to the backstop.
+  test("repeat-guard — *_status vẫn có trần: lặp mãi tới ngưỡng poll → dừng + onBackstop", async () => {
+    const callOllama = vi.fn(async () => ({
+      message: { content: "", tool_calls: [{ function: { name: "mcp__daab__kg_query_datasource_status", arguments: { id: "q-1", wait_seconds: 20 } } }] },
+    }));
+    const dispatch = vi.fn(async () => ({ status: "running" }));
+    const onBackstop = vi.fn();
+    const out = await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onBackstop });
+    expect(dispatch).toHaveBeenCalledTimes(7); // ngưỡng 8: lần thứ 8 không dispatch nữa
+    expect(onBackstop).toHaveBeenCalledTimes(1);
+    expect(out.some((m) => m.role === "tool" && String(m.content).includes("cùng tham số"))).toBe(true);
+  });
+
   // In-loop eviction fires on a tight budget so a long run doesn't overflow the model
   // window: oldest tool results become stubs, the most recent are kept verbatim.
   test("in-loop eviction — tight budget clears oldest tool results during a long run", async () => {
