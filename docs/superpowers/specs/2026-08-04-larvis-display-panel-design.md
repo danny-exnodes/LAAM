@@ -2,7 +2,11 @@
 
 **Ngày:** 2026-08-04
 **Trạng thái:** design đã duyệt, chưa có plan
-**Phạm vi:** `/constellation` và `/constellation-v2` (Larvis). Text chat **không** đụng tới.
+**Phạm vi:**
+
+- `extractForSpeech` — **cả hai** client Larvis (`ConstellationClient.tsx`, `ConstellationV2Client.tsx`), vì cả hai đang import `stripForSpeech`.
+- `DisplayPanel` + pill — **chỉ `/constellation` (v1)**, nơi user đang thực sự dùng. v2 nhận panel sau, khi v1 đã chạy ổn — không dựng hai lần.
+- Text chat (`ChatClient.tsx`) **không đụng tới**: nó đã render bảng/chart inline.
 
 ## Vấn đề
 
@@ -64,6 +68,18 @@ Mảng dài hơn ngưỡng hiển thị bị cắt và ghi `truncated: { shown, 
 
 Orchestrator không giữ controller của stream, nên nó nhận thêm callback `onView?: (d: ViewDescriptor) => void` (cùng kiểu với `onBackstop` đang có). Route gọi callback đó để phát frame.
 
+#### Một lượt chỉ được một panel
+
+Một lượt thường có **nhiều** tool result: `drilldown.ts` sinh ra bước hai (list → detail) một cách có chủ đích, và vòng lặp chạy tới `DEFAULT_MAX_ROUNDS = 25`. Câu "cửa hàng nào lệch kho nhất" có thể lần lượt trả về danh sách project, rồi bảng tổng hợp, rồi một bản ghi tra cứu lẻ. Nếu phát frame sau mỗi `dispatch` thì panel nhảy loạn và kết thúc ở kết quả tình cờ cuối cùng.
+
+Luật: **gom trong suốt lượt, chỉ phát một `view` frame ở cuối**, chọn theo thứ tự ưu tiên:
+
+1. Descriptor `table`/`chart` **cuối cùng** trong lượt.
+2. Nếu không có: descriptor `record`/`stat` cuối cùng.
+3. Không có gì: không phát frame.
+
+Chọn *cuối cùng* chứ không phải *đầu tiên* là vì cặp list → detail của `drilldown.ts`: bước hai mới là thứ user hỏi, bước một chỉ là phương tiện lấy id.
+
 ### Nguồn B — tách từ chính câu trả lời (khi không có tool call)
 
 Câu như "so sánh iPhone và Android" không gọi tool nào; model tự viết bảng markdown. Việc của code không phải dựng bảng mà là **cắt bảng ra khỏi lời nói**.
@@ -96,12 +112,12 @@ Không có A → dùng B.
 | { t: "view"; d: ViewDescriptor }
 ```
 
-Client dùng `splitFrames` sẵn có — không đổi gì ở tầng vận chuyển.
+Client dùng `splitFrames` sẵn có — không đổi gì ở tầng vận chuyển. Bán kính ảnh hưởng đã kiểm: cả hai consumer (`ChatClient.tsx:419`, `useConstellationChat.ts:62`) lọc frame bằng `if (f.t === …)`, **không** switch vét cạn, nên thêm biến thể không làm vỡ chỗ nào; text chat lặng lẽ bỏ qua `view`.
 
 ## Kênh nói
 
 - `speech` = phần văn xuôi còn lại sau khi tách. **Đây là lời giải cho bug `VOICE_GUIDE`**: thôi năn nỉ model, cắt bằng code.
-- Câu chỉ dẫn ("bảng đang hiện trên màn hình") do **code** chèn, lấy từ i18n (`vi`/`en`/`zh`), và **chỉ khi** có descriptor thật đã render. Không có dữ liệu → không nói câu này. Trong hội thoại đo được, 9/21 lượt trả về rỗng; nếu để model tự nói thì user nhìn sang màn hình trống.
+- Câu chỉ dẫn ("bảng đang hiện trên màn hình") do **code** chèn, lấy từ i18n (`vi`/`en`/`zh`). Điều kiện chèn là `descriptors.length > 0` **tại thời điểm lắp câu nói** — không phải "panel đã mount". Panel mount ngay khi frame `view` tới, tức là sớm hơn tiếng nói đầu tiên rất nhiều (`TTS_PREBUFFER_SECONDS = 3`, ~4.3s tới audio đầu), nên gate theo descriptor là đủ và là thứ duy nhất biết được trong pipeline nói. Không có descriptor → không nói câu này. Trong hội thoại đo được, 9/21 lượt trả về rỗng; nếu để model tự nói thì user nhìn sang màn hình trống.
 - Câu chỉ dẫn **không nhắc vị trí** ("bên phải") vì panel nằm giữa và bố cục đổi theo thiết bị.
 
 **Thứ tự bắt buộc:** `extractForSpeech` → chèn câu chỉ dẫn → `splitForSpeech` → TTS.
@@ -113,14 +129,14 @@ Component mới `DisplayPanel`, render nội dung bằng `ChartBlock` / `Markdow
 
 ### Hình thức
 
-Panel kính nổi **giữa màn hình**, dùng đúng token của `CommandDock.tsx:41`:
+Panel kính nổi **giữa màn hình**:
 
-| Thuộc tính | Giá trị |
-|---|---|
-| Nền | `rgba(8,24,42,.92)` + `backdrop-blur(14px)` |
-| Viền | `rgba(91,214,255,.30)` |
-| Chữ | `#eaf6ff` |
-| Quầng ngoài | **vàng** (`rgba(255,196,80,.30-.45)`) — cùng tông ring, để panel là một phần của Larvis |
+| Thuộc tính | Giá trị | Lấy từ |
+|---|---|---|
+| Nền | `bg-[#08182a]/92` + `backdrop-blur-xl` | `CommandDock.tsx:41` |
+| Viền | `border-[#5bd6ff]/30` | `CommandDock.tsx:41` |
+| Chữ | `#eaf6ff` / `#a9e9ff` | `ConstellationClient.tsx:578` |
+| Quầng ngoài | **vàng** `rgba(255,196,80,.30–.45)` | cùng tông ring, để panel là một phần của Larvis |
 
 Độ đục `.92` là quyết định có chủ ý: bản kính trong hơn nhìn đẹp hơn nhưng orb là vệt sáng **động phản ứng theo âm thanh**, chữ số đè lên sẽ đổi tương phản liên tục trong lúc user đang đọc.
 
@@ -132,7 +148,7 @@ Bù cho phần ring bị che: **viền panel thở theo biên độ âm thanh**,
 
 - **Không phải modal.** Không focus-trap, không backdrop chặn click. User phải vừa nhìn vừa nói tiếp — panel chặn mic hay chặn dock là hỏng cả luồng.
 - **Đóng:** nút `×` góc phải trên, hoặc phím `Esc`. Bấm ra ngoài **không** đóng (tránh đóng nhầm khi chạm màn hình lúc đang nói).
-- **Đóng chỉ thu gọn, không xoá.** Descriptor còn nguyên; hiện pill `▦ Xem bảng · N` trong cụm góc dưới phải, **bên trái ô chọn model**, cùng chiều cao và bo tròn với ô đó, accent vàng. Bấm pill → bung lại.
+- **Đóng chỉ thu gọn, không xoá.** Descriptor còn nguyên; hiện pill `▦ Xem bảng · N` **bên trái `<select>` model**, là con trực tiếp của cụm ở `ConstellationClient.tsx:572` (`absolute bottom-6 right-4 … flex items-center gap-2 rounded-full border-white/10 bg-white/[0.03] p-1.5 backdrop-blur-xl`). Style bám theo `<select>` anh em ở dòng 578 — `rounded-full px-3 py-2 text-[12px]` — chỉ đổi accent sang vàng. Bấm pill → bung lại.
 - **Pill chỉ hiện khi panel đang đóng.** Panel mở thì nút `×` đã làm đúng việc đó; cụm góc dưới phải đã có 3 phần tử, không thêm cái thứ 4 thường trực.
 - **Luôn hiển thị lượt mới nhất.** Lượt mới có descriptor → panel tự mở, thay nội dung. Lượt mới **không** có descriptor → giữ nguyên trạng thái đang đóng, không để pill cũ sót lại.
 - **Badge nguồn:** `DAAB · N dòng · hh:mm` (nguồn A) vs `AI tổng hợp` (nguồn B).
@@ -155,6 +171,7 @@ Cùng một descriptor, khác cách render. Model **không** biết gì về m�
 - **Regression chốt chặn** — sau extract, `speech` không được chứa `|` đầu dòng hay ` ``` `. Đây đúng chỗ prompt đã thất bại hai lần; test này là thứ giữ nó không tái phát.
 - **Guard câu chỉ dẫn** — không descriptor → tuyệt đối không có câu "bảng đang hiện trên màn hình".
 - **Luật ưu tiên** — lượt có cả A và B: descriptor phải là của A, và speech vẫn phải sạch bảng.
+- **Một panel một lượt** — lượt có 3 tool result (list → aggregate → detail) chỉ phát đúng 1 frame `view`, và là cái `table`/`chart` cuối cùng.
 - **Component** — đóng → hiện pill; bấm pill → mở lại; lượt mới có dữ liệu → tự mở + thay nội dung; lượt mới không dữ liệu → giữ đóng, không sót pill cũ; `Esc` đóng, click ra ngoài không đóng.
 
 ## Không làm (YAGNI)
