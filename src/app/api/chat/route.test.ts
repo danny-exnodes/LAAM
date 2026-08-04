@@ -330,6 +330,102 @@ describe("R0 tool-loop robustness", () => {
     }
   });
 
+  // Task 3 review fix: frames.test.ts chỉ chứng minh codec round-trip TRONG NGHĨA CÔ LẬP —
+  // không chứng minh route.ts thật sự phát `view` frame TRƯỚC `cite` khi một tool call thật
+  // sinh ra kết quả dạng bảng. Đây đúng lớp lỗi "sse-block-ordering-bug" mà commit message
+  // của Task 3 viện dẫn: một sửa đổi tương lai vào leadingFrames có thể âm thầm phá thứ tự
+  // mà không có gì bắt được. laam_list_agents trả về ≥2 hàng CÙNG bộ khoá (deriveFromToolResult
+  // nhận ra "table") → view frame phải xuất hiện, và phải đứng TRƯỚC cite frame (thứ tự
+  // leadingFrames: view → cite → proactive → tokens).
+  test("tool trả bảng (laam_list_agents) → frame view phát TRƯỚC frame cite trong stream", async () => {
+    const captured = { values: [] as unknown[] };
+    const agentRows = [
+      {
+        id: "s1",
+        projectId: "P1",
+        machineId: "m1",
+        model: "claude",
+        status: "running",
+        startedAt: new Date(Date.now() - 10 * 60_000),
+        lastActivity: new Date(Date.now() - 1 * 60_000),
+        latestActivity: "đang chạy tests",
+        tokensIn: 100,
+        tokensOut: 200,
+        costUsd: 0.12,
+      },
+      {
+        id: "s2",
+        projectId: "P2",
+        machineId: "m2",
+        model: "claude",
+        status: "idle",
+        startedAt: new Date(Date.now() - 20 * 60_000),
+        lastActivity: new Date(Date.now() - 15 * 60_000),
+        latestActivity: "chờ input",
+        tokensIn: 50,
+        tokensOut: 80,
+        costUsd: 0.05,
+      },
+    ];
+    // select #1 = history (rỗng, lượt mới không có conversationId), select #2 = agentSessions
+    // (bên trong laam_list_agents handler). `system` override trong body BỎ QUA nhánh
+    // proactive (route.ts: `if (!hasSystemOverride)`) nên không có select xen giữa.
+    _db = fakeChainDb(captured, [[], agentRows]);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ndjson = JSON.stringify({ message: { content: "Dưới đây là danh sách agent." }, done: true, prompt_eval_count: 3, eval_count: 6 }) + "\n";
+    const fetchMock = vi
+      .fn()
+      // round 1: model gọi laam_list_agents
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: { content: "", tool_calls: [{ function: { name: "laam_list_agents", arguments: {} } }] },
+        }),
+      })
+      // round 2: không tool_calls nữa → tool-loop kết thúc tự nhiên
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ message: { content: "" } }) })
+      // completion cuối: NDJSON stream (nội dung THẬT, khác rỗng → finalizeTurn mới phát leadingFrames)
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => {
+            let sent = false;
+            return {
+              read: async () => {
+                if (sent) return { done: true as const, value: undefined };
+                sent = true;
+                return { done: false as const, value: new TextEncoder().encode(ndjson) };
+              },
+            };
+          },
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "liệt kê agent đang theo dõi", system: "Bạn là trợ lý LAAM." }),
+        }),
+      );
+      const text = await res.text();
+      const viewIdx = text.indexOf('"t":"view"');
+      const citeIdx = text.indexOf('"t":"cite"');
+      expect(viewIdx).toBeGreaterThan(-1); // view frame thực sự có mặt
+      expect(citeIdx).toBeGreaterThan(-1); // cite frame thực sự có mặt (sanity — nếu không thì so sánh thứ tự vô nghĩa)
+      expect(viewIdx).toBeLessThan(citeIdx); // và view PHẢI đứng trước cite (leadingFrames: view → cite → proactive → tokens)
+      // Descriptor mang dữ liệu bảng thật (Rule 13: số liệu do CODE suy, không phải model bịa).
+      expect(text).toContain('"kind":"table"');
+      expect(text).toContain('"toolName":"laam_list_agents"');
+    } finally {
+      vi.unstubAllGlobals();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
   // BUG prod: upload PDF → ChatClient đọc file.text() ra rác nhị phân chứa NUL → message
   // có NUL → insert chatMessages (KHÔNG fail-soft, route.ts:217) ném vì Postgres TEXT không
   // lưu NUL → 500 "Lỗi server". Server PHẢI strip NUL trước persist (defense-in-depth).
