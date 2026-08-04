@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { speechSupport, langToBcp47, stripForSpeech, splitForSpeech, SPEECH_SEGMENT_SOFT_CAP } from "./voice";
+import {
+  speechSupport,
+  langToBcp47,
+  stripForSpeech,
+  splitForSpeech,
+  SPEECH_SEGMENT_SOFT_CAP,
+  extractForSpeech,
+} from "./voice";
 
 describe("voice.speechSupport", () => {
   it("reports false/false for an unsupported (empty) window — the fallback path", () => {
@@ -126,6 +133,67 @@ describe("voice.splitForSpeech", () => {
     const out = splitForSpeech(`${almostFull} X.`);
     expect(out).toHaveLength(1);
     expect(out[0]).toContain("X.");
+  });
+});
+
+describe("extractForSpeech", () => {
+  const TABLE = [
+    "| Store | Variance |",
+    "|---|---|",
+    "| PH-005 | 1015 |",
+    "| PH-003 | 542 |",
+  ].join("\n");
+
+  it("bảng GFM ra descriptor, và BIẾN MẤT khỏi lời nói", () => {
+    const { speech, descriptors } = extractForSpeech(`Kết quả đây.\n\n${TABLE}\n\nHết.`);
+    expect(descriptors).toHaveLength(1);
+    expect(descriptors[0].kind).toBe("table");
+    expect(descriptors[0].source).toEqual({ type: "model" });
+    expect(descriptors[0].columns?.map((c) => c.label)).toEqual(["Store", "Variance"]);
+    expect(descriptors[0].rows).toEqual([
+      { Store: "PH-005", Variance: "1015" },
+      { Store: "PH-003", Variance: "542" },
+    ]);
+    expect(speech).toBe("Kết quả đây. Hết.");
+  });
+
+  it("block chart ra descriptor kind=chart và biến mất khỏi lời nói", () => {
+    const md = 'Xem biểu đồ.\n\n```chart\n{"type":"bar","title":"T","data":{"labels":["a"],"datasets":[{"data":[1]}]}}\n```';
+    const { speech, descriptors } = extractForSpeech(md);
+    expect(descriptors).toHaveLength(1);
+    expect(descriptors[0].kind).toBe("chart");
+    expect(descriptors[0].title).toBe("T");
+    expect(speech).toBe("Xem biểu đồ.");
+  });
+
+  it("REGRESSION — đây là chỗ VOICE_GUIDE đã thất bại 2 lần: lời nói không còn cú pháp bảng", () => {
+    const { speech } = extractForSpeech(`## Tiêu đề\n\n${TABLE}\n\n**Đậm** xong.`);
+    expect(speech).not.toMatch(/\|/);
+    expect(speech).not.toMatch(/```/);
+    expect(speech).not.toMatch(/[*#]/);
+  });
+
+  it("bảng SAI cú pháp (thiếu dòng ---) → không có descriptor, nội dung vẫn được đọc, không lọt ký tự |", () => {
+    const broken = "| Store | Variance |\n| PH-005 | 1015 |";
+    const { speech, descriptors } = extractForSpeech(`Trước.\n${broken}\nSau.`);
+    expect(descriptors).toHaveLength(0);
+    expect(speech).not.toMatch(/\|/);
+    expect(speech).toMatch(/PH-005/);
+  });
+
+  it("stripForSpeech VẪN để lọt | ở bảng hỏng — lỗi có sẵn, extractForSpeech mới là chỗ được vá", () => {
+    // Chốt ranh giới: constraint cấm đổi hành vi stripForSpeech (v2 đang dùng).
+    // Test này tồn tại để lần sau ai đó "tiện tay sửa luôn" thì thấy đỏ và phải đọc lý do.
+    expect(stripForSpeech("| a | b |\n| c | d |")).toMatch(/\|/);
+  });
+
+  it("không có bảng/chart → descriptors rỗng, lời nói y như stripForSpeech", () => {
+    const md = "**Chào** bạn.\n\n- một\n- hai";
+    expect(extractForSpeech(md)).toEqual({ speech: stripForSpeech(md), descriptors: [] });
+  });
+
+  it("stripForSpeech KHÔNG đổi hành vi — v2 vẫn cần bảng đọc thành văn xuôi", () => {
+    expect(stripForSpeech(TABLE)).toMatch(/Store: PH-005/);
   });
 });
 
