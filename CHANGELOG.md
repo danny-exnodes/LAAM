@@ -9,6 +9,9 @@ phiên bản theo [Semantic Versioning](https://semver.org/lang/vi/).
 
 ## [Unreleased]
 
+### Đã thêm — Larvis display panel
+- **Bảng/biểu đồ của câu trả lời hiện trên panel kính giữa màn hình `/constellation`, giọng nói chỉ đọc phần diễn giải.** Dữ liệu panel do code suy từ tool result (badge nguồn hiện tên agent) hoặc tách từ bảng markdown model tự viết (badge "AI tổng hợp") — hai mức tin cậy khác nhau không được trông giống nhau trên màn hình. Đóng bằng `×`/`Esc`, thu về pill cạnh ô chọn model; click ra ngoài không đóng vì panel không phải modal (`role="region"`, không focus-trap).
+
 ### Đã sửa — Voice (Constellation) trả lời nông hoặc BỊA dữ liệu dù có tool đọc dữ liệu thật
 - Đo trên `gpt-oss-120b` (cùng câu hỏi, hội thoại mới, chỉ khác `mode`): **3/17 lượt voice hỏng** so với **0/6 lượt text** — 2 lượt dừng ngay sau một tool liệt kê tổng quan rồi trả lời bằng đúng mấy trường có trong danh sách, 1 lượt **không gọi tool nào và bịa nguyên hồ sơ dự án** (kèm cả tên người phụ trách không có thật). Vòng lặp tool không hề chặn sớm (`DEFAULT_MAX_ROUNDS = 25`) — model tự dừng.
 - **`VOICE_GUIDE` (`lib/agent/context.ts`) là thủ phạm phía prompt**: "Ưu tiên ngắn gọn và tóm tắt" và "KHÔNG đọc ID, UUID…" bị model hiểu là chỉ dẫn về mức độ TRA CỨU, không chỉ về cách nói — trong khi các tool đi sâu BẮT BUỘC nhận `project_id` dạng UUID. Nay hai câu đó neo rõ vào LỜI NÓI RA, và chỉ dẫn "nói ngắn không được làm giảm số bước tra cứu; vẫn dùng ID/UUID làm tham số tool; một kết quả liệt kê tổng quan thường CHƯA đủ cho câu hỏi chi tiết" được đặt trong KHỐI TOOL (chỉ render khi lượt đó thật sự có tool) để đường không-tool — Claude MVS ở `/api/chat` — vẫn sạch từ ngữ tool như trước.

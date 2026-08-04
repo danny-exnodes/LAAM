@@ -12,6 +12,7 @@ import { SonicWaveformCanvas } from "./SonicWaveformCanvas";
 import { ParticleFieldBackground } from "./ParticleFieldBackground";
 import { ConstellationNodes } from "./ConstellationNodes";
 import { CommandDock } from "./CommandDock";
+import { DisplayPanel, type Density } from "./DisplayPanel";
 import { useConstellationChat, type PendingWrite } from "./useConstellationChat";
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
@@ -77,6 +78,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // chồng). `viewClosed` là user đã bấm × — đóng chỉ thu gọn, không xoá dữ liệu.
   const [view, setView] = useState<ViewDescriptor | null>(null);
   const [viewClosed, setViewClosed] = useState(false);
+  const [density, setDensity] = useState<Density>("detail");
   const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
   // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
   // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
@@ -175,6 +177,12 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const placed = useMemo(
     () => placeNodes(buildNodes({ agents, groups, connectors, selectedAgentId })),
     [agents, groups, connectors, selectedAgentId]);
+
+  // Nhãn nguồn cho badge: tên hiển thị của agent đang chọn; không có thì lùi về tên
+  // tool (thà hiện "kg_list_projects" còn hơn hiện một UUID — selectedAgentId là ID).
+  const agentLabel =
+    agents.find((a) => a.id === selectedAgentId)?.name ??
+    (view?.source.type === "tool" ? view.source.toolName : "");
 
   const onPick = useCallback((n: ConstNode) => {
     if (n.ref.kind === "agent") {
@@ -562,6 +570,16 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       <SysInfoPanel greetingName={greetingName} t={t} lang={lang} />
       <ConstellationNodes placed={placed} onPick={onPick} t={t} />
 
+      {view && !viewClosed && (
+        <DisplayPanel
+          view={view}
+          density={density}
+          onClose={() => setViewClosed(true)}
+          onToggleDensity={() => setDensity((d) => (d === "detail" ? "focus" : "detail"))}
+          agentLabel={agentLabel}
+        />
+      )}
+
       {/* Write-gate confirm chip */}
       {pendingWrite && (
         <div className="absolute left-1/2 top-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3 rounded-2xl border border-[#ffce7a]/30 bg-[#08182a]/95 px-6 py-4 text-center shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur-xl">
@@ -597,6 +615,15 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
 
           {/* Unified control bar: model · chat · voice — single row, no overlap */}
           <div className="absolute bottom-6 right-4 z-20 flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+            {view && viewClosed && (
+              <button
+                type="button"
+                onClick={() => setViewClosed(false)}
+                className="shrink-0 rounded-full border border-[#ffd479]/55 bg-[#ffc450]/15 px-3 py-2 text-[12px] text-[#ffe2a6] transition-colors hover:bg-[#ffc450]/25"
+              >
+                ▦ {t("constellation.viewPill")} · {view.rows?.length ?? 0}
+              </button>
+            )}
             {models.length > 0 && (
               <select
                 aria-label={t("constellation.modelAria")}
