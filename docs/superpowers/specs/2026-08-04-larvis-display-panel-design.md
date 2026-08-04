@@ -64,9 +64,11 @@ Luật thuần cấu trúc — **không** phân loại ý định, **không** g�
 | Một con số / một dòng | `stat` |
 | Không khớp gì | không phát descriptor |
 
-Mảng dài hơn ngưỡng hiển thị bị cắt và ghi `truncated: { shown, total }` — panel phải nói rõ "5/666 dòng", không được im lặng cắt bớt.
+Ngưỡng cụ thể: **giữ tối đa 50 dòng** trong descriptor, dài hơn thì cắt và ghi `truncated: { shown: 50, total }` — panel phải nói rõ "50/666 dòng", không được im lặng cắt bớt. (Mức `focus` hiển thị 3 dòng đầu, nhưng đó là chuyện render, không cắt dữ liệu.)
 
-Orchestrator không giữ controller của stream, nên nó nhận thêm callback `onView?: (d: ViewDescriptor) => void` (cùng kiểu với `onBackstop` đang có). Route gọi callback đó để phát frame.
+`kind: "chart"` **thuần** chỉ sinh từ nguồn B (block ` ```chart ` model viết). Nguồn A không bao giờ tạo chart không kèm bảng — dữ liệu luôn có sẵn dạng dòng nên luôn ra `table`, chart chỉ là trường phụ.
+
+Orchestrator không giữ controller của stream, nên nó nhận thêm callback `onView?: (d: ViewDescriptor) => void` (cùng kiểu với `onBackstop` đang có). **Orchestrator gom descriptor nội bộ suốt lượt và gọi `onView` đúng MỘT lần khi vòng lặp kết thúc**, không gọi sau mỗi `dispatch`. Route nhận callback đó rồi phát frame.
 
 #### Một lượt chỉ được một panel
 
@@ -91,6 +93,8 @@ Câu như "so sánh iPhone và Android" không gọi tool nào; model tự viế
 export function extractForSpeech(md: string): { speech: string; descriptors: ViewDescriptor[] }
 ```
 
+**Chỉ đổi nhánh xử lý bảng và chart.** Mọi việc khác `stripForSpeech` đang làm — gỡ header, `**bold**`, danh sách đánh số, link — **giữ nguyên không đụng**. Đây là hàm đã được dùng ở cả hai client Larvis, sửa quá tay là hỏng phần đọc văn xuôi vốn đang chạy tốt.
+
 Bổ sung một nhánh bắt block ` ```chart ` (JSON Chart.js — dạng model đang xuất sẵn, xem `ChartBlock.tsx`).
 
 `tablesToProse` **không bị xoá**: nó thành đường lui cho bảng sai cú pháp (thiếu dòng `|---|`, số ô lệch nhau). Bảng hỏng không dựng được descriptor thì vẫn phải thành văn xuôi để TTS đọc, tuyệt đối không để lọt ký tự `|` ra loa và cũng không được nuốt mất nội dung.
@@ -114,6 +118,10 @@ Không có A → dùng B.
 
 Client dùng `splitFrames` sẵn có — không đổi gì ở tầng vận chuyển. Bán kính ảnh hưởng đã kiểm: cả hai consumer (`ChatClient.tsx:419`, `useConstellationChat.ts:62`) lọc frame bằng `if (f.t === …)`, **không** switch vét cạn, nên thêm biến thể không làm vỡ chỗ nào; text chat lặng lẽ bỏ qua `view`.
 
+Phát ở **cuối lượt**, cùng chỗ với chuỗi frame đuôi đang có (`streamOllama`/`streamText` nhận `frames?: ChatFrame[]` và enqueue sau text: tool trace → cite → tokens). `view` nối vào đúng chuỗi đó — không phải cơ chế mới, và tránh được rủi ro thứ tự đã ghi ở `sse-block-ordering-bug`.
+
+**Không persist.** `chatMessages` chỉ lưu `content` (text); frame không được lưu, nên tải lại hội thoại sẽ **không** có panel. Chấp nhận: descriptor là dữ liệu phù du của một lượt nói. Muốn xem lại thì mở text chat — nơi bảng vẫn nằm nguyên trong nội dung message.
+
 ## Kênh nói
 
 - `speech` = phần văn xuôi còn lại sau khi tách. **Đây là lời giải cho bug `VOICE_GUIDE`**: thôi năn nỉ model, cắt bằng code.
@@ -125,7 +133,16 @@ Sai thứ tự thì soft cap 280 ký tự của `splitForSpeech` sẽ băm bản
 
 ## Giao diện
 
-Component mới `DisplayPanel`, render nội dung bằng `ChartBlock` / `MarkdownView` sẵn có trong `src/components/render/`.
+Component mới `DisplayPanel`.
+
+**Đường render — đã kiểm chữ ký component thật, không dùng lại được nguyên xi:**
+
+| Component | Chữ ký | Kết luận |
+|---|---|---|
+| `ChartBlock` | `({ raw }: { raw: string })` — tự `looseJsonParse` | **Tái dùng**, nhưng phải serialize descriptor → JSON Chart.js rồi truyền vào `raw`. Không sửa `ChartBlock` (recharts + `useChartTheme` giữ nguyên). |
+| `MarkdownView` | `({ source }: { source: string })` | **Không dùng** cho bảng. Dùng nó nghĩa là markdown → descriptor → markdown, vòng vo và mất `truncated` / badge / highlight. |
+
+Bảng render bằng markup riêng trong `DisplayPanel` (`<table>` thuần, ~30 dòng) để kiểm soát được canh cột, định dạng số, dòng nổi bật và dòng "5/666".
 
 ### Hình thức
 
@@ -151,7 +168,8 @@ Bù cho phần ring bị che: **viền panel thở theo biên độ âm thanh**,
 - **Đóng chỉ thu gọn, không xoá.** Descriptor còn nguyên; hiện pill `▦ Xem bảng · N` **bên trái `<select>` model**, là con trực tiếp của cụm ở `ConstellationClient.tsx:572` (`absolute bottom-6 right-4 … flex items-center gap-2 rounded-full border-white/10 bg-white/[0.03] p-1.5 backdrop-blur-xl`). Style bám theo `<select>` anh em ở dòng 578 — `rounded-full px-3 py-2 text-[12px]` — chỉ đổi accent sang vàng. Bấm pill → bung lại.
 - **Pill chỉ hiện khi panel đang đóng.** Panel mở thì nút `×` đã làm đúng việc đó; cụm góc dưới phải đã có 3 phần tử, không thêm cái thứ 4 thường trực.
 - **Luôn hiển thị lượt mới nhất.** Lượt mới có descriptor → panel tự mở, thay nội dung. Lượt mới **không** có descriptor → giữ nguyên trạng thái đang đóng, không để pill cũ sót lại.
-- **Badge nguồn:** `DAAB · N dòng · hh:mm` (nguồn A) vs `AI tổng hợp` (nguồn B).
+- **Badge nguồn:** `<nhãn> · N dòng · hh:mm` (nguồn A) vs `AI tổng hợp` (nguồn B).
+  `source.toolName` là tên tool (`kg_list_projects`), **không phải** tên agent — nhãn "DAAB" không suy thẳng ra được. Lấy nhãn theo thứ tự: node agent đang chọn ở client (`selectedAgentId`, đã có sẵn) → nếu không có thì hiện chính `toolName`. Tuyệt đối không đoán nhãn từ chuỗi tên tool.
 
 ### Mật độ
 
@@ -163,6 +181,14 @@ Hai mức, chọn theo breakpoint + một toggle:
 | `detail` | desktop, ngồi trước màn hình | bảng đầy đủ, cuộn được |
 
 Cùng một descriptor, khác cách render. Model **không** biết gì về mật độ — nếu để model tự quyết "lúc này nói ngắn, lúc kia nói dài" thì vừa đắt vừa không ổn định.
+
+Mặc định theo breakpoint (`< md` → `focus`); toggle đặt **trong header của panel**, cạnh nút `×`, không đẩy thêm phần tử vào cụm dock. Lựa chọn nhớ qua `localStorage` cùng kiểu `laam:chat:model` đang dùng.
+
+### i18n & a11y
+
+- Chuỗi mới (câu chỉ dẫn, nhãn pill, badge, tooltip toggle) phải thêm cho **cả ba** ngôn ngữ `vi`/`en`/`zh` — quy ước bắt buộc của repo.
+- Panel **không** dùng `role="dialog"` (nó không modal, gắn role đó là nói dối với screen reader). Dùng `role="region"` + `aria-label` là tiêu đề descriptor.
+- `×` và pill là `<button>` thật, có `aria-label`, vào được bằng Tab. Badge nguồn đọc được, không phải chỉ màu sắc.
 
 ## Kiểm thử
 
@@ -176,7 +202,11 @@ Cùng một descriptor, khác cách render. Model **không** biết gì về m�
 
 ## Không làm (YAGNI)
 
-Nhiều panel dạng tab/stack · bấm drill-down trong bảng · export panel · mật độ thứ ba · panel cho text chat (text chat đã render inline, không đụng) · để model tự sinh display spec.
+Nhiều panel dạng tab/stack · bấm drill-down trong bảng · export panel · mật độ thứ ba · panel cho text chat (text chat đã render inline, không đụng) · để model tự sinh display spec · lưu descriptor vào DB để xem lại sau.
+
+## Việc theo quy ước repo
+
+Ghi mục vào `CHANGELOG.md` phần `[Unreleased]`; `README.md` chỉ sửa nếu hành vi người dùng thấy được đổi (ở đây là có — Larvis mọc thêm panel).
 
 ## Rủi ro
 
