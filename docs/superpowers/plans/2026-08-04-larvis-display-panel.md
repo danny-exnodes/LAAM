@@ -344,7 +344,7 @@ bộ chuẩn hoá MCP/object của drilldown."
 
 - [ ] **Step 1: Viết test thất bại**
 
-Thêm vào `src/lib/agent/orchestrator.test.ts` (giữ nguyên style helper `deps` đã có trong file — đọc phần đầu file để dùng đúng khuôn mẫu mock `callOllama`/`dispatch` hiện có):
+**Trước khi viết:** đọc đầu `src/lib/agent/orchestrator.test.ts` và dùng đúng helper dựng `deps` / khuôn mock `callOllama` đang có ở đó. Đoạn dưới là **ý định test và assertion cần đạt**, không phải khuôn mock chuẩn của file — kiểu `ConnectorTool` và `OllamaChatResponse` có shape riêng, ép `as never` bừa sẽ che mất lỗi thật:
 
 ```ts
 describe("onView", () => {
@@ -549,24 +549,27 @@ Expected: PASS.
 Trong `src/app/api/chat/route.ts`, cạnh `let hitBackstop = false;` (~dòng 632) thêm:
 
 ```ts
-        let turnView: ChatFrame | null = null;
+        // Mảng chứ không phải `let x: ChatFrame | null` — biến chỉ được gán TRONG một
+        // callback thì TypeScript thu hẹp kiểu về `null` ở chỗ đọc sau đó và `...(x ? …)`
+        // sẽ báo lỗi. `const` + push không dính vấn đề đó.
+        const viewFrames: ChatFrame[] = [];
 ```
 
 Thêm vào object opts của `runToolRounds` (~dòng 635-640), ngay sau `onBackstop`:
 
 ```ts
-            onView: (d) => { turnView = { t: "view", d }; },
+            onView: (d) => { viewFrames.length = 0; viewFrames.push({ t: "view", d }); },
 ```
 
 Và thêm vào mảng `leadingFrames` (~dòng 798), **trước** `cite`:
 
 ```ts
-            ...(turnView ? [turnView] : []),
+            ...viewFrames,
 ```
 
 - [ ] **Step 6: Nối vào route — nhánh Ollama**
 
-Lặp lại đúng ba sửa đổi trên cho nhánh thứ hai: khai báo `let turnView: ChatFrame | null = null;` cạnh `hitBackstop` của nhánh đó, `onView` trong opts `runToolRounds` (~dòng 848-853), và `...(turnView ? [turnView] : []),` vào `leadingFrames` (~dòng 964).
+Lặp lại đúng ba sửa đổi trên cho nhánh thứ hai: khai báo `const viewFrames: ChatFrame[] = [];` cạnh `hitBackstop` của nhánh đó, `onView` trong opts `runToolRounds` (~dòng 848-853), và `...viewFrames,` vào `leadingFrames` (~dòng 964).
 
 - [ ] **Step 7: Xác nhận build + test route**
 
@@ -640,12 +643,18 @@ describe("extractForSpeech", () => {
     expect(speech).not.toMatch(/[*#]/);
   });
 
-  it("bảng SAI cú pháp (thiếu dòng ---) → không có descriptor, nội dung vẫn được đọc thành văn xuôi, không lọt ký tự |", () => {
+  it("bảng SAI cú pháp (thiếu dòng ---) → không có descriptor, nội dung vẫn được đọc, không lọt ký tự |", () => {
     const broken = "| Store | Variance |\n| PH-005 | 1015 |";
     const { speech, descriptors } = extractForSpeech(`Trước.\n${broken}\nSau.`);
     expect(descriptors).toHaveLength(0);
     expect(speech).not.toMatch(/\|/);
     expect(speech).toMatch(/PH-005/);
+  });
+
+  it("stripForSpeech VẪN để lọt | ở bảng hỏng — lỗi có sẵn, extractForSpeech mới là chỗ được vá", () => {
+    // Chốt ranh giới: constraint cấm đổi hành vi stripForSpeech (v2 đang dùng).
+    // Test này tồn tại để lần sau ai đó "tiện tay sửa luôn" thì thấy đỏ và phải đọc lý do.
+    expect(stripForSpeech("| a | b |\n| c | d |")).toMatch(/\|/);
   });
 
   it("không có bảng/chart → descriptors rỗng, lời nói y như stripForSpeech", () => {
@@ -786,8 +795,23 @@ export function extractForSpeech(md: string): { speech: string; descriptors: Vie
   }
   rest = kept.join("\n");
 
-  // 3) bảng hỏng còn sót lại vẫn phải đọc được (không để ký tự | ra loa)
-  return { speech: cleanProse(tablesToProse(rest)), descriptors };
+  // 3) dòng-bảng lạc (bảng thiếu separator, model viết hỏng) vẫn phải đọc được.
+  //    cleanProse KHÔNG đụng tới ký tự "|" — đây là lỗ có sẵn của stripForSpeech, và ta
+  //    chỉ vá ở đường mới này, không đụng stripForSpeech (v2 đang dùng).
+  return { speech: cleanProse(strayTableRowsToProse(tablesToProse(rest))), descriptors };
+}
+```
+
+Và thêm helper `strayTableRowsToProse` ngay phía trên `extractForSpeech`:
+
+```ts
+// "| PH-005 | 1015 |" → "PH-005, 1015". Chạy SAU tablesToProse nên chỉ còn lại những
+// dòng-bảng lạc không thành bảng hợp lệ. Giữ nội dung, bỏ cú pháp — im lặng nuốt cả
+// dòng sẽ làm user mất dữ liệu mà không biết.
+function strayTableRowsToProse(md: string): string {
+  return md.replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (_m, inner: string) =>
+    inner.split("|").map((c) => c.trim()).filter(Boolean).join(", "),
+  );
 }
 ```
 
@@ -928,12 +952,23 @@ thêm vào signature tham số (cạnh `onPendingWrite`):
 
 ```ts
   onView,
+  onTurnStart,
 ```
 
 và vào phần kiểu:
 
 ```ts
   onView?: (d: ViewDescriptor) => void;
+  // Bắn đúng một lần ở đầu MỖI lượt gửi. Client dùng nó để reset cờ "lượt này đã có
+  // nguồn A chưa". Đặt ở đây chứ không ở chỗ gọi vì client có HAI đường gửi (nút gửi
+  // và đường thoại) — reset ở một đường sẽ để cờ bẩn cho đường kia.
+  onTurnStart?: () => void;
+```
+
+thêm ngay dòng đầu trong thân `consume`, trước `setStreaming(true)`:
+
+```ts
+      onTurnStart?.();
 ```
 
 đổi vòng lọc frame:
@@ -945,7 +980,7 @@ và vào phần kiểu:
           }
 ```
 
-và thêm `onView` vào mảng dependency của `useCallback` (`[onText, onPendingWrite, onView]`).
+và thêm cả hai vào mảng dependency của `useCallback` (`[onText, onPendingWrite, onView, onTurnStart]`).
 
 - [ ] **Step 9: Chạy test, xác nhận xanh**
 
@@ -972,6 +1007,11 @@ thêm state cạnh các state khác:
   const [view, setView] = useState<ViewDescriptor | null>(null);
   const [viewClosed, setViewClosed] = useState(false);
   const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
+  // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
+  // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
+  // liên tục và kéo theo mọi effect/ref phụ thuộc nó.
+  const pointerRef = useRef("");
+  pointerRef.current = t("constellation.viewPointer");
 ```
 
 đổi wiring hook (~dòng 193-195):
@@ -980,6 +1020,7 @@ thêm state cạnh các state khác:
   const chat = useConstellationChat({
     onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
+    onTurnStart: () => { viewFromToolRef.current = false; },
     onView: (d) => { viewFromToolRef.current = true; setView(d); setViewClosed(false); },
   });
 ```
@@ -1007,18 +1048,12 @@ thành:
       setViewClosed(false);
     }
     const hasView = viewFromToolRef.current || descriptors.length > 0;
-    const spoken = withPointer(speech, hasView, t("constellation.viewPointer"));
+    const spoken = withPointer(speech, hasView, pointerRef.current);
     if (!spoken) return;
     const segments = splitForSpeech(spoken);
 ```
 
-Thêm `t` vào mảng dependency của `useCallback` bọc `speakReply`.
-
-Cuối cùng, đặt lại cờ mỗi khi gửi lượt mới — tìm hàm gửi (`handleSend`, ~dòng 440) và thêm dòng đầu tiên trong thân hàm:
-
-```ts
-    viewFromToolRef.current = false; // lượt mới: chưa có nguồn A
-```
+**Không** thêm dependency nào vào `useCallback` bọc `speakReply` — mọi thứ mới đều đọc qua ref. Việc reset cờ đầu lượt do `onTurnStart` lo (Step 8), phủ cả hai đường gửi.
 
 - [ ] **Step 11: Xác nhận không vỡ**
 
@@ -1203,7 +1238,20 @@ describe("DisplayPanel", () => {
         density="detail" onClose={noop} onToggleDensity={noop} agentLabel="DAAB"
       />,
     );
-    expect(screen.getByText(/AI tổng hợp|AI generated/)).toBeTruthy();
+    // 3 ngôn ngữ vì test không cố định cookie laam_lang; điều được khẳng định là
+    // nhãn agent BIẾN MẤT — không được để bảng model tự viết trông như bảng từ DB.
+    expect(screen.getByText(/AI tổng hợp|AI generated|AI 生成/)).toBeTruthy();
+    expect(screen.queryByText(/DAAB/)).toBeNull();
+  });
+
+  it("chart-only descriptor (nguồn B) vẫn render ở mật độ focus — không để panel rỗng", () => {
+    render(
+      <DisplayPanel
+        view={{ kind: "chart", title: "T", source: { type: "model" }, rows: [{ raw: '{"type":"bar","data":{"labels":["a"],"datasets":[{"data":[1]}]}}' }] }}
+        density="focus" onClose={noop} onToggleDensity={noop} agentLabel="DAAB"
+      />,
+    );
+    expect(screen.getByRole("region")).not.toBeEmptyDOMElement();
   });
 
   it("nút × gọi onClose", () => {
@@ -1286,9 +1334,16 @@ export function DisplayPanel({
 
   // Ranh giới tin cậy: số từ tool là số code lấy được; số từ model là model kể lại.
   // Hai thứ đó không được trông giống nhau trên màn hình.
+  // Chỉ đếm dòng khi dòng có nghĩa. Descriptor kind="chart" (nguồn B) có đúng 1 "dòng"
+  // là chuỗi JSON — in "· 1 ·" ra badge là con số vô nghĩa, tệ hơn không in.
+  const countable = view.kind === "table" || view.kind === "record";
   const badge =
     view.source.type === "tool"
-      ? `${agentLabel} · ${rows.length} · ${new Date(view.source.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+      ? [
+          agentLabel,
+          countable ? String(rows.length) : null,
+          new Date(view.source.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        ].filter(Boolean).join(" · ")
       : t("constellation.viewSourceAi");
 
   return (
@@ -1362,7 +1417,9 @@ export function DisplayPanel({
         </p>
       )}
 
-      {chartRaw && density === "detail" && (
+      {/* Ở mật độ focus thường giấu chart cho gọn — TRỪ khi descriptor chỉ có chart
+          (nguồn B, block ```chart không kèm bảng): giấu nốt thì panel rỗng trơn. */}
+      {chartRaw && (density === "detail" || columns.length === 0) && (
         <div className="mt-2 h-40">
           <ChartBlock raw={chartRaw} />
         </div>
@@ -1372,7 +1429,10 @@ export function DisplayPanel({
 }
 ```
 
-> **Kiểm trước khi viết:** xác nhận đường import của `useT` bằng `grep -n "useT" src/components/constellation/ConstellationClient.tsx` và dùng đúng đường đó. Xác nhận `ChartBlock` là named export bằng `grep -n "export function ChartBlock" src/components/render/ChartBlock.tsx`.
+> **Kiểm trước khi viết (3 lệnh, đừng bỏ):**
+> 1. `grep -n "useT" src/components/constellation/ConstellationClient.tsx` — dùng đúng đường import đó.
+> 2. `grep -n "export function ChartBlock" src/components/render/ChartBlock.tsx` — xác nhận named export.
+> 3. `grep -rn "useT" src/components/constellation/*.test.tsx src/components/chat/*.test.tsx | head` — xem component test hiện có phải bọc provider i18n không. **Nếu có, bọc y hệt trong `DisplayPanel.test.tsx`**; nếu không, `useT` tự đọc cookie và render trần là đủ. Đừng đoán.
 
 - [ ] **Step 8: Chạy test, xác nhận xanh**
 
@@ -1393,6 +1453,16 @@ Thêm import:
 import { DisplayPanel, type Density } from "./DisplayPanel";
 ```
 
+Tính nhãn agent. **`selectedAgentId` là ID, không phải tên hiển thị** — đưa thẳng vào badge sẽ ra một chuỗi id trên màn hình. Tra danh sách node để lấy tên; trước khi viết, chạy `grep -n "selectedAgentId\|agents\b" src/components/constellation/ConstellationClient.tsx | head` để biết mảng node tên gì và trường tên là gì, rồi:
+
+```ts
+  // Nhãn nguồn cho badge: tên hiển thị của agent đang chọn; không có thì lùi về tên
+  // tool (thà hiện "kg_list_projects" còn hơn hiện một UUID).
+  const agentLabel =
+    agents.find((a) => a.id === selectedAgentId)?.name ??
+    (view?.source.type === "tool" ? view.source.toolName : "");
+```
+
 Render panel — đặt **sau** `ConstellationNodes` và **trước** cụm dock, bên trong `<section>` gốc:
 
 ```tsx
@@ -1402,7 +1472,7 @@ Render panel — đặt **sau** `ConstellationNodes` và **trước** cụm dock
             density={density}
             onClose={() => setViewClosed(true)}
             onToggleDensity={() => setDensity((d) => (d === "detail" ? "focus" : "detail"))}
-            agentLabel={selectedAgentId ?? (view.source.type === "tool" ? view.source.toolName : "")}
+            agentLabel={agentLabel}
           />
         )}
 ```
@@ -1455,7 +1525,9 @@ serialize sang JSON Chart.js để dùng lại ChartBlock nguyên vẹn."
 
 ## Kiểm thử thủ công cuối cùng
 
-Sau Task 6, chạy `npm run dev` và kiểm bằng tay tại `http://localhost:3000/constellation`:
+> ⚠️ **Next 16 khoá thư mục — không chạy được hai instance trong cùng thư mục.** User đang có server ở `:3100`. Muốn kiểm tay thì **tắt server đó trước**, hoặc copy repo sang thư mục khác rồi chạy ở port riêng (`npx next dev -p 3101`). Đừng vừa `npm run dev` vừa để `:3100` sống — nó sẽ fail và mất thời gian truy nguyên nhân sai chỗ.
+
+Sau Task 6, chạy dev server và kiểm bằng tay tại `/constellation`:
 
 1. Hỏi "cửa hàng nào lệch kho nhiều nhất" ở chế độ **giọng nói** → panel hiện bảng + bar chart, badge có nhãn agent, và Larvis **không** đọc ký tự `|` nào.
 2. Nghe kỹ câu cuối: phải có "Bảng đang hiện trên màn hình."
@@ -1496,6 +1568,17 @@ Sau Task 6, chạy `npm run dev` và kiểm bằng tay tại `http://localhost:3
 - Spec nói mật độ mặc định theo breakpoint và nhớ qua `localStorage`. Plan chỉ làm **toggle thủ công, mặc định `detail`**. Lý do: breakpoint + persist là hai thứ thêm bề mặt test mà chưa có bằng chứng cần (YAGNI, Rule 2). Nếu dùng thật thấy vướng thì thêm sau, đúng một commit nhỏ.
 - Viền panel **chưa** thở theo âm thanh. Đây là phần trang trí, phụ thuộc `useAudioAnalyser` và không có test khách quan; tách khỏi plan này để panel lên được sớm. Ghi vào backlog sau khi merge.
 
-**Placeholder scan:** Task 5 Step 6 và Task 6 Step 7 có 2 chỗ yêu cầu người cài đặt tự tra khuôn mock/đường import sẵn có trong repo (kèm lệnh `grep` cụ thể). Đây là cố ý — viết cứng khuôn mock mà không đọc file test thật sẽ đẻ ra code không chạy. Mọi bước khác đều có code đầy đủ.
+**Placeholder scan:** ba chỗ yêu cầu người cài đặt tự tra repo trước khi viết, đều kèm lệnh `grep` cụ thể — Task 2 Step 1 (khuôn mock `deps`), Task 5 Step 6 (khuôn mock stream), Task 6 Step 7 + Step 9 (đường import `useT`, provider i18n trong test, tên mảng node). Đây là cố ý: viết cứng khuôn mock mà không đọc file thật sẽ đẻ ra test không chạy, và `as never` bừa sẽ che mất lỗi kiểu thật. Mọi bước khác đều có code đầy đủ.
+
+**Lỗi đã bắt được ở vòng rà thứ hai (ghi lại để không ai "sửa ngược"):**
+
+1. `let turnView: ChatFrame | null` chỉ được gán trong callback → TypeScript thu hẹp về `null` ở chỗ đọc. Đổi sang `const viewFrames: ChatFrame[]`.
+2. `cleanProse` **không** gỡ ký tự `|`, nên bảng hỏng vẫn lọt pipe ra loa — test ban đầu khẳng định điều code không làm. Thêm `strayTableRowsToProse`, và chỉ ở đường `extractForSpeech`.
+3. Reset cờ `viewFromToolRef` ở `handleSend` bỏ sót đường gửi thứ hai (đường thoại) → cờ bẩn sang lượt sau. Chuyển vào `onTurnStart` trong hook.
+4. `t` làm dependency của `speakReply` khiến callback đổi identity mỗi render. Đọc qua `pointerRef`.
+5. Descriptor `kind: "chart"` (chỉ có chart, không cột) render rỗng ở mật độ `focus`. Sửa điều kiện + thêm test.
+6. Badge in `· 1 ·` cho descriptor chart (1 "dòng" là chuỗi JSON). Chỉ đếm khi `table`/`record`.
+7. `selectedAgentId` là ID chứ không phải tên hiển thị → badge sẽ hiện UUID. Tra tên từ danh sách node.
+8. `npm run dev` sẽ fail nếu server `:3100` của user đang chạy (Next 16 khoá thư mục).
 
 **Type consistency:** `ViewDescriptor` khai báo ở Task 1 và được dùng nguyên vẹn ở Task 2/3/4/5/6. `descriptorToChartRaw` dùng `d.rows[0].raw` cho `kind: "chart"` — khớp với chỗ Task 4 ghi `rows: [{ raw: body.trim() }]`. `Density` export từ `DisplayPanel.tsx` và import lại ở `ConstellationClient.tsx`. `onView` cùng chữ ký ở `ToolRoundsOpts` (Task 2) và `useConstellationChat` (Task 5).
