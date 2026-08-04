@@ -621,7 +621,11 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
                 onClick={() => setViewClosed(false)}
                 className="shrink-0 rounded-full border border-[#ffd479]/55 bg-[#ffc450]/15 px-3 py-2 text-[12px] text-[#ffe2a6] transition-colors hover:bg-[#ffc450]/25"
               >
-                ▦ {t("constellation.viewPill")} · {view.rows?.length ?? 0}
+                {/* Đếm dòng chỉ khi có nghĩa — cùng luật với badge trong DisplayPanel:
+                    descriptor kind="chart" chỉ có 1 "dòng" là chuỗi JSON, đếm nó ra pill
+                    là con số vô nghĩa (vd "· 1" cho một biểu đồ nhiều điểm dữ liệu). */}
+                ▦ {t("constellation.viewPill")}
+                {(view.kind === "table" || view.kind === "record") && ` · ${view.rows?.length ?? 0}`}
               </button>
             )}
             {models.length > 0 && (
