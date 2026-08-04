@@ -7,6 +7,7 @@ import {
   SPEECH_SEGMENT_SOFT_CAP,
   extractForSpeech,
 } from "./voice";
+import { pickTurnView } from "@/lib/agent/view";
 
 describe("voice.speechSupport", () => {
   it("reports false/false for an unsupported (empty) window — the fallback path", () => {
@@ -224,6 +225,37 @@ describe("extractForSpeech", () => {
       ["1", "A", "X"],
       ["2", "B", "Y"],
     ]);
+  });
+
+  // ConstellationClient (nguồn B, speakReply) chọn view bằng pickTurnView(descriptors),
+  // KHÔNG phải descriptors[0] — vì extractForSpeech xử lý block chart TRƯỚC bảng, nên
+  // descriptors[0] luôn là chart dù bảng đứng trước trong văn bản; và bất kỳ descriptor
+  // nào sau cái đầu tiên sẽ bị descriptors[0] âm thầm bỏ qua. Test này khoá đúng hành vi
+  // tiêu dùng mà ConstellationClient.tsx phải dùng.
+  it("tiêu dùng qua pickTurnView (không phải descriptors[0]): bảng đứng TRƯỚC chart trong văn bản vẫn được chọn", () => {
+    const md = [
+      "Đây là bảng trước:",
+      TABLE,
+      "Và biểu đồ sau:",
+      '```chart',
+      '{"type":"bar","title":"T","data":{"labels":["a"],"datasets":[{"data":[1]}]}}',
+      '```',
+    ].join("\n\n");
+    const { descriptors } = extractForSpeech(md);
+    // extractForSpeech xử lý chart trước → descriptors[0] là chart dù bảng đứng trước
+    // trong văn bản gốc — đây chính là cái bẫy mà descriptors[0] rơi vào.
+    expect(descriptors[0].kind).toBe("chart");
+    expect(descriptors).toHaveLength(2);
+    // pickTurnView chọn ĐÚNG: bảng/chart CUỐI trong mảng — ở đây là bảng (đứng sau
+    // trong mảng vì được xử lý sau), không phải chart mà descriptors[0] sẽ chọn nhầm.
+    const picked = pickTurnView(descriptors);
+    expect(picked?.kind).toBe("table");
+  });
+
+  it("chỉ có 1 descriptor (đường thường) → pickTurnView chọn đúng cái đó, giống descriptors[0]", () => {
+    const md = `Kết quả đây.\n\n${TABLE}\n\nHết.`;
+    const { descriptors } = extractForSpeech(md);
+    expect(pickTurnView(descriptors)).toEqual(descriptors[0]);
   });
 });
 

@@ -67,6 +67,39 @@ describe("DisplayPanel", () => {
     expect(screen.queryByText(/DAAB/)).toBeNull();
   });
 
+  it("stat descriptor (kind='stat') render bảng 1 cột — không được để panel rỗng dù pointer nói có bảng", () => {
+    renderPanel(
+      <DisplayPanel
+        view={{
+          kind: "stat",
+          title: "kg_count_open_tickets",
+          source: { type: "tool", toolName: "kg_count_open_tickets", at: Date.parse("2026-08-04T08:42:00Z") },
+          columns: [{ key: "value", label: "kg_count_open_tickets", align: "right" }],
+          rows: [{ value: 666 }],
+        }}
+        density="detail" onClose={noop} onToggleDensity={noop} agentLabel="DAAB"
+      />,
+    );
+    expect(screen.getByRole("region")).not.toBeEmptyDOMElement();
+    expect(screen.getByText("666")).toBeTruthy();
+  });
+
+  it("stat descriptor vẫn render ở mật độ focus — cùng luật với chart-only, không rỗng", () => {
+    renderPanel(
+      <DisplayPanel
+        view={{
+          kind: "stat",
+          title: "kg_count_open_tickets",
+          source: { type: "tool", toolName: "kg_count_open_tickets", at: Date.parse("2026-08-04T08:42:00Z") },
+          columns: [{ key: "value", label: "kg_count_open_tickets", align: "right" }],
+          rows: [{ value: 666 }],
+        }}
+        density="focus" onClose={noop} onToggleDensity={noop} agentLabel="DAAB"
+      />,
+    );
+    expect(screen.getByText("666")).toBeTruthy();
+  });
+
   it("chart-only descriptor (nguồn B) vẫn render ở mật độ focus — không để panel rỗng", () => {
     renderPanel(
       <DisplayPanel

@@ -66,6 +66,14 @@ describe("deriveFromToolResult", () => {
     expect(deriveFromToolResult("t", 666, AT)?.kind).toBe("stat");
   });
 
+  // Critical 2 (final review): stat KHÔNG có columns → DisplayPanel chỉ render bảng
+  // khi columns.length > 0, nên panel rỗng trơn dù pointer vẫn đọc "bảng đang hiện".
+  it("stat có columns — DisplayPanel render bảng theo cột này, không được rỗng", () => {
+    const d = deriveFromToolResult("kg_count_open_tickets", 666, AT);
+    expect(d?.columns).toEqual([{ key: "value", label: "kg_count_open_tickets", align: "right" }]);
+    expect(d?.rows).toEqual([{ value: 666 }]);
+  });
+
   it("shape không nhận ra → null, KHÔNG dựng panel rỗng", () => {
     expect(deriveFromToolResult("t", null, AT)).toBeNull();
     expect(deriveFromToolResult("t", { text: "không phải json" }, AT)).toBeNull();

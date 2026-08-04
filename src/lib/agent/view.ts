@@ -100,7 +100,15 @@ export function deriveFromToolResult(
   }
 
   if (typeof payload === "number" && Number.isFinite(payload)) {
-    return { kind: "stat", title: toolName, source, rows: [{ value: payload }] };
+    // Cần `columns` dù chỉ 1 cột — DisplayPanel chỉ render bảng khi columns.length > 0
+    // (xem DisplayPanel.tsx); thiếu nó thì panel rỗng trơn dù pointer vẫn nói có bảng.
+    return {
+      kind: "stat",
+      title: toolName,
+      source,
+      columns: [{ key: "value", label: toolName, align: "right" as const }],
+      rows: [{ value: payload }],
+    };
   }
 
   return null;

@@ -19,7 +19,7 @@ import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
 import { splitForSpeech, extractForSpeech } from "@/lib/chat/voice";
 import { withPointer } from "@/lib/chat/speech-pointer";
-import type { ViewDescriptor } from "@/lib/agent/view";
+import { pickTurnView, type ViewDescriptor } from "@/lib/agent/view";
 import { playPcmStream } from "@/lib/chat/streamingAudio";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
@@ -214,7 +214,23 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const chat = useConstellationChat({
     onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
-    onTurnStart: () => { viewFromToolRef.current = false; },
+    onTurnStart: () => {
+      viewFromToolRef.current = false;
+      // Xoá panel/pill của lượt TRƯỚC ngay khi lượt MỚI bắt đầu, chưa cần biết lượt
+      // này có descriptor hay không. Nếu không xoá ở đây: lượt mới không có bảng/biểu
+      // đồ sẽ vẫn hiện panel/pill CŨ (chỉ set, chưa bao giờ clear) — trái với spec
+      // (dòng 171): "lượt mới KHÔNG có descriptor → giữ nguyên trạng thái đang đóng,
+      // không để pill cũ sót lại". Một lượt CÓ descriptor sẽ set lại `view` sau đó
+      // trong cùng lượt (onView ở dưới, hoặc nhánh nguồn B trong speakReply) — clear
+      // ở đây không tranh chấp với chúng.
+      // onTurnStart bắn từ CẢ send() lẫn confirm() (xem consume() trong
+      // useConstellationChat.ts — dùng chung một điểm reset cho hai đường gửi, xem
+      // Task 5). Hệ quả: xác nhận một pending-write cũng xoá panel đang mở. Chấp
+      // nhận được — một lượt confirm cũng là một lượt hội thoại MỚI, panel của lượt
+      // trước không còn ăn khớp với phản hồi sắp tới.
+      setView(null);
+      setViewClosed(false);
+    },
     onView: (d) => { viewFromToolRef.current = true; setView(d); setViewClosed(false); },
     initialConversationId,
   });
@@ -301,8 +317,15 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     // số của A do code lấy được, số của B là model kể lại (Rule 13). Nhưng bảng của B
     // vẫn phải bị cắt khỏi lời nói — đó là việc extractForSpeech vừa làm ở trên.
     if (!viewFromToolRef.current && descriptors.length) {
-      setView(descriptors[0]);
-      setViewClosed(false);
+      // pickTurnView, không phải descriptors[0]: extractForSpeech xử lý chart fence
+      // TRƯỚC table, nên descriptors[0] luôn là chart dù table đứng trước trong văn
+      // bản — và mọi descriptor sau cái đầu bị âm thầm bỏ, không hiện, không báo.
+      // pickTurnView áp cùng luật "bảng/chart CUỐI thắng" đã dùng cho nguồn A (view.ts).
+      const picked = pickTurnView(descriptors);
+      if (picked) {
+        setView(picked);
+        setViewClosed(false);
+      }
     }
     const hasView = viewFromToolRef.current || descriptors.length > 0;
     const spoken = withPointer(speech, hasView, pointerRef.current);
