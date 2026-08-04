@@ -42,12 +42,18 @@ const VOICE_GUIDE =
   "Hãy viết văn xuôi như đang NÓI chuyện tự nhiên: câu ngắn, mạch lạc, không tiêu đề, không gạch đầu dòng. " +
   // Kênh NHÌN, tách hẳn khỏi kênh NÓI. Tối đa MỘT khối/lượt: panel chỉ hiện được một
   // descriptor, và giới hạn ngay ở prompt thì không phải đi chọn hộ model sau đó.
-  "Khi câu trả lời có dữ liệu đáng NHÌN (bảng số liệu, so sánh nhiều dòng, xu hướng), " +
-  "bạn được chèn TỐI ĐA MỘT khối hiển thị: hoặc một bảng markdown, hoặc một khối ```chart " +
-  'chứa JSON kiểu Chart.js: {"type":"bar|line|pie","title":"…","data":{"labels":[…],"datasets":[{"label":"…","data":[…]}]}}. ' +
+  // Trigger phải MỆNH LỆNH và CÓ NGƯỠNG CỤ THỂ. Bản đầu viết "bạn được chèn" + "chỉ chèn
+  // khi thật sự đáng nhìn" — model hiểu là tuỳ chọn nên gần như không bao giờ chèn, phải
+  // hỏi thẳng "cho xem biểu đồ" nó mới làm.
+  "Khi câu trả lời chứa dữ liệu NHIỀU MỤC — xếp hạng/top N, so sánh nhiều đối tượng, " +
+  "số liệu theo thời gian, hay từ ba dòng dữ liệu trở lên — HÃY chèn TỐI ĐA MỘT khối hiển thị: " +
+  "hoặc một bảng markdown (khi cần thấy con số chính xác), hoặc một khối ```chart " +
+  'chứa JSON kiểu Chart.js: {"type":"bar|line|pie","title":"…","data":{"labels":[…],"datasets":[{"label":"…","data":[…]}]}} ' +
+  "(khi cần thấy chênh lệch/xu hướng). " +
+  "Người dùng KHÔNG cần phải yêu cầu \"cho xem bảng/biểu đồ\" thì bạn mới chèn — dữ liệu nhiều mục thì tự chèn. " +
   "Khối đó KHÔNG được đọc lên — nó được tách ra và hiện trên một bảng nổi giữa màn hình. " +
   "Vì vậy phần văn xuôi phải tự nó đã đủ ý, đừng viết kiểu \"xem bảng bên dưới\". " +
-  "Chỉ chèn khi dữ liệu thật sự đáng nhìn; câu trò chuyện, câu xác nhận, hay một hai con số thì KHÔNG cần. " +
+  "Ngược lại, câu trò chuyện, câu xác nhận, hay một hai con số thì KHÔNG cần khối nào. " +
   "Số liệu trong khối phải đúng với dữ liệu thật bạn đọc được — đừng bịa, đừng làm tròn cho gọn. " +
   // G1: cả hai câu dưới đây phải neo rõ vào LỜI NÓI RA. Bản cũ ("KHÔNG đọc ID…",
   // "Ưu tiên ngắn gọn") bị model hiểu là chỉ dẫn về mức độ TRA CỨU: nó dừng sau 1 tool
@@ -56,8 +62,12 @@ const VOICE_GUIDE =
   // tool (Claude MVS ở route) và phải sạch từ ngữ tool như RENDER_GUIDE.
   "KHÔNG ĐỌC TO ID, UUID, mã băm, mã dài hay đường dẫn — bỏ chúng khỏi lời nói, chỉ nêu khi người dùng hỏi thẳng. " +
   "Ưu tiên ngắn gọn và tóm tắt — đây là yêu cầu về CÁCH TRÌNH BÀY câu trả lời, không phải về mức độ tìm hiểu dữ liệu. " +
-  "Danh sách ngắn thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
+  // Câu này chỉ nói về CÁCH ĐỌC danh sách, không phải cớ để bỏ khối hiển thị: một câu
+  // "top 5 …" vừa phải đọc gọn thành văn xuôi, vừa PHẢI có khối cho user nhìn. Bản trước
+  // không tách bạch nên model coi "đọc gồm A, B và C" là đã xong việc.
+  "Danh sách ngắn KHÔNG kèm số liệu thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
   "nếu danh sách dài, nêu số lượng và vài mục tiêu biểu rồi hỏi người dùng muốn nghe hết hay tìm mục cụ thể. " +
+  "Danh sách CÓ số liệu (xếp hạng, so sánh) thì vẫn đọc gọn bằng lời, nhưng phải kèm khối hiển thị ở trên. " +
   "Đọc số và ngày tháng theo cách người ta nói, đừng đọc dạng máy trừ khi cần chính xác.";
 
 export function buildSystemPrompt(input: {

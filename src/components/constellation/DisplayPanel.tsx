@@ -129,7 +129,11 @@ export function DisplayPanel({
       {/* Ở mật độ focus thường giấu chart cho gọn — TRỪ khi descriptor chỉ có chart
           (nguồn B, block ```chart không kèm bảng): giấu nốt thì panel rỗng trơn. */}
       {chartRaw && (density === "detail" || columns.length === 0) && (
-        <div className="mt-2 h-40">
+        // KHÔNG ép chiều cao: ChartBlock tự dựng khung 300px bên trong (ChartBlock.tsx),
+        // nhồi nó vào h-40 thì 140px dưới — gồm các cột còn lại và nhãn trục X — bị cắt
+        // mất. /chat render <ChartBlock> trần đúng như vậy; panel có max-h + scroll rồi
+        // nên chart cao không làm tràn màn hình.
+        <div className="mt-2">
           <ChartBlock raw={chartRaw} />
         </div>
       )}

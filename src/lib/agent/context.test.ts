@@ -69,6 +69,12 @@ describe("buildSystemPrompt", () => {
     expect(p).toContain("```chart");
     expect(p).toContain("TỐI ĐA MỘT khối"); // 1 panel/lượt — chốt ngay ở prompt
     expect(p).toContain("KHÔNG được đọc lên"); // khối bị tách khỏi lời nói, không đọc
+    // Trigger phải MỆNH LỆNH: bản đầu viết "bạn được chèn" (tuỳ chọn) → model gần như
+    // không bao giờ tự chèn, phải hỏi thẳng "cho xem biểu đồ" mới làm.
+    expect(p).toContain("HÃY chèn");
+    expect(p).toContain("KHÔNG cần phải yêu cầu");
+    // …và không được mâu thuẫn với chỉ dẫn đọc danh sách: "top 5" vừa đọc gọn, vừa có khối.
+    expect(p).toContain("phải kèm khối hiển thị");
     // ```map KHÔNG được dạy ở voice: DisplayPanel chỉ render bảng + chart. Một khối map
     // sẽ bị cleanProse nuốt như code fence → mất hẳn, không nói cũng không hiện.
     expect(p).not.toContain("```map");
