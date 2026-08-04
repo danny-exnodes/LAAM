@@ -74,6 +74,13 @@ export async function seedRequestedTool(
 export const DEFAULT_MAX_ROUNDS = 25;
 const MAX_ROUNDS_CEILING = 50; // hard safety ceiling — env CHAT_MAX_ROUNDS can raise the default up to here
 const REPEAT_THRESHOLD = 3; // same tool+args this many times → stuck → stop, answer with what we have
+// Polling tools (tên đuôi `_status`: kg_query_datasource_status, kg_index_status, …) lặp
+// CÙNG args là hành vi hợp lệ trong lúc chờ job async — ngưỡng 3 từng cắt oan turn phân
+// tích giữa chuỗi poll. Vẫn phải có trần (job không bao giờ xong = kẹt thật) nên chỉ nâng
+// ngưỡng, không miễn trừ hẳn.
+const POLL_REPEAT_THRESHOLD = 8;
+const repeatThresholdFor = (name: string): number =>
+  name.endsWith("_status") ? POLL_REPEAT_THRESHOLD : REPEAT_THRESHOLD;
 // Default in-loop eviction budget — sized for the local 16k model (≈ route's
 // REPLAY_BUDGET_CHARS). The route passes a much larger budget for big-context providers.
 const DEFAULT_TOOL_BUDGET_CHARS = 37_000;
@@ -146,7 +153,7 @@ export async function runToolRounds(
         const args = tc.function?.arguments;
         const count = (seen.get(name + "|" + stableArgs(args)) ?? 0) + 1;
         seen.set(name + "|" + stableArgs(args), count);
-        if (count >= REPEAT_THRESHOLD) {
+        if (count >= repeatThresholdFor(name)) {
           // Stuck on the same call — don't re-dispatch (result won't change); tell the
           // model, then end the loop gracefully so it answers with what it has.
           convo.push({ role: "tool", content: repeatFeedback(name, count) });
