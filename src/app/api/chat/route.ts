@@ -630,6 +630,10 @@ function streamMainTurn(opts: {
         let toolTurns: ReturnType<typeof extractToolTurns> = [];
         let cites: string[] = [];
         let hitBackstop = false;
+        // Mảng chứ không phải `let x: ChatFrame | null` — biến chỉ được gán TRONG một
+        // callback thì TypeScript thu hẹp kiểu về `null` ở chỗ đọc sau đó và `...(x ? …)`
+        // sẽ báo lỗi. `const` + push không dính vấn đề đó.
+        const viewFrames: ChatFrame[] = [];
         try {
           if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
           convo = await runToolRounds(payload.messages, tools, { callOllama: callByteplus, dispatch }, {
@@ -637,6 +641,7 @@ function streamMainTurn(opts: {
             maxRounds: CHAT_MAX_ROUNDS,
             budgetChars: BYTEPLUS_TOOL_BUDGET_CHARS,
             onBackstop: () => { hitBackstop = true; },
+            onView: (d) => { viewFrames.length = 0; viewFrames.push({ t: "view", d }); },
           });
           toolTurns = extractToolTurns(convo, baseLen);
           cites = deriveCitations(convo, baseLen);
@@ -796,6 +801,7 @@ function streamMainTurn(opts: {
           guard: guardWrites ? { writeBacked, lang } : undefined,
           persist: { assistantMsgId, toolTurns },
           leadingFrames: [
+            ...viewFrames,
             ...(cites.length ? [{ t: "cite", names: cites } as ChatFrame] : []),
             ...(proactive.length ? [proactiveFrame(proactive)] : []),
           ],
@@ -841,6 +847,10 @@ function streamMainTurn(opts: {
       let toolTurns: ReturnType<typeof extractToolTurns> = [];
       let cites: string[] = [];
       let hitBackstop = false;
+      // Mảng chứ không phải `let x: ChatFrame | null` — biến chỉ được gán TRONG một
+      // callback thì TypeScript thu hẹp kiểu về `null` ở chỗ đọc sau đó và `...(x ? …)`
+      // sẽ báo lỗi. `const` + push không dính vấn đề đó.
+      const viewFrames: ChatFrame[] = [];
       try {
         // P1 quick-tools: tool user đã chọn → CODE gọi trước (qua đúng dispatch withSafety
         // → tool frame tự emit, write vẫn suspend PendingWriteSignal vào catch dưới).
@@ -850,6 +860,7 @@ function streamMainTurn(opts: {
           maxRounds: CHAT_MAX_ROUNDS,
           budgetChars: REPLAY_BUDGET_CHARS,
           onBackstop: () => { hitBackstop = true; },
+          onView: (d) => { viewFrames.length = 0; viewFrames.push({ t: "view", d }); },
         });
         toolTurns = extractToolTurns(convo, baseLen);
         cites = deriveCitations(convo, baseLen);
@@ -962,6 +973,7 @@ function streamMainTurn(opts: {
           guard: guardWrites ? { writeBacked, lang } : undefined,
           persist: { assistantMsgId, toolTurns },
           leadingFrames: [
+            ...viewFrames,
             ...(cites.length ? [{ t: "cite", names: cites } as ChatFrame] : []),
             ...(proactive.length ? [proactiveFrame(proactive)] : []),
           ],

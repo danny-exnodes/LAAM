@@ -1,6 +1,8 @@
 // Giao thức frame chung cho stream /api/chat: text thường + frame metadata bọc cặp
 // U+001E. THUẦN — server dùng encodeFrame, client dùng splitFrames. SP-4 sở hữu (D-SP4-2).
 // SP-2 import encodeFrame + ChatFrame ('pending_write') từ ĐÂY (1 nguồn, không bản 2).
+import type { ViewDescriptor } from "@/lib/agent/view";
+
 export const FRAME_SEP = "\x1e"; // U+001E record separator
 
 export type ChatFrame =
@@ -12,6 +14,10 @@ export type ChatFrame =
   | { t: "tool"; phase: "call" | "result"; c: number; name: string; args?: string; ok?: boolean }
   | { t: "cite"; names: string[] }
   | { t: "pending_write"; token: string; tool: string; title: string; summary: string; fields?: { label: string; value: string }[] }
+  // Panel hiển thị (Larvis): bảng/biểu đồ render RIÊNG, không nối vào câu trả lời —
+  // cùng tinh thần pending_write/proactive. Số liệu do code suy từ tool result
+  // (Rule 13). Phát tối đa 1 lần mỗi lượt, ở cuối, cùng chuỗi frame đuôi.
+  | { t: "view"; d: ViewDescriptor }
   // SP-3/FEAT-2: proactive alert surfaced as a distinct card (not appended to the
   // model's reply). Numbers are code-derived from agent_session (Rule 13). `key`
   // is the stable dedupe key (S2 dismiss); `sessionId` deep-links to the agent.
