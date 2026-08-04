@@ -48,4 +48,14 @@ export const constellation: Dict = {
     en: "Hi {name}, Larvis is listening to you. Please tell me what you want.",
     zh: "你好 {name}，Larvis 正在聆听。请告诉我你需要什么。",
   },
+  "constellation.viewPointer": {
+    vi: "Bảng đang hiện trên màn hình.",
+    en: "The table is on screen now.",
+    zh: "表格已显示在屏幕上。",
+  },
+  "constellation.viewPill": { vi: "Xem bảng", en: "View table", zh: "查看表格" },
+  "constellation.viewClose": { vi: "Đóng bảng", en: "Close table", zh: "关闭表格" },
+  "constellation.viewSourceAi": { vi: "AI tổng hợp", en: "AI generated", zh: "AI 生成" },
+  "constellation.viewDensity": { vi: "Đổi mật độ hiển thị", en: "Toggle density", zh: "切换显示密度" },
+  "constellation.viewTruncated": { vi: "{shown}/{total} dòng", en: "{shown}/{total} rows", zh: "{shown}/{total} 行" },
 };

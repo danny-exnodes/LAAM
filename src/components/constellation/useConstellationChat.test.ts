@@ -56,6 +56,24 @@ describe("useConstellationChat", () => {
     );
   });
 
+  it("frame view được chuyển ra onView", async () => {
+    const d = { kind: "table", title: "t", source: { type: "tool", toolName: "t", at: 1 }, rows: [{ a: 1 }] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          `Xong.${SEP}${JSON.stringify({ t: "view", d })}${SEP}`,
+        ])
+      )
+    );
+    const seen: unknown[] = [];
+    const { result } = renderHook(() =>
+      useConstellationChat({ onText: () => {}, onPendingWrite: () => {}, onView: (v) => seen.push(v) })
+    );
+    await act(async () => { await result.current.send({ message: "hỏi", model: "gemma4:e4b" }); });
+    expect(seen).toEqual([d]);
+  });
+
   it("sends mode:'voice' in the POST body on send", async () => {
     const fetchMock = vi.fn(async (_input?: RequestInfo | URL, _init?: RequestInit) => streamResponse(["ok"]));
     vi.stubGlobal("fetch", fetchMock);

@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useRef, useState } from "react";
 import { splitFrames } from "@/lib/chat/frames";
+import type { ViewDescriptor } from "@/lib/agent/view";
 
 export type PendingWrite = {
   token: string;
@@ -19,12 +20,19 @@ type SendOpts = {
 export function useConstellationChat({
   onText,
   onPendingWrite,
+  onView,
+  // Bắn đúng một lần ở đầu MỖI lượt gửi. Client dùng nó để reset cờ "lượt này đã có
+  // nguồn A chưa". Đặt ở đây chứ không ở chỗ gọi vì client có HAI đường gửi (nút gửi
+  // và đường thoại) — reset ở một đường sẽ để cờ bẩn cho đường kia.
+  onTurnStart,
   // D3: hội thoại đang mở sẵn (deep-link ?conv=<id> từ /chat) — lượt gửi ĐẦU TIÊN sẽ
   // tiếp tục đúng hội thoại đó thay vì server tự tạo mới. Vắng mặt ⇒ hành vi cũ.
   initialConversationId,
 }: {
   onText: (full: string) => void;
   onPendingWrite: (pw: PendingWrite) => void;
+  onView?: (d: ViewDescriptor) => void;
+  onTurnStart?: () => void;
   initialConversationId?: string;
 }) {
   const [streaming, setStreaming] = useState(false);
@@ -40,6 +48,7 @@ export function useConstellationChat({
 
   const consume = useCallback(
     async (body: Record<string, unknown>) => {
+      onTurnStart?.();
       setStreaming(true);
       try {
         const res = await fetch("/api/chat", {
@@ -63,13 +72,14 @@ export function useConstellationChat({
           onText(text);
           for (const f of frames) {
             if (f.t === "pending_write") onPendingWrite(f as unknown as PendingWrite);
+            else if (f.t === "view") onView?.(f.d);
           }
         }
       } finally {
         setStreaming(false);
       }
     },
-    [onText, onPendingWrite]
+    [onText, onPendingWrite, onView, onTurnStart]
   );
 
   const send = useCallback(

@@ -16,7 +16,9 @@ import { useConstellationChat, type PendingWrite } from "./useConstellationChat"
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
-import { stripForSpeech, splitForSpeech } from "@/lib/chat/voice";
+import { splitForSpeech, extractForSpeech } from "@/lib/chat/voice";
+import { withPointer } from "@/lib/chat/speech-pointer";
+import type { ViewDescriptor } from "@/lib/agent/view";
 import { playPcmStream } from "@/lib/chat/streamingAudio";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
@@ -70,6 +72,17 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
   // tool requested by node-pick
   const [requestedTool, setRequestedTool] = useState<{ name: string; args: unknown } | null>(null);
+
+  // Panel hiển thị. `view` là descriptor của lượt gần nhất (luôn thay thế, không xếp
+  // chồng). `viewClosed` là user đã bấm × — đóng chỉ thu gọn, không xoá dữ liệu.
+  const [view, setView] = useState<ViewDescriptor | null>(null);
+  const [viewClosed, setViewClosed] = useState(false);
+  const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
+  // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
+  // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
+  // liên tục và kéo theo mọi effect/ref phụ thuộc nó.
+  const pointerRef = useRef("");
+  pointerRef.current = t("constellation.viewPointer");
 
   // Hydrate the selected agent from localStorage after mount (SSR-safe).
   useEffect(() => {
@@ -193,6 +206,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const chat = useConstellationChat({
     onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
+    onTurnStart: () => { viewFromToolRef.current = false; },
+    onView: (d) => { viewFromToolRef.current = true; setView(d); setViewClosed(false); },
     initialConversationId,
   });
 
@@ -270,7 +285,19 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const speakAbortRef = useRef<AbortController | null>(null);
   const speakReply = useCallback(async (text: string) => {
     if (!text) return;
-    const spoken = stripForSpeech(text);
+    // Tách phần NHÌN được ra trước, rồi mới chèn câu trỏ panel, rồi mới cắt segment.
+    // Thứ tự này bắt buộc: đảo lại thì soft cap 280 ký tự của splitForSpeech sẽ băm
+    // bảng thành mảnh và đọc to "| PH-005 | 1015 |".
+    const { speech, descriptors } = extractForSpeech(text);
+    // Nguồn A (frame view từ tool result) luôn thắng nguồn B (bảng model tự viết):
+    // số của A do code lấy được, số của B là model kể lại (Rule 13). Nhưng bảng của B
+    // vẫn phải bị cắt khỏi lời nói — đó là việc extractForSpeech vừa làm ở trên.
+    if (!viewFromToolRef.current && descriptors.length) {
+      setView(descriptors[0]);
+      setViewClosed(false);
+    }
+    const hasView = viewFromToolRef.current || descriptors.length > 0;
+    const spoken = withPointer(speech, hasView, pointerRef.current);
     if (!spoken) return;
     const segments = splitForSpeech(spoken);
     if (!segments.length) return;
