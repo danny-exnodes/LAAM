@@ -192,6 +192,22 @@ body::after {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(420%); }
 }
+/* Larvis display panel (constellation): "hiện hình" ra khỏi nền sao — mờ + nhoè +
+   thu nhỏ nhẹ rồi nét dần, thay vì trượt vào như panel thường. Vào chậm hơn ra
+   (0.34s vs 0.2s) và dùng ease-out-expo để cảm giác dừng lại dứt khoát.
+   Ra nhanh + nhoè mạnh hơn: đóng thì phải dứt khoát, không kéo dài.
+   PANEL_EXIT_MS trong DisplayPanel.tsx phải ≥ thời lượng laam-panel-out. */
+@keyframes laam-panel-in {
+  from { opacity: 0; transform: translateY(-12px) scale(0.96); filter: blur(12px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+@keyframes laam-panel-out {
+  from { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  to { opacity: 0; transform: translateY(-8px) scale(0.98); filter: blur(10px); }
+}
+.anim-panel-in { animation: laam-panel-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-panel-out { animation: laam-panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
+
 .laam-bar { animation: laam-progress 0.9s ease-in-out infinite; }
 .anim-fade-in { animation: laam-fade-in 0.18s ease-out both; }
 .anim-slide-down { animation: laam-slide-down 0.18s ease-out both; }
@@ -240,6 +256,8 @@ body::after {
   .anim-slide-down,
   .anim-slide-in-left,
   .anim-scale-in,
+  .anim-panel-in,
+  .anim-panel-out,
   .anim-float,
   .anim-float-2,
   .anim-glow,

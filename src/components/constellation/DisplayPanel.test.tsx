@@ -133,6 +133,26 @@ describe("DisplayPanel", () => {
     expect(document.querySelector(".chat-chart")).toBeTruthy();
   });
 
+  // Panel ở lại DOM trong lúc chạy animation đóng (cha gỡ sau PANEL_EXIT_MS). Trong
+  // khoảng đó nó KHÔNG còn là nội dung đang hiện: phải ẩn khỏi screen reader và không
+  // ăn click, nếu không user vẫn "thấy" một panel vô hình.
+  it("open=false → chạy anim ra, ẩn khỏi screen reader, không nhận click", () => {
+    renderPanel(
+      <DisplayPanel views={[view]} density="detail" open={false} onClose={noop} onToggleDensity={noop} agentLabel="DAAB" />,
+    );
+    const region = document.querySelector('[role="region"]')!;
+    expect(region.getAttribute("aria-hidden")).toBe("true");
+    expect(region.className).toContain("anim-panel-out");
+    expect(region.className).toContain("pointer-events-none");
+  });
+
+  it("open=true → chạy anim vào và nhận tương tác bình thường", () => {
+    renderPanel(<DisplayPanel views={[view]} density="detail" open onClose={noop} onToggleDensity={noop} agentLabel="DAAB" />);
+    const region = screen.getByRole("region");
+    expect(region.className).toContain("anim-panel-in");
+    expect(region.className).toContain("pointer-events-auto");
+  });
+
   it("nút × gọi onClose", () => {
     const onClose = vi.fn();
     renderPanel(<DisplayPanel views={[view]} density="detail" onClose={onClose} onToggleDensity={noop} agentLabel="DAAB" />);

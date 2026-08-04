@@ -12,7 +12,7 @@ import { SonicWaveformCanvas } from "./SonicWaveformCanvas";
 import { ParticleFieldBackground } from "./ParticleFieldBackground";
 import { ConstellationNodes } from "./ConstellationNodes";
 import { CommandDock } from "./CommandDock";
-import { DisplayPanel, type Density } from "./DisplayPanel";
+import { DisplayPanel, PANEL_EXIT_MS, type Density } from "./DisplayPanel";
 import { useConstellationChat, type PendingWrite } from "./useConstellationChat";
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
@@ -80,6 +80,19 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [views, setViews] = useState<ViewDescriptor[]>([]);
   const [viewClosed, setViewClosed] = useState(false);
   const [density, setDensity] = useState<Density>("detail");
+  // Panel phải Ở LẠI trong DOM để chạy hết animation đóng rồi mới gỡ — gỡ ngay thì nó
+  // biến mất đột ngột, không thấy animation nào cả. `panelOpen` điều khiển animation
+  // vào/ra, `panelMounted` điều khiển việc có render hay không.
+  const panelOpen = views.length > 0 && !viewClosed;
+  const [panelMounted, setPanelMounted] = useState(false);
+  useEffect(() => {
+    if (panelOpen) {
+      setPanelMounted(true);
+      return; // mở lại giữa lúc đang đóng: cleanup dưới đã huỷ timer gỡ, panel vào lại mượt
+    }
+    const id = setTimeout(() => setPanelMounted(false), PANEL_EXIT_MS);
+    return () => clearTimeout(id);
+  }, [panelOpen]);
   const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
   // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
   // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
@@ -595,10 +608,11 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       <SysInfoPanel greetingName={greetingName} t={t} lang={lang} />
       <ConstellationNodes placed={placed} onPick={onPick} t={t} />
 
-      {views.length > 0 && !viewClosed && (
+      {panelMounted && views.length > 0 && (
         <DisplayPanel
           views={views}
           density={density}
+          open={panelOpen}
           onClose={() => setViewClosed(true)}
           onToggleDensity={() => setDensity((d) => (d === "detail" ? "focus" : "detail"))}
           agentLabel={agentLabel}

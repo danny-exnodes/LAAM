@@ -15,9 +15,15 @@ export type Density = "focus" | "detail";
 
 const FOCUS_ROWS = 3; // liếc mắt đọc được; detail hiện hết những gì descriptor giữ
 
+// Panel phải Ở LẠI trong DOM đủ lâu để chạy hết animation đóng rồi mới gỡ. Con số này
+// phải ≥ thời lượng .anim-panel-out trong globals.css (0.2s) — ngắn hơn thì panel biến
+// mất đột ngột giữa chừng, đúng bằng lỗi mà animation đang muốn tránh.
+export const PANEL_EXIT_MS = 220;
+
 export function DisplayPanel({
   views,
   density,
+  open = true,
   onClose,
   onToggleDensity,
   agentLabel,
@@ -26,6 +32,9 @@ export function DisplayPanel({
   // Trước đây prop là MỘT descriptor nên model trả 2 khối thì user chỉ thấy 1.
   views: ViewDescriptor[];
   density: Density;
+  // false = đang chạy animation ĐÓNG (vẫn trong DOM). Cha giữ mounted thêm PANEL_EXIT_MS
+  // rồi mới gỡ — xem ConstellationClient. Mặc định true để test cũ gọi không cần prop này.
+  open?: boolean;
   onClose: () => void;
   onToggleDensity: () => void;
   agentLabel: string;
@@ -61,7 +70,19 @@ export function DisplayPanel({
     <section
       role="region"
       aria-label={head.title}
-      className="pointer-events-auto absolute left-[11%] right-[11%] top-[13%] z-30 max-h-[74vh] overflow-y-auto rounded-2xl border border-[#5bd6ff]/30 bg-[#08182a]/[0.92] p-4 text-[#eaf6ff] shadow-[0_0_0_1.5px_rgba(255,196,80,0.45),0_0_30px_rgba(255,196,80,0.30),0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+      // Đang đóng thì ẩn khỏi screen reader và chặn click — nó vẫn nằm trong DOM cho tới
+      // khi animation ra chạy xong, nhưng không còn là nội dung "đang hiện" nữa.
+      aria-hidden={!open}
+      className={[
+        "absolute left-[11%] right-[11%] top-[13%] z-30 max-h-[74vh] overflow-y-auto rounded-2xl",
+        // Nền mờ hơn hẳn (0.92 → 0.55) để thấy được sao/sóng phía sau; bù lại tăng
+        // backdrop-blur (xl → 2xl) và thêm viền sáng trong để chữ vẫn đọc rõ trên nền động.
+        "border border-[#5bd6ff]/25 bg-[#08182a]/55 backdrop-blur-2xl",
+        "p-4 text-[#eaf6ff]",
+        // Quầng vàng mềm hơn nền cũ — nền trong rồi thì shadow đậm sẽ thành viền cứng.
+        "shadow-[inset_0_1px_0_rgba(255,255,255,0.07),0_0_0_1px_rgba(255,196,80,0.30),0_0_34px_rgba(255,196,80,0.18),0_18px_44px_rgba(0,0,0,0.40)]",
+        open ? "pointer-events-auto anim-panel-in" : "pointer-events-none anim-panel-out",
+      ].join(" ")}
     >
       <div className="mb-2 flex items-start gap-2">
         <span className="rounded-full border border-emerald-400/40 bg-emerald-400/15 px-2 py-0.5 text-[10px] text-emerald-300">
