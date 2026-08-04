@@ -62,6 +62,20 @@ describe("deriveFromToolResult", () => {
     expect(d?.rows).toEqual([{ store_id: "PH-001", city: "Frisco", open: true }]);
   });
 
+  it("object 'not found' kiểu { hint, master_record: null } → null, không dựng panel từ gợi ý nội bộ cho model", () => {
+    expect(
+      deriveFromToolResult(
+        "kg_get_master_record",
+        { hint: "Project has no master record — use kg_search or kg_query to synthesize an answer from the graph.", master_record: null },
+        AT,
+      ),
+    ).toBeNull();
+  });
+
+  it("object có ≥2 field NULL/undefined nhưng chỉ 1 field có giá trị thật → null", () => {
+    expect(deriveFromToolResult("t", { a: "x", b: null, c: undefined }, AT)).toBeNull();
+  });
+
   it("một con số → stat", () => {
     expect(deriveFromToolResult("t", 666, AT)?.kind).toBe("stat");
   });
@@ -100,9 +114,14 @@ describe("pickTurnView", () => {
     expect(pickTurnView([rec])?.kind).toBe("record");
   });
 
-  it("table thắng record kể cả khi record đến sau", () => {
+  it("record mới hơn thắng table cũ hơn — list→describe, describe mới là câu trả lời", () => {
     const rec = deriveFromToolResult("r", { a: 1, b: 2 }, AT)!;
-    expect(pickTurnView([table("t")!, rec])?.kind).toBe("table");
+    expect(pickTurnView([table("t")!, rec])?.kind).toBe("record");
+  });
+
+  it("luôn lấy phần tử CUỐI bất kể kind — không còn ưu tiên table/chart", () => {
+    const rec = deriveFromToolResult("r", { a: 1, b: 2 }, AT)!;
+    expect(pickTurnView([rec, table("t")!])?.kind).toBe("table");
   });
 
   it("rỗng → null", () => {

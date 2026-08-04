@@ -138,6 +138,11 @@ export async function runToolRounds(
   let drilledDown = false;
   const seen = new Map<string, number>(); // repeat-detection: tool+args → count
   const views: ViewDescriptor[] = []; // gom cả lượt, chọn 1 ở cuối (pickTurnView)
+  // Đếm SỐ LẦN dispatch() thật sự chạy trong lượt (không tính lần bị chặn bởi
+  // repeat-detection). 1 lần = tra cứu thoáng qua để trả lời bằng lời, không đáng hiện
+  // panel; ≥2 lần = model đang đào sâu (vd. list→detail), panel mới đáng xem. Luật thuần
+  // đếm số bước, không đọc nội dung câu hỏi/câu trả lời (Rule 5).
+  let toolCallCount = 0;
 
   for (let i = 0; i < maxRounds; i++) {
     const isLastRound = i === maxRounds - 1; // ONLY the backstop forces a text answer
@@ -162,6 +167,7 @@ export async function runToolRounds(
         }
         if (name === "web_read") webReadNudged = true; // đã đọc rồi → khỏi nhắc
         const result = await deps.dispatch(name, args);
+        toolCallCount++;
         convo.push({ role: "tool", content: JSON.stringify(result) });
         if (opts.onView) {
           const view = deriveFromToolResult(name, result, Date.now());
@@ -182,6 +188,7 @@ export async function runToolRounds(
             // phải nổ ra ngoài để route suspend chờ xác nhận (Rule 12).
             try {
               const detail = await deps.dispatch(plan.name, plan.args);
+              toolCallCount++;
               convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: plan.name, arguments: plan.args } }] });
               convo.push({ role: "tool", content: JSON.stringify(detail) });
               if (opts.onView) {
@@ -219,7 +226,10 @@ export async function runToolRounds(
     if (isLastRound) opts.onBackstop?.(); // reached the backstop round → forced text → honest signal
     break;
   }
-  const view = pickTurnView(views);
+  // 1 tool call = tra cứu thoáng qua (vd. tìm ID theo tên) để trả lời bằng lời — không
+  // đáng hiện panel, và hay ra bảng "không liên quan" tới câu trả lời cuối. ≥2 = model
+  // đang đào sâu (list→detail hoặc nhiều bước), panel mới thật sự phản ánh câu trả lời.
+  const view = toolCallCount >= 2 ? pickTurnView(views) : null;
   if (view) opts.onView?.(view);
   return convo;
 }

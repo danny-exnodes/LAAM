@@ -59,7 +59,7 @@ export function DisplayPanel({
     <section
       role="region"
       aria-label={view.title}
-      className="pointer-events-auto absolute left-[11%] right-[11%] top-[13%] z-30 rounded-2xl border border-[#5bd6ff]/30 bg-[#08182a]/[0.92] p-4 text-[#eaf6ff] shadow-[0_0_0_1.5px_rgba(255,196,80,0.45),0_0_30px_rgba(255,196,80,0.30),0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl"
+      className="pointer-events-auto absolute left-[11%] right-[11%] top-[13%] z-30 max-h-[74vh] overflow-y-auto rounded-2xl border border-[#5bd6ff]/30 bg-[#08182a]/[0.92] p-4 text-[#eaf6ff] shadow-[0_0_0_1.5px_rgba(255,196,80,0.45),0_0_30px_rgba(255,196,80,0.30),0_18px_44px_rgba(0,0,0,0.45)] backdrop-blur-xl"
     >
       <div className="mb-2 flex items-start gap-2">
         <span className="rounded-full border border-emerald-400/40 bg-emerald-400/15 px-2 py-0.5 text-[10px] text-emerald-300">

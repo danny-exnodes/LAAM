@@ -89,7 +89,12 @@ export function deriveFromToolResult(
 
   if (isPlainObject(payload)) {
     const keys = Object.keys(payload);
-    if (keys.length < 2) return null; // 1 field không đáng chiếm cả màn hình
+    // Chỉ đếm field có GIÁ TRỊ THẬT (khác null/undefined). Nhiều tool trả "not found"
+    // dạng { hint: "...", master_record: null } — 2 field nhưng chỉ 1 cái có nội dung
+    // (còn lại là hướng dẫn nội bộ cho MODEL, không phải dữ liệu cho user xem). Đếm cả
+    // field null sẽ biến gợi ý nội bộ đó thành một "bảng" trông như dữ liệu thật.
+    const meaningfulKeys = keys.filter((k) => payload[k] !== null && payload[k] !== undefined);
+    if (meaningfulKeys.length < 2) return null; // <2 field có nội dung không đáng chiếm cả màn hình
     return {
       kind: "record",
       title: toolName,
@@ -115,11 +120,10 @@ export function deriveFromToolResult(
 }
 
 // Một lượt có nhiều tool result (drilldown list → detail, tối đa DEFAULT_MAX_ROUNDS
-// vòng). Chỉ MỘT panel được hiện, và là cái CUỐI CÙNG có dạng bảng/biểu đồ: bước
-// liệt kê chỉ là phương tiện lấy id, bước chi tiết mới là thứ người dùng hỏi.
+// vòng). Chỉ MỘT panel được hiện: descriptor CUỐI CÙNG theo thời gian, bất kể kind.
+// Trước đây ưu tiên table/chart hơn record/stat kể cả khi record mới hơn — sai với
+// thực tế list→describe (describe trả về 1 object = record, nhưng là bước gần câu
+// trả lời nhất). "Cuối cùng" luôn đúng hơn "table luôn thắng".
 export function pickTurnView(views: ViewDescriptor[]): ViewDescriptor | null {
-  for (let i = views.length - 1; i >= 0; i--) {
-    if (views[i].kind === "table" || views[i].kind === "chart") return views[i];
-  }
   return views.length ? views[views.length - 1] : null;
 }

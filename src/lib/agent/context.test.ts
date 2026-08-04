@@ -58,13 +58,19 @@ describe("buildSystemPrompt", () => {
     // map dùng tên địa điểm (client tự tra toạ độ) — không bắt model bịa polyline
     expect(p).toContain("directions");
   });
-  test("voice mode: dùng VOICE_GUIDE, bỏ hợp đồng render trực quan (chart/map)", () => {
+  test("voice mode: dùng VOICE_GUIDE, CHO PHÉP khối hiển thị ```chart/bảng nhưng KHÔNG cho ```map", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [], mode: "voice" });
     // Voice guide markers
     expect(p).toContain("giọng nói");        // "Đây là hội thoại bằng giọng nói…"
     expect(p).toContain("KHÔNG ĐỌC TO ID");  // drop identifiers rule — scoped to SPEECH
-    // Visual render contract must be gone — meaningless for TTS
-    expect(p).not.toContain("```chart");
+    // Kênh NHÌN: model tự quyết khi nào đáng hiện, giống RENDER_GUIDE của chat thường.
+    // (Trước đây voice cấm hẳn markdown và panel do code tự suy từ tool result — cách đó
+    // hiện panel cho cả bước tra cứu nội bộ không liên quan tới câu trả lời.)
+    expect(p).toContain("```chart");
+    expect(p).toContain("TỐI ĐA MỘT khối"); // 1 panel/lượt — chốt ngay ở prompt
+    expect(p).toContain("KHÔNG được đọc lên"); // khối bị tách khỏi lời nói, không đọc
+    // ```map KHÔNG được dạy ở voice: DisplayPanel chỉ render bảng + chart. Một khối map
+    // sẽ bị cleanProse nuốt như code fence → mất hẳn, không nói cũng không hiện.
     expect(p).not.toContain("```map");
     // C1: voice + KHÔNG tool (đường Claude MVS ở route) vẫn phải SẠCH từ ngữ tool —
     // nói về "gọi công cụ" với model không có tool sẽ làm nó bịa cú pháp tool.

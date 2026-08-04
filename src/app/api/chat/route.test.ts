@@ -330,14 +330,16 @@ describe("R0 tool-loop robustness", () => {
     }
   });
 
-  // Task 3 review fix: frames.test.ts chỉ chứng minh codec round-trip TRONG NGHĨA CÔ LẬP —
-  // không chứng minh route.ts thật sự phát `view` frame TRƯỚC `cite` khi một tool call thật
-  // sinh ra kết quả dạng bảng. Đây đúng lớp lỗi "sse-block-ordering-bug" mà commit message
-  // của Task 3 viện dẫn: một sửa đổi tương lai vào leadingFrames có thể âm thầm phá thứ tự
-  // mà không có gì bắt được. laam_list_agents trả về ≥2 hàng CÙNG bộ khoá (deriveFromToolResult
-  // nhận ra "table") → view frame phải xuất hiện, và phải đứng TRƯỚC cite frame (thứ tự
-  // leadingFrames: view → cite → proactive → tokens).
-  test("tool trả bảng (laam_list_agents) → frame view phát TRƯỚC frame cite trong stream", async () => {
+  // NGUỒN A ĐÃ TẮT. Trước đây route tự suy descriptor từ MỌI tool result và phát frame
+  // `view` — panel do đó hiện cả những bước tra cứu nội bộ chẳng liên quan gì tới câu trả
+  // lời (tra id theo tên, kết quả "not found"...), vì luật cấu trúc không trả lời được câu
+  // hỏi ngữ nghĩa "kết quả này có đáng cho user nhìn không". Nay model tự quyết bằng cách
+  // chèn bảng/```chart vào câu trả lời (VOICE_GUIDE), client tách ra bằng extractForSpeech
+  // — CÙNG cơ chế với chat thường.
+  //
+  // Test này giữ lại ở dạng ĐẢO NGƯỢC: một tool trả kết quả dạng bảng đẹp KHÔNG được đẻ ra
+  // frame `view` nữa. Nếu ai đó nối lại onView ở route mà không cân nhắc, test này đỏ.
+  test("tool trả bảng (laam_list_agents) → KHÔNG còn phát frame view (nguồn A đã tắt)", async () => {
     const captured = { values: [] as unknown[] };
     const agentRows = [
       {
@@ -411,14 +413,13 @@ describe("R0 tool-loop robustness", () => {
         }),
       );
       const text = await res.text();
-      const viewIdx = text.indexOf('"t":"view"');
-      const citeIdx = text.indexOf('"t":"cite"');
-      expect(viewIdx).toBeGreaterThan(-1); // view frame thực sự có mặt
-      expect(citeIdx).toBeGreaterThan(-1); // cite frame thực sự có mặt (sanity — nếu không thì so sánh thứ tự vô nghĩa)
-      expect(viewIdx).toBeLessThan(citeIdx); // và view PHẢI đứng trước cite (leadingFrames: view → cite → proactive → tokens)
-      // Descriptor mang dữ liệu bảng thật (Rule 13: số liệu do CODE suy, không phải model bịa).
-      expect(text).toContain('"kind":"table"');
-      expect(text).toContain('"toolName":"laam_list_agents"');
+      // Tool ĐÃ chạy và ĐÃ trả kết quả dạng bảng (sanity — nếu tool không chạy thì phép
+      // khẳng định "không có view frame" dưới đây là vô nghĩa, đúng kiểu test luôn xanh).
+      expect(text).toContain("laam_list_agents");
+      expect(text).toContain('"t":"cite"'); // chuỗi frame đuôi vẫn phát bình thường
+      // …nhưng KHÔNG có view frame: panel giờ do model tự quyết (bảng/```chart trong câu
+      // trả lời → extractForSpeech tách ở client), không phải code tự suy từ tool result.
+      expect(text).not.toContain('"t":"view"');
     } finally {
       vi.unstubAllGlobals();
       errSpy.mockRestore();

@@ -27,13 +27,28 @@ const RENDER_GUIDE =
   "Hệ thống tự tra toạ độ và vẽ tuyến — đừng tự bịa toạ độ hay số liệu; " +
   "chỉ chèn khối khi câu hỏi thực sự cần biểu đồ hoặc bản đồ.";
 
-// Voice contract: on /constellation the reply is read aloud by TTS. Generate spoken
-// prose, not written markup — no tables/lists/markdown, no read-aloud identifiers,
-// summarize long lists. Replaces RENDER_GUIDE (chart/map are visual-only) in voice mode.
+// Voice contract: on /constellation the reply is read aloud by TTS. Prose is SPOKEN;
+// an optional table/```chart block is NOT — extractForSpeech (lib/chat/voice.ts) cuts it
+// out of the speech and the client shows it on a floating panel.
+//
+// Trước đây khối này CẤM HẲN markdown và panel do CODE tự suy từ mọi tool result
+// (deriveFromToolResult + onView). Cách đó hiện panel cho cả những bước tra cứu nội bộ
+// không liên quan gì tới câu trả lời (tra id theo tên, kết quả "not found"...), vì luật
+// cấu trúc không trả lời được câu hỏi ngữ nghĩa "kết quả này có đáng cho user nhìn
+// không". Nay giao quyết định đó cho model — CÙNG hợp đồng với RENDER_GUIDE của chat
+// thường, để hai bề mặt hành xử như nhau và chỉ có một chỗ phải sửa.
 const VOICE_GUIDE =
-  "Đây là hội thoại bằng giọng nói — câu trả lời của bạn sẽ được đọc thành tiếng. " +
-  "Hãy trả lời như đang NÓI chuyện tự nhiên: câu ngắn, mạch lạc, KHÔNG dùng markdown " +
-  "(không bảng, không gạch đầu dòng, không tiêu đề, không khối mã). " +
+  "Đây là hội thoại bằng giọng nói — phần văn xuôi của bạn sẽ được ĐỌC THÀNH TIẾNG. " +
+  "Hãy viết văn xuôi như đang NÓI chuyện tự nhiên: câu ngắn, mạch lạc, không tiêu đề, không gạch đầu dòng. " +
+  // Kênh NHÌN, tách hẳn khỏi kênh NÓI. Tối đa MỘT khối/lượt: panel chỉ hiện được một
+  // descriptor, và giới hạn ngay ở prompt thì không phải đi chọn hộ model sau đó.
+  "Khi câu trả lời có dữ liệu đáng NHÌN (bảng số liệu, so sánh nhiều dòng, xu hướng), " +
+  "bạn được chèn TỐI ĐA MỘT khối hiển thị: hoặc một bảng markdown, hoặc một khối ```chart " +
+  'chứa JSON kiểu Chart.js: {"type":"bar|line|pie","title":"…","data":{"labels":[…],"datasets":[{"label":"…","data":[…]}]}}. ' +
+  "Khối đó KHÔNG được đọc lên — nó được tách ra và hiện trên một bảng nổi giữa màn hình. " +
+  "Vì vậy phần văn xuôi phải tự nó đã đủ ý, đừng viết kiểu \"xem bảng bên dưới\". " +
+  "Chỉ chèn khi dữ liệu thật sự đáng nhìn; câu trò chuyện, câu xác nhận, hay một hai con số thì KHÔNG cần. " +
+  "Số liệu trong khối phải đúng với dữ liệu thật bạn đọc được — đừng bịa, đừng làm tròn cho gọn. " +
   // G1: cả hai câu dưới đây phải neo rõ vào LỜI NÓI RA. Bản cũ ("KHÔNG đọc ID…",
   // "Ưu tiên ngắn gọn") bị model hiểu là chỉ dẫn về mức độ TRA CỨU: nó dừng sau 1 tool
   // liệt kê và né luôn các tool nhận UUID → trả lời nông/bịa (đo: 3/17 lượt voice hỏng,

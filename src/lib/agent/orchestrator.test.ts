@@ -366,6 +366,20 @@ describe("onView", () => {
     expect(onView).toHaveBeenCalledWith(expect.objectContaining({ source: expect.objectContaining({ toolName: "detail" }) }));
   });
 
+  test("KHÔNG gọi khi lượt chỉ có ĐÚNG 1 tool call, dù ra descriptor hợp lệ — tra cứu thoáng qua không đáng hiện panel", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "list", arguments: {} } }] } })
+      .mockResolvedValueOnce({ message: { content: "xong" } });
+    const dispatch = vi.fn(async (name: string) => rows(name));
+    const onView = vi.fn();
+
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onView });
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(onView).not.toHaveBeenCalled();
+  });
+
   test("KHÔNG gọi khi lượt không có tool result nào dựng được descriptor", async () => {
     const callOllama = vi.fn(async () => ({ message: { content: "chào bạn" } }));
     const dispatch = vi.fn(async () => ({}));
