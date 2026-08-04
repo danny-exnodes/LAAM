@@ -195,5 +195,35 @@ describe("extractForSpeech", () => {
   it("stripForSpeech KHÔNG đổi hành vi — v2 vẫn cần bảng đọc thành văn xuôi", () => {
     expect(stripForSpeech(TABLE)).toMatch(/Store: PH-005/);
   });
+
+  it("block chart JSON hỏng → không descriptor, văn xuôi xung quanh vẫn được đọc (không nuốt trắng)", () => {
+    const md = 'Trước.\n\n```chart\n{not valid json\n```\n\nSau.';
+    const { speech, descriptors } = extractForSpeech(md);
+    expect(descriptors).toHaveLength(0);
+    expect(speech).toContain("Trước");
+    expect(speech).toContain("Sau");
+    expect(speech).not.toMatch(/```/);
+    expect(speech).not.toMatch(/not valid json/);
+  });
+
+  it("bảng có header rỗng/trùng tên → không cột nào bị đè mất dữ liệu", () => {
+    const md = [
+      "| | Tên | Tên |",
+      "|---|---|---|",
+      "| 1 | A | X |",
+      "| 2 | B | Y |",
+    ].join("\n");
+    const { descriptors } = extractForSpeech(md);
+    expect(descriptors).toHaveLength(1);
+    // 3 cột hiển thị, label giữ nguyên văn bản gốc (kể cả rỗng/trùng)
+    expect(descriptors[0].columns?.map((c) => c.label)).toEqual(["", "Tên", "Tên"]);
+    expect(descriptors[0].columns).toHaveLength(3);
+    // mỗi hàng giữ đủ 3 giá trị — không cột nào bị ghi đè bởi cột trùng tên
+    const values = descriptors[0].rows?.map((r) => Object.values(r));
+    expect(values).toEqual([
+      ["1", "A", "X"],
+      ["2", "B", "Y"],
+    ]);
+  });
 });
 

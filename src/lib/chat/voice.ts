@@ -112,12 +112,26 @@ export function stripForSpeech(md: string): string {
   return cleanProse(tablesToProse(md));
 }
 
+// Blank/duplicate header text ("| | Store |" hoặc hai cột cùng tên) không được phép
+// làm object-key trùng nhau — trùng key nghĩa là ô sau ghi đè ô trước, mất dữ liệu
+// âm thầm. Key nội bộ được làm duy nhất bằng hậu tố chỉ số; LABEL hiển thị vẫn giữ
+// nguyên văn bản gốc (kể cả rỗng/trùng) để bảng trên panel đúng như model viết.
+function uniqueHeaderKeys(headers: string[]): string[] {
+  const seen = new Map<string, number>();
+  return headers.map((h, i) => {
+    const count = seen.get(h) ?? 0;
+    seen.set(h, count + 1);
+    return h === "" || count > 0 ? `${h}__${i}` : h;
+  });
+}
+
 // Chỉ nhận bảng GFM ĐÚNG cú pháp (có dòng separator). Bảng hỏng rơi xuống
 // tablesToProse ở cuối hàm — nội dung vẫn được đọc, chỉ không lên panel.
 function tableToDescriptor(headers: string[], dataRows: string[][]): ViewDescriptor | null {
   if (!headers.length || !dataRows.length) return null;
+  const keys = uniqueHeaderKeys(headers);
   const rows = dataRows.map((cells) =>
-    Object.fromEntries(headers.map((h, i) => [h, cells[i] ?? ""])),
+    Object.fromEntries(keys.map((k, i) => [k, cells[i] ?? ""])),
   );
   const numeric = (key: string) =>
     rows.every((r) => r[key] !== "" && !Number.isNaN(Number(String(r[key]).replace(/[,\s]/g, ""))));
@@ -125,7 +139,7 @@ function tableToDescriptor(headers: string[], dataRows: string[][]): ViewDescrip
     kind: "table",
     title: headers.join(" · "),
     source: { type: "model" },
-    columns: headers.map((h) => ({ key: h, label: h, align: numeric(h) ? "right" : "left" })),
+    columns: keys.map((k, i) => ({ key: k, label: headers[i], align: numeric(k) ? "right" : "left" })),
     rows,
   };
 }
@@ -169,11 +183,16 @@ function strayTableRowsToProse(md: string): string {
 export function extractForSpeech(md: string): { speech: string; descriptors: ViewDescriptor[] } {
   const descriptors: ViewDescriptor[] = [];
 
-  // 1) chart fences
-  let rest = md.replace(CHART_FENCE, (_m, body: string) => {
+  // 1) chart fences — JSON hỏng thì GIỮ NGUYÊN văn bản khớp (kể cả dấu ```), để nó
+  //    chảy xuống cleanProse's fenced-code-block regex và bị nuốt ở ĐÓ như comment của
+  //    chartToDescriptor mô tả, thay vì biến mất ở đây mà không qua fallback nào.
+  let rest = md.replace(CHART_FENCE, (m, body: string) => {
     const d = chartToDescriptor(body);
-    if (d) descriptors.push(d);
-    return "\n";
+    if (d) {
+      descriptors.push(d);
+      return "\n";
+    }
+    return m;
   });
 
   // 2) bảng GFM đúng cú pháp
