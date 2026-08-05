@@ -145,6 +145,17 @@ export function buildSystemPrompt(input: {
       "Vẫn nêu đầy đủ những điều kiện NGƯỜI DÙNG đã nói (khoảng thời gian, ngưỡng, mã cụ thể) và tên bảng khi đã chắc chắn, " +
       "nhưng KHÔNG tự chọn hộ cột khi có nhiều cột cùng hợp lý: tầng dưới có cơ chế hỏi lại khi mơ hồ, chốt sẵn sẽ làm cơ chế đó im lặng và một lựa chọn sai sẽ trông y hệt câu trả lời đúng. " +
       "Tuyệt đối không gửi câu SQL vào ô câu hỏi ngôn ngữ tự nhiên." +
+      // P2: vá lỗ hổng do chính P1 mở ra. ĐO ĐƯỢC 2026-08-05 trên câu hỏi mới "Which is our
+      // busiest store?": 1/2 lượt model trả lời với 0 TOOL CALL, tự tuyên bố "chưa có dữ liệu
+      // về doanh thu/lượt khách" — trong khi dữ liệu CÓ (lượt còn lại truy vấn bình thường,
+      // ra PH-002 331 giao dịch, khớp DB chính xác). P1 dặn "đừng tự chốt cột khi nhiều cột
+      // cùng hợp lý", và model suy diễn tiếp thành "không chốt được ⇒ không truy vấn được ⇒
+      // từ chối". Nói thẳng đường đi đúng: mơ hồ thì CỨ GỬI câu hỏi xuống, tầng dưới có cơ
+      // chế hỏi lại; LAAM tự hỏi lại người dùng trước là thừa một vòng và thường hỏi bằng
+      // thuật ngữ kỹ thuật tệ hơn câu tầng dưới hỏi.
+      "Câu hỏi mơ hồ về cách tính KHÔNG phải lý do để không truy vấn: ĐỪNG vì thế mà bỏ qua việc truy vấn, cũng đừng tự hỏi lại người dùng trước — " +
+      "cứ gửi câu hỏi xuống công cụ theo lời người dùng, tầng dưới sẽ tự hỏi lại nếu nó thấy mơ hồ, và khi đó bạn chuyển câu hỏi ấy cho người dùng. " +
+      "Và tuyệt đối KHÔNG nói 'không có dữ liệu' hay 'hệ thống chưa có thông tin' khi bạn chưa gọi công cụ lần nào cho câu hỏi này — đó là phỏng đoán, không phải sự thật." +
       // R1: đo được model chọn nhầm tool audit RIÊNG của chính LAAM (đọc log hành động
       // của chính agent này, tiền tố laam_) cho câu hỏi về hoạt động NGHIỆP VỤ của
       // khách hàng/dữ liệu đã kết nối — chỉ vì tên tool có chữ "audit" khớp mặt chữ với

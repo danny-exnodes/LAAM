@@ -66,6 +66,21 @@ describe("buildSystemPrompt", () => {
     expect(p).toContain("điều kiện NGƯỜI DÙNG đã nói");
     expect(p).toContain("không gửi câu SQL");
   });
+  // P2 — đóng lỗ hổng do chính P1 mở ra. ĐO ĐƯỢC 2026-08-05 trên câu hỏi mới
+  // "Which is our busiest store?": 1/2 lượt model trả lời với 0 TOOL CALL, tự nói "chưa có
+  // dữ liệu về doanh thu/lượt khách" — trong khi dữ liệu CÓ (lượt còn lại truy vấn bình
+  // thường và ra PH-002, 331 giao dịch, khớp DB chính xác). P1 dặn "đừng tự chốt cột khi
+  // nhiều cột cùng hợp lý"; model suy diễn thành "không chốt được ⇒ không truy vấn được".
+  // Hai câu cấm dưới đây nói thẳng đường đi đúng: cứ gửi câu hỏi xuống, tầng dưới sẽ hỏi lại.
+  test("P2: mơ hồ KHÔNG phải cớ để bỏ truy vấn hay tự hỏi lại người dùng trước", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
+    expect(p).toContain("ĐỪNG vì thế mà bỏ qua việc truy vấn");
+    expect(p).toContain("tầng dưới sẽ tự hỏi lại");
+  });
+  test("P2: cấm tuyên bố 'không có dữ liệu' khi chưa hề truy vấn", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
+    expect(p).toContain("chưa gọi công cụ lần nào");
+  });
   test("R1: có tool → cấm dùng tool audit riêng của LAAM cho câu hỏi nghiệp vụ khách hàng", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "laam_query_audit", kind: "read" }] });
     expect(p).toContain("KHÔNG chứa dữ liệu nghiệp vụ của khách hàng");
