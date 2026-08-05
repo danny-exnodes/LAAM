@@ -143,7 +143,12 @@ export function buildSystemPrompt(input: {
       // câu hỏi nhiều chỉ số thành nhiều lượt (M1 ở trên) cũng không đổi.
       "Khi diễn đạt câu hỏi cho công cụ truy vấn dữ liệu bằng ngôn ngữ tự nhiên, hãy GIỮ NGUYÊN cách người dùng mô tả chỉ số cần tính — đừng thay bằng tên cột bạn tự đoán. " +
       "Vẫn nêu đầy đủ những điều kiện NGƯỜI DÙNG đã nói (khoảng thời gian, ngưỡng, mã cụ thể) và tên bảng khi đã chắc chắn, " +
-      "nhưng KHÔNG tự chọn hộ cột khi có nhiều cột cùng hợp lý: tầng dưới có cơ chế hỏi lại khi mơ hồ, chốt sẵn sẽ làm cơ chế đó im lặng và một lựa chọn sai sẽ trông y hệt câu trả lời đúng. " +
+      // PORTABILITY: lý do CHÍNH phải là thứ luôn đúng với MỌI công cụ truy vấn NL — bạn không
+      // thấy dữ liệu nên không có cơ sở để chọn. Bản đầu khẳng định "tầng dưới CÓ cơ chế hỏi
+      // lại", đúng với connector đang cắm nhưng không đảm bảo với connector khác; nếu sai thì
+      // lời khuyên này thành có hại. Nay nó chỉ còn là lợi ích PHỤ, nêu có điều kiện.
+      "nhưng KHÔNG tự chọn hộ cột khi có nhiều cột cùng hợp lý — bạn KHÔNG nhìn thấy dữ liệu thật nên không có cơ sở để chọn, và một lựa chọn sai sẽ trông y hệt câu trả lời đúng. " +
+      "Nếu công cụ có cơ chế hỏi lại khi mơ hồ, việc chốt sẵn còn làm cơ chế đó im lặng luôn. " +
       "Tuyệt đối không gửi câu SQL vào ô câu hỏi ngôn ngữ tự nhiên." +
       // P3: P1 chặn được việc chốt TÊN CỘT, nhưng chạy lại đủ 12 câu (2026-08-05) cho thấy còn
       // HAI kiểu viết lại khác cũng phá cơ chế hỏi-lại, và cả hai đều KHÔNG nhắc tên cột nào:
@@ -159,7 +164,7 @@ export function buildSystemPrompt(input: {
       // Nói cách khác: chính TỪ NGỮ của người dùng ("duplicate", "repeated", "shortage",
       // "busiest") là tín hiệu tầng dưới dựa vào để biết cần hỏi lại. Diễn giải lại = xoá tín
       // hiệu. Vế cuối giữ M1 sống: tách câu hỏi ghép vẫn hợp lệ, miễn mỗi phần giữ lời gốc.
-      "GIỮ NGUYÊN TỪ NGỮ người dùng dùng để mô tả thứ cần tìm (vd 'duplicate', 'repeated', 'shortage', 'busiest') — đừng thay bằng định nghĩa của bạn ('nhiều hơn một lần', 'flagged = true'), vì chính những từ đó cho tầng dưới biết chỗ nào cần hỏi lại. " +
+      "GIỮ NGUYÊN TỪ NGỮ người dùng dùng để mô tả thứ cần tìm (vd 'duplicate', 'repeated', 'shortage', 'busiest') — đừng thay bằng định nghĩa của bạn ('nhiều hơn một lần', 'cột đánh dấu bằng true', 'chênh lệch nhỏ hơn 0'), vì diễn giải lại là bạn đang quyết định thay người dùng một điều họ chưa hề nói. " +
       "Và đừng liệt kê các cột cần hiển thị — để tầng dưới tự chọn cột phù hợp; chỉ định cột hiển thị từng khiến nó gộp nhóm theo khoá chính và trả về rỗng. " +
       "Tách câu hỏi ghép thành nhiều phần thì vẫn được (xem luật ở trên), miễn mỗi phần giữ đúng lời người dùng cho phần đó." +
       // P2: vá lỗ hổng do chính P1 mở ra. ĐO ĐƯỢC 2026-08-05 trên câu hỏi mới "Which is our
@@ -171,7 +176,7 @@ export function buildSystemPrompt(input: {
       // chế hỏi lại; LAAM tự hỏi lại người dùng trước là thừa một vòng và thường hỏi bằng
       // thuật ngữ kỹ thuật tệ hơn câu tầng dưới hỏi.
       "Câu hỏi mơ hồ về cách tính KHÔNG phải lý do để không truy vấn: ĐỪNG vì thế mà bỏ qua việc truy vấn, cũng đừng tự hỏi lại người dùng trước — " +
-      "cứ gửi câu hỏi xuống công cụ theo lời người dùng, tầng dưới sẽ tự hỏi lại nếu nó thấy mơ hồ, và khi đó bạn chuyển câu hỏi ấy cho người dùng. " +
+      "cứ gửi câu hỏi xuống công cụ theo lời người dùng: nếu công cụ hỏi lại thì bạn chuyển câu hỏi ấy cho người dùng, còn nếu nó trả về dữ liệu thì bạn đã có số liệu thật để soi thay vì phỏng đoán. " +
       "Và tuyệt đối KHÔNG nói 'không có dữ liệu' hay 'hệ thống chưa có thông tin' khi bạn chưa gọi công cụ lần nào cho câu hỏi này — đó là phỏng đoán, không phải sự thật." +
       // R1: đo được model chọn nhầm tool audit RIÊNG của chính LAAM (đọc log hành động
       // của chính agent này, tiền tố laam_) cho câu hỏi về hoạt động NGHIỆP VỤ của

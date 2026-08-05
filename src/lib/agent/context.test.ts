@@ -75,7 +75,26 @@ describe("buildSystemPrompt", () => {
   test("P2: mơ hồ KHÔNG phải cớ để bỏ truy vấn hay tự hỏi lại người dùng trước", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
     expect(p).toContain("ĐỪNG vì thế mà bỏ qua việc truy vấn");
-    expect(p).toContain("tầng dưới sẽ tự hỏi lại");
+    expect(p).toContain("nếu công cụ hỏi lại");
+  });
+  // PORTABILITY — luật P1/P2/P3 nằm trong prompt CHUNG, áp cho MỌI công cụ truy vấn dữ liệu
+  // bằng ngôn ngữ tự nhiên, không riêng connector nào. Bản đầu khẳng định thẳng "tầng dưới CÓ
+  // cơ chế hỏi lại khi mơ hồ" — đúng với DAAB nhưng KHÔNG đảm bảo với connector khác, và nếu
+  // sai thì lời khuyên "đừng chốt, tầng dưới sẽ hỏi" trở thành có hại (gửi câu mơ hồ xuống cho
+  // một tầng chỉ biết đoán im lặng). Lý do CHÍNH phải là thứ luôn đúng: LAAM không nhìn thấy dữ
+  // liệu nên không có cơ sở để chọn. Cơ chế hỏi lại chỉ là lợi ích PHỤ, diễn đạt có điều kiện.
+  test("không giả định mọi công cụ đều biết hỏi lại; lý do chính phải luôn đúng", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
+    expect(p).toContain("bạn KHÔNG nhìn thấy dữ liệu thật");
+    expect(p).toContain("Nếu công cụ có cơ chế hỏi lại");
+    expect(p).not.toContain("tầng dưới có cơ chế hỏi lại khi mơ hồ");
+    expect(p).not.toContain("tầng dưới sẽ tự hỏi lại");
+  });
+  // Ví dụ minh hoạ trong prompt chung không được suy ra từ schema của một dataset cụ thể
+  // ('flagged' là cột của cash_drawers trong pharmacy_demo).
+  test("ví dụ trong prompt là trung tính, không lấy từ schema của một dataset", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
+    expect(p).not.toContain("flagged");
   });
   test("P2: cấm tuyên bố 'không có dữ liệu' khi chưa hề truy vấn", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
