@@ -275,6 +275,33 @@ describe("runToolRounds", () => {
     expect(dispatch).toHaveBeenCalledWith("kg_query_datasource", { q: "x" });
   });
 
+  // ĐO ĐƯỢC (2026-08-05, Larvis câu 12 trong thread 12 câu): model gọi tool dữ liệu DAAB
+  // TRƯỚC rồi mới gọi laam_query_audit — điều kiện cũ `!calledDataFetchTool` khiến guard tắt
+  // câm ĐÚNG LÚC lỗi xảy ra, và lượt đó trả lời sang chủ đề của câu hỏi trước. Đọc nhật ký
+  // riêng của LAAM để trả lời câu hỏi nghiệp vụ là SAI bất kể trước đó đã gọi tool gì.
+  test("G5: gọi tool dữ liệu TRƯỚC rồi mới laam_query_audit → vẫn phải nhắc đích danh", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query_datasource", arguments: { q: "a" } } }] },
+      })
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "laam_query_audit", arguments: { limit: 50 } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Xong." } });
+    const dispatch = vi.fn(async () => ({ rows: [] }));
+
+    const out = await runToolRounds(baseMessages, [auditTool, dataTool], { callOllama, dispatch }, {
+      dataFetchTools: new Set(["kg_query_datasource"]),
+    });
+
+    const nudgeMsg = out.find(
+      (m) => m.role === "tool" && typeof m.content === "string" && m.content.includes("laam_query_audit"),
+    );
+    expect(nudgeMsg).toBeTruthy();
+    expect(nudgeMsg!.content).toContain("Gọi NGAY");
+  });
+
   // Regression cho lỗi thật đo được trong hội thoại DÀI (2026-08-05, thread liên tục 12 câu):
   // khi maxRounds lớn (còn RẤT nhiều vòng), ca dò-cấu-trúc chung ĐÚNG LÀ nên chờ tới
   // DATA_FETCH_NUDGE_LEAD_ROUNDS trước khi nhắc (cho model thời gian dò hợp lệ). Nhưng ca
@@ -625,6 +652,31 @@ describe("runToolRounds", () => {
     expect(dispatch).toHaveBeenCalledTimes(7); // ngưỡng 8: lần thứ 8 không dispatch nữa
     expect(onBackstop).toHaveBeenCalledTimes(1);
     expect(out.some((m) => m.role === "tool" && String(m.content).includes("cùng tham số"))).toBe(true);
+  });
+
+  // The two force-stop paths (round backstop vs. stuck repeat) need DIFFERENT operator
+  // responses: "rounds" means raise CHAT_MAX_ROUNDS, "repeat" means a tool/query is stuck
+  // and MORE rounds would not have helped. Without a reason on the callback both look
+  // identical in logs, so a repeat-stall gets misdiagnosed as "cap too low" forever.
+  test("onBackstop nêu lý do 'rounds' khi chạm trần vòng", async () => {
+    let n = 0;
+    const callOllama = vi.fn(async () => ({
+      message: { content: "", tool_calls: [{ function: { name: "github_list_repos", arguments: { page: n++ } } }] },
+    }));
+    const dispatch = vi.fn(async () => ({ ok: true }));
+    const onBackstop = vi.fn();
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { maxRounds: 4, onBackstop });
+    expect(onBackstop).toHaveBeenCalledWith("rounds");
+  });
+
+  test("onBackstop nêu lý do 'repeat' khi kẹt lặp cùng tham số", async () => {
+    const callOllama = vi.fn(async () => ({
+      message: { content: "", tool_calls: [{ function: { name: "github_list_repos", arguments: { q: "same" } } }] },
+    }));
+    const dispatch = vi.fn(async () => ({ ok: true }));
+    const onBackstop = vi.fn();
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onBackstop });
+    expect(onBackstop).toHaveBeenCalledWith("repeat");
   });
 
   // In-loop eviction fires on a tight budget so a long run doesn't overflow the model

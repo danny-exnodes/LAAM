@@ -20,6 +20,7 @@ import { claudeStream, isClaudeModel, ClaudeUnavailableError } from "@/lib/llm/c
 import { isBytePlusModel, byteplusChat, byteplusStream, BytePlusUnavailableError } from "@/lib/llm/byteplus";
 import { replayBudgetFor } from "@/lib/chat/replay-budget";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
+import { synthNudge, loopTruncatedNotice, restateQuestion } from "@/lib/chat/backstop-notice";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
 import { extractToolTurns, type ToolTurnRow } from "@/lib/agent/persist";
@@ -53,12 +54,9 @@ const TOOL_LOOP_ERR: Record<"vi" | "en" | "zh", string> = {
 };
 
 // Injected as a final user turn when the tool loop was force-stopped (backstop), so the
-// model writes an answer from what it already gathered instead of reasoning about more tools.
-const SYNTH_NUDGE: Record<"vi" | "en" | "zh", string> = {
-  vi: "Đã đủ dữ liệu từ các công cụ ở trên. Bây giờ hãy TRẢ LỜI trực tiếp câu hỏi dựa trên dữ liệu đó — KHÔNG gọi thêm công cụ, KHÔNG suy luận dài, viết câu trả lời ngay.",
-  en: "You have enough data from the tools above. Now ANSWER the question directly from it — do NOT call more tools, do NOT reason at length, write the answer now.",
-  zh: "上述工具已提供足够数据。现在请直接据此回答问题——不要再调用工具，不要长篇推理，立即给出答案。",
-};
+// model writes an answer from what it already gathered instead of reasoning about more
+// tools. Built per-turn because it interpolates the literal question — see
+// lib/chat/backstop-notice.ts for why naming the question matters.
 
 // Shown when a turn completes but the model returned NO answer text (e.g. a reasoning
 // model that used its whole budget thinking). Fail loud, never a blank bubble.
@@ -129,13 +127,8 @@ const CLOUD_RESULT_BOUND = 120_000;
 const resultBound = (model: string): number | undefined =>
   isBytePlusModel(model) || isClaudeModel(model) ? CLOUD_RESULT_BOUND : undefined;
 // Honest "stopped early" notice (Rule 12) appended when the loop is force-terminated by
-// the backstop or a stuck repeat — never silently truncate.
-const LOOP_TRUNCATED: Record<"vi" | "en" | "zh", string> = {
-  vi: "\n\n_(Đã dừng sau nhiều bước công cụ — kết quả có thể chưa đầy đủ.)_",
-  en: "\n\n_(Stopped after many tool steps — the result may be incomplete.)_",
-  zh: "\n\n_(在多次工具调用后停止——结果可能不完整。)_",
-};
-const loopTruncatedText = (lang: string) => LOOP_TRUNCATED[lang as keyof typeof LOOP_TRUNCATED] ?? LOOP_TRUNCATED.vi;
+// the backstop or a stuck repeat — never silently truncate. Suppressed in voice mode
+// (TTS would read it aloud); see lib/chat/backstop-notice.ts.
 // Sampler (góp ý team): Qwen3-Q8 hay lặp từ khi để mặc định cao → presence_penalty 0.0–0.3 giảm
 // lặp + ổn định JSON/code. Env CHAT_PRESENCE_PENALTY (default 0.2). Áp server-side để có hiệu lực
 // NGAY (kể cả FE chưa gửi); `body.presencePenalty` override nếu có. (temperature default 0.6 ở DEFAULT_SETTINGS.)
@@ -507,7 +500,7 @@ export async function POST(req: Request) {
   // which on attachment turns is prefixed with the extracted file content — avoids
   // buffering a summarize-turn just because an uploaded doc contains "tạo/create".
   const intentText = (typeof body.titleHint === "string" && body.titleHint.trim()) ? body.titleHint : message;
-  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow, requestedTool, reqSignal: req.signal });
+  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow, requestedTool, reqSignal: req.signal, mode: body.mode });
 }
 
 // S3 — the main chat turn as a single live stream. Replaces the old "await the
@@ -528,8 +521,9 @@ function streamMainTurn(opts: {
   readAllow: ReadonlySet<string>;
   requestedTool?: RequestedTool | null; // P1 quick-tools: pre-dispatch deterministic trước tool-loop
   reqSignal?: AbortSignal;
+  mode?: "voice" | "text"; // /constellation = "voice" → spoken register (no written-only footer)
 }): Response {
-  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow, requestedTool, reqSignal } = opts;
+  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow, requestedTool, reqSignal, mode } = opts;
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -647,7 +641,13 @@ function streamMainTurn(opts: {
             dataFetchTools: DATA_FETCH_TOOLS,
             maxRounds: CHAT_MAX_ROUNDS,
             budgetChars: BYTEPLUS_TOOL_BUDGET_CHARS,
-            onBackstop: () => { hitBackstop = true; },
+            // Log the reason: "rounds" means the cap is too low for this workload (raise
+            // CHAT_MAX_ROUNDS), "repeat" means a tool stalled and more rounds would not
+            // have helped. Conflating them mis-tunes the cap forever.
+            onBackstop: (reason) => {
+              hitBackstop = true;
+              console.warn(`[chat] tool-loop force-stopped (conv=${convId}, reason=${reason}, maxRounds=${CHAT_MAX_ROUNDS})`);
+            },
           });
           toolTurns = extractToolTurns(convo, baseLen);
           cites = deriveCitations(convo, baseLen);
@@ -680,8 +680,17 @@ function streamMainTurn(opts: {
         // a tool result — a reasoning model then "thinks about the next tool" and emits
         // reasoning_content only, no answer (seen: 455 out-tokens, 0 content). Append an
         // explicit "answer now, no more tools" turn so the final stream produces content.
+        //
+        // Natural completion still needs the question PINNED (restateQuestion): measured
+        // 2026-08-05 on Larvis Q12 — zero backstops that turn, yet the answer came back on a
+        // previous question's topic. Only for turns that ran tools: a plain chitchat turn has
+        // no tool results to drift among, and appending a turn there would change the
+        // bare-turn request shape that route.test.ts pins.
         if (hitBackstop) {
-          convo = [...convo, { role: "user", content: SYNTH_NUDGE[lang as keyof typeof SYNTH_NUDGE] ?? SYNTH_NUDGE.vi }];
+          convo = [...convo, { role: "user", content: synthNudge(lang, userText) }];
+        } else if (toolTurns.length > 0) {
+          const restate = restateQuestion(lang, userText);
+          if (restate) convo = [...convo, { role: "user", content: restate }];
         }
 
         // F1 (Rule 13): a write never executes in the main turn — it suspends above.
@@ -752,7 +761,7 @@ function streamMainTurn(opts: {
         // comes back empty — Rule 12).
         if (!full && !reqSignal?.aborted) {
           console.warn(`[chat] byteplus stream produced no content, retrying once (conv=${convId}, model=${payload.model})`);
-          const retryConvo = [...convo, { role: "user", content: SYNTH_NUDGE[lang as keyof typeof SYNTH_NUDGE] ?? SYNTH_NUDGE.vi }];
+          const retryConvo = [...convo, { role: "user", content: synthNudge(lang, userText) }];
           try {
             for await (const ev of byteplusStream({ model: payload.model, messages: retryConvo, options: payload.options, signal: reqSignal })) {
               if (ev.delta) {
@@ -791,11 +800,12 @@ function streamMainTurn(opts: {
         if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
         // Backstop/repeat force-terminated the loop → append an honest notice (Rule 12).
         // Add to `full` so it persists + (guard turns) re-emits via finalizeTurn; enqueue
-        // live for non-guard turns (those already streamed and won't re-emit).
+        // live for non-guard turns (those already streamed and won't re-emit). Empty in
+        // voice mode (TTS would speak it) → nothing to append or enqueue.
         if (hitBackstop && full) {
-          const note = loopTruncatedText(lang);
+          const note = loopTruncatedNotice(lang, mode);
           full += note;
-          if (!guardWrites) {
+          if (note && !guardWrites) {
             try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ }
           }
         }
@@ -861,7 +871,13 @@ function streamMainTurn(opts: {
           dataFetchTools: DATA_FETCH_TOOLS,
           maxRounds: CHAT_MAX_ROUNDS,
           budgetChars: REPLAY_BUDGET_CHARS,
-          onBackstop: () => { hitBackstop = true; },
+          // Log the reason: "rounds" means the cap is too low for this workload (raise
+          // CHAT_MAX_ROUNDS), "repeat" means a tool stalled and more rounds would not
+          // have helped. Conflating them mis-tunes the cap forever.
+          onBackstop: (reason) => {
+            hitBackstop = true;
+            console.warn(`[chat] tool-loop force-stopped (conv=${convId}, reason=${reason}, maxRounds=${CHAT_MAX_ROUNDS})`);
+          },
         });
         toolTurns = extractToolTurns(convo, baseLen);
         cites = deriveCitations(convo, baseLen);
@@ -958,7 +974,7 @@ function streamMainTurn(opts: {
         // Backstop/repeat force-terminated the loop → honest "stopped early" notice (Rule
         // 12): append to `full` (persist + guard re-emit), enqueue live for non-guard turns.
         if (hitBackstop && full) {
-          const note = loopTruncatedText(lang);
+          const note = loopTruncatedNotice(lang, mode);
           full += note;
           if (!guardWrites) {
             try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ }

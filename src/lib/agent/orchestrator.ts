@@ -122,12 +122,19 @@ const repeatThresholdFor = (name: string): number =>
 // REPLAY_BUDGET_CHARS). The route passes a much larger budget for big-context providers.
 const DEFAULT_TOOL_BUDGET_CHARS = 37_000;
 
+export type BackstopReason = "rounds" | "repeat";
+
 export type ToolRoundsOpts = {
   drilldownPairs?: DrilldownPair[]; // D2: cặp "tool liệt kê → tool chi tiết" (config, mặc định tắt)
   maxRounds?: number;
   budgetChars?: number; // evict oldest tool results when the convo exceeds this
   keepRecent?: number; // tool results kept verbatim during eviction (default 3)
-  onBackstop?: () => void; // fired when the loop is FORCE-terminated (backstop / repeat), not on natural completion
+  // Fired when the loop is FORCE-terminated, not on natural completion. The reason is
+  // NOT cosmetic: "rounds" (hit maxRounds) and "repeat" (same tool+args stalled) call for
+  // opposite operator responses — raise CHAT_MAX_ROUNDS vs. investigate a stuck tool that
+  // more rounds would never have rescued. Undiscriminated, a repeat-stall reads as "cap
+  // too low" and gets mis-tuned forever.
+  onBackstop?: (reason: BackstopReason) => void;
   // Panel hiển thị: gom descriptor suốt lượt, phát ĐÚNG 1 lần sau khi vòng lặp kết
   // thúc. Không phát sau mỗi dispatch — một lượt có thể có hàng chục tool result và
   // panel sẽ nhảy loạn rồi dừng ở kết quả tình cờ cuối cùng.
@@ -221,6 +228,7 @@ export async function runToolRounds(
   let dataFetchNudged = false; // G5: one-shot latch, cùng lý do với G4
   let calledDataFetchTool = false; // G5: lượt này đã chạm tool lấy dữ liệu thật chưa
   let calledAuditTool = false; // G5: lượt này có gọi laam_query_audit không (đổi nội dung nhắc)
+  let auditMisuseNudged = false; // G5: latch RIÊNG cho nhắc audit-misuse (xem readyAuditMisuse)
   const drilldownPairs = opts.drilldownPairs ?? [];
   // Câu hỏi của lượt này = message user CUỐI trong lịch sử truyền vào (drilldown khớp tên
   // theo câu người dùng vừa hỏi, không phải theo cả hội thoại).
@@ -320,21 +328,34 @@ export async function runToolRounds(
       // ĐƯỢC (2026-08-05, thread dài 12 câu liên tục): chờ tới LEAD_ROUNDS=3 như ca chung thì
       // đôi khi model đã dừng gọi tool và "chốt" kết luận sai trước khi kịp tới ngưỡng đó.
       const readyGeneric = !calledDataFetchTool && !dataFetchNudged && roundsLeft <= DATA_FETCH_NUDGE_LEAD_ROUNDS;
-      const readyAuditMisuse = calledAuditTool && !calledDataFetchTool && !dataFetchNudged;
+      // KHÔNG còn điều kiện `!calledDataFetchTool`: ĐO ĐƯỢC (2026-08-05, Larvis câu 12) model
+      // gọi tool dữ liệu DAAB TRƯỚC rồi mới gọi laam_query_audit — điều kiện cũ tắt guard câm
+      // đúng lúc lỗi xảy ra. Đọc nhật ký RIÊNG của LAAM để trả lời câu hỏi nghiệp vụ là sai bất
+      // kể trước đó đã gọi tool gì. Latch RIÊNG (không dùng chung dataFetchNudged) để lời nhắc
+      // chung đã bắn không nuốt mất lời nhắc này, và ngược lại.
+      const readyAuditMisuse = calledAuditTool && !auditMisuseNudged;
       if (
         !stuck &&
         dataFetchTools.size > 0 &&
         (readyGeneric || readyAuditMisuse) &&
         roundsLeft >= 2 // < 2 thì round kế tiếp đã là vòng chót bị ép tools=[] — nhắc cũng vô ích
       ) {
-        dataFetchNudged = true;
-        convo.push({ role: "tool", content: calledAuditTool ? auditMisuseNudge(dataFetchTools) : DATA_FETCH_NUDGE });
+        // Audit-misuse thắng khi cả hai cùng sẵn sàng: nó chỉ đích danh sai lầm cụ thể, còn lời
+        // nhắc chung chỉ nói "hãy gọi tool dữ liệu" — yếu hơn hẳn với model đã tự thuyết phục
+        // bằng audit log.
+        if (readyAuditMisuse) {
+          auditMisuseNudged = true;
+          convo.push({ role: "tool", content: auditMisuseNudge(dataFetchTools) });
+        } else {
+          dataFetchNudged = true;
+          convo.push({ role: "tool", content: DATA_FETCH_NUDGE });
+        }
       }
       // Context mgmt: evict oldest raw tool bytes when the convo nears the model window
       // (provider-aware via budgetChars) so a long run never silently truncates.
       convo = evictOldToolResults(convo, { budgetChars, keepRecent }).convo;
       if (stuck) {
-        opts.onBackstop?.();
+        opts.onBackstop?.("repeat");
         break;
       }
       continue;
@@ -364,13 +385,23 @@ export async function runToolRounds(
       dataFetchTools.size > 0 &&
       !calledDataFetchTool &&
       !dataFetchNudged &&
+      // Giữ bất biến "tối đa MỘT lời nhắc G5 mỗi lượt" qua cả hai chỗ nhắc. Trước đây chỗ nhắc
+      // trong-vòng đặt dataFetchNudged nên điều kiện trên đã đủ chặn; nay nó đặt latch RIÊNG
+      // (auditMisuseNudged) nên phải kiểm cả latch đó, nếu không lượt đã bị nhắc audit sẽ bị
+      // nhắc lại lần hai ở đây.
+      !auditMisuseNudged &&
       roundsAfterNudge >= 2
     ) {
-      dataFetchNudged = true;
-      convo.push({ role: "tool", content: calledAuditTool ? auditMisuseNudge(dataFetchTools) : DATA_FETCH_NUDGE });
+      if (calledAuditTool) {
+        auditMisuseNudged = true;
+        convo.push({ role: "tool", content: auditMisuseNudge(dataFetchTools) });
+      } else {
+        dataFetchNudged = true;
+        convo.push({ role: "tool", content: DATA_FETCH_NUDGE });
+      }
       continue;
     }
-    if (isLastRound) opts.onBackstop?.(); // reached the backstop round → forced text → honest signal
+    if (isLastRound) opts.onBackstop?.("rounds"); // reached the backstop round → forced text → honest signal
     break;
   }
   // 1 tool call = tra cứu thoáng qua (vd. tìm ID theo tên) để trả lời bằng lời — không
