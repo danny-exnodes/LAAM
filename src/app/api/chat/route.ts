@@ -104,6 +104,13 @@ const CHAT_MAX_ROUNDS = Math.max(1, Number(process.env.CHAT_MAX_ROUNDS) || DEFAU
 // Khai báo ở env chứ KHÔNG hardcode trong code: connector (DAAB…) là thứ cắm từ ngoài vào,
 // LAAM không được biết tên tool của riêng connector nào. Không đặt env ⇒ tính năng tắt.
 const DRILLDOWN_PAIRS = parseDrilldownPairs(process.env.TOOL_DRILLDOWN_PAIRS);
+// G5: tool nào THỰC SỰ lấy dữ liệu (phân biệt với tool đọc cấu trúc/liệt kê). Lượt nào chỉ đọc
+// cấu trúc rồi kết luận "không có dữ liệu thực tế" sẽ bị nhắc đúng 1 lần (xem DATA_FETCH_NUDGE
+// trong orchestrator.ts). Ở env vì tên tool là của connector — cùng lý do với DRILLDOWN_PAIRS.
+// Không đặt env ⇒ guard tắt, hành vi y như cũ.
+const DATA_FETCH_TOOLS: ReadonlySet<string> = new Set(
+  (process.env.TOOL_DATA_FETCH ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+);
 // In-loop tool-result eviction budget. Local Ollama shares the replay budget (16k window);
 // BytePlus has a large window so it evicts far later (≈115k tokens, mirrors Anthropic's
 // 100k clear trigger) — env-tunable.
@@ -637,6 +644,7 @@ function streamMainTurn(opts: {
           if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
           convo = await runToolRounds(payload.messages, tools, { callOllama: callByteplus, dispatch }, {
             drilldownPairs: DRILLDOWN_PAIRS,
+            dataFetchTools: DATA_FETCH_TOOLS,
             maxRounds: CHAT_MAX_ROUNDS,
             budgetChars: BYTEPLUS_TOOL_BUDGET_CHARS,
             onBackstop: () => { hitBackstop = true; },
@@ -850,6 +858,7 @@ function streamMainTurn(opts: {
         if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
         convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch }, {
           drilldownPairs: DRILLDOWN_PAIRS,
+          dataFetchTools: DATA_FETCH_TOOLS,
           maxRounds: CHAT_MAX_ROUNDS,
           budgetChars: REPLAY_BUDGET_CHARS,
           onBackstop: () => { hitBackstop = true; },

@@ -119,6 +119,30 @@ export function buildSystemPrompt(input: {
       // Trust structured tool output over prose (Rule 13): when a result carries structured data
       // (JSON, arrays), count/classify from that data — never from a prose summary — and never invent a total.
       "Khi kết quả trả về có dữ liệu cấu trúc (JSON, mảng), hãy đếm và phân loại từ chính dữ liệu cấu trúc đó, không suy từ đoạn văn tóm tắt, và không tự bịa con số tổng." +
+      // M1: đo trực tiếp trên log ai_queries của DAAB — một câu hỏi bằng ngôn ngữ tự
+      // nhiên GỘP nhiều chỉ số ở nhiều bảng khác nhau trong MỘT lượt gọi (vd "so sánh
+      // doanh số, hoàn tiền, tồn kho và bồi thường theo từng cửa hàng") gần như luôn
+      // sinh SQL lỗi ở tầng dưới (JOIN sai, CTE trùng tên, cú pháp khoảng thời gian sai)
+      // — tách thành NHIỀU lượt gọi, mỗi lượt một chỉ số/một bảng, rồi tự cộng gộp kết
+      // quả lại gần như luôn thành công. Không đặc thù một connector nào — áp dụng cho
+      // mọi công cụ truy vấn dữ liệu bằng ngôn ngữ tự nhiên.
+      "Khi câu hỏi cần SO SÁNH NHIỀU chỉ số ở NHIỀU bảng/nguồn dữ liệu khác nhau, ĐỪNG gộp tất cả vào một lượt gọi công cụ — " +
+      "hãy hỏi TỪNG chỉ số một qua các lượt gọi riêng biệt (mỗi lượt một bảng), rồi TỰ TỔNG HỢP kết quả lại thành câu trả lời cuối. " +
+      // P1 (đặt tên khác F1 để tránh trùng, đo cùng đợt với M1): câu hỏi bằng ngôn ngữ
+      // tự nhiên gửi cho công cụ truy vấn dữ liệu càng MƠ HỒ càng dễ bị tầng dưới hiểu
+      // sai (bỏ sót điều kiện lọc, chọn nhầm ngưỡng gộp nhóm). Đã biết cấu trúc bảng
+      // (từ bước mô tả bảng) thì nêu thẳng tên bảng/cột/điều kiện thay vì diễn đạt
+      // chung chung.
+      "Khi diễn đạt câu hỏi cho công cụ truy vấn dữ liệu bằng ngôn ngữ tự nhiên, hãy nêu CỤ THỂ tên bảng/cột và điều kiện lọc/gộp nhóm bạn đã biết (từ bước mô tả cấu trúc bảng trước đó) thay vì hỏi chung chung — câu hỏi càng cụ thể càng ít bị hiểu sai." +
+      // R1: đo được model chọn nhầm tool audit RIÊNG của chính LAAM (đọc log hành động
+      // của chính agent này, tiền tố laam_) cho câu hỏi về hoạt động NGHIỆP VỤ của
+      // khách hàng/dữ liệu đã kết nối — chỉ vì tên tool có chữ "audit" khớp mặt chữ với
+      // câu hỏi. Việc chỉ sửa mô tả tool KHÔNG đủ (đã thử, model vẫn chọn nhầm) nên nhắc
+      // thẳng ở đây, cùng chỗ với các luật chọn-tool khác (F1/F3/M1).
+      "Có một tool CHỈ đọc nhật ký hành động của CHÍNH agent này trong hệ thống LAAM (tên có tiền tố laam_) — " +
+      "tool đó KHÔNG chứa dữ liệu nghiệp vụ của khách hàng hay data source đã kết nối. " +
+      "Câu hỏi về hoạt động nghiệp vụ (giao dịch, override ngoài giờ, hoạt động nhạy cảm của khách hàng…) " +
+      "PHẢI dùng công cụ truy vấn data source tương ứng, KHÔNG dùng tool audit riêng của LAAM." +
       // G1: chỉ voice — gỡ hiểu nhầm "nói ngắn ⇒ tra cứu ít" mà VOICE_GUIDE gây ra.
       // Đặt trong KHỐI TOOL (không trong VOICE_GUIDE) để đường không-tool vẫn sạch từ
       // ngữ tool. Câu cuối nhắm đúng lỗi đã đo: model coi một kết quả liệt kê tổng quan

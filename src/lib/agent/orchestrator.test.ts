@@ -35,6 +35,320 @@ describe("runToolRounds", () => {
     expect(toolMsg!.content).toBe(JSON.stringify([{ name: "laam" }]));
   });
 
+  // gpt-oss-120b (BytePlus) đo được trả tool_calls[].function.name dính rác định dạng
+  // harmony nội bộ của chính model (vd "kg_list_projects[]",
+  // "kg_query_datasource_status<|channel|>commentary"). Tên rác không khớp tool đã đăng
+  // ký → phải cắt về tên sạch trước khi dispatch, nếu không dispatch nhận tên sai và
+  // resolveKind (ở route, ngoài phạm vi unit test này) fail-closed nhầm thành ghi.
+  test("tool_call name dính rác harmony (<|channel|>...) → cắt về tên tool đã đăng ký trước khi dispatch", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "github_list_repos<|channel|>commentary", arguments: {} } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ ok: true }));
+
+    const out = await runToolRounds(baseMessages, tools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith("github_list_repos", {});
+    const assistantMsg = out.find((m) => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length);
+    expect((assistantMsg!.tool_calls![0] as { function: { name: string } }).function.name).toBe("github_list_repos");
+  });
+
+  test("tool_call name dính hậu tố [] rác → cắt về tên tool đã đăng ký", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "github_list_repos[]", arguments: {} } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ ok: true }));
+
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith("github_list_repos", {});
+  });
+
+  // Đo thực tế trên gpt-oss-120b/BytePlus (2026-08-05): tên tool MCP dài dính rác
+  // KHÔNG có ký tự đặc biệt để cắt — "kg_list_datasourcesjson" (hậu tố "json" dính
+  // liền, có thể rò từ token response_format). Bước (a) không cắt được vì toàn bộ
+  // chuỗi vẫn thuần chữ/số/gạch dưới — cần so khớp tiền tố dài nhất.
+  const mcpTools = [
+    {
+      type: "function" as const,
+      kind: "read" as const,
+      function: { name: "mcp__daab-michael-pharmacy-chain__kg_list_datasources", description: "", parameters: {} },
+    },
+    {
+      type: "function" as const,
+      kind: "read" as const,
+      function: { name: "mcp__daab-michael-pharmacy-chain__kg_query_datasource_status", description: "", parameters: {} },
+    },
+  ];
+
+  test("tool_call name dính hậu tố chữ/số liền (không ký tự đặc biệt) → khớp tiền tố dài nhất", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: {
+          content: "",
+          tool_calls: [{ function: { name: "mcp__daab-michael-pharmacy-chain__kg_list_datasourcesjson", arguments: {} } }],
+        },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ ok: true }));
+
+    await runToolRounds(baseMessages, mcpTools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith("mcp__daab-michael-pharmacy-chain__kg_list_datasources", {});
+  });
+
+  test("tiền tố khớp chọn tên DÀI NHẤT — không dừng ở tên ngắn hơn cũng khớp một phần", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: {
+          content: "",
+          tool_calls: [{ function: { name: "mcp__daab-michael-pharmacy-chain__kg_query_datasource_statusXYZ", arguments: {} } }],
+        },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ ok: true }));
+
+    await runToolRounds(baseMessages, mcpTools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith("mcp__daab-michael-pharmacy-chain__kg_query_datasource_status", {});
+  });
+
+  // Đo thực tế: model đổi "-" thành "_" giữa chuỗi (tên connector do user đặt có
+  // "pharmacy-chain" nhưng model trả "pharmacy_chain") — không phải cắt hậu tố mà là
+  // THAY ký tự, nên bước (a)/(b) không bắt được, cần chuẩn hoá "-"/"_" rồi so khớp.
+  test("tool_call name đổi lẫn '-' và '_' giữa chuỗi → chuẩn hoá rồi khớp tên đã đăng ký", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: {
+          content: "",
+          tool_calls: [{ function: { name: "mcp__daab-michael-pharmacy_chain__kg_list_datasources", arguments: {} } }],
+        },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ ok: true }));
+
+    await runToolRounds(baseMessages, mcpTools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith("mcp__daab-michael-pharmacy-chain__kg_list_datasources", {});
+  });
+
+  // G5 data-fetch guard. WHY: đo thực tế trên bộ 12 câu DAAB (2026-08-05) — 2/3 lượt hỏi
+  // "cửa hàng nào lệch tồn kho cao nhất" model gọi describe_table 4 lần rồi kết luận "không có
+  // dữ liệu thực tế" và dừng, KHÔNG hề gọi tool truy vấn. G4 không bắt được vì lượt đó CÓ gọi
+  // tool. Nếu latch 1-lần hỏng, model không chịu gọi tool dữ liệu sẽ quay vòng tới backstop.
+  const NUDGE_DATA =
+    "Bạn mới xem cấu trúc/danh sách chứ chưa truy vấn dữ liệu thật. Hãy gọi công cụ truy vấn dữ liệu để lấy số liệu thực tế rồi mới trả lời; nếu câu hỏi thực sự không cần dữ liệu thì trả lời trực tiếp.";
+  const schemaTool = {
+    type: "function" as const,
+    kind: "read" as const,
+    function: { name: "kg_describe_table", description: "", parameters: {} },
+  };
+  const dataTool = {
+    type: "function" as const,
+    kind: "read" as const,
+    function: { name: "kg_query_datasource", description: "", parameters: {} },
+  };
+
+  test("G5: chỉ gọi tool đọc cấu trúc rồi dừng → nhắc 1 lần, model gọi tool dữ liệu ở vòng sau", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_describe_table", arguments: { t: "a" } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Tôi chưa có dữ liệu thực tế." } }) // bỏ cuộc
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query_datasource", arguments: { q: "x" } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "PH-005 lệch nhiều nhất." } });
+    const dispatch = vi.fn(async () => ({ rows: [] }));
+
+    const out = await runToolRounds(baseMessages, [schemaTool, dataTool], { callOllama, dispatch }, {
+      dataFetchTools: new Set(["kg_query_datasource"]),
+    });
+
+    expect(out.some((m) => m.role === "tool" && m.content === NUDGE_DATA)).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith("kg_query_datasource", { q: "x" });
+  });
+
+  test("G5: đã gọi tool dữ liệu rồi → KHÔNG nhắc (không làm phiền lượt hợp lệ)", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query_datasource", arguments: {} } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Xong." } });
+    const dispatch = vi.fn(async () => ({ rows: [1] }));
+
+    const out = await runToolRounds(baseMessages, [schemaTool, dataTool], { callOllama, dispatch }, {
+      dataFetchTools: new Set(["kg_query_datasource"]),
+    });
+
+    expect(out.some((m) => m.role === "tool" && m.content === NUDGE_DATA)).toBe(false);
+  });
+
+  test("G5: KHÔNG cấu hình dataFetchTools → hành vi y hệt trước (mặc định tắt)", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_describe_table", arguments: {} } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Chưa có dữ liệu." } });
+    const dispatch = vi.fn(async () => ({}));
+
+    const out = await runToolRounds(baseMessages, [schemaTool, dataTool], { callOllama, dispatch });
+
+    expect(out.some((m) => m.role === "tool" && m.content === NUDGE_DATA)).toBe(false);
+    expect(callOllama).toHaveBeenCalledTimes(2); // không có vòng hỏi lại
+  });
+
+  test("G5: nhắc TỐI ĐA 1 lần — model vẫn không gọi tool dữ liệu thì thoát, không quay vòng", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_describe_table", arguments: {} } }] },
+      })
+      .mockResolvedValue({ message: { content: "Vẫn chưa có dữ liệu." } });
+    const dispatch = vi.fn(async () => ({}));
+
+    const out = await runToolRounds(baseMessages, [schemaTool, dataTool], { callOllama, dispatch }, {
+      dataFetchTools: new Set(["kg_query_datasource"]),
+    });
+
+    expect(out.filter((m) => m.role === "tool" && m.content === NUDGE_DATA)).toHaveLength(1);
+    expect(callOllama).toHaveBeenCalledTimes(3); // vòng tool + bỏ cuộc + hỏi lại 1 lần → dừng
+  });
+
+  // Regression cho đúng lỗi thật đo được (2026-08-05, CHAT_MAX_ROUNDS=8): model KHÔNG bao giờ
+  // "tự dừng" — nó liên tục gọi tool đọc cấu trúc hết mọi vòng cho tới khi bị ép vào vòng chót
+  // (tools=[]). Nhánh nhắc cũ (chỉ kiểm tra khi calls.length rỗng) KHÔNG BAO GIỜ chạy trong ca
+  // này vì model chưa từng dừng gọi tool trước khi hết vòng. Guard phải kiểm tra CHỦ ĐỘNG ngay
+  // sau mỗi vòng có tool call, dựa theo số vòng còn lại — không đợi model tự nhận ra.
+  // Regression cho đúng lỗi thật đo được (2026-08-05, probe 4 lần Q12): model gọi
+  // laam_query_audit (nhật ký RIÊNG của LAAM) nhiều lần với tham số khác nhau, tự thuyết phục
+  // "không có dữ liệu", rồi dừng — 4/4 lượt probe đều kết luận sai dù data source thật có dữ
+  // liệu. Nhắc chung "hãy gọi tool truy vấn dữ liệu" không đủ mạnh khi model đã bám vào kết luận
+  // từ laam_query_audit (retest sau bản nhắc-chung đầu tiên: vẫn 2/4 sai — model bị nhắc xong lại
+  // quay ra dò thêm cấu trúc thay vì gọi thẳng tool dữ liệu) — nên nhắc ĐÍCH DANH tên tool cần
+  // gọi (lấy từ chính dataFetchTools đã cấu hình), không để model "thăm dò thêm" một lần nữa.
+  const auditTool = {
+    type: "function" as const,
+    kind: "read" as const,
+    function: { name: "laam_query_audit", description: "", parameters: {} },
+  };
+
+  // Nhắc audit-misuse fire NGAY sau vòng gọi laam_query_audit đầu tiên (không đợi model tự
+  // dừng như ca dò-cấu-trúc chung) — nên vòng KẾ TIẾP (vòng 2) đã là vòng model phản hồi lại
+  // lời nhắc, không phải vòng model "chốt kết luận sai" như trước khi có sửa này.
+  test("G5: đã gọi laam_query_audit → nhắc ĐÍCH DANH NGAY (không đợi model tự dừng/chốt sai)", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "laam_query_audit", arguments: { limit: 50 } } }] },
+      })
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query_datasource", arguments: { q: "x" } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Có 162 bản ghi." } });
+    const dispatch = vi.fn(async () => ({ rows: [] }));
+
+    const out = await runToolRounds(baseMessages, [auditTool, dataTool], { callOllama, dispatch }, {
+      dataFetchTools: new Set(["kg_query_datasource"]),
+    });
+
+    const nudgeMsg = out.find(
+      (m) => m.role === "tool" && typeof m.content === "string" && m.content.includes("laam_query_audit"),
+    );
+    expect(nudgeMsg).toBeTruthy();
+    // Nêu đích danh tên tool cần gọi (không chỉ nhắc chung chung).
+    expect(nudgeMsg!.content).toContain("kg_query_datasource");
+    expect(nudgeMsg!.content).toContain("Gọi NGAY");
+    expect(out.some((m) => m.role === "tool" && m.content === NUDGE_DATA)).toBe(false); // KHÔNG dùng nhắc chung
+    expect(dispatch).toHaveBeenCalledWith("kg_query_datasource", { q: "x" });
+  });
+
+  // Regression cho lỗi thật đo được trong hội thoại DÀI (2026-08-05, thread liên tục 12 câu):
+  // khi maxRounds lớn (còn RẤT nhiều vòng), ca dò-cấu-trúc chung ĐÚNG LÀ nên chờ tới
+  // DATA_FETCH_NUDGE_LEAD_ROUNDS trước khi nhắc (cho model thời gian dò hợp lệ). Nhưng ca
+  // laam_query_audit thì KHÔNG được áp dụng cùng độ trễ đó — nó phải nhắc NGAY bất kể còn bao
+  // nhiêu vòng, vì đây không phải "cần thêm thời gian" mà là "đã đi sai hướng ngay từ đầu".
+  test("G5: audit-misuse nhắc NGAY dù còn RẤT nhiều vòng (không đợi ngưỡng LEAD_ROUNDS như ca chung)", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "laam_query_audit", arguments: {} } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Xong." } });
+    const dispatch = vi.fn(async () => ({ rows: [] }));
+
+    const out = await runToolRounds(baseMessages, [auditTool, dataTool], { callOllama, dispatch }, {
+      maxRounds: 25, // mặc định — còn rất xa ngưỡng LEAD_ROUNDS=3, ca chung sẽ KHÔNG nhắc ở đây
+      dataFetchTools: new Set(["kg_query_datasource"]),
+    });
+
+    const nudgeMsg = out.find(
+      (m) => m.role === "tool" && typeof m.content === "string" && m.content.includes("laam_query_audit"),
+    );
+    expect(nudgeMsg).toBeTruthy();
+    expect(callOllama).toHaveBeenCalledTimes(2); // nhắc ngay ở vòng 2, không phải đợi tới vòng ~22
+  });
+
+  test("G5: model liên tục gọi tool đọc cấu trúc suốt (không tự dừng) → vẫn được nhắc TRƯỚC khi hết vòng", async () => {
+    let n = 0;
+    const callOllama = vi.fn(async () =>
+      n < 6
+        ? { message: { content: "", tool_calls: [{ function: { name: "kg_describe_table", arguments: { t: `t${n++}` } } }] } }
+        : { message: { content: "", tool_calls: [{ function: { name: "kg_query_datasource", arguments: { q: "x" } } }] } },
+    );
+    const dispatch = vi.fn(async () => ({ rows: [] }));
+
+    const out = await runToolRounds(baseMessages, [schemaTool, dataTool], { callOllama, dispatch }, {
+      maxRounds: 8, // đúng giá trị CHAT_MAX_ROUNDS đo được lỗi
+      dataFetchTools: new Set(["kg_query_datasource"]),
+    });
+
+    expect(out.some((m) => m.role === "tool" && m.content === NUDGE_DATA)).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith("kg_query_datasource", { q: "x" });
+  });
+
+  // Nhắc TRỄ QUÁ (không còn đủ vòng để model hành động) thì thà không nhắc — tránh lãng phí
+  // một message mà vẫn không đổi được kết quả, giữ hành vi y như trước khi có G5.
+  test("G5: chỉ còn 1 vòng (vòng kế đã là vòng chót tools=[]) → KHÔNG nhắc, vì nhắc cũng vô ích", async () => {
+    const callOllama = vi.fn(async () => ({
+      message: { content: "", tool_calls: [{ function: { name: "kg_describe_table", arguments: {} } }] },
+    }));
+    const dispatch = vi.fn(async () => ({}));
+
+    const out = await runToolRounds(baseMessages, [schemaTool, dataTool], { callOllama, dispatch }, {
+      maxRounds: 2, // vòng 0 gọi tool xong → roundsLeft = 2-1-0 = 1 → dưới ngưỡng tác dụng
+      dataFetchTools: new Set(["kg_query_datasource"]),
+    });
+
+    expect(out.some((m) => m.role === "tool" && m.content === NUDGE_DATA)).toBe(false);
+  });
+
+  test("tên KHÔNG khớp bất kỳ tool nào dù đã cắt rác → giữ nguyên (gate vẫn fail-closed đúng luật)", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "totally_unknown_tool<|channel|>x", arguments: {} } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ ok: true }));
+
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith("totally_unknown_tool<|channel|>x", {});
+  });
+
   test("không tool_calls và KHÔNG có tool khả dụng → trả nguyên, không gọi dispatch", async () => {
     const callOllama = vi.fn(async () => ({ message: { content: "Hi there." } }));
     const dispatch = vi.fn(async () => ({}));

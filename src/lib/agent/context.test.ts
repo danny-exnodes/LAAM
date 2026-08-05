@@ -40,6 +40,21 @@ describe("buildSystemPrompt", () => {
     expect(p).toContain("BẮT BUỘC gọi lại công cụ");
     expect(p).toContain("KHÔNG dùng lại kết quả cũ"); // cấm trả lời từ hội thoại/tóm tắt cũ
   });
+  test("M1: có tool → ép tách câu hỏi so sánh nhiều chỉ số/nhiều bảng thành nhiều lượt gọi riêng", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
+    expect(p).toContain("SO SÁNH NHIỀU chỉ số");
+    expect(p).toContain("ĐỪNG gộp tất cả vào một lượt gọi công cụ");
+    expect(p).toContain("TỰ TỔNG HỢP kết quả");
+  });
+  test("P1: có tool → ép diễn đạt câu hỏi truy vấn dữ liệu cụ thể (tên bảng/cột/điều kiện), không mơ hồ", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
+    expect(p).toContain("nêu CỤ THỂ tên bảng/cột và điều kiện lọc/gộp nhóm");
+  });
+  test("R1: có tool → cấm dùng tool audit riêng của LAAM cho câu hỏi nghiệp vụ khách hàng", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "laam_query_audit", kind: "read" }] });
+    expect(p).toContain("KHÔNG chứa dữ liệu nghiệp vụ của khách hàng");
+    expect(p).toContain("KHÔNG dùng tool audit riêng của LAAM");
+  });
   test("KHÔNG few-shot neo tool cụ thể (QW-5 đã gỡ — neo demo_create_task làm tụt write-selection 8B)", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "trello_create_card", kind: "write" }] });
     expect(p).not.toContain("Ví dụ:"); // không few-shot
