@@ -773,6 +773,9 @@ export function ChatClient() {
   const totalTokens = messages.reduce((s, m) => s + (m.tokensIn ?? 0) + (m.tokensOut ?? 0), 0);
   // C2: whether the currently-selected model is a Claude API model.
   const isCurrentClaude = claudeModels.includes(settings.model);
+  // Any billed API model (Claude or BytePlus) — the empty state must not claim it runs
+  // locally now that the default can be a cloud model.
+  const isCurrentCloud = isCurrentClaude || byteplusModels.includes(settings.model);
   // C2: estimated cost for the current conversation when a Claude model is selected.
   // In/out ARE tracked per message (tokensIn/tokensOut from the {t:"tokens"} frame +
   // DB columns) — use the real split. "Ước tính" remains because MODEL attribution is
@@ -917,7 +920,7 @@ export function ChatClient() {
           {messages.length === 0 ? (
             <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-4 py-8 text-center">
               <h2 className="mb-1 text-lg font-bold tracking-tight">{t("chat.emptyTitle")}</h2>
-              <p className="mb-4 text-sm leading-relaxed text-neutral-500">{t("chat.empty", { model: modelName })}</p>
+              <p className="mb-4 text-sm leading-relaxed text-neutral-500">{t(isCurrentCloud ? "chat.emptyCloud" : "chat.empty", { model: modelName })}</p>
               <Link
                 href="/constellation"
                 className="mb-5 inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/40 px-4 py-2 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--accent-muted)]"

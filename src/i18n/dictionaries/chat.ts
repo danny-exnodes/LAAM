@@ -39,6 +39,9 @@ export const chat: Dict = {
 
   // --- empty state ---
   'chat.empty': { vi: 'Bắt đầu trò chuyện với {model} chạy cục bộ. Mỗi cuộc hội thoại được theo dõi như một phiên trong LAAM.', en: 'Start chatting with {model} running locally. Each conversation is tracked as a session in LAAM.', zh: '开始与本地运行的 {model} 对话。每段对话都会作为一个会话在 LAAM 中被跟踪。' },
+  // Cloud variant: the selected model is a billed API model, so it must NOT be described
+  // as running locally / free (chat.empty above).
+  'chat.emptyCloud': { vi: 'Bắt đầu trò chuyện với {model} qua API (tính phí). Mỗi cuộc hội thoại được theo dõi như một phiên trong LAAM.', en: 'Start chatting with {model} via API (billed). Each conversation is tracked as a session in LAAM.', zh: '开始通过 API 与 {model} 对话（计费）。每段对话都会作为一个会话在 LAAM 中被跟踪。' },
 
   // --- errors / attachment prompts ---
   'chat.errPrefix': { vi: 'Lỗi: {msg}', en: 'Error: {msg}', zh: '错误：{msg}' },

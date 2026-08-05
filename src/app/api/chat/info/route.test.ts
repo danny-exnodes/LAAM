@@ -31,6 +31,25 @@ describe("GET /api/chat/info", () => {
     expect(body.model.length).toBeGreaterThan(0);
   });
 
+  // Cloud-first: a server holding a BytePlus key preselects the BytePlus default so the
+  // chat does not open on a local model that may be off. Asserted as a LITERAL — the
+  // chat default must not silently change when the whitelist is reordered.
+  test("model = gpt-oss-120b when BYTEPLUS_API_KEY is set, even with DEFAULT_CHAT_MODEL", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "bp-test");
+    vi.stubEnv("DEFAULT_CHAT_MODEL", "gemma4:e4b");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.model).toBe("gpt-oss-120b");
+  });
+
+  test("model = DEFAULT_CHAT_MODEL when no BYTEPLUS_API_KEY (local-only stays free)", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "");
+    vi.stubEnv("DEFAULT_CHAT_MODEL", "gemma4:e4b");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.model).toBe("gemma4:e4b");
+  });
+
   // C1: claudeModels = whitelist CHỈ khi server có ANTHROPIC_API_KEY (đọc lúc
   // request, không lúc import) — không key thì picker không hiện model Claude.
   test("claudeModels = whitelist khi có ANTHROPIC_API_KEY", async () => {
