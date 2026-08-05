@@ -69,6 +69,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // while streaming, before speech even started. The full text is still captured (below,
   // via fullReplyRef) so speakReply has something to read once streaming ends.
   const [caption, setCaption] = useState("");
+  // Tool calls completed in the CURRENT turn, fed by useConstellationChat's onActivity. Drives
+  // the status caption only — a voice turn runs 15-30s with an empty strip otherwise, which
+  // reads as a frozen page. 0 = still reasoning, >0 = actively looking things up.
+  const [toolSteps, setToolSteps] = useState(0);
   // write-gate chip state
   const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
   // tool requested by node-pick
@@ -244,8 +248,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       // trước không còn ăn khớp với phản hồi sắp tới.
       setViews([]);
       setViewClosed(false);
+      setToolSteps(0); // new turn → status caption restarts at "thinking"
     },
     onView: (d) => { viewFromToolRef.current = true; setViews([d]); setViewClosed(false); },
+    onActivity: setToolSteps,
     initialConversationId,
   });
 
@@ -575,6 +581,17 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         ? "thinking"
         : "idle";
 
+  // Status caption while the agent works. `caption` (the segment being spoken) always wins —
+  // once speech starts there is no doubt the page is alive, and the spoken text is what the
+  // user wants to read. Only fills the strip while it would otherwise be EMPTY.
+  // Display-only: never reaches speakReply, so TTS does not read it out.
+  const statusCaption =
+    chat.streaming && !caption
+      ? toolSteps > 0
+        ? t("constellation.statusWorking", { n: String(toolSteps) })
+        : t("constellation.statusThinking")
+      : "";
+
   const btnBase =
     "flex h-10 w-10 items-center justify-center rounded-full border transition-all duration-200 " +
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5bd6ff]/50";
@@ -650,7 +667,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
           */}
 
           {/* Caption + command input panel */}
-          <CommandDock t={t} caption={caption} open={chatOpen} value={command} onChange={setCommand} onSend={handleSend} />
+          <CommandDock t={t} caption={caption || statusCaption} open={chatOpen} value={command} onChange={setCommand} onSend={handleSend} />
 
           {/* Unified control bar: model · chat · voice — single row, no overlap */}
           <div className="absolute bottom-6 right-4 z-20 flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.55)] backdrop-blur-xl">

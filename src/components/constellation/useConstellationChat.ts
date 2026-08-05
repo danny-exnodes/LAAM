@@ -25,6 +25,13 @@ export function useConstellationChat({
   // nguồn A chưa". Đặt ở đây chứ không ở chỗ gọi vì client có HAI đường gửi (nút gửi
   // và đường thoại) — reset ở một đường sẽ để cờ bẩn cho đường kia.
   onTurnStart,
+  // Progress ping for the caption strip: called with the RUNNING TOTAL of tool calls seen so
+  // far this turn, each time that total grows. A voice turn takes 15-30s and the strip is
+  // otherwise empty the whole time, so the page reads as frozen; tool-call frames already
+  // arrive on this stream and are the only live evidence work is happening.
+  // Deliberately passes a COUNT, not the tool name — the caption must not leak any
+  // connector's internal tool names, and a number is what the user actually needs.
+  onActivity,
   // D3: hội thoại đang mở sẵn (deep-link ?conv=<id> từ /chat) — lượt gửi ĐẦU TIÊN sẽ
   // tiếp tục đúng hội thoại đó thay vì server tự tạo mới. Vắng mặt ⇒ hành vi cũ.
   initialConversationId,
@@ -33,9 +40,11 @@ export function useConstellationChat({
   onPendingWrite: (pw: PendingWrite) => void;
   onView?: (d: ViewDescriptor) => void;
   onTurnStart?: () => void;
+  onActivity?: (toolCalls: number) => void;
   initialConversationId?: string;
 }) {
   const [streaming, setStreaming] = useState(false);
+  const toolCallsRef = useRef(0); // tool calls seen this turn (see onActivity)
   // convId: ref cho consume() đọc/ghi tức thời (tránh closure cũ — consume chỉ
   // memo theo [onText, onPendingWrite], không theo convId). conversationId: state
   // SONG SONG chỉ để expose ra ngoài — dùng ref.current trực tiếp ở return KHÔNG đủ:
@@ -49,6 +58,7 @@ export function useConstellationChat({
   const consume = useCallback(
     async (body: Record<string, unknown>) => {
       onTurnStart?.();
+      toolCallsRef.current = 0; // per-turn: a stale count would overstate progress next turn
       setStreaming(true);
       try {
         const res = await fetch("/api/chat", {
@@ -74,12 +84,21 @@ export function useConstellationChat({
             if (f.t === "pending_write") onPendingWrite(f as unknown as PendingWrite);
             else if (f.t === "view") onView?.(f.d);
           }
+          // Count rather than increment: splitFrames() re-parses the WHOLE accumulated buffer
+          // on every chunk, so each frame is seen again and again. Counting what is present is
+          // idempotent; a per-sighting increment would inflate wildly. Only "call" frames
+          // count — a "result" is the same step finishing, not a new one.
+          const calls = frames.filter((f) => f.t === "tool" && f.phase === "call").length;
+          if (calls > toolCallsRef.current) {
+            toolCallsRef.current = calls;
+            onActivity?.(calls);
+          }
         }
       } finally {
         setStreaming(false);
       }
     },
-    [onText, onPendingWrite, onView, onTurnStart]
+    [onText, onPendingWrite, onView, onTurnStart, onActivity]
   );
 
   const send = useCallback(

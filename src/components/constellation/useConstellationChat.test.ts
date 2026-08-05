@@ -122,4 +122,60 @@ describe("useConstellationChat", () => {
     await act(async () => { await result.current.send({ message: "hi", model: "gemma4:e4b" }); });
     expect(result.current.conversationId).toBe("c1"); // header x-conversation-id của streamResponse
   });
+
+  // Progress signal for the Larvis caption. A voice turn takes 15-30s (measured on the
+  // pharmacy question set) and the subtitle strip is EMPTY that whole time, so the page looks
+  // frozen. Tool-call frames already arrive on this stream — they were simply dropped — and
+  // they are the only live evidence the agent is still working.
+  //
+  // Reported as a RUNNING TOTAL, not an increment: splitFrames() re-parses the whole
+  // accumulated buffer on every chunk, so the same frame is seen many times. Counting the
+  // frames present is naturally idempotent; incrementing per sighting would inflate wildly.
+  it("reports tool-call progress as a running total, once per new call", async () => {
+    const call = (name: string, c: number) =>
+      `${SEP}{"t":"tool","phase":"call","c":${c},"name":"${name}"}${SEP}`;
+    const result = (name: string, c: number) =>
+      `${SEP}{"t":"tool","phase":"result","c":${c},"name":"${name}","ok":true}${SEP}`;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          call("a", 0),
+          result("a", 0), // a result must NOT advance the counter
+          call("b", 1),
+          "Xong.",
+        ])
+      )
+    );
+    const onActivity = vi.fn();
+    const { result: hook } = renderHook(() =>
+      useConstellationChat({ onText: () => {}, onPendingWrite: () => {}, onActivity })
+    );
+
+    await act(async () => {
+      await hook.current.send({ message: "hi" });
+    });
+
+    expect(onActivity.mock.calls.map((c) => c[0])).toEqual([1, 2]);
+  });
+
+  it("restarts the progress count each turn", async () => {
+    const call = (c: number) => `${SEP}{"t":"tool","phase":"call","c":${c},"name":"x"}${SEP}`;
+    vi.stubGlobal("fetch", vi.fn(async () => streamResponse([call(0), "ok"])));
+    const onActivity = vi.fn();
+    const { result: hook } = renderHook(() =>
+      useConstellationChat({ onText: () => {}, onPendingWrite: () => {}, onActivity })
+    );
+
+    await act(async () => {
+      await hook.current.send({ message: "one" });
+    });
+    await act(async () => {
+      await hook.current.send({ message: "two" });
+    });
+
+    // Second turn starts from 1 again — a stale count would make the caption claim the agent
+    // is further along than it is.
+    expect(onActivity.mock.calls.map((c) => c[0])).toEqual([1, 1]);
+  });
 });
