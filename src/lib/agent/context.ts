@@ -128,12 +128,23 @@ export function buildSystemPrompt(input: {
       // mọi công cụ truy vấn dữ liệu bằng ngôn ngữ tự nhiên.
       "Khi câu hỏi cần SO SÁNH NHIỀU chỉ số ở NHIỀU bảng/nguồn dữ liệu khác nhau, ĐỪNG gộp tất cả vào một lượt gọi công cụ — " +
       "hãy hỏi TỪNG chỉ số một qua các lượt gọi riêng biệt (mỗi lượt một bảng), rồi TỰ TỔNG HỢP kết quả lại thành câu trả lời cuối. " +
-      // P1 (đặt tên khác F1 để tránh trùng, đo cùng đợt với M1): câu hỏi bằng ngôn ngữ
-      // tự nhiên gửi cho công cụ truy vấn dữ liệu càng MƠ HỒ càng dễ bị tầng dưới hiểu
-      // sai (bỏ sót điều kiện lọc, chọn nhầm ngưỡng gộp nhóm). Đã biết cấu trúc bảng
-      // (từ bước mô tả bảng) thì nêu thẳng tên bảng/cột/điều kiện thay vì diễn đạt
-      // chung chung.
-      "Khi diễn đạt câu hỏi cho công cụ truy vấn dữ liệu bằng ngôn ngữ tự nhiên, hãy nêu CỤ THỂ tên bảng/cột và điều kiện lọc/gộp nhóm bạn đã biết (từ bước mô tả cấu trúc bảng trước đó) thay vì hỏi chung chung — câu hỏi càng cụ thể càng ít bị hiểu sai." +
+      // P1 (SỬA 2026-08-05 — Rule 7: luật cũ và cơ chế hỏi-ngược của tầng dưới mâu thuẫn
+      // nhau, chọn cái mới hơn/đo được, KHÔNG trộn). Bản CŨ dặn "nêu CỤ THỂ tên bảng/CỘT",
+      // ra đời khi tầng dưới chưa biết tự hỏi lại; giờ nó VÔ HIỆU HOÁ đúng cơ chế đó.
+      // ĐO ĐƯỢC trên log `ai_queries` của DAAB, cùng một câu hỏi:
+      //   gửi nguyên văn "Which products have negative inventory?"        → clarification_needed 4/4
+      //   gửi bản đã chốt cột "...where variance_quantity is less than 0" → completed (thi hành luôn)
+      // Hậu quả thật: câu 8 trả "471 sản phẩm tồn kho âm" trong khi đáp án đúng là "không có"
+      // — LAAM đã chọn hộ cột chênh lệch (variance_quantity) thay vì cột tồn thực
+      // (counted_quantity/system_quantity), và vì đã chốt sẵn nên DAAB không còn gì để hỏi.
+      // Một lựa chọn sai được trình bày y hệt một câu trả lời đúng.
+      // GIỮ phần đúng của P1: điều kiện do NGƯỜI DÙNG nêu (khoảng thời gian, ngưỡng, mã cụ
+      // thể) vẫn phải chuyển xuống đầy đủ — đó mới là thứ tầng dưới hay bỏ sót. Việc TÁCH
+      // câu hỏi nhiều chỉ số thành nhiều lượt (M1 ở trên) cũng không đổi.
+      "Khi diễn đạt câu hỏi cho công cụ truy vấn dữ liệu bằng ngôn ngữ tự nhiên, hãy GIỮ NGUYÊN cách người dùng mô tả chỉ số cần tính — đừng thay bằng tên cột bạn tự đoán. " +
+      "Vẫn nêu đầy đủ những điều kiện NGƯỜI DÙNG đã nói (khoảng thời gian, ngưỡng, mã cụ thể) và tên bảng khi đã chắc chắn, " +
+      "nhưng KHÔNG tự chọn hộ cột khi có nhiều cột cùng hợp lý: tầng dưới có cơ chế hỏi lại khi mơ hồ, chốt sẵn sẽ làm cơ chế đó im lặng và một lựa chọn sai sẽ trông y hệt câu trả lời đúng. " +
+      "Tuyệt đối không gửi câu SQL vào ô câu hỏi ngôn ngữ tự nhiên." +
       // R1: đo được model chọn nhầm tool audit RIÊNG của chính LAAM (đọc log hành động
       // của chính agent này, tiền tố laam_) cho câu hỏi về hoạt động NGHIỆP VỤ của
       // khách hàng/dữ liệu đã kết nối — chỉ vì tên tool có chữ "audit" khớp mặt chữ với
