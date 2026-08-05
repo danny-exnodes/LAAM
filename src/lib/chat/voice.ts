@@ -11,6 +11,7 @@
  *   - stripForSpeech(md): reduce markdown to prose so TTS reads words, not syntax.
  */
 import type { Lang } from "@/i18n/types";
+import type { ViewDescriptor } from "@/lib/agent/view";
 
 // Minimal shape of the bits of `window` we feature-detect (keeps the fn pure +
 // callable with a stub object in tests, no real DOM needed).
@@ -85,14 +86,11 @@ function tablesToProse(md: string): string {
   return out.join("\n");
 }
 
-/**
- * stripForSpeech — turn a markdown assistant reply into plain prose for TTS:
- * convert GFM tables into spoken sentences, drop fenced code blocks, inline code,
- * image/link syntax (keep link text), heading/list/emphasis markers, and collapse
- * whitespace.
- */
-export function stripForSpeech(md: string): string {
-  return tablesToProse(md)
+// Phần dọn markdown dùng CHUNG cho stripForSpeech và extractForSpeech — hai hàm chỉ
+// khác nhau ở chỗ bảng đi đâu (đọc thành văn xuôi vs. đẩy sang panel). Tách ra để
+// chúng không trôi khác nhau theo thời gian.
+function cleanProse(md: string): string {
+  return md
     .replace(/```[\s\S]*?```/g, " ") // fenced code blocks
     .replace(/`([^`]+)`/g, "$1") // inline code
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images
@@ -102,6 +100,130 @@ export function stripForSpeech(md: string): string {
     .replace(/[*_~>]/g, "") // emphasis / blockquote marks
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * stripForSpeech — turn a markdown assistant reply into plain prose for TTS:
+ * convert GFM tables into spoken sentences, drop fenced code blocks, inline code,
+ * image/link syntax (keep link text), heading/list/emphasis markers, and collapse
+ * whitespace.
+ */
+export function stripForSpeech(md: string): string {
+  return cleanProse(tablesToProse(md));
+}
+
+// Blank/duplicate header text ("| | Store |" hoặc hai cột cùng tên) không được phép
+// làm object-key trùng nhau — trùng key nghĩa là ô sau ghi đè ô trước, mất dữ liệu
+// âm thầm. Key nội bộ được làm duy nhất bằng hậu tố chỉ số; LABEL hiển thị vẫn giữ
+// nguyên văn bản gốc (kể cả rỗng/trùng) để bảng trên panel đúng như model viết.
+function uniqueHeaderKeys(headers: string[]): string[] {
+  const seen = new Map<string, number>();
+  return headers.map((h, i) => {
+    const count = seen.get(h) ?? 0;
+    seen.set(h, count + 1);
+    return h === "" || count > 0 ? `${h}__${i}` : h;
+  });
+}
+
+// Chỉ nhận bảng GFM ĐÚNG cú pháp (có dòng separator). Bảng hỏng rơi xuống
+// tablesToProse ở cuối hàm — nội dung vẫn được đọc, chỉ không lên panel.
+function tableToDescriptor(headers: string[], dataRows: string[][]): ViewDescriptor | null {
+  if (!headers.length || !dataRows.length) return null;
+  const keys = uniqueHeaderKeys(headers);
+  const rows = dataRows.map((cells) =>
+    Object.fromEntries(keys.map((k, i) => [k, cells[i] ?? ""])),
+  );
+  const numeric = (key: string) =>
+    rows.every((r) => r[key] !== "" && !Number.isNaN(Number(String(r[key]).replace(/[,\s]/g, ""))));
+  return {
+    kind: "table",
+    title: headers.join(" · "),
+    source: { type: "model" },
+    columns: keys.map((k, i) => ({ key: k, label: headers[i], align: numeric(k) ? "right" : "left" })),
+    rows,
+  };
+}
+
+const CHART_FENCE = /```chart\s*([\s\S]*?)```/g;
+
+function chartToDescriptor(body: string): ViewDescriptor | null {
+  try {
+    const parsed = JSON.parse(body) as { type?: string; title?: string };
+    if (!parsed || typeof parsed !== "object") return null;
+    return {
+      kind: "chart",
+      title: typeof parsed.title === "string" ? parsed.title : "",
+      source: { type: "model" },
+      rows: [{ raw: body.trim() }], // ChartBlock nhận nguyên chuỗi JSON
+    };
+  } catch {
+    return null; // JSON hỏng → không dựng panel; cleanProse sẽ nuốt block như code fence
+  }
+}
+
+// "| PH-005 | 1015 |" → "PH-005, 1015". Chạy SAU tablesToProse nên chỉ còn lại những
+// dòng-bảng lạc không thành bảng hợp lệ. Giữ nội dung, bỏ cú pháp — im lặng nuốt cả
+// dòng sẽ làm user mất dữ liệu mà không biết.
+function strayTableRowsToProse(md: string): string {
+  return md.replace(/^[ \t]*\|(.+)\|[ \t]*$/gm, (_m, inner: string) =>
+    inner.split("|").map((c) => c.trim()).filter(Boolean).join(", "),
+  );
+}
+
+/**
+ * extractForSpeech — tách phần NHÌN được (bảng GFM, block ```chart) ra khỏi câu trả
+ * lời, trả về lời nói đã sạch cú pháp + danh sách descriptor cho panel.
+ *
+ * WHY: VOICE_GUIDE bảo model đừng xuất markdown và model phớt lờ (đã sửa prompt 2 lần,
+ * xem checkpoint 2026-07-22 / 2026-08-03). Cắt bằng code là thứ chắc chắn (Rule 5).
+ *
+ * KHÁC stripForSpeech: hàm đó BIẾN bảng thành văn xuôi để đọc; hàm này BỎ bảng khỏi
+ * lời nói vì nó sẽ hiện trên panel. Client nào không có panel phải dùng stripForSpeech.
+ */
+export function extractForSpeech(md: string): { speech: string; descriptors: ViewDescriptor[] } {
+  const descriptors: ViewDescriptor[] = [];
+
+  // 1) chart fences — JSON hỏng thì GIỮ NGUYÊN văn bản khớp (kể cả dấu ```), để nó
+  //    chảy xuống cleanProse's fenced-code-block regex và bị nuốt ở ĐÓ như comment của
+  //    chartToDescriptor mô tả, thay vì biến mất ở đây mà không qua fallback nào.
+  let rest = md.replace(CHART_FENCE, (m, body: string) => {
+    const d = chartToDescriptor(body);
+    if (d) {
+      descriptors.push(d);
+      return "\n";
+    }
+    return m;
+  });
+
+  // 2) bảng GFM đúng cú pháp
+  const lines = rest.split("\n");
+  const kept: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (isTableRow(lines[i]) && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
+      const headers = splitTableCells(lines[i]);
+      const dataRows: string[][] = [];
+      let j = i + 2;
+      while (j < lines.length && isTableRow(lines[j]) && !isTableSeparator(lines[j])) {
+        dataRows.push(splitTableCells(lines[j]));
+        j++;
+      }
+      const d = tableToDescriptor(headers, dataRows);
+      if (d) {
+        descriptors.push(d);
+        i = j;
+        continue; // bảng đã lên panel → bỏ khỏi lời nói
+      }
+    }
+    kept.push(lines[i]);
+    i++;
+  }
+  rest = kept.join("\n");
+
+  // 3) dòng-bảng lạc (bảng thiếu separator, model viết hỏng) vẫn phải đọc được.
+  //    cleanProse KHÔNG đụng tới ký tự "|" — đây là lỗ có sẵn của stripForSpeech, và ta
+  //    chỉ vá ở đường mới này, không đụng stripForSpeech (v2 đang dùng).
+  return { speech: cleanProse(strayTableRowsToProse(tablesToProse(rest))), descriptors };
 }
 
 // A long reply streamed through /tts/stream in ONE request can take far longer to

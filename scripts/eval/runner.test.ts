@@ -51,7 +51,10 @@ describe("runScenario", () => {
     });
     await runScenario({ ...scenario, mode: "voice" }, { callOllama: captureOllama, buildTools: () => [] }, 1);
     expect(seenSystem).toContain("giọng nói"); // marker VOICE_GUIDE
-    expect(seenSystem).not.toContain("```chart"); // RENDER_GUIDE (mode mặc định) phải vắng mặt
+    // Mốc phân biệt là ```map, KHÔNG phải ```chart: từ khi voice tự quyết panel, VOICE_GUIDE
+    // cũng dạy khối ```chart (giống RENDER_GUIDE) — chỉ ```map là riêng của RENDER_GUIDE,
+    // vì DisplayPanel không render được bản đồ.
+    expect(seenSystem).not.toContain("```map"); // RENDER_GUIDE (mode mặc định) phải vắng mặt
   });
 
   test("KHÔNG set mode → hành vi CŨ giữ nguyên (RENDER_GUIDE, không phải VOICE_GUIDE)", async () => {

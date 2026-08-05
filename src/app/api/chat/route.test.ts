@@ -330,6 +330,103 @@ describe("R0 tool-loop robustness", () => {
     }
   });
 
+  // NGUỒN A ĐÃ TẮT. Trước đây route tự suy descriptor từ MỌI tool result và phát frame
+  // `view` — panel do đó hiện cả những bước tra cứu nội bộ chẳng liên quan gì tới câu trả
+  // lời (tra id theo tên, kết quả "not found"...), vì luật cấu trúc không trả lời được câu
+  // hỏi ngữ nghĩa "kết quả này có đáng cho user nhìn không". Nay model tự quyết bằng cách
+  // chèn bảng/```chart vào câu trả lời (VOICE_GUIDE), client tách ra bằng extractForSpeech
+  // — CÙNG cơ chế với chat thường.
+  //
+  // Test này giữ lại ở dạng ĐẢO NGƯỢC: một tool trả kết quả dạng bảng đẹp KHÔNG được đẻ ra
+  // frame `view` nữa. Nếu ai đó nối lại onView ở route mà không cân nhắc, test này đỏ.
+  test("tool trả bảng (laam_list_agents) → KHÔNG còn phát frame view (nguồn A đã tắt)", async () => {
+    const captured = { values: [] as unknown[] };
+    const agentRows = [
+      {
+        id: "s1",
+        projectId: "P1",
+        machineId: "m1",
+        model: "claude",
+        status: "running",
+        startedAt: new Date(Date.now() - 10 * 60_000),
+        lastActivity: new Date(Date.now() - 1 * 60_000),
+        latestActivity: "đang chạy tests",
+        tokensIn: 100,
+        tokensOut: 200,
+        costUsd: 0.12,
+      },
+      {
+        id: "s2",
+        projectId: "P2",
+        machineId: "m2",
+        model: "claude",
+        status: "idle",
+        startedAt: new Date(Date.now() - 20 * 60_000),
+        lastActivity: new Date(Date.now() - 15 * 60_000),
+        latestActivity: "chờ input",
+        tokensIn: 50,
+        tokensOut: 80,
+        costUsd: 0.05,
+      },
+    ];
+    // select #1 = history (rỗng, lượt mới không có conversationId), select #2 = agentSessions
+    // (bên trong laam_list_agents handler). `system` override trong body BỎ QUA nhánh
+    // proactive (route.ts: `if (!hasSystemOverride)`) nên không có select xen giữa.
+    _db = fakeChainDb(captured, [[], agentRows]);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ndjson = JSON.stringify({ message: { content: "Dưới đây là danh sách agent." }, done: true, prompt_eval_count: 3, eval_count: 6 }) + "\n";
+    const fetchMock = vi
+      .fn()
+      // round 1: model gọi laam_list_agents
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: { content: "", tool_calls: [{ function: { name: "laam_list_agents", arguments: {} } }] },
+        }),
+      })
+      // round 2: không tool_calls nữa → tool-loop kết thúc tự nhiên
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ message: { content: "" } }) })
+      // completion cuối: NDJSON stream (nội dung THẬT, khác rỗng → finalizeTurn mới phát leadingFrames)
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => {
+            let sent = false;
+            return {
+              read: async () => {
+                if (sent) return { done: true as const, value: undefined };
+                sent = true;
+                return { done: false as const, value: new TextEncoder().encode(ndjson) };
+              },
+            };
+          },
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "liệt kê agent đang theo dõi", system: "Bạn là trợ lý LAAM." }),
+        }),
+      );
+      const text = await res.text();
+      // Tool ĐÃ chạy và ĐÃ trả kết quả dạng bảng (sanity — nếu tool không chạy thì phép
+      // khẳng định "không có view frame" dưới đây là vô nghĩa, đúng kiểu test luôn xanh).
+      expect(text).toContain("laam_list_agents");
+      expect(text).toContain('"t":"cite"'); // chuỗi frame đuôi vẫn phát bình thường
+      // …nhưng KHÔNG có view frame: panel giờ do model tự quyết (bảng/```chart trong câu
+      // trả lời → extractForSpeech tách ở client), không phải code tự suy từ tool result.
+      expect(text).not.toContain('"t":"view"');
+    } finally {
+      vi.unstubAllGlobals();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
   // BUG prod: upload PDF → ChatClient đọc file.text() ra rác nhị phân chứa NUL → message
   // có NUL → insert chatMessages (KHÔNG fail-soft, route.ts:217) ném vì Postgres TEXT không
   // lưu NUL → 500 "Lỗi server". Server PHẢI strip NUL trước persist (defense-in-depth).

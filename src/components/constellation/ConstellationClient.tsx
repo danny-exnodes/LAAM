@@ -12,11 +12,14 @@ import { SonicWaveformCanvas } from "./SonicWaveformCanvas";
 import { ParticleFieldBackground } from "./ParticleFieldBackground";
 import { ConstellationNodes } from "./ConstellationNodes";
 import { CommandDock } from "./CommandDock";
+import { DisplayPanel, PANEL_EXIT_MS, type Density } from "./DisplayPanel";
 import { useConstellationChat, type PendingWrite } from "./useConstellationChat";
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
-import { stripForSpeech, splitForSpeech } from "@/lib/chat/voice";
+import { splitForSpeech, extractForSpeech } from "@/lib/chat/voice";
+import { withPointer } from "@/lib/chat/speech-pointer";
+import { pickTurnView, type ViewDescriptor } from "@/lib/agent/view";
 import { playPcmStream } from "@/lib/chat/streamingAudio";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
@@ -70,6 +73,32 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
   // tool requested by node-pick
   const [requestedTool, setRequestedTool] = useState<{ name: string; args: unknown } | null>(null);
+
+  // Panel hiển thị. `views` là các descriptor của lượt gần nhất (một lượt có thể vừa có
+  // bảng vừa có chart — /chat hiện cả hai thì panel cũng phải vậy). Lượt mới THAY THẾ
+  // toàn bộ, không xếp chồng. `viewClosed` là user đã bấm × — đóng chỉ thu gọn, không xoá.
+  const [views, setViews] = useState<ViewDescriptor[]>([]);
+  const [viewClosed, setViewClosed] = useState(false);
+  const [density, setDensity] = useState<Density>("detail");
+  // Panel phải Ở LẠI trong DOM để chạy hết animation đóng rồi mới gỡ — gỡ ngay thì nó
+  // biến mất đột ngột, không thấy animation nào cả. `panelOpen` điều khiển animation
+  // vào/ra, `panelMounted` điều khiển việc có render hay không.
+  const panelOpen = views.length > 0 && !viewClosed;
+  const [panelMounted, setPanelMounted] = useState(false);
+  useEffect(() => {
+    if (panelOpen) {
+      setPanelMounted(true);
+      return; // mở lại giữa lúc đang đóng: cleanup dưới đã huỷ timer gỡ, panel vào lại mượt
+    }
+    const id = setTimeout(() => setPanelMounted(false), PANEL_EXIT_MS);
+    return () => clearTimeout(id);
+  }, [panelOpen]);
+  const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
+  // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
+  // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
+  // liên tục và kéo theo mọi effect/ref phụ thuộc nó.
+  const pointerRef = useRef("");
+  pointerRef.current = t("constellation.viewPointer");
 
   // Hydrate the selected agent from localStorage after mount (SSR-safe).
   useEffect(() => {
@@ -163,6 +192,12 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     () => placeNodes(buildNodes({ agents, groups, connectors, selectedAgentId })),
     [agents, groups, connectors, selectedAgentId]);
 
+  // Nhãn nguồn cho badge: tên hiển thị của agent đang chọn; không có thì lùi về tên
+  // tool (thà hiện "kg_list_projects" còn hơn hiện một UUID — selectedAgentId là ID).
+  const agentLabel =
+    agents.find((a) => a.id === selectedAgentId)?.name ??
+    (views[0]?.source.type === "tool" ? views[0].source.toolName : "");
+
   const onPick = useCallback((n: ConstNode) => {
     if (n.ref.kind === "agent") {
       setSelectedAgentId(n.ref.agentId);
@@ -180,9 +215,38 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // Mirrors convState for getLevel (declared before it's read; see Step 7 in the plan) —
   // getLevel needs the current hands-free listening state without depending on convState.
   const convStateRef = useRef<"idle" | "listening" | "thinking" | "speaking" | "off">("off");
+  // D3: /chat truyền hội thoại đang mở qua ?conv=<id> khi điều hướng sang đây (nút Orbit)
+  // — lượt gửi voice ĐẦU TIÊN tiếp tục đúng hội thoại đó thay vì luôn tạo mới. Đọc trực
+  // tiếp window.location.search (không dùng hook useSearchParams của next/navigation) để
+  // khớp đúng cách ?agent=/localStorage restore đã làm trong ChatClient.tsx — an toàn SSR
+  // vì đây LÀ giá trị khởi tạo lười của useRef bên trong hook, cần có ngay ở lần render
+  // đầu (không thể đợi một useEffect chạy sau).
+  const initialConversationId =
+    typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("conv") ?? undefined)
+      : undefined;
   const chat = useConstellationChat({
     onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
+    onTurnStart: () => {
+      viewFromToolRef.current = false;
+      // Xoá panel/pill của lượt TRƯỚC ngay khi lượt MỚI bắt đầu, chưa cần biết lượt
+      // này có descriptor hay không. Nếu không xoá ở đây: lượt mới không có bảng/biểu
+      // đồ sẽ vẫn hiện panel/pill CŨ (chỉ set, chưa bao giờ clear) — trái với spec
+      // (dòng 171): "lượt mới KHÔNG có descriptor → giữ nguyên trạng thái đang đóng,
+      // không để pill cũ sót lại". Một lượt CÓ descriptor sẽ set lại `view` sau đó
+      // trong cùng lượt (onView ở dưới, hoặc nhánh nguồn B trong speakReply) — clear
+      // ở đây không tranh chấp với chúng.
+      // onTurnStart bắn từ CẢ send() lẫn confirm() (xem consume() trong
+      // useConstellationChat.ts — dùng chung một điểm reset cho hai đường gửi, xem
+      // Task 5). Hệ quả: xác nhận một pending-write cũng xoá panel đang mở. Chấp
+      // nhận được — một lượt confirm cũng là một lượt hội thoại MỚI, panel của lượt
+      // trước không còn ăn khớp với phản hồi sắp tới.
+      setViews([]);
+      setViewClosed(false);
+    },
+    onView: (d) => { viewFromToolRef.current = true; setViews([d]); setViewClosed(false); },
+    initialConversationId,
   });
 
   // Voice + audio
@@ -259,7 +323,27 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const speakAbortRef = useRef<AbortController | null>(null);
   const speakReply = useCallback(async (text: string) => {
     if (!text) return;
-    const spoken = stripForSpeech(text);
+    // Tách phần NHÌN được ra trước, rồi mới chèn câu trỏ panel, rồi mới cắt segment.
+    // Thứ tự này bắt buộc: đảo lại thì soft cap 280 ký tự của splitForSpeech sẽ băm
+    // bảng thành mảnh và đọc to "| PH-005 | 1015 |".
+    const { speech, descriptors } = extractForSpeech(text);
+    // Nguồn A (frame view từ tool result) luôn thắng nguồn B (bảng model tự viết):
+    // số của A do code lấy được, số của B là model kể lại (Rule 13). Nhưng bảng của B
+    // vẫn phải bị cắt khỏi lời nói — đó là việc extractForSpeech vừa làm ở trên.
+    if (!viewFromToolRef.current && descriptors.length) {
+      // Giữ TẤT CẢ descriptor, không chọn một cái. Trước đây pickTurnView lấy đúng một
+      // → model trả cả bảng lẫn chart thì user chỉ thấy chart, giống hệt việc /chat hiện
+      // cả hai còn Larvis nuốt mất một cái.
+      // extractForSpeech xử lý chart fence TRƯỚC table nên thứ tự trả về là [chart…, bảng…];
+      // sắp lại cho bảng lên trước để khớp cách /chat trình bày (bảng rồi mới tới chart).
+      const ordered = [...descriptors].sort(
+        (a, b) => Number(a.kind === "chart") - Number(b.kind === "chart"),
+      );
+      setViews(ordered);
+      setViewClosed(false);
+    }
+    const hasView = viewFromToolRef.current || descriptors.length > 0;
+    const spoken = withPointer(speech, hasView, pointerRef.current);
     if (!spoken) return;
     const segments = splitForSpeech(spoken);
     if (!segments.length) return;
@@ -510,7 +594,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       <ParticleFieldBackground />
       <ConstellationCanvas placed={placed} getLevel={getLevel} mode={canvasMode} />
       <Link
-        href="/chat"
+        // D3: mang theo hội thoại vừa nói (nếu có) để /chat mở đúng transcript, không
+        // phải trang trắng — chat.conversationId là state THẬT (không phải ref đọc trực
+        // tiếp, xem useConstellationChat.ts) nên luôn phản ánh đúng lượt gửi gần nhất.
+        href={chat.conversationId ? `/chat?conv=${chat.conversationId}` : "/chat"}
         className="absolute right-4 top-4 z-10 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-[#a9e9ff]/90 backdrop-blur-md transition-colors hover:border-[#5bd6ff]/40 hover:bg-white/[0.06] hover:text-[#eaf9ff]"
       >
         {t("constellation.back")}
@@ -520,6 +607,17 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       </h1>
       <SysInfoPanel greetingName={greetingName} t={t} lang={lang} />
       <ConstellationNodes placed={placed} onPick={onPick} t={t} />
+
+      {panelMounted && views.length > 0 && (
+        <DisplayPanel
+          views={views}
+          density={density}
+          open={panelOpen}
+          onClose={() => setViewClosed(true)}
+          onToggleDensity={() => setDensity((d) => (d === "detail" ? "focus" : "detail"))}
+          agentLabel={agentLabel}
+        />
+      )}
 
       {/* Write-gate confirm chip */}
       {pendingWrite && (
@@ -556,6 +654,25 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
 
           {/* Unified control bar: model · chat · voice — single row, no overlap */}
           <div className="absolute bottom-6 right-4 z-20 flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+            {views.length > 0 && viewClosed && (
+              <button
+                type="button"
+                onClick={() => setViewClosed(false)}
+                className="shrink-0 rounded-full border border-[#ffd479]/55 bg-[#ffc450]/15 px-3 py-2 text-[12px] text-[#ffe2a6] transition-colors hover:bg-[#ffc450]/25"
+              >
+                {/* Đếm dòng chỉ khi có nghĩa — cùng luật với badge trong DisplayPanel:
+                    descriptor kind="chart" chỉ có 1 "dòng" là chuỗi JSON, đếm nó ra pill
+                    là con số vô nghĩa (vd "· 1" cho một biểu đồ nhiều điểm dữ liệu).
+                    Cộng dồn qua các descriptor đếm được: một lượt có thể có cả bảng lẫn chart. */}
+                ▦ {t("constellation.viewPill")}
+                {(() => {
+                  const rows = views
+                    .filter((v) => v.kind === "table" || v.kind === "record")
+                    .reduce((n, v) => n + (v.rows?.length ?? 0), 0);
+                  return rows > 0 ? ` · ${rows}` : "";
+                })()}
+              </button>
+            )}
             {models.length > 0 && (
               <select
                 aria-label={t("constellation.modelAria")}

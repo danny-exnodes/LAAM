@@ -27,13 +27,41 @@ const RENDER_GUIDE =
   "Hệ thống tự tra toạ độ và vẽ tuyến — đừng tự bịa toạ độ hay số liệu; " +
   "chỉ chèn khối khi câu hỏi thực sự cần biểu đồ hoặc bản đồ.";
 
-// Voice contract: on /constellation the reply is read aloud by TTS. Generate spoken
-// prose, not written markup — no tables/lists/markdown, no read-aloud identifiers,
-// summarize long lists. Replaces RENDER_GUIDE (chart/map are visual-only) in voice mode.
+// Voice contract: on /constellation the reply is read aloud by TTS. Prose is SPOKEN;
+// an optional table/```chart block is NOT — extractForSpeech (lib/chat/voice.ts) cuts it
+// out of the speech and the client shows it on a floating panel.
+//
+// Trước đây khối này CẤM HẲN markdown và panel do CODE tự suy từ mọi tool result
+// (deriveFromToolResult + onView). Cách đó hiện panel cho cả những bước tra cứu nội bộ
+// không liên quan gì tới câu trả lời (tra id theo tên, kết quả "not found"...), vì luật
+// cấu trúc không trả lời được câu hỏi ngữ nghĩa "kết quả này có đáng cho user nhìn
+// không". Nay giao quyết định đó cho model — CÙNG hợp đồng với RENDER_GUIDE của chat
+// thường, để hai bề mặt hành xử như nhau và chỉ có một chỗ phải sửa.
 const VOICE_GUIDE =
-  "Đây là hội thoại bằng giọng nói — câu trả lời của bạn sẽ được đọc thành tiếng. " +
-  "Hãy trả lời như đang NÓI chuyện tự nhiên: câu ngắn, mạch lạc, KHÔNG dùng markdown " +
-  "(không bảng, không gạch đầu dòng, không tiêu đề, không khối mã). " +
+  "Đây là hội thoại bằng giọng nói — phần văn xuôi của bạn sẽ được ĐỌC THÀNH TIẾNG. " +
+  "Hãy viết văn xuôi như đang NÓI chuyện tự nhiên: câu ngắn, mạch lạc, không tiêu đề, không gạch đầu dòng. " +
+  // Kênh NHÌN, tách hẳn khỏi kênh NÓI. Tối đa MỘT khối/lượt: panel chỉ hiện được một
+  // descriptor, và giới hạn ngay ở prompt thì không phải đi chọn hộ model sau đó.
+  // Trigger phải MỆNH LỆNH và CÓ NGƯỠNG CỤ THỂ. Bản đầu viết "bạn được chèn" + "chỉ chèn
+  // khi thật sự đáng nhìn" — model hiểu là tuỳ chọn nên gần như không bao giờ chèn, phải
+  // hỏi thẳng "cho xem biểu đồ" nó mới làm.
+  "Khi câu trả lời chứa dữ liệu NHIỀU MỤC — xếp hạng/top N, so sánh nhiều đối tượng, " +
+  "số liệu theo thời gian, hay từ ba dòng dữ liệu trở lên — HÃY chèn khối hiển thị: " +
+  "một bảng markdown (để thấy con số chính xác) và/hoặc một khối ```chart " +
+  'chứa JSON kiểu Chart.js: {"type":"bar|line|pie","title":"…","data":{"labels":[…],"datasets":[{"label":"…","data":[…]}]}} ' +
+  "(để thấy chênh lệch/xu hướng). Với dữ liệu xếp hạng, CẢ BẢNG LẪN BIỂU ĐỒ đều hữu ích — " +
+  "cứ chèn cả hai, panel hiện được nhiều khối. " +
+  "Người dùng KHÔNG cần phải yêu cầu \"cho xem bảng/biểu đồ\" thì bạn mới chèn — dữ liệu nhiều mục thì tự chèn. " +
+  "Khối đó KHÔNG được đọc lên — nó được tách ra và hiện trên một bảng nổi giữa màn hình. " +
+  // Người dùng đang NGHE: nếu phần đọc chỉ nói "xem bảng ở trên" thì với họ câu hỏi chưa
+  // được trả lời. Câu trỏ panel đã do CODE chèn sẵn ở cuối (constellation.viewPointer),
+  // model không cần và không nên tự viết câu đó.
+  "Vì vậy phần văn xuôi phải TỰ NÓ trả lời xong câu hỏi, KHÔNG được đẩy người dùng sang khối " +
+  "(đừng viết \"xem bảng ở trên/bên dưới\", \"chi tiết trong bảng\" — hệ thống tự thêm câu đó). " +
+  "Với câu hỏi xếp hạng/top N, hãy ĐỌC LẦN LƯỢT từng mục kèm con số của nó — " +
+  "\"đứng đầu là A với …, thứ hai là B với …\" — chứ không chỉ nêu tên hay nói \"có 5 mục\". " +
+  "Ngược lại, câu trò chuyện, câu xác nhận, hay một hai con số thì KHÔNG cần khối nào. " +
+  "Số liệu trong khối phải đúng với dữ liệu thật bạn đọc được — đừng bịa, đừng làm tròn cho gọn. " +
   // G1: cả hai câu dưới đây phải neo rõ vào LỜI NÓI RA. Bản cũ ("KHÔNG đọc ID…",
   // "Ưu tiên ngắn gọn") bị model hiểu là chỉ dẫn về mức độ TRA CỨU: nó dừng sau 1 tool
   // liệt kê và né luôn các tool nhận UUID → trả lời nông/bịa (đo: 3/17 lượt voice hỏng,
@@ -41,8 +69,14 @@ const VOICE_GUIDE =
   // tool (Claude MVS ở route) và phải sạch từ ngữ tool như RENDER_GUIDE.
   "KHÔNG ĐỌC TO ID, UUID, mã băm, mã dài hay đường dẫn — bỏ chúng khỏi lời nói, chỉ nêu khi người dùng hỏi thẳng. " +
   "Ưu tiên ngắn gọn và tóm tắt — đây là yêu cầu về CÁCH TRÌNH BÀY câu trả lời, không phải về mức độ tìm hiểu dữ liệu. " +
-  "Danh sách ngắn thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
-  "nếu danh sách dài, nêu số lượng và vài mục tiêu biểu rồi hỏi người dùng muốn nghe hết hay tìm mục cụ thể. " +
+  // "Ngắn gọn" ở trên nói về CÁCH DIỄN ĐẠT, không phải cớ để bỏ bớt nội dung: một câu
+  // "top 5 …" vẫn phải đọc đủ 5 mục kèm số, chỉ là đọc bằng câu nói tự nhiên chứ không
+  // đọc cấu trúc bảng. Bản trước ghi "vẫn đọc gọn bằng lời" nên model rút còn một câu
+  // rồi đẩy user sang bảng.
+  "Danh sách ngắn KHÔNG kèm số liệu thì đọc tự nhiên kiểu \"gồm A, B và C\"; " +
+  "danh sách CÓ số liệu (xếp hạng, so sánh) thì đọc đủ từng mục kèm số, bằng câu nói tự nhiên, " +
+  "và vẫn phải kèm khối hiển thị ở trên; " +
+  "chỉ khi danh sách QUÁ DÀI (trên khoảng mười mục) mới nêu số lượng và vài mục tiêu biểu rồi hỏi người dùng muốn nghe tiếp phần nào. " +
   "Đọc số và ngày tháng theo cách người ta nói, đừng đọc dạng máy trừ khi cần chính xác.";
 
 export function buildSystemPrompt(input: {

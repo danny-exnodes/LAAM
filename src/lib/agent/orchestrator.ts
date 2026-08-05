@@ -4,6 +4,7 @@ import type { ConnectorTool } from "@/lib/connectors/types";
 import { evictOldToolResults } from "./loop-context";
 import { planDrilldown, type DrilldownPair } from "./drilldown";
 import { PendingWriteSignal } from "@/lib/agent/safety/gate";
+import { deriveFromToolResult, pickTurnView, type ViewDescriptor } from "./view";
 
 // W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
 // Ollama multimodal. Optional/additive: vắng mặt ⇒ wire-format y như cũ.
@@ -90,6 +91,10 @@ export type ToolRoundsOpts = {
   budgetChars?: number; // evict oldest tool results when the convo exceeds this
   keepRecent?: number; // tool results kept verbatim during eviction (default 3)
   onBackstop?: () => void; // fired when the loop is FORCE-terminated (backstop / repeat), not on natural completion
+  // Panel hiển thị: gom descriptor suốt lượt, phát ĐÚNG 1 lần sau khi vòng lặp kết
+  // thúc. Không phát sau mỗi dispatch — một lượt có thể có hàng chục tool result và
+  // panel sẽ nhảy loạn rồi dừng ở kết quả tình cờ cuối cùng.
+  onView?: (d: ViewDescriptor) => void;
 };
 
 // Stable key for repeat-detection: tool name + normalized args (object OR JSON string).
@@ -132,6 +137,12 @@ export async function runToolRounds(
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   let drilledDown = false;
   const seen = new Map<string, number>(); // repeat-detection: tool+args → count
+  const views: ViewDescriptor[] = []; // gom cả lượt, chọn 1 ở cuối (pickTurnView)
+  // Đếm SỐ LẦN dispatch() thật sự chạy trong lượt (không tính lần bị chặn bởi
+  // repeat-detection). 1 lần = tra cứu thoáng qua để trả lời bằng lời, không đáng hiện
+  // panel; ≥2 lần = model đang đào sâu (vd. list→detail), panel mới đáng xem. Luật thuần
+  // đếm số bước, không đọc nội dung câu hỏi/câu trả lời (Rule 5).
+  let toolCallCount = 0;
 
   for (let i = 0; i < maxRounds; i++) {
     const isLastRound = i === maxRounds - 1; // ONLY the backstop forces a text answer
@@ -156,7 +167,12 @@ export async function runToolRounds(
         }
         if (name === "web_read") webReadNudged = true; // đã đọc rồi → khỏi nhắc
         const result = await deps.dispatch(name, args);
+        toolCallCount++;
         convo.push({ role: "tool", content: JSON.stringify(result) });
+        if (opts.onView) {
+          const view = deriveFromToolResult(name, result, Date.now());
+          if (view) views.push(view);
+        }
         if (name === "web_search" && searchResultHasUrl(result)) sawWebSearchWithUrl = true;
         // D2: tool liệt kê vừa chạy + câu hỏi nhắc đúng tên một mục trong kết quả →
         // CODE đi tiếp bước chi tiết (xem drilldown.ts). Một lần/lượt: nếu không, model
@@ -172,8 +188,13 @@ export async function runToolRounds(
             // phải nổ ra ngoài để route suspend chờ xác nhận (Rule 12).
             try {
               const detail = await deps.dispatch(plan.name, plan.args);
+              toolCallCount++;
               convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: plan.name, arguments: plan.args } }] });
               convo.push({ role: "tool", content: JSON.stringify(detail) });
+              if (opts.onView) {
+                const detailView = deriveFromToolResult(plan.name, detail, Date.now());
+                if (detailView) views.push(detailView);
+              }
             } catch (e) {
               if (e instanceof PendingWriteSignal) throw e;
               console.warn(`[drilldown] ${plan.name} lỗi — bỏ qua bước chi tiết`, e);
@@ -205,5 +226,10 @@ export async function runToolRounds(
     if (isLastRound) opts.onBackstop?.(); // reached the backstop round → forced text → honest signal
     break;
   }
+  // 1 tool call = tra cứu thoáng qua (vd. tìm ID theo tên) để trả lời bằng lời — không
+  // đáng hiện panel, và hay ra bảng "không liên quan" tới câu trả lời cuối. ≥2 = model
+  // đang đào sâu (list→detail hoặc nhiều bước), panel mới thật sự phản ánh câu trả lời.
+  const view = toolCallCount >= 2 ? pickTurnView(views) : null;
+  if (view) opts.onView?.(view);
   return convo;
 }

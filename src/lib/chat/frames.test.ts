@@ -33,4 +33,17 @@ describe("encodeFrame / splitFrames", () => {
     const raw = "hi" + FRAME_SEP + "{bad json}" + FRAME_SEP + "đuôi";
     expect(splitFrames(raw)).toEqual({ text: "hiđuôi", frames: [] });
   });
+  test("frame view đi qua encode → splitFrames còn nguyên descriptor", () => {
+    const d = {
+      kind: "table" as const,
+      title: "kg_list_stores",
+      source: { type: "tool" as const, toolName: "kg_list_stores", at: 1 },
+      columns: [{ key: "store", label: "store", align: "left" as const }],
+      rows: [{ store: "PH-005" }],
+    };
+    const raw = "Đây là kết quả." + encodeFrame({ t: "view", d });
+    const out = splitFrames(raw);
+    expect(out.text).toBe("Đây là kết quả.");
+    expect(out.frames).toEqual([{ t: "view", d }]);
+  });
 });

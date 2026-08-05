@@ -59,7 +59,11 @@ function mockFetch() {
   });
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  // D3 tests push a ?conv=... URL — reset so it doesn't leak into other tests' mount effects.
+  window.history.pushState({}, "", "/chat");
+});
 
 // UX-1 INTENT: prompt mẫu là đường tắt 1-click. Nếu click chỉ ĐIỀN composer (hành vi
 // cũ) user phải bấm gửi lần nữa — click phải GỬI NGAY qua đường send hiện có.
@@ -316,4 +320,57 @@ test("empty-state links to the constellation page", async () => {
   renderChat();
   const links = await screen.findAllByRole("link", { name: /bản đồ trợ lý|assistant/i });
   expect(links.some((l) => l.getAttribute("href") === "/constellation")).toBe(true);
+});
+
+// D3 — deep-link tiếp tục hội thoại giữa /chat và /constellation. WHY: icon Orbit
+// (mở /constellation) trước đây luôn tạo hội thoại mới, kể cả đang xem sẵn một
+// hội thoại — xác nhận là chủ đích v1 nhưng đã hoãn phần deep-link (spec gốc:
+// "no new deep-link param required for v1"). Nay bổ sung theo cả 2 chiều.
+test("D3: mount với ?conv=<id> trong URL tự mở đúng hội thoại đó (không phải trang trắng)", async () => {
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/conversations/conv-42") {
+      return {
+        ok: true,
+        json: async () => ({
+          messages: [
+            { role: "user", content: "câu hỏi cũ" },
+            { role: "assistant", content: "trả lời cũ" },
+          ],
+        }),
+      } as unknown as Response;
+    }
+    const json = url.startsWith("/api/conversations")
+      ? { conversations: [{ id: "conv-42", title: "chat cũ" }] }
+      : url === "/api/ollama/models"
+        ? { models: [] }
+        : url === "/api/chat/info"
+          ? { model: "test-model" }
+          : url === "/api/ocr"
+            ? { available: true }
+            : url === "/api/chat/tools"
+              ? { groups: TOOL_GROUPS_FX }
+              : {};
+    return { ok: true, json: async () => json } as unknown as Response;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  window.history.pushState({}, "", "/chat?conv=conv-42");
+  render(
+    <I18nProvider lang="vi">
+      <ChatClient />
+    </I18nProvider>,
+  );
+  expect(await screen.findByText("câu hỏi cũ")).toBeInTheDocument();
+  expect(await screen.findByText("trả lời cũ")).toBeInTheDocument();
+});
+
+test("D3: link Orbit mang theo hội thoại đang mở (?conv=<activeId>) sau khi đã gửi 1 lượt", async () => {
+  const fetchMock = mockFetch(); // streamResponse mặc định trả x-conversation-id: "conv-1"
+  vi.stubGlobal("fetch", fetchMock);
+  renderChat();
+  fireEvent.change(await screen.findByLabelText("Soạn tin nhắn"), { target: { value: "hi" } });
+  fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+  await waitFor(() => {
+    const link = screen.getByRole("link", { name: /bản đồ trợ lý|assistant/i });
+    expect(link.getAttribute("href")).toBe("/constellation?conv=conv-1");
+  });
 });
