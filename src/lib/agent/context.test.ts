@@ -81,6 +81,25 @@ describe("buildSystemPrompt", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
     expect(p).toContain("chưa gọi công cụ lần nào");
   });
+  // P3 — P1 chặn được việc chốt TÊN CỘT nhưng vẫn lọt hai kiểu viết lại khác, ĐO ĐƯỢC
+  // 2026-08-05 khi chạy lại đủ 12 câu:
+  //   Q4: LAAM thêm "Show refund_id, store_id…" -> planner GROUP BY refund_id (khoá chính)
+  //       + HAVING COUNT(DISTINCT store_id) > 1 -> luôn rỗng -> trả lời "không có trùng lặp"
+  //       trong khi thực tế có 9 nhóm. Câu nguyên văn: DAAB sinh SQL ĐÚNG 2/2 lần.
+  //   Q9: LAAM đổi "repeated" thành "more than one" -> tự giải quyết chỗ mơ hồ -> planner
+  //       chọn `flagged = true` thay vì `cash_variance < 0` -> sai người. Câu nguyên văn:
+  //       DAAB HỎI LẠI, và hai lựa chọn nó đưa ra đúng là hai cách hiểu đó.
+  // Điểm chung: từ ngữ của người dùng ("duplicate", "repeated", "shortage") CHÍNH LÀ tín hiệu
+  // tầng dưới dựa vào để biết cần hỏi lại; định nghĩa hộ là xoá mất tín hiệu đó.
+  test("P3: cấm tự định nghĩa hộ từ ngữ người dùng, và cấm liệt kê cột hiển thị", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
+    expect(p).toContain("GIỮ NGUYÊN TỪ NGỮ người dùng");
+    expect(p).toContain("đừng liệt kê các cột cần hiển thị");
+  });
+  test("P3: tách câu hỏi ghép vẫn được phép (không mâu thuẫn M1)", () => {
+    const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "kg_query_datasource", kind: "read" }] });
+    expect(p).toContain("Tách câu hỏi ghép thành nhiều phần thì vẫn được");
+  });
   test("R1: có tool → cấm dùng tool audit riêng của LAAM cho câu hỏi nghiệp vụ khách hàng", () => {
     const p = buildSystemPrompt({ lang: "vi", now, tools: [{ name: "laam_query_audit", kind: "read" }] });
     expect(p).toContain("KHÔNG chứa dữ liệu nghiệp vụ của khách hàng");

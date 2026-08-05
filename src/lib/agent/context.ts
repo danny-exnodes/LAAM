@@ -145,6 +145,23 @@ export function buildSystemPrompt(input: {
       "Vẫn nêu đầy đủ những điều kiện NGƯỜI DÙNG đã nói (khoảng thời gian, ngưỡng, mã cụ thể) và tên bảng khi đã chắc chắn, " +
       "nhưng KHÔNG tự chọn hộ cột khi có nhiều cột cùng hợp lý: tầng dưới có cơ chế hỏi lại khi mơ hồ, chốt sẵn sẽ làm cơ chế đó im lặng và một lựa chọn sai sẽ trông y hệt câu trả lời đúng. " +
       "Tuyệt đối không gửi câu SQL vào ô câu hỏi ngôn ngữ tự nhiên." +
+      // P3: P1 chặn được việc chốt TÊN CỘT, nhưng chạy lại đủ 12 câu (2026-08-05) cho thấy còn
+      // HAI kiểu viết lại khác cũng phá cơ chế hỏi-lại, và cả hai đều KHÔNG nhắc tên cột nào:
+      //   Q4 — LAAM thêm "Show refund_id, store_id…" (chỉ định cột HIỂN THỊ). Planner bèn
+      //        GROUP BY refund_id — khoá chính — rồi HAVING COUNT(DISTINCT store_id) > 1, một
+      //        truy vấn LUÔN rỗng về mặt logic ⇒ trả lời "không có refund trùng lặp" trong khi
+      //        thực tế có 9 nhóm. Gửi nguyên văn "Show duplicate refunds across stores." thì
+      //        DAAB sinh SQL đúng (GROUP BY original_transaction_id) 2/2 lần.
+      //   Q9 — LAAM đổi "repeated" thành "more than one", tức TỰ GIẢI QUYẾT chỗ mơ hồ. Planner
+      //        hết tín hiệu để hỏi, chọn `flagged = true` thay vì `cash_variance < 0` ⇒ sai
+      //        người. Gửi nguyên văn thì DAAB HỎI LẠI, và hai lựa chọn nó đưa ra đúng bằng hai
+      //        cách hiểu đó.
+      // Nói cách khác: chính TỪ NGỮ của người dùng ("duplicate", "repeated", "shortage",
+      // "busiest") là tín hiệu tầng dưới dựa vào để biết cần hỏi lại. Diễn giải lại = xoá tín
+      // hiệu. Vế cuối giữ M1 sống: tách câu hỏi ghép vẫn hợp lệ, miễn mỗi phần giữ lời gốc.
+      "GIỮ NGUYÊN TỪ NGỮ người dùng dùng để mô tả thứ cần tìm (vd 'duplicate', 'repeated', 'shortage', 'busiest') — đừng thay bằng định nghĩa của bạn ('nhiều hơn một lần', 'flagged = true'), vì chính những từ đó cho tầng dưới biết chỗ nào cần hỏi lại. " +
+      "Và đừng liệt kê các cột cần hiển thị — để tầng dưới tự chọn cột phù hợp; chỉ định cột hiển thị từng khiến nó gộp nhóm theo khoá chính và trả về rỗng. " +
+      "Tách câu hỏi ghép thành nhiều phần thì vẫn được (xem luật ở trên), miễn mỗi phần giữ đúng lời người dùng cho phần đó." +
       // P2: vá lỗ hổng do chính P1 mở ra. ĐO ĐƯỢC 2026-08-05 trên câu hỏi mới "Which is our
       // busiest store?": 1/2 lượt model trả lời với 0 TOOL CALL, tự tuyên bố "chưa có dữ liệu
       // về doanh thu/lượt khách" — trong khi dữ liệu CÓ (lượt còn lại truy vấn bình thường,
