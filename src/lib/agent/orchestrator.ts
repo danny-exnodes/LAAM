@@ -5,6 +5,7 @@ import { evictOldToolResults } from "./loop-context";
 import { planDrilldown, type DrilldownPair } from "./drilldown";
 import { PendingWriteSignal } from "@/lib/agent/safety/gate";
 import { deriveFromToolResult, pickTurnView, type ViewDescriptor } from "./view";
+import { annotateEmptyResult } from "./empty-result";
 
 // W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
 // Ollama multimodal. Optional/additive: vắng mặt ⇒ wire-format y như cũ.
@@ -100,7 +101,7 @@ export async function seedRequestedTool(
 ): Promise<void> {
   convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: rt.name, arguments: rt.args } }] });
   const result = await dispatch(rt.name, rt.args);
-  convo.push({ role: "tool", content: JSON.stringify(result) });
+  convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, rt.args)) });
 }
 
 // Runaway BACKSTOP on tool rounds — NOT a task-shaping cap. The loop's real exit is
@@ -276,7 +277,9 @@ export async function runToolRounds(
         if (name === LAAM_AUDIT_TOOL_NAME) calledAuditTool = true; // G5: đổi nội dung nhắc
         const result = await deps.dispatch(name, args);
         toolCallCount++;
-        convo.push({ role: "tool", content: JSON.stringify(result) });
+        // Empty result → tell the model (in the tool result) that emptiness is not absence.
+        // Only the convo copy is annotated; `result` below stays raw for the view/drilldown.
+        convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, args)) });
         if (opts.onView) {
           const view = deriveFromToolResult(name, result, Date.now());
           if (view) views.push(view);
@@ -298,7 +301,7 @@ export async function runToolRounds(
               const detail = await deps.dispatch(plan.name, plan.args);
               toolCallCount++;
               convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: plan.name, arguments: plan.args } }] });
-              convo.push({ role: "tool", content: JSON.stringify(detail) });
+              convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(detail, plan.args)) });
               if (opts.onView) {
                 const detailView = deriveFromToolResult(plan.name, detail, Date.now());
                 if (detailView) views.push(detailView);

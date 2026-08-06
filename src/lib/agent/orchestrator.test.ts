@@ -798,7 +798,13 @@ describe("seedRequestedTool (P1 - user picked tool, code dispatches)", () => {
       role: "assistant",
       tool_calls: [{ function: { name: "mcp__daab__kg_query", arguments: { project_id: "1f991b74-x" } } }],
     });
-    expect(convo[2]).toEqual({ role: "tool", content: JSON.stringify({ rows: [] }) });
+    // Result carries through as a tool message. This dispatch returns ZERO rows, so the
+    // content also carries the empty-result note (see empty-result.ts): the model must not
+    // be able to read "no rows" as "no such thing exists".
+    expect(convo[2]).toMatchObject({ role: "tool" });
+    const seeded = JSON.parse(String((convo[2] as { content: string }).content));
+    expect(seeded.rows).toEqual([]);
+    expect(String(seeded.note)).toContain("KHÔNG phải bằng chứng");
   });
 
   // D2 — drilldown xác định trong tool-loop. Logic khớp tên nằm ở drilldown.ts (đã test
