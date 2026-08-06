@@ -60,9 +60,11 @@ export function ConversationLog({
           className={[
             // Every turn hugs the RIGHT edge, above the command input it belongs to — who
             // said what is carried by the colour and the label, so alternating sides only
-            // made the column zig-zag. The indent stays on the opposite side, so bubble
-            // width is unchanged (they still stretch to the column).
-            "ml-6 rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
+            // made the column zig-zag.
+            // self-end also opts the bubble out of the flex column's default stretch, so
+            // it shrinks to its own content instead of every turn being one slab the full
+            // width of the column. ml-6 caps how wide a long one can grow.
+            "ml-6 self-end rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
             // Each bubble carries its own background: with the wrapper gone there is
             // nothing else between the text and the moving starfield.
             // Solid rgba, NOT backdrop-blur — one blurred surface over the WebGL canvas was
