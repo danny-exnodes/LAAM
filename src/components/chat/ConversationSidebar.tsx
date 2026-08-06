@@ -326,7 +326,7 @@ export function ConversationSidebar({
       <div
         role="list"
         aria-label={t("chat.histListAria")}
-        className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3"
+        className="laam-scroll flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 pb-3"
       >
         {loading && convs.length === 0 ? (
           // U-minor: skeleton until the first load resolves (no "no conversations" flash).

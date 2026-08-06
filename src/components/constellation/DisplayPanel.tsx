@@ -140,14 +140,16 @@ function ViewBlock({
   return (
     <>
       {columns.length > 0 && (
-        <div className="max-h-[38vh] overflow-auto">
-          <table className="w-full border-collapse text-[12px]">
+        // overflow-auto: many-column tool tables scroll horizontally instead of
+        // crushing headers (same fix as .chat-md-tablewrap on markdown tables).
+        <div className="laam-scroll max-h-[38vh] overflow-auto">
+          <table className="w-max min-w-full border-collapse text-[12px]">
             <thead>
               <tr>
                 {columns.map((c) => (
                   <th
                     key={c.key}
-                    className={`border-b border-white/10 pb-1 font-medium text-[#a9e9ff] ${c.align === "right" ? "text-right" : "text-left"}`}
+                    className={`whitespace-nowrap border-b border-white/10 px-2 pb-1 font-medium text-[#a9e9ff] ${c.align === "right" ? "text-right" : "text-left"}`}
                   >
                     {c.label}
                   </th>
@@ -160,7 +162,7 @@ function ViewBlock({
                   {columns.map((c) => (
                     <td
                       key={c.key}
-                      className={`border-b border-dashed border-white/10 py-1 ${c.align === "right" ? "text-right tabular-nums" : "text-left"}`}
+                      className={`max-w-[32ch] whitespace-normal break-words border-b border-dashed border-white/10 px-2 py-1 ${c.align === "right" ? "text-right tabular-nums" : "text-left"}`}
                     >
                       {String(r[c.key] ?? "")}
                     </td>
