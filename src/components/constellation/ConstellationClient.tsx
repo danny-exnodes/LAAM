@@ -100,9 +100,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     return () => clearTimeout(id);
   }, [panelOpen]);
 
-  // In-page transcript. Session-scoped on purpose: it records what was actually said on
-  // THIS page, so the user can re-read a number without leaving for /chat (which would
-  // tear down the voice session). Resumed history stays out of scope — /chat owns that.
+  // In-page transcript, so the user can re-read a number without leaving for /chat (which
+  // would tear down the voice session).
   const [turns, setTurns] = useState<Turn[]>([]);
   const [logOpen, setLogOpen] = useState(false);
   const [logMounted, setLogMounted] = useState(false);
@@ -119,6 +118,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   const pushTurn = useCallback((role: Turn["role"], text: string) => {
     if (text) setTurns((prev) => [...prev, { role, text }]);
   }, []);
+
+  // (History for a resumed ?conv= is loaded further down, once initialConversationId exists.)
   const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
   // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
   // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
@@ -251,6 +252,38 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     typeof window !== "undefined"
       ? (new URLSearchParams(window.location.search).get("conv") ?? undefined)
       : undefined;
+
+  // Resuming a conversation (/constellation?conv=…) must show what was already said —
+  // opening the same id in /chat lists the whole history, so a transcript that starts
+  // blank on the same URL just reads as broken.
+  //
+  // Keyed on initialConversationId, NOT chat.conversationId: the latter also gets set the
+  // moment a BRAND-NEW conversation is created mid-session, and re-fetching then would
+  // pull back the turns pushTurn already appended — every live turn duplicated. History
+  // loads once, for the conversation the page was opened with; live turns append after.
+  useEffect(() => {
+    if (!initialConversationId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/conversations/${initialConversationId}`);
+        if (!res.ok) return; // fail-soft: missing history is bad, a crashed page is worse
+        const data = (await res.json()) as { messages?: { role?: string; content?: string }[] };
+        if (cancelled || !Array.isArray(data.messages)) return;
+        const history: Turn[] = data.messages
+          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+          .map((m) => ({ role: m.role as Turn["role"], text: m.content as string }));
+        // Prepend: the greeting Larvis speaks on load pushes a live turn before this fetch
+        // resolves, and it belongs AFTER the restored history, not in front of it.
+        if (history.length) setTurns((prev) => [...history, ...prev]);
+      } catch {
+        /* offline / aborted — the transcript just starts from this session */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialConversationId]);
   const chat = useConstellationChat({
     onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
