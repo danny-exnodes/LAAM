@@ -77,6 +77,13 @@ async function send(text: string) {
   fireEvent.keyDown(input, { key: "Enter" });
 }
 
+// The panel and the transcript are mutually exclusive: with the command input open the
+// transcript owns the screen and the panel is suppressed. Sending needs the input, so a
+// test that asserts on the panel has to close the input again first.
+async function closeChat() {
+  fireEvent.click(await screen.findByRole("button", { name: /trò chuyện|chat/i }));
+}
+
 describe("ConstellationClient — panel/pill không sót qua lượt (Critical 1)", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -99,12 +106,16 @@ describe("ConstellationClient — panel/pill không sót qua lượt (Critical 1
     // names itself after the descriptor title.
     const panel = () => screen.queryByRole("region", { name: "kg_list_stores" });
 
-    // Turn 1: response carries a view frame → panel should appear.
+    // Turn 1: response carries a view frame → panel should appear once the input is out
+    // of the way (the two surfaces never show together).
     await send("lượt 1");
+    await closeChat();
     await waitFor(() => expect(panel()).toBeTruthy(), { timeout: 5000 });
 
     // Turn 2: response carries NO view frame → panel must close, no stale pill either.
+    await openChat();
     await send("lượt 2");
+    await closeChat();
     await waitFor(
       () => {
         expect(panel()).toBeNull();

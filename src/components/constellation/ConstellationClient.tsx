@@ -89,7 +89,11 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // Panel phải Ở LẠI trong DOM để chạy hết animation đóng rồi mới gỡ — gỡ ngay thì nó
   // biến mất đột ngột, không thấy animation nào cả. `panelOpen` điều khiển animation
   // vào/ra, `panelMounted` điều khiển việc có render hay không.
-  const panelOpen = views.length > 0 && !viewClosed;
+  // One data surface at a time. The transcript already renders tables and charts inline
+  // (same ChatMarkdown as /chat), so with the command input open the panel was a second
+  // copy of the same numbers competing for the same screen. Chat open => you are reading
+  // and typing, the transcript is the surface; chat closed => hands-free, the panel is.
+  const panelOpen = views.length > 0 && !viewClosed && !chatOpen;
   const [panelMounted, setPanelMounted] = useState(false);
   useEffect(() => {
     if (panelOpen) {
@@ -747,7 +751,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
 
           {/* Unified control bar: model · chat · voice — single row, no overlap */}
           <div className="absolute bottom-6 right-4 z-20 flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-            {views.length > 0 && viewClosed && (
+            {/* Hidden while the command input is open for the same reason the panel is:
+                the pill would reopen a surface that is currently suppressed — a control
+                that visibly does nothing. */}
+            {views.length > 0 && viewClosed && !chatOpen && (
               <button
                 type="button"
                 onClick={() => setViewClosed(false)}
