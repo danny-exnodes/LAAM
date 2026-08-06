@@ -160,6 +160,22 @@ function applyOptions(body: Record<string, unknown>, options?: SamplingOptions):
   }
 }
 
+// Reasoning budget for gpt-oss / other reasoning models on BytePlus. UNSET → body is left
+// untouched and the provider default applies (measured: behaves like "high" — ~9k chars of
+// reasoning_content on a data question, most of a slow turn's wall time). Only the three
+// documented values are forwarded; anything else is ignored rather than sent to the API.
+// Split by phase on purpose: the TOOL rounds are where the model decides what to ask the
+// connector (a judgment call — starving it there produced a wrong "no duplicates found" on
+// a fraud question), while the FINAL round is only writing up rows it already has, which is
+// where most of the wall time goes. CHAT_REASONING_EFFORT sets both unless a phase-specific
+// var overrides it.
+const REASONING_EFFORTS = new Set(["low", "medium", "high"]);
+function applyReasoningEffort(body: Record<string, unknown>, phase: "tools" | "final"): void {
+  const specific = phase === "tools" ? process.env.CHAT_REASONING_EFFORT_TOOLS : process.env.CHAT_REASONING_EFFORT_FINAL;
+  const effort = (specific ?? process.env.CHAT_REASONING_EFFORT ?? "").trim();
+  if (REASONING_EFFORTS.has(effort)) body.reasoning_effort = effort;
+}
+
 async function safeText(res: Response): Promise<string> {
   try {
     return await res.text();
@@ -212,6 +228,7 @@ export async function byteplusChat(opts: {
   const tools = sanitizeTools(opts.tools);
   if (tools.length) body.tools = tools; // omit on the final (text-only) round
   applyOptions(body, opts.options);
+  applyReasoningEffort(body, "tools");
 
   const res = await request(key, body, opts.signal);
   const data = (await res.json()) as OAChatResponse;
@@ -253,6 +270,7 @@ export async function* byteplusStream(opts: {
     stream_options: { include_usage: true },
   };
   applyOptions(body, opts.options);
+  applyReasoningEffort(body, "final");
 
   const res = await request(key, body, opts.signal);
   const reader = res.body!.getReader();
