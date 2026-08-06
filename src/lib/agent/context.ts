@@ -119,6 +119,74 @@ export function buildSystemPrompt(input: {
       // Trust structured tool output over prose (Rule 13): when a result carries structured data
       // (JSON, arrays), count/classify from that data — never from a prose summary — and never invent a total.
       "Khi kết quả trả về có dữ liệu cấu trúc (JSON, mảng), hãy đếm và phân loại từ chính dữ liệu cấu trúc đó, không suy từ đoạn văn tóm tắt, và không tự bịa con số tổng." +
+      // M1: đo trực tiếp trên log ai_queries của DAAB — một câu hỏi bằng ngôn ngữ tự
+      // nhiên GỘP nhiều chỉ số ở nhiều bảng khác nhau trong MỘT lượt gọi (vd "so sánh
+      // doanh số, hoàn tiền, tồn kho và bồi thường theo từng cửa hàng") gần như luôn
+      // sinh SQL lỗi ở tầng dưới (JOIN sai, CTE trùng tên, cú pháp khoảng thời gian sai)
+      // — tách thành NHIỀU lượt gọi, mỗi lượt một chỉ số/một bảng, rồi tự cộng gộp kết
+      // quả lại gần như luôn thành công. Không đặc thù một connector nào — áp dụng cho
+      // mọi công cụ truy vấn dữ liệu bằng ngôn ngữ tự nhiên.
+      "Khi câu hỏi cần SO SÁNH NHIỀU chỉ số ở NHIỀU bảng/nguồn dữ liệu khác nhau, ĐỪNG gộp tất cả vào một lượt gọi công cụ — " +
+      "hãy hỏi TỪNG chỉ số một qua các lượt gọi riêng biệt (mỗi lượt một bảng), rồi TỰ TỔNG HỢP kết quả lại thành câu trả lời cuối. " +
+      // P1 (SỬA 2026-08-05 — Rule 7: luật cũ và cơ chế hỏi-ngược của tầng dưới mâu thuẫn
+      // nhau, chọn cái mới hơn/đo được, KHÔNG trộn). Bản CŨ dặn "nêu CỤ THỂ tên bảng/CỘT",
+      // ra đời khi tầng dưới chưa biết tự hỏi lại; giờ nó VÔ HIỆU HOÁ đúng cơ chế đó.
+      // ĐO ĐƯỢC trên log `ai_queries` của DAAB, cùng một câu hỏi:
+      //   gửi nguyên văn "Which products have negative inventory?"        → clarification_needed 4/4
+      //   gửi bản đã chốt cột "...where variance_quantity is less than 0" → completed (thi hành luôn)
+      // Hậu quả thật: câu 8 trả "471 sản phẩm tồn kho âm" trong khi đáp án đúng là "không có"
+      // — LAAM đã chọn hộ cột chênh lệch (variance_quantity) thay vì cột tồn thực
+      // (counted_quantity/system_quantity), và vì đã chốt sẵn nên DAAB không còn gì để hỏi.
+      // Một lựa chọn sai được trình bày y hệt một câu trả lời đúng.
+      // GIỮ phần đúng của P1: điều kiện do NGƯỜI DÙNG nêu (khoảng thời gian, ngưỡng, mã cụ
+      // thể) vẫn phải chuyển xuống đầy đủ — đó mới là thứ tầng dưới hay bỏ sót. Việc TÁCH
+      // câu hỏi nhiều chỉ số thành nhiều lượt (M1 ở trên) cũng không đổi.
+      "Khi diễn đạt câu hỏi cho công cụ truy vấn dữ liệu bằng ngôn ngữ tự nhiên, hãy GIỮ NGUYÊN cách người dùng mô tả chỉ số cần tính — đừng thay bằng tên cột bạn tự đoán. " +
+      "Vẫn nêu đầy đủ những điều kiện NGƯỜI DÙNG đã nói (khoảng thời gian, ngưỡng, mã cụ thể) và tên bảng khi đã chắc chắn, " +
+      // PORTABILITY: lý do CHÍNH phải là thứ luôn đúng với MỌI công cụ truy vấn NL — bạn không
+      // thấy dữ liệu nên không có cơ sở để chọn. Bản đầu khẳng định "tầng dưới CÓ cơ chế hỏi
+      // lại", đúng với connector đang cắm nhưng không đảm bảo với connector khác; nếu sai thì
+      // lời khuyên này thành có hại. Nay nó chỉ còn là lợi ích PHỤ, nêu có điều kiện.
+      "nhưng KHÔNG tự chọn hộ cột khi có nhiều cột cùng hợp lý — bạn KHÔNG nhìn thấy dữ liệu thật nên không có cơ sở để chọn, và một lựa chọn sai sẽ trông y hệt câu trả lời đúng. " +
+      "Nếu công cụ có cơ chế hỏi lại khi mơ hồ, việc chốt sẵn còn làm cơ chế đó im lặng luôn. " +
+      "Tuyệt đối không gửi câu SQL vào ô câu hỏi ngôn ngữ tự nhiên." +
+      // P3: P1 chặn được việc chốt TÊN CỘT, nhưng chạy lại đủ 12 câu (2026-08-05) cho thấy còn
+      // HAI kiểu viết lại khác cũng phá cơ chế hỏi-lại, và cả hai đều KHÔNG nhắc tên cột nào:
+      //   Q4 — LAAM thêm "Show refund_id, store_id…" (chỉ định cột HIỂN THỊ). Planner bèn
+      //        GROUP BY refund_id — khoá chính — rồi HAVING COUNT(DISTINCT store_id) > 1, một
+      //        truy vấn LUÔN rỗng về mặt logic ⇒ trả lời "không có refund trùng lặp" trong khi
+      //        thực tế có 9 nhóm. Gửi nguyên văn "Show duplicate refunds across stores." thì
+      //        DAAB sinh SQL đúng (GROUP BY original_transaction_id) 2/2 lần.
+      //   Q9 — LAAM đổi "repeated" thành "more than one", tức TỰ GIẢI QUYẾT chỗ mơ hồ. Planner
+      //        hết tín hiệu để hỏi, chọn `flagged = true` thay vì `cash_variance < 0` ⇒ sai
+      //        người. Gửi nguyên văn thì DAAB HỎI LẠI, và hai lựa chọn nó đưa ra đúng bằng hai
+      //        cách hiểu đó.
+      // Nói cách khác: chính TỪ NGỮ của người dùng ("duplicate", "repeated", "shortage",
+      // "busiest") là tín hiệu tầng dưới dựa vào để biết cần hỏi lại. Diễn giải lại = xoá tín
+      // hiệu. Vế cuối giữ M1 sống: tách câu hỏi ghép vẫn hợp lệ, miễn mỗi phần giữ lời gốc.
+      "GIỮ NGUYÊN TỪ NGỮ người dùng dùng để mô tả thứ cần tìm (vd 'duplicate', 'repeated', 'shortage', 'busiest') — đừng thay bằng định nghĩa của bạn ('nhiều hơn một lần', 'cột đánh dấu bằng true', 'chênh lệch nhỏ hơn 0'), vì diễn giải lại là bạn đang quyết định thay người dùng một điều họ chưa hề nói. " +
+      "Và đừng liệt kê các cột cần hiển thị — để tầng dưới tự chọn cột phù hợp; chỉ định cột hiển thị từng khiến nó gộp nhóm theo khoá chính và trả về rỗng. " +
+      "Tách câu hỏi ghép thành nhiều phần thì vẫn được (xem luật ở trên), miễn mỗi phần giữ đúng lời người dùng cho phần đó." +
+      // P2: vá lỗ hổng do chính P1 mở ra. ĐO ĐƯỢC 2026-08-05 trên câu hỏi mới "Which is our
+      // busiest store?": 1/2 lượt model trả lời với 0 TOOL CALL, tự tuyên bố "chưa có dữ liệu
+      // về doanh thu/lượt khách" — trong khi dữ liệu CÓ (lượt còn lại truy vấn bình thường,
+      // ra PH-002 331 giao dịch, khớp DB chính xác). P1 dặn "đừng tự chốt cột khi nhiều cột
+      // cùng hợp lý", và model suy diễn tiếp thành "không chốt được ⇒ không truy vấn được ⇒
+      // từ chối". Nói thẳng đường đi đúng: mơ hồ thì CỨ GỬI câu hỏi xuống, tầng dưới có cơ
+      // chế hỏi lại; LAAM tự hỏi lại người dùng trước là thừa một vòng và thường hỏi bằng
+      // thuật ngữ kỹ thuật tệ hơn câu tầng dưới hỏi.
+      "Câu hỏi mơ hồ về cách tính KHÔNG phải lý do để không truy vấn: ĐỪNG vì thế mà bỏ qua việc truy vấn, cũng đừng tự hỏi lại người dùng trước — " +
+      "cứ gửi câu hỏi xuống công cụ theo lời người dùng: nếu công cụ hỏi lại thì bạn chuyển câu hỏi ấy cho người dùng, còn nếu nó trả về dữ liệu thì bạn đã có số liệu thật để soi thay vì phỏng đoán. " +
+      "Và tuyệt đối KHÔNG nói 'không có dữ liệu' hay 'hệ thống chưa có thông tin' khi bạn chưa gọi công cụ lần nào cho câu hỏi này — đó là phỏng đoán, không phải sự thật." +
+      // R1: đo được model chọn nhầm tool audit RIÊNG của chính LAAM (đọc log hành động
+      // của chính agent này, tiền tố laam_) cho câu hỏi về hoạt động NGHIỆP VỤ của
+      // khách hàng/dữ liệu đã kết nối — chỉ vì tên tool có chữ "audit" khớp mặt chữ với
+      // câu hỏi. Việc chỉ sửa mô tả tool KHÔNG đủ (đã thử, model vẫn chọn nhầm) nên nhắc
+      // thẳng ở đây, cùng chỗ với các luật chọn-tool khác (F1/F3/M1).
+      "Có một tool CHỈ đọc nhật ký hành động của CHÍNH agent này trong hệ thống LAAM (tên có tiền tố laam_) — " +
+      "tool đó KHÔNG chứa dữ liệu nghiệp vụ của khách hàng hay data source đã kết nối. " +
+      "Câu hỏi về hoạt động nghiệp vụ (giao dịch, override ngoài giờ, hoạt động nhạy cảm của khách hàng…) " +
+      "PHẢI dùng công cụ truy vấn data source tương ứng, KHÔNG dùng tool audit riêng của LAAM." +
       // G1: chỉ voice — gỡ hiểu nhầm "nói ngắn ⇒ tra cứu ít" mà VOICE_GUIDE gây ra.
       // Đặt trong KHỐI TOOL (không trong VOICE_GUIDE) để đường không-tool vẫn sạch từ
       // ngữ tool. Câu cuối nhắm đúng lỗi đã đo: model coi một kết quả liệt kê tổng quan

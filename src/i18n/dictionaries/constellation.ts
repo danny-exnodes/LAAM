@@ -42,6 +42,18 @@ export const constellation: Dict = {
   "constellation.boot4": { vi: "đồng bộ công cụ nội bộ", en: "syncing internal tools", zh: "同步内部工具" },
   "constellation.boot5": { vi: "hiệu chỉnh dòng năng lượng", en: "calibrating energy flows", zh: "校准能量流" },
   "constellation.boot6": { vi: "trực tuyến", en: "online", zh: "在线" },
+  // Caption-strip status while a turn is running. The strip is otherwise EMPTY for the whole
+  // 15-30s a voice turn takes, so the page reads as frozen. These are DISPLAY-only — never
+  // passed to speakReply, so TTS never reads them aloud.
+  // Two stages on purpose: before any tool call the agent is only reasoning; once tool calls
+  // start, the step count is honest live proof it is still moving. Deliberately says "bước"
+  // (steps) and not the tool's name — the caption must not leak a connector's internals.
+  "constellation.statusThinking": { vi: "Đang suy nghĩ…", en: "Thinking…", zh: "思考中…" },
+  "constellation.statusWorking": {
+    vi: "Đang tra cứu dữ liệu… (bước {n})",
+    en: "Looking things up… (step {n})",
+    zh: "正在查询数据…（第 {n} 步）",
+  },
   // Spoken greeting on load-complete ({name} = user display name)
   "constellation.greetVoice": {
     vi: "Chào {name}, Larvis đang lắng nghe bạn. Hãy cho tôi biết bạn cần gì.",
@@ -62,4 +74,11 @@ export const constellation: Dict = {
   "constellation.viewSourceAi": { vi: "AI tổng hợp", en: "AI generated", zh: "AI 生成" },
   "constellation.viewDensity": { vi: "Đổi mật độ hiển thị", en: "Toggle density", zh: "切换显示密度" },
   "constellation.viewTruncated": { vi: "{shown}/{total} dòng", en: "{shown}/{total} rows", zh: "{shown}/{total} 行" },
+
+  // In-page transcript (ConversationLog) — lets the user re-read the conversation without
+  // leaving for /chat, which would tear down the voice session. It is chromeless (no
+  // header, no close button) and shows/hides with the command input, so the only strings
+  // it needs are the landmark's accessible name and the speaker label.
+  "constellation.logTitle": { vi: "Hội thoại", en: "Conversation", zh: "对话" },
+  "constellation.logYou": { vi: "Bạn", en: "You", zh: "您" },
 };

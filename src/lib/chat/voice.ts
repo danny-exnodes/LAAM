@@ -86,11 +86,23 @@ function tablesToProse(md: string): string {
   return out.join("\n");
 }
 
+// "$1,000.12" đọc lên nghe như "đô la một phẩy không không không chấm mười hai" — TTS
+// (đặc biệt VieNeu tiếng Việt) không có quy ước đọc ký hiệu "$" đứng TRƯỚC số kèm dấu
+// phẩy ngăn nghìn. Đảo thành "1,000.12 USD" (số trước, đơn vị sau, dạng TTS đọc tự
+// nhiên hơn — số + đơn vị tiền). CHỈ đụng lời nói — bảng/chart trên panel lấy dữ liệu
+// TRƯỚC khi cleanProse chạy (tableToDescriptor/chartToDescriptor dùng cell text gốc)
+// nên vẫn hiển thị "$1,000.12" như model viết, không đổi hiển thị.
+const USD_SIGIL = /(-?)\$\s?(\d[\d,]*(?:\.\d+)?)/g;
+
+function currencyToSpoken(text: string): string {
+  return text.replace(USD_SIGIL, (_m, sign: string, amount: string) => `${sign}${amount} USD`);
+}
+
 // Phần dọn markdown dùng CHUNG cho stripForSpeech và extractForSpeech — hai hàm chỉ
 // khác nhau ở chỗ bảng đi đâu (đọc thành văn xuôi vs. đẩy sang panel). Tách ra để
 // chúng không trôi khác nhau theo thời gian.
 function cleanProse(md: string): string {
-  return md
+  return currencyToSpoken(md)
     .replace(/```[\s\S]*?```/g, " ") // fenced code blocks
     .replace(/`([^`]+)`/g, "$1") // inline code
     .replace(/!\[[^\]]*\]\([^)]*\)/g, " ") // images

@@ -32,6 +32,43 @@ const WEB_READ_NUDGE =
 // KHÔNG phân loại ý định người dùng bằng model hay bằng danh sách từ khoá (Rule 5).
 // Vế "nếu không cần thì trả lời trực tiếp" là đường thoát cho chitchat: câu chào vẫn
 // được trả lời thẳng, chỉ tốn thêm một vòng ngắn (đo: lượt chitchat ~1.5-1.8s).
+// G5 data-fetch guard: đo thực tế trên gpt-oss-120b (2026-08-05, bộ 12 câu DAAB) — 2/3 lượt
+// hỏi "cửa hàng nào lệch tồn kho cao nhất" model gọi describe_table BỐN lần để đọc cấu trúc
+// bảng rồi kết luận "không có dữ liệu thực tế" và dừng, KHÔNG hề gọi tool truy vấn dữ liệu lần
+// nào. G4 không bắt được vì lượt đó CÓ gọi tool. Điều kiện kích hoạt thuần CẤU TRÚC (lượt sắp
+// kết thúc + đã gọi tool + không tool nào thuộc nhóm "lấy dữ liệu"), KHÔNG phân loại ý định hay
+// đọc nội dung câu trả lời (Rule 5). Danh sách tool "lấy dữ liệu" đến từ env chứ không hardcode
+// — LAAM không được biết tên tool của riêng connector nào (cùng lý do với TOOL_DRILLDOWN_PAIRS).
+// Không đặt env ⇒ tính năng tắt hẳn, hành vi y như cũ.
+const DATA_FETCH_NUDGE =
+  "Bạn mới xem cấu trúc/danh sách chứ chưa truy vấn dữ liệu thật. Hãy gọi công cụ truy vấn dữ liệu để lấy số liệu thực tế rồi mới trả lời; nếu câu hỏi thực sự không cần dữ liệu thì trả lời trực tiếp.";
+// G5 nhắc chung ("hãy gọi tool truy vấn dữ liệu") không đủ mạnh khi model đã tự thuyết phục
+// bản thân bằng laam_query_audit — đo được model đọc audit log RIÊNG của LAAM (0-vài dòng
+// agent_write), kết luận "không có dữ liệu", rồi GIỮ NGUYÊN kết luận đó ngay cả sau khi nhắc
+// chung và/hoặc sau khi tự gọi thêm tool DAAB thật (không tổng hợp lại từ kết quả mới, vẫn bám
+// kết luận ban đầu). Tên tool literal ở đây khớp CHÍNH XÁC `laam_query_audit.name` trong
+// tools/laam/query-audit.ts — không import trực tiếp file đó vì nó kéo theo @/db/drizzle-orm
+// vào orchestrator.ts, phá vỡ tiền đề "không cần mock module nào" mà orchestrator.test.ts dựa
+// vào (xem comment đầu file test). Cùng tiền lệ với "web_read" đã hardcode literal ở file này.
+const LAAM_AUDIT_TOOL_NAME = "laam_query_audit";
+// ĐO ĐƯỢC (2026-08-05, 4 lượt retest): nhắc chung chung "gọi tool truy vấn data source" đôi khi
+// vẫn không đủ — model bị nhắc xong lại quay ra dò thêm cấu trúc (describe_table) thay vì gọi
+// thẳng tool dữ liệu, dùng hết nốt số vòng còn lại. Nêu ĐÍCH DANH tên tool (lấy từ chính
+// dataFetchTools đã cấu hình — không hardcode) để không còn chỗ cho model "thăm dò thêm".
+function auditMisuseNudge(dataFetchTools: ReadonlySet<string>): string {
+  const names = Array.from(dataFetchTools).join(", ");
+  return (
+    "Nhật ký bạn vừa đọc (laam_query_audit) CHỈ là hành động của chính bạn trong hệ thống LAAM — KHÔNG phải dữ liệu nghiệp vụ của khách hàng. " +
+    `Gọi NGAY một trong các công cụ sau để lấy dữ liệu nghiệp vụ thật: ${names}. ` +
+    "KHÔNG dò thêm cấu trúc bảng nữa, KHÔNG gọi lại laam_query_audit, và đừng kết luận 'không có dữ liệu' chỉ dựa trên laam_query_audit."
+  );
+}
+// G5 cần TỐI THIỂU 2 vòng còn lại SAU lượt nhắc để có tác dụng (1 để model gọi tool dữ liệu,
+// 1 để tổng hợp câu trả lời ở vòng chót bị ép tools=[]) — nhắc mà không còn đủ vòng thì vô ích,
+// coi như không có G5. Đặt lead = 3 (thay vì đúng-2-tối-thiểu) để chừa thêm 1 vòng đệm cho câu
+// hỏi cần soạn tool-call phức tạp.
+const DATA_FETCH_NUDGE_LEAD_ROUNDS = 3;
+
 const GROUNDING_NUDGE =
   "Câu hỏi này có thể cần dữ liệu thật từ hệ thống. Nếu cần, hãy gọi công cụ phù hợp trước khi trả lời; nếu không cần thì trả lời trực tiếp.";
 
@@ -85,16 +122,26 @@ const repeatThresholdFor = (name: string): number =>
 // REPLAY_BUDGET_CHARS). The route passes a much larger budget for big-context providers.
 const DEFAULT_TOOL_BUDGET_CHARS = 37_000;
 
+export type BackstopReason = "rounds" | "repeat";
+
 export type ToolRoundsOpts = {
   drilldownPairs?: DrilldownPair[]; // D2: cặp "tool liệt kê → tool chi tiết" (config, mặc định tắt)
   maxRounds?: number;
   budgetChars?: number; // evict oldest tool results when the convo exceeds this
   keepRecent?: number; // tool results kept verbatim during eviction (default 3)
-  onBackstop?: () => void; // fired when the loop is FORCE-terminated (backstop / repeat), not on natural completion
+  // Fired when the loop is FORCE-terminated, not on natural completion. The reason is
+  // NOT cosmetic: "rounds" (hit maxRounds) and "repeat" (same tool+args stalled) call for
+  // opposite operator responses — raise CHAT_MAX_ROUNDS vs. investigate a stuck tool that
+  // more rounds would never have rescued. Undiscriminated, a repeat-stall reads as "cap
+  // too low" and gets mis-tuned forever.
+  onBackstop?: (reason: BackstopReason) => void;
   // Panel hiển thị: gom descriptor suốt lượt, phát ĐÚNG 1 lần sau khi vòng lặp kết
   // thúc. Không phát sau mỗi dispatch — một lượt có thể có hàng chục tool result và
   // panel sẽ nhảy loạn rồi dừng ở kết quả tình cờ cuối cùng.
   onView?: (d: ViewDescriptor) => void;
+  // G5: tên các tool THỰC SỰ lấy dữ liệu (vs. tool đọc cấu trúc/liệt kê). Lượt nào chỉ gọi
+  // tool ngoài tập này rồi dừng sẽ bị nhắc đúng 1 lần. Vắng mặt/rỗng ⇒ guard tắt.
+  dataFetchTools?: ReadonlySet<string>;
 };
 
 // Stable key for repeat-detection: tool name + normalized args (object OR JSON string).
@@ -111,6 +158,52 @@ function stableArgs(args: unknown): string {
 
 const repeatFeedback = (name: string, n: number) =>
   `Bạn đã gọi "${name}" với cùng tham số ${n} lần — kết quả sẽ không đổi. Hãy đổi cách tiếp cận hoặc trả lời với dữ liệu hiện có.`;
+
+// gpt-oss-120b qua BytePlus đôi khi trả tool_calls[].function.name dính rác từ định
+// dạng harmony nội bộ của chính model. Đo được BA dạng khác nhau, mỗi dạng cần một
+// cách sửa riêng — validNames luôn là chính danh sách tool đã đưa cho model nên
+// không thể đoán nhầm sang một tool khác đang tồn tại:
+//   (a) rác có ký tự đặc biệt phân cách — "kg_list_projects[]",
+//       "kg_query_datasource_status<|channel|>commentary" → cắt tại ký tự đặc biệt đầu tiên.
+//   (b) rác dính liền chữ/số, KHÔNG có ký tự đặc biệt để cắt — "kg_list_datasourcesjson"
+//       (hậu tố "json" dính thẳng, có thể từ token response_format rò rỉ) → so khớp TIỀN TỐ
+//       dài nhất trong validNames.
+//   (c) rác ĐỔI ký tự giữa chuỗi — "mcp__daab-michael-pharmacy_chain__kg_list_datasources"
+//       (dấu gạch ngang "-" trong tên connector bị đổi thành "_") → so khớp sau khi chuẩn hoá
+//       "-"/"_" về cùng một ký tự ở cả hai phía.
+// Ba bước chạy TUẦN TỰ, dừng ngay khi khớp — thứ tự từ chắc chắn nhất (khớp nguyên) đến
+// khoan dung nhất (chuẩn hoá ký tự), tránh sửa nhầm khi bước trước đã đủ.
+function sanitizeToolCallName(rawName: string, validNames: ReadonlySet<string>): string {
+  if (validNames.has(rawName)) return rawName;
+
+  const warn = (cleaned: string) => {
+    console.warn(`[orchestrator] tool_call name dính rác, đã sửa: "${rawName}" → "${cleaned}"`);
+    return cleaned;
+  };
+
+  // (a) cắt tại ký tự đầu tiên không phải chữ/số/gạch dưới/gạch ngang.
+  const cut = rawName.search(/[^A-Za-z0-9_-]/);
+  const symbolCut = cut === -1 ? rawName : rawName.slice(0, cut);
+  if (validNames.has(symbolCut)) return warn(symbolCut);
+
+  // (b) tiền tố hợp lệ DÀI NHẤT khớp với phần đầu chuỗi (đã cắt rác ký tự đặc biệt ở (a),
+  // nếu có) — bắt hậu tố rác dính liền chữ/số mà (a) không cắt được.
+  let longestPrefix = "";
+  for (const name of validNames) {
+    if (symbolCut.startsWith(name) && name.length > longestPrefix.length) longestPrefix = name;
+  }
+  if (longestPrefix) return warn(longestPrefix);
+
+  // (c) chuẩn hoá "-"/"_" về cùng ký tự rồi so khớp — bắt trường hợp model đổi lẫn hai
+  // ký tự đó ở giữa tên (thường ở phần tên connector do người dùng đặt, có cả hai ký tự).
+  const normalize = (s: string) => s.replace(/[-_]/g, "_");
+  const normalizedRaw = normalize(symbolCut);
+  for (const name of validNames) {
+    if (normalize(name) === normalizedRaw) return warn(name);
+  }
+
+  return rawName; // không khớp gì — giữ nguyên, gate vẫn fail-closed nếu thật sự lạ
+}
 
 // Run the agentic tool-loop until the model NATURALLY stops calling tools (the primary
 // exit) — so multi-step tasks actually finish — bounded only by real safety limits: a
@@ -131,6 +224,11 @@ export async function runToolRounds(
   let convo: ChatMessage[] = messages.slice();
   let webReadNudged = convoHasWebRead(convo);
   let groundingNudged = false; // G4: one-shot latch — nhắc grounding tối đa 1 lần/lượt
+  const dataFetchTools = opts.dataFetchTools ?? new Set<string>();
+  let dataFetchNudged = false; // G5: one-shot latch, cùng lý do với G4
+  let calledDataFetchTool = false; // G5: lượt này đã chạm tool lấy dữ liệu thật chưa
+  let calledAuditTool = false; // G5: lượt này có gọi laam_query_audit không (đổi nội dung nhắc)
+  let auditMisuseNudged = false; // G5: latch RIÊNG cho nhắc audit-misuse (xem readyAuditMisuse)
   const drilldownPairs = opts.drilldownPairs ?? [];
   // Câu hỏi của lượt này = message user CUỐI trong lịch sử truyền vào (drilldown khớp tên
   // theo câu người dùng vừa hỏi, không phải theo cả hội thoại).
@@ -143,12 +241,20 @@ export async function runToolRounds(
   // panel; ≥2 lần = model đang đào sâu (vd. list→detail), panel mới đáng xem. Luật thuần
   // đếm số bước, không đọc nội dung câu hỏi/câu trả lời (Rule 5).
   let toolCallCount = 0;
+  const validToolNames = new Set(tools.map((t) => t.function.name));
 
   for (let i = 0; i < maxRounds; i++) {
     const isLastRound = i === maxRounds - 1; // ONLY the backstop forces a text answer
     const res = await deps.callOllama(convo, isLastRound ? [] : tools);
     const msg = res?.message ?? {};
-    const calls = isLastRound ? [] : Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    const rawCalls = isLastRound ? [] : Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+    // Sửa TÊN trước khi lưu vào convo — nếu không, lượt sau model thấy lại chính tên
+    // rác của nó trong lịch sử và có xu hướng lặp lại kiểu hỏng đó.
+    const calls = rawCalls.map((tc) =>
+      tc.function
+        ? { ...tc, function: { ...tc.function, name: sanitizeToolCallName(tc.function.name ?? "", validToolNames) } }
+        : tc,
+    );
     if (calls.length) {
       convo.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });
       let sawWebSearchWithUrl = false;
@@ -166,6 +272,8 @@ export async function runToolRounds(
           continue;
         }
         if (name === "web_read") webReadNudged = true; // đã đọc rồi → khỏi nhắc
+        if (dataFetchTools.has(name)) calledDataFetchTool = true; // G5: đã chạm dữ liệu thật
+        if (name === LAAM_AUDIT_TOOL_NAME) calledAuditTool = true; // G5: đổi nội dung nhắc
         const result = await deps.dispatch(name, args);
         toolCallCount++;
         convo.push({ role: "tool", content: JSON.stringify(result) });
@@ -206,11 +314,48 @@ export async function runToolRounds(
         convo.push({ role: "tool", content: WEB_READ_NUDGE });
         webReadNudged = true; // chỉ chèn 1 lần/lượt
       }
+      // G5: CHỦ ĐỘNG kiểm tra ngay sau lượt CÓ gọi tool, không đợi model tự dừng. ĐO ĐƯỢC
+      // (2026-08-05, CHAT_MAX_ROUNDS=8): đặt guard này ở nhánh "model không gọi tool nào" (bên
+      // dưới) thì KHÔNG BAO GIỜ chạy nếu model cứ liên tục gọi tool đọc cấu trúc/liệt kê hết cả
+      // 7/8 vòng — vòng cuối bị ép tools=[] TRƯỚC KHI model kịp "tự dừng" để guard đó đánh giá.
+      // Kiểm tra ở đây (ngay sau khi dispatch xong tool của lượt) bắt được cả trường hợp đó:
+      // hết roundsLeft mà chưa chạm tool dữ liệu → chèn nhắc NGAY, không chờ model tự nhận ra.
+      const roundsLeft = maxRounds - 1 - i; // số vòng còn lại SAU vòng này (không tính vòng chót ép trả lời)
+      // Ca "đã gọi laam_query_audit" KHÔNG cần chờ tới ngưỡng LEAD_ROUNDS như ca dò-cấu-trúc
+      // chung — dò cấu trúc CÓ THỂ là bước hợp lệ đang đi tới dữ liệu thật (nên chờ thêm), còn
+      // gọi laam_query_audit cho câu hỏi nghiệp vụ là SAI NGAY TỪ ĐẦU (không phải "cần thêm thời
+      // gian", mà là "đi sai hướng") — nhắc CÀNG SỚM CÀNG TỐT để còn nhiều vòng phục hồi. ĐO
+      // ĐƯỢC (2026-08-05, thread dài 12 câu liên tục): chờ tới LEAD_ROUNDS=3 như ca chung thì
+      // đôi khi model đã dừng gọi tool và "chốt" kết luận sai trước khi kịp tới ngưỡng đó.
+      const readyGeneric = !calledDataFetchTool && !dataFetchNudged && roundsLeft <= DATA_FETCH_NUDGE_LEAD_ROUNDS;
+      // KHÔNG còn điều kiện `!calledDataFetchTool`: ĐO ĐƯỢC (2026-08-05, Larvis câu 12) model
+      // gọi tool dữ liệu DAAB TRƯỚC rồi mới gọi laam_query_audit — điều kiện cũ tắt guard câm
+      // đúng lúc lỗi xảy ra. Đọc nhật ký RIÊNG của LAAM để trả lời câu hỏi nghiệp vụ là sai bất
+      // kể trước đó đã gọi tool gì. Latch RIÊNG (không dùng chung dataFetchNudged) để lời nhắc
+      // chung đã bắn không nuốt mất lời nhắc này, và ngược lại.
+      const readyAuditMisuse = calledAuditTool && !auditMisuseNudged;
+      if (
+        !stuck &&
+        dataFetchTools.size > 0 &&
+        (readyGeneric || readyAuditMisuse) &&
+        roundsLeft >= 2 // < 2 thì round kế tiếp đã là vòng chót bị ép tools=[] — nhắc cũng vô ích
+      ) {
+        // Audit-misuse thắng khi cả hai cùng sẵn sàng: nó chỉ đích danh sai lầm cụ thể, còn lời
+        // nhắc chung chỉ nói "hãy gọi tool dữ liệu" — yếu hơn hẳn với model đã tự thuyết phục
+        // bằng audit log.
+        if (readyAuditMisuse) {
+          auditMisuseNudged = true;
+          convo.push({ role: "tool", content: auditMisuseNudge(dataFetchTools) });
+        } else {
+          dataFetchNudged = true;
+          convo.push({ role: "tool", content: DATA_FETCH_NUDGE });
+        }
+      }
       // Context mgmt: evict oldest raw tool bytes when the convo nears the model window
       // (provider-aware via budgetChars) so a long run never silently truncates.
       convo = evictOldToolResults(convo, { budgetChars, keepRecent }).convo;
       if (stuck) {
-        opts.onBackstop?.();
+        opts.onBackstop?.("repeat");
         break;
       }
       continue;
@@ -223,7 +368,40 @@ export async function runToolRounds(
       convo.push({ role: "tool", content: GROUNDING_NUDGE });
       continue;
     }
-    if (isLastRound) opts.onBackstop?.(); // reached the backstop round → forced text → honest signal
+    // G5: lượt sắp kết thúc, model ĐÃ gọi tool nhưng chưa tool nào lấy dữ liệu thật (chỉ
+    // đọc cấu trúc/liệt kê) → nhắc đúng 1 lần rồi hỏi lại. Đặt SAU G4 vì hai guard bù nhau:
+    // G4 lo "không gọi tool nào", G5 lo "có gọi nhưng chưa chạm dữ liệu".
+    //
+    // ĐO ĐƯỢC (2026-08-05, CHAT_MAX_ROUNDS=8): với câu hỏi cần dò nhiều bảng, model tiêu hết
+    // 6-7 vòng chỉ để describe_table TRƯỚC KHI G5 kịp nhắc — nhắc xong không còn vòng nào để
+    // model vừa gọi tool dữ liệu VỪA tổng hợp câu trả lời (cần tối thiểu 2 vòng sau lượt nhắc:
+    // 1 để gọi tool, 1 để trả lời), nên lượt bị đẩy thẳng vào backstop và trả lời "chưa có dữ
+    // liệu" y hệt như không có G5. Chỉ nhắc khi CHẮC CHẮN còn đủ chỗ để lời nhắc có tác dụng
+    // — nhắc mà không còn vòng để hành động thì thà im lặng, để hành vi giữ nguyên như trước.
+    const roundsAfterNudge = maxRounds - 1 - i; // số vòng còn lại SAU vòng vừa nhắc
+    if (
+      !isLastRound &&
+      toolCallCount > 0 &&
+      dataFetchTools.size > 0 &&
+      !calledDataFetchTool &&
+      !dataFetchNudged &&
+      // Giữ bất biến "tối đa MỘT lời nhắc G5 mỗi lượt" qua cả hai chỗ nhắc. Trước đây chỗ nhắc
+      // trong-vòng đặt dataFetchNudged nên điều kiện trên đã đủ chặn; nay nó đặt latch RIÊNG
+      // (auditMisuseNudged) nên phải kiểm cả latch đó, nếu không lượt đã bị nhắc audit sẽ bị
+      // nhắc lại lần hai ở đây.
+      !auditMisuseNudged &&
+      roundsAfterNudge >= 2
+    ) {
+      if (calledAuditTool) {
+        auditMisuseNudged = true;
+        convo.push({ role: "tool", content: auditMisuseNudge(dataFetchTools) });
+      } else {
+        dataFetchNudged = true;
+        convo.push({ role: "tool", content: DATA_FETCH_NUDGE });
+      }
+      continue;
+    }
+    if (isLastRound) opts.onBackstop?.("rounds"); // reached the backstop round → forced text → honest signal
     break;
   }
   // 1 tool call = tra cứu thoáng qua (vd. tìm ID theo tên) để trả lời bằng lời — không

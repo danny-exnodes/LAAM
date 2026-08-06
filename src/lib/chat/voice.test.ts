@@ -77,6 +77,26 @@ describe("voice.stripForSpeech", () => {
     expect(out).toContain("A: x");
     expect(out).toContain("Sau bảng");
   });
+
+  // INTENT: "$1,000.12" đọc lên nghe kỳ quặc qua TTS (thứ tự đô-la trước, dấu phẩy ngăn
+  // nghìn không có quy ước đọc) — đo thực tế trên Larvis. Đảo thành "1,000.12 USD" (số
+  // trước, đơn vị sau) để TTS đọc tự nhiên hơn. Chỉ đụng lời nói, không đụng hiển thị
+  // trên bảng/panel (xem describe("extractForSpeech") bên dưới).
+  it("reformats $1,000.12 style USD amounts to '1,000.12 USD' for speech", () => {
+    expect(stripForSpeech("Tổng cộng **$1,000.12**.")).toBe("Tổng cộng 1,000.12 USD.");
+  });
+
+  it("keeps the minus sign on a negative amount", () => {
+    expect(stripForSpeech("Chênh lệch: -$685.42.")).toBe("Chênh lệch: -685.42 USD.");
+  });
+
+  it("handles an amount with no decimal part", () => {
+    expect(stripForSpeech("Giá: $42.")).toBe("Giá: 42 USD.");
+  });
+
+  it("reformats every amount in a sentence with multiple amounts", () => {
+    expect(stripForSpeech("Từ $10 đến $9,886.23.")).toBe("Từ 10 USD đến 9,886.23 USD.");
+  });
 });
 
 // INTENT: a long reply streamed through /tts/stream in ONE request can take far longer
@@ -156,6 +176,21 @@ describe("extractForSpeech", () => {
       { Store: "PH-003", Variance: "542" },
     ]);
     expect(speech).toBe("Kết quả đây. Hết.");
+  });
+
+  // INTENT: currencyToSpoken chỉ đụng LỜI NÓI — bảng lên panel phải giữ nguyên "$1,000.12"
+  // như model viết (đây là kênh NHÌN, không qua TTS nên không cần đảo định dạng).
+  it("bảng GFM giữ nguyên định dạng $ trên panel dù lời nói ngoài bảng có đảo currency", () => {
+    const md = [
+      "Tổng **$1,000.12**.",
+      "",
+      "| Store | Total |",
+      "|---|---|",
+      "| PH-001 | $1,000.12 |",
+    ].join("\n");
+    const { speech, descriptors } = extractForSpeech(md);
+    expect(descriptors[0].rows).toEqual([{ Store: "PH-001", Total: "$1,000.12" }]);
+    expect(speech).toBe("Tổng 1,000.12 USD.");
   });
 
   it("block chart ra descriptor kind=chart và biến mất khỏi lời nói", () => {

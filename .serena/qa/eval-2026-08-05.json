@@ -1,0 +1,583 @@
+{
+  "meta": {
+    "k": 5,
+    "model": "qwen3-vl:8b-instruct-q8_0",
+    "at": "2026-08-05"
+  },
+  "scores": [
+    {
+      "id": "stuck-basic",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[stuck-basic#1] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[stuck-basic#1] grounding: thiếu: billing-svc",
+        "[stuck-basic#2] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[stuck-basic#2] grounding: thiếu: billing-svc",
+        "[stuck-basic#3] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[stuck-basic#3] grounding: thiếu: billing-svc",
+        "[stuck-basic#4] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[stuck-basic#4] grounding: thiếu: billing-svc",
+        "[stuck-basic#5] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[stuck-basic#5] grounding: thiếu: billing-svc"
+      ],
+      "avgMs": 9,
+      "noCall": 5
+    },
+    {
+      "id": "tokens-today",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[tokens-today#1] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[tokens-today#1] grounding: thiếu: 12345",
+        "[tokens-today#2] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[tokens-today#2] grounding: thiếu: 12345",
+        "[tokens-today#3] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[tokens-today#3] grounding: thiếu: 12345",
+        "[tokens-today#4] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[tokens-today#4] grounding: thiếu: 12345",
+        "[tokens-today#5] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[tokens-today#5] grounding: thiếu: 12345"
+      ],
+      "avgMs": 3,
+      "noCall": 5
+    },
+    {
+      "id": "agent-detail",
+      "capability": "args",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "args": {
+          "passed": 0,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[agent-detail#1] tool-selection: thiếu gọi: laam_list_agents, laam_get_agent (đã gọi: —)",
+        "[agent-detail#1] args: laam_get_agent: chưa gọi",
+        "[agent-detail#1] grounding: thiếu: billing-svc",
+        "[agent-detail#2] tool-selection: thiếu gọi: laam_list_agents, laam_get_agent (đã gọi: —)",
+        "[agent-detail#2] args: laam_get_agent: chưa gọi",
+        "[agent-detail#2] grounding: thiếu: billing-svc",
+        "[agent-detail#3] tool-selection: thiếu gọi: laam_list_agents, laam_get_agent (đã gọi: —)",
+        "[agent-detail#3] args: laam_get_agent: chưa gọi",
+        "[agent-detail#3] grounding: thiếu: billing-svc",
+        "[agent-detail#4] tool-selection: thiếu gọi: laam_list_agents, laam_get_agent (đã gọi: —)",
+        "[agent-detail#4] args: laam_get_agent: chưa gọi",
+        "[agent-detail#4] grounding: thiếu: billing-svc",
+        "[agent-detail#5] tool-selection: thiếu gọi: laam_list_agents, laam_get_agent (đã gọi: —)",
+        "[agent-detail#5] args: laam_get_agent: chưa gọi",
+        "[agent-detail#5] grounding: thiếu: billing-svc"
+      ],
+      "avgMs": 3,
+      "noCall": 5
+    },
+    {
+      "id": "machines-online",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[machines-online#1] tool-selection: thiếu gọi: laam_list_machines (đã gọi: —)",
+        "[machines-online#1] grounding: thiếu: gaming-pc",
+        "[machines-online#2] tool-selection: thiếu gọi: laam_list_machines (đã gọi: —)",
+        "[machines-online#2] grounding: thiếu: gaming-pc",
+        "[machines-online#3] tool-selection: thiếu gọi: laam_list_machines (đã gọi: —)",
+        "[machines-online#3] grounding: thiếu: gaming-pc",
+        "[machines-online#4] tool-selection: thiếu gọi: laam_list_machines (đã gọi: —)",
+        "[machines-online#4] grounding: thiếu: gaming-pc",
+        "[machines-online#5] tool-selection: thiếu gọi: laam_list_machines (đã gọi: —)",
+        "[machines-online#5] grounding: thiếu: gaming-pc"
+      ],
+      "avgMs": 4,
+      "noCall": 5
+    },
+    {
+      "id": "top-agents-cost",
+      "capability": "args",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "args": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[top-agents-cost#1] tool-selection: thiếu gọi: laam_list_agents (đã gọi: —)",
+        "[top-agents-cost#1] args: laam_list_agents: chưa gọi",
+        "[top-agents-cost#2] tool-selection: thiếu gọi: laam_list_agents (đã gọi: —)",
+        "[top-agents-cost#2] args: laam_list_agents: chưa gọi",
+        "[top-agents-cost#3] tool-selection: thiếu gọi: laam_list_agents (đã gọi: —)",
+        "[top-agents-cost#3] args: laam_list_agents: chưa gọi",
+        "[top-agents-cost#4] tool-selection: thiếu gọi: laam_list_agents (đã gọi: —)",
+        "[top-agents-cost#4] args: laam_list_agents: chưa gọi",
+        "[top-agents-cost#5] tool-selection: thiếu gọi: laam_list_agents (đã gọi: —)",
+        "[top-agents-cost#5] args: laam_list_agents: chưa gọi"
+      ],
+      "avgMs": 3,
+      "noCall": 5
+    },
+    {
+      "id": "greeting-restraint",
+      "capability": "restraint",
+      "runs": 5,
+      "perDim": {
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 5,
+      "noCall": 5
+    },
+    {
+      "id": "chitchat-restraint",
+      "capability": "restraint",
+      "runs": 5,
+      "perDim": {
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [],
+      "avgMs": 3,
+      "noCall": 5
+    },
+    {
+      "id": "geo-directions",
+      "capability": "rich-block",
+      "runs": 5,
+      "perDim": {
+        "rich-block": {
+          "passed": 0,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[geo-directions#1] rich-block: không emit ```map",
+        "[geo-directions#2] rich-block: không emit ```map",
+        "[geo-directions#3] rich-block: không emit ```map",
+        "[geo-directions#4] rich-block: không emit ```map",
+        "[geo-directions#5] rich-block: không emit ```map"
+      ],
+      "avgMs": 3,
+      "noCall": 5
+    },
+    {
+      "id": "chart-render",
+      "capability": "rich-block",
+      "runs": 5,
+      "perDim": {
+        "rich-block": {
+          "passed": 0,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[chart-render#1] rich-block: không emit ```chart",
+        "[chart-render#2] rich-block: không emit ```chart",
+        "[chart-render#3] rich-block: không emit ```chart",
+        "[chart-render#4] rich-block: không emit ```chart",
+        "[chart-render#5] rich-block: không emit ```chart"
+      ],
+      "avgMs": 6,
+      "noCall": 5
+    },
+    {
+      "id": "write-intent-trello",
+      "capability": "write-intent",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "args": {
+          "passed": 0,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 5,
+          "total": 5
+        },
+        "write-intent": {
+          "passed": 0,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[write-intent-trello#1] tool-selection: thiếu gọi: trello_create_card (đã gọi: —)",
+        "[write-intent-trello#1] args: trello_create_card: chưa gọi",
+        "[write-intent-trello#1] write-intent: chưa gọi trello_create_card",
+        "[write-intent-trello#2] tool-selection: thiếu gọi: trello_create_card (đã gọi: —)",
+        "[write-intent-trello#2] args: trello_create_card: chưa gọi",
+        "[write-intent-trello#2] write-intent: chưa gọi trello_create_card",
+        "[write-intent-trello#3] tool-selection: thiếu gọi: trello_create_card (đã gọi: —)",
+        "[write-intent-trello#3] args: trello_create_card: chưa gọi",
+        "[write-intent-trello#3] write-intent: chưa gọi trello_create_card",
+        "[write-intent-trello#4] tool-selection: thiếu gọi: trello_create_card (đã gọi: —)",
+        "[write-intent-trello#4] args: trello_create_card: chưa gọi",
+        "[write-intent-trello#4] write-intent: chưa gọi trello_create_card",
+        "[write-intent-trello#5] tool-selection: thiếu gọi: trello_create_card (đã gọi: —)",
+        "[write-intent-trello#5] args: trello_create_card: chưa gọi",
+        "[write-intent-trello#5] write-intent: chưa gọi trello_create_card"
+      ],
+      "avgMs": 5,
+      "noCall": 5
+    },
+    {
+      "id": "loop-guard",
+      "capability": "termination",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[loop-guard#1] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[loop-guard#1] grounding: thiếu: không",
+        "[loop-guard#2] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[loop-guard#2] grounding: thiếu: không",
+        "[loop-guard#3] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[loop-guard#3] grounding: thiếu: không",
+        "[loop-guard#4] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[loop-guard#4] grounding: thiếu: không",
+        "[loop-guard#5] tool-selection: thiếu gọi: laam_find_stuck (đã gọi: —)",
+        "[loop-guard#5] grounding: thiếu: không"
+      ],
+      "avgMs": 6,
+      "noCall": 5
+    },
+    {
+      "id": "web-research-loop",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 10
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[web-research-loop#1] tool-selection: thiếu gọi: web_search, web_read (đã gọi: —)",
+        "[web-research-loop#1] grounding: thiếu: Turbopack",
+        "[web-research-loop#1] grounding: không dẫn URL (kỳ vọng dẫn nguồn web)",
+        "[web-research-loop#2] tool-selection: thiếu gọi: web_search, web_read (đã gọi: —)",
+        "[web-research-loop#2] grounding: thiếu: Turbopack",
+        "[web-research-loop#2] grounding: không dẫn URL (kỳ vọng dẫn nguồn web)",
+        "[web-research-loop#3] tool-selection: thiếu gọi: web_search, web_read (đã gọi: —)",
+        "[web-research-loop#3] grounding: thiếu: Turbopack",
+        "[web-research-loop#3] grounding: không dẫn URL (kỳ vọng dẫn nguồn web)",
+        "[web-research-loop#4] tool-selection: thiếu gọi: web_search, web_read (đã gọi: —)",
+        "[web-research-loop#4] grounding: thiếu: Turbopack",
+        "[web-research-loop#4] grounding: không dẫn URL (kỳ vọng dẫn nguồn web)",
+        "[web-research-loop#5] tool-selection: thiếu gọi: web_search, web_read (đã gọi: —)",
+        "[web-research-loop#5] grounding: thiếu: Turbopack",
+        "[web-research-loop#5] grounding: không dẫn URL (kỳ vọng dẫn nguồn web)"
+      ],
+      "avgMs": 5,
+      "noCall": 5
+    },
+    {
+      "id": "web-restraint",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[web-restraint#1] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[web-restraint#1] grounding: thiếu: 3",
+        "[web-restraint#2] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[web-restraint#2] grounding: thiếu: 3",
+        "[web-restraint#3] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[web-restraint#3] grounding: thiếu: 3",
+        "[web-restraint#4] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[web-restraint#4] grounding: thiếu: 3",
+        "[web-restraint#5] tool-selection: thiếu gọi: laam_query_stats (đã gọi: —)",
+        "[web-restraint#5] grounding: thiếu: 3"
+      ],
+      "avgMs": 4,
+      "noCall": 5
+    },
+    {
+      "id": "util-calc-sum",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "args": {
+          "passed": 0,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[util-calc-sum#1] tool-selection: thiếu gọi: util_calc (đã gọi: —)",
+        "[util-calc-sum#1] args: util_calc: chưa gọi",
+        "[util-calc-sum#1] grounding: thiếu: 1.65",
+        "[util-calc-sum#2] tool-selection: thiếu gọi: util_calc (đã gọi: —)",
+        "[util-calc-sum#2] args: util_calc: chưa gọi",
+        "[util-calc-sum#2] grounding: thiếu: 1.65",
+        "[util-calc-sum#3] tool-selection: thiếu gọi: util_calc (đã gọi: —)",
+        "[util-calc-sum#3] args: util_calc: chưa gọi",
+        "[util-calc-sum#3] grounding: thiếu: 1.65",
+        "[util-calc-sum#4] tool-selection: thiếu gọi: util_calc (đã gọi: —)",
+        "[util-calc-sum#4] args: util_calc: chưa gọi",
+        "[util-calc-sum#4] grounding: thiếu: 1.65",
+        "[util-calc-sum#5] tool-selection: thiếu gọi: util_calc (đã gọi: —)",
+        "[util-calc-sum#5] args: util_calc: chưa gọi",
+        "[util-calc-sum#5] grounding: thiếu: 1.65"
+      ],
+      "avgMs": 4,
+      "noCall": 5
+    },
+    {
+      "id": "laam-search-sessions",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "args": {
+          "passed": 0,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[laam-search-sessions#1] tool-selection: thiếu gọi: laam_search_sessions (đã gọi: —)",
+        "[laam-search-sessions#1] args: laam_search_sessions: chưa gọi",
+        "[laam-search-sessions#1] grounding: thiếu: auth-svc",
+        "[laam-search-sessions#2] tool-selection: thiếu gọi: laam_search_sessions (đã gọi: —)",
+        "[laam-search-sessions#2] args: laam_search_sessions: chưa gọi",
+        "[laam-search-sessions#2] grounding: thiếu: auth-svc",
+        "[laam-search-sessions#3] tool-selection: thiếu gọi: laam_search_sessions (đã gọi: —)",
+        "[laam-search-sessions#3] args: laam_search_sessions: chưa gọi",
+        "[laam-search-sessions#3] grounding: thiếu: auth-svc",
+        "[laam-search-sessions#4] tool-selection: thiếu gọi: laam_search_sessions (đã gọi: —)",
+        "[laam-search-sessions#4] args: laam_search_sessions: chưa gọi",
+        "[laam-search-sessions#4] grounding: thiếu: auth-svc",
+        "[laam-search-sessions#5] tool-selection: thiếu gọi: laam_search_sessions (đã gọi: —)",
+        "[laam-search-sessions#5] args: laam_search_sessions: chưa gọi",
+        "[laam-search-sessions#5] grounding: thiếu: auth-svc"
+      ],
+      "avgMs": 2,
+      "noCall": 5
+    },
+    {
+      "id": "laam-get-timeline",
+      "capability": "args",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "args": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[laam-get-timeline#1] tool-selection: thiếu gọi: laam_get_timeline (đã gọi: —)",
+        "[laam-get-timeline#1] args: laam_get_timeline: chưa gọi",
+        "[laam-get-timeline#2] tool-selection: thiếu gọi: laam_get_timeline (đã gọi: —)",
+        "[laam-get-timeline#2] args: laam_get_timeline: chưa gọi",
+        "[laam-get-timeline#3] tool-selection: thiếu gọi: laam_get_timeline (đã gọi: —)",
+        "[laam-get-timeline#3] args: laam_get_timeline: chưa gọi",
+        "[laam-get-timeline#4] tool-selection: thiếu gọi: laam_get_timeline (đã gọi: —)",
+        "[laam-get-timeline#4] args: laam_get_timeline: chưa gọi",
+        "[laam-get-timeline#5] tool-selection: thiếu gọi: laam_get_timeline (đã gọi: —)",
+        "[laam-get-timeline#5] args: laam_get_timeline: chưa gọi"
+      ],
+      "avgMs": 3,
+      "noCall": 5
+    },
+    {
+      "id": "laam-query-audit",
+      "capability": "tool-selection",
+      "runs": 5,
+      "perDim": {
+        "tool-selection": {
+          "passed": 0,
+          "total": 5
+        },
+        "restraint": {
+          "passed": 5,
+          "total": 5
+        },
+        "grounding": {
+          "passed": 0,
+          "total": 5
+        },
+        "termination": {
+          "passed": 5,
+          "total": 5
+        }
+      },
+      "fails": [
+        "[laam-query-audit#1] tool-selection: thiếu gọi: laam_query_audit (đã gọi: —)",
+        "[laam-query-audit#1] grounding: thiếu: connector.write",
+        "[laam-query-audit#2] tool-selection: thiếu gọi: laam_query_audit (đã gọi: —)",
+        "[laam-query-audit#2] grounding: thiếu: connector.write",
+        "[laam-query-audit#3] tool-selection: thiếu gọi: laam_query_audit (đã gọi: —)",
+        "[laam-query-audit#3] grounding: thiếu: connector.write",
+        "[laam-query-audit#4] tool-selection: thiếu gọi: laam_query_audit (đã gọi: —)",
+        "[laam-query-audit#4] grounding: thiếu: connector.write",
+        "[laam-query-audit#5] tool-selection: thiếu gọi: laam_query_audit (đã gọi: —)",
+        "[laam-query-audit#5] grounding: thiếu: connector.write"
+      ],
+      "avgMs": 2,
+      "noCall": 5
+    }
+  ]
+}

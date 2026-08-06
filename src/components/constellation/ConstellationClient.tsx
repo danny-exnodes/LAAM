@@ -13,6 +13,8 @@ import { ParticleFieldBackground } from "./ParticleFieldBackground";
 import { ConstellationNodes } from "./ConstellationNodes";
 import { CommandDock } from "./CommandDock";
 import { DisplayPanel, PANEL_EXIT_MS, type Density } from "./DisplayPanel";
+import { ConversationLog } from "./ConversationLog";
+import type { Turn } from "./turns";
 import { useConstellationChat, type PendingWrite } from "./useConstellationChat";
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
@@ -69,6 +71,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // while streaming, before speech even started. The full text is still captured (below,
   // via fullReplyRef) so speakReply has something to read once streaming ends.
   const [caption, setCaption] = useState("");
+  // Tool calls completed in the CURRENT turn, fed by useConstellationChat's onActivity. Drives
+  // the status caption only — a voice turn runs 15-30s with an empty strip otherwise, which
+  // reads as a frozen page. 0 = still reasoning, >0 = actively looking things up.
+  const [toolSteps, setToolSteps] = useState(0);
   // write-gate chip state
   const [pendingWrite, setPendingWrite] = useState<PendingWrite | null>(null);
   // tool requested by node-pick
@@ -83,7 +89,11 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // Panel phải Ở LẠI trong DOM để chạy hết animation đóng rồi mới gỡ — gỡ ngay thì nó
   // biến mất đột ngột, không thấy animation nào cả. `panelOpen` điều khiển animation
   // vào/ra, `panelMounted` điều khiển việc có render hay không.
-  const panelOpen = views.length > 0 && !viewClosed;
+  // One data surface at a time. The transcript already renders tables and charts inline
+  // (same ChatMarkdown as /chat), so with the command input open the panel was a second
+  // copy of the same numbers competing for the same screen. Chat open => you are reading
+  // and typing, the transcript is the surface; chat closed => hands-free, the panel is.
+  const panelOpen = views.length > 0 && !viewClosed && !chatOpen;
   const [panelMounted, setPanelMounted] = useState(false);
   useEffect(() => {
     if (panelOpen) {
@@ -93,6 +103,29 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     const id = setTimeout(() => setPanelMounted(false), PANEL_EXIT_MS);
     return () => clearTimeout(id);
   }, [panelOpen]);
+
+  // In-page transcript, so the user can re-read a number without leaving for /chat (which
+  // would tear down the voice session).
+  const [turns, setTurns] = useState<Turn[]>([]);
+  // Visibility rides on `chatOpen` — the transcript stacks directly above the command
+  // input and the two show and hide together, so a separate toggle would be a second
+  // control for one surface.
+  const [logMounted, setLogMounted] = useState(false);
+  useEffect(() => {
+    if (chatOpen) {
+      setLogMounted(true);
+      return;
+    }
+    const id = setTimeout(() => setLogMounted(false), PANEL_EXIT_MS);
+    return () => clearTimeout(id);
+  }, [chatOpen]);
+  // setState is referentially stable, so this helper never re-creates the callbacks that
+  // close over it (speakReply in particular must keep its identity — see pointerRef).
+  const pushTurn = useCallback((role: Turn["role"], text: string) => {
+    if (text) setTurns((prev) => [...prev, { role, text }]);
+  }, []);
+
+  // (History for a resumed ?conv= is loaded further down, once initialConversationId exists.)
   const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
   // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
   // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
@@ -225,6 +258,38 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     typeof window !== "undefined"
       ? (new URLSearchParams(window.location.search).get("conv") ?? undefined)
       : undefined;
+
+  // Resuming a conversation (/constellation?conv=…) must show what was already said —
+  // opening the same id in /chat lists the whole history, so a transcript that starts
+  // blank on the same URL just reads as broken.
+  //
+  // Keyed on initialConversationId, NOT chat.conversationId: the latter also gets set the
+  // moment a BRAND-NEW conversation is created mid-session, and re-fetching then would
+  // pull back the turns pushTurn already appended — every live turn duplicated. History
+  // loads once, for the conversation the page was opened with; live turns append after.
+  useEffect(() => {
+    if (!initialConversationId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/conversations/${initialConversationId}`);
+        if (!res.ok) return; // fail-soft: missing history is bad, a crashed page is worse
+        const data = (await res.json()) as { messages?: { role?: string; content?: string }[] };
+        if (cancelled || !Array.isArray(data.messages)) return;
+        const history: Turn[] = data.messages
+          .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
+          .map((m) => ({ role: m.role as Turn["role"], text: m.content as string }));
+        // Prepend: the greeting Larvis speaks on load pushes a live turn before this fetch
+        // resolves, and it belongs AFTER the restored history, not in front of it.
+        if (history.length) setTurns((prev) => [...history, ...prev]);
+      } catch {
+        /* offline / aborted — the transcript just starts from this session */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialConversationId]);
   const chat = useConstellationChat({
     onText: (text) => { fullReplyRef.current = text; },
     onPendingWrite: setPendingWrite,
@@ -244,8 +309,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       // trước không còn ăn khớp với phản hồi sắp tới.
       setViews([]);
       setViewClosed(false);
+      setToolSteps(0); // new turn → status caption restarts at "thinking"
     },
     onView: (d) => { viewFromToolRef.current = true; setViews([d]); setViewClosed(false); },
+    onActivity: setToolSteps,
     initialConversationId,
   });
 
@@ -343,6 +410,12 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       setViewClosed(false);
     }
     const hasView = viewFromToolRef.current || descriptors.length > 0;
+    // Record the RAW reply, not `speech`: the transcript renders it through the same
+    // ChatMarkdown as /chat, so formatting (bold, lists, tables, ```chart) survives.
+    // `speech` is the TTS input — stripping blocks is a speech concern, not a display one.
+    // Recorded before the early return below so a reply that produces no audio (empty
+    // prose, e.g. a table-only answer) still lands in the log.
+    pushTurn("assistant", text);
     const spoken = withPointer(speech, hasView, pointerRef.current);
     if (!spoken) return;
     const segments = splitForSpeech(spoken);
@@ -422,7 +495,9 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         else setNeuralSpeaking(false);
       }
     }
-  }, [audio, lang, voice]);
+    // pushTurn is stable (setState identity) so it does NOT change speakReply's identity —
+    // see the pointerRef note above for why that matters.
+  }, [audio, lang, voice, pushTurn]);
 
   const speakRef = useRef(speakReply);
   speakRef.current = speakReply;
@@ -508,13 +583,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     setCaption("");
     fullReplyRef.current = "";
     setCommand("");
+    pushTurn("user", msg);
     void chat.send({
       message: msg,
       ...(model ? { model } : {}),
       customAgentId: selectedAgentId,
       ...(requestedTool ? { requestedTool } : {}),
     });
-  }, [command, model, selectedAgentId, requestedTool, chat, voice]);
+  }, [command, model, selectedAgentId, requestedTool, chat, voice, pushTurn]);
 
   // Submit an arbitrary utterance (voice turn) through the same path as manual send,
   // including the "cut Jarvis off before a new turn" behavior.
@@ -526,6 +602,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       voice.cancelSpeak();
       setCaption("");
       fullReplyRef.current = "";
+      pushTurn("user", text);
       void chat.send({
         message: text,
         ...(model ? { model } : {}),
@@ -533,7 +610,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         ...(requestedTool ? { requestedTool } : {}),
       });
     },
-    [chat, model, selectedAgentId, requestedTool, voice],
+    [chat, model, selectedAgentId, requestedTool, voice, pushTurn],
   );
 
   const { convState } = useVoiceConversation({
@@ -575,6 +652,17 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         ? "thinking"
         : "idle";
 
+  // Status caption while the agent works. `caption` (the segment being spoken) always wins —
+  // once speech starts there is no doubt the page is alive, and the spoken text is what the
+  // user wants to read. Only fills the strip while it would otherwise be EMPTY.
+  // Display-only: never reaches speakReply, so TTS does not read it out.
+  const statusCaption =
+    chat.streaming && !caption
+      ? toolSteps > 0
+        ? t("constellation.statusWorking", { n: String(toolSteps) })
+        : t("constellation.statusThinking")
+      : "";
+
   const btnBase =
     "flex h-10 w-10 items-center justify-center rounded-full border transition-all duration-200 " +
     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5bd6ff]/50";
@@ -607,6 +695,15 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       </h1>
       <SysInfoPanel greetingName={greetingName} t={t} lang={lang} />
       <ConstellationNodes placed={placed} onPick={onPick} t={t} />
+
+      {logMounted && (
+        <ConversationLog
+          turns={turns}
+          open={chatOpen}
+          title={t("constellation.logTitle")}
+          youLabel={t("constellation.logYou")}
+        />
+      )}
 
       {panelMounted && views.length > 0 && (
         <DisplayPanel
@@ -650,11 +747,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
           */}
 
           {/* Caption + command input panel */}
-          <CommandDock t={t} caption={caption} open={chatOpen} value={command} onChange={setCommand} onSend={handleSend} />
+          <CommandDock t={t} caption={caption || statusCaption} open={chatOpen} value={command} onChange={setCommand} onSend={handleSend} />
 
           {/* Unified control bar: model · chat · voice — single row, no overlap */}
           <div className="absolute bottom-6 right-4 z-20 flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] p-1.5 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-            {views.length > 0 && viewClosed && (
+            {/* Hidden while the command input is open for the same reason the panel is:
+                the pill would reopen a surface that is currently suppressed — a control
+                that visibly does nothing. */}
+            {views.length > 0 && viewClosed && !chatOpen && (
               <button
                 type="button"
                 onClick={() => setViewClosed(false)}

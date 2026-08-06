@@ -9,7 +9,17 @@ import { BYTEPLUS_MODELS } from "@/lib/llm/byteplus";
 // ANTHROPIC_API_KEY (đọc lúc request, không lúc import — testable & restart-free).
 // + `byteplusModels` — same env-gated pattern, present only when BYTEPLUS_API_KEY set.
 
-const MODEL = process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
+// Cloud-first default, mirroring the internal-model router (src/lib/llm/internal.ts):
+// when the server holds a BYTEPLUS_API_KEY the picker preselects the default BytePlus
+// model instead of the local Ollama one. A deployment with NO cloud key keeps the free
+// local default exactly as before. Read at request time (like the key gating below) so
+// it is testable and restart-free.
+// Tradeoff: BytePlus wins over DEFAULT_CHAT_MODEL, so an operator cannot keep the
+// BytePlus picker while forcing a local default — unset the key for a local-only chat.
+function defaultChatModel(): string {
+  if (process.env.BYTEPLUS_API_KEY) return BYTEPLUS_MODELS[0];
+  return process.env.DEFAULT_CHAT_MODEL ?? "gemma4:e4b";
+}
 
 export async function GET() {
   const session = await auth();
@@ -17,7 +27,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   return NextResponse.json({
-    model: MODEL,
+    model: defaultChatModel(),
     claudeModels: process.env.ANTHROPIC_API_KEY ? [...CLAUDE_MODELS] : [],
     byteplusModels: process.env.BYTEPLUS_API_KEY ? [...BYTEPLUS_MODELS] : [],
   });
