@@ -39,6 +39,27 @@ describe("ConversationLog", () => {
     expect(screen.getByText("Larvis")).toBeTruthy();
   });
 
+  // Parity with /chat: an assistant reply is rendered through ChatMarkdown, so a GFM
+  // table becomes a real table instead of raw pipe syntax. Storing the stripped speech
+  // prose instead would make the transcript the only surface that loses the structure.
+  it("assistant markdown renders like /chat — a GFM table becomes a <table>, not pipe text", () => {
+    const md = ["| Store | Variance |", "|---|---|", "| PH-005 | 1015 |"].join("\n");
+    renderLog(
+      <ConversationLog turns={[{ role: "assistant", text: md }]} open onClose={noop} {...props} />,
+    );
+    expect(document.querySelector("table")).toBeTruthy();
+    expect(screen.getByText("PH-005")).toBeTruthy();
+    expect(screen.queryByText(/\|/)).toBeNull(); // no raw pipe syntax leaked through
+  });
+
+  it("user turn stays plain text — a stray asterisk must not reflow what the user said", () => {
+    renderLog(
+      <ConversationLog turns={[{ role: "user", text: "giá *chưa* gồm VAT" }]} open onClose={noop} {...props} />,
+    );
+    expect(screen.getByText(/giá \*chưa\* gồm VAT/)).toBeTruthy();
+    expect(document.querySelector("em")).toBeNull();
+  });
+
   it("empty session says so instead of rendering a blank box", () => {
     renderLog(<ConversationLog turns={[]} open onClose={noop} {...props} />);
     expect(screen.getByText(/Chưa có tin nhắn nào/)).toBeTruthy();

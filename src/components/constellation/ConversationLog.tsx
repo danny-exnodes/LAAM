@@ -8,6 +8,7 @@
 // there is no focus trap and no backdrop. Same reasoning as DisplayPanel (role="region").
 import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { ChatMarkdown } from "@/components/render/ChatMarkdown";
 import type { Turn } from "./turns";
 
 export function ConversationLog({
@@ -47,7 +48,9 @@ export function ConversationLog({
         // Left column, spanning the free band between the header row and the bottom dock.
         // z-20 keeps it UNDER DisplayPanel (z-30): when both are open the current answer
         // stays on top, the transcript is reference material behind it.
-        "absolute left-6 top-[28%] bottom-28 z-20 flex w-[340px] max-w-[calc(100vw-3rem)] flex-col",
+        // 420px, not the 340 it started at: turns now render full markdown like /chat, and
+        // a GFM table or a ```chart at 340px wraps into something unreadable.
+        "absolute left-6 top-[28%] bottom-28 z-20 flex w-[420px] max-w-[calc(100vw-3rem)] flex-col",
         "rounded-2xl border border-[#5bd6ff]/20 bg-[#08182a]/40 backdrop-blur-md",
         "text-[#eaf6ff]",
         "shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_12px_40px_-12px_rgba(0,0,0,0.5)]",
@@ -87,7 +90,15 @@ export function ConversationLog({
               <span className="mb-0.5 block text-[10px] uppercase tracking-wider opacity-60">
                 {turn.role === "user" ? youLabel : "Larvis"}
               </span>
-              {turn.text}
+              {/* Assistant replies go through the SAME renderer as /chat so both surfaces
+                  format identically. The user's own message is plain text there too — it
+                  is typed/spoken input, not markup, and rendering it would let a stray
+                  asterisk silently reflow what the user actually said. */}
+              {turn.role === "assistant" ? (
+                <ChatMarkdown source={turn.text} className="chat-md" />
+              ) : (
+                turn.text
+              )}
             </div>
           ))
         )}

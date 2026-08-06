@@ -371,10 +371,12 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       setViewClosed(false);
     }
     const hasView = viewFromToolRef.current || descriptors.length > 0;
-    // Record the prose, not the raw reply: table/chart blocks already went to DisplayPanel,
-    // and the pointer sentence below is a UI cue, not something Larvis "said". Recorded
-    // before the early return so a reply that produces no audio still shows up in the log.
-    pushTurn("assistant", speech);
+    // Record the RAW reply, not `speech`: the transcript renders it through the same
+    // ChatMarkdown as /chat, so formatting (bold, lists, tables, ```chart) survives.
+    // `speech` is the TTS input — stripping blocks is a speech concern, not a display one.
+    // Recorded before the early return below so a reply that produces no audio (empty
+    // prose, e.g. a table-only answer) still lands in the log.
+    pushTurn("assistant", text);
     const spoken = withPointer(speech, hasView, pointerRef.current);
     if (!spoken) return;
     const segments = splitForSpeech(spoken);
