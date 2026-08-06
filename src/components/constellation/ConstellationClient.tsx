@@ -13,6 +13,8 @@ import { ParticleFieldBackground } from "./ParticleFieldBackground";
 import { ConstellationNodes } from "./ConstellationNodes";
 import { CommandDock } from "./CommandDock";
 import { DisplayPanel, PANEL_EXIT_MS, type Density } from "./DisplayPanel";
+import { ConversationLog } from "./ConversationLog";
+import type { Turn } from "./turns";
 import { useConstellationChat, type PendingWrite } from "./useConstellationChat";
 import type { CatalogGroup } from "@/lib/chat/toolCatalog";
 import type { ConnectorStatus } from "@/lib/connectors/types";
@@ -97,6 +99,26 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     const id = setTimeout(() => setPanelMounted(false), PANEL_EXIT_MS);
     return () => clearTimeout(id);
   }, [panelOpen]);
+
+  // In-page transcript. Session-scoped on purpose: it records what was actually said on
+  // THIS page, so the user can re-read a number without leaving for /chat (which would
+  // tear down the voice session). Resumed history stays out of scope — /chat owns that.
+  const [turns, setTurns] = useState<Turn[]>([]);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logMounted, setLogMounted] = useState(false);
+  useEffect(() => {
+    if (logOpen) {
+      setLogMounted(true);
+      return;
+    }
+    const id = setTimeout(() => setLogMounted(false), PANEL_EXIT_MS);
+    return () => clearTimeout(id);
+  }, [logOpen]);
+  // setState is referentially stable, so this helper never re-creates the callbacks that
+  // close over it (speakReply in particular must keep its identity — see pointerRef).
+  const pushTurn = useCallback((role: Turn["role"], text: string) => {
+    if (text) setTurns((prev) => [...prev, { role, text }]);
+  }, []);
   const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
   // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
   // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
@@ -349,6 +371,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       setViewClosed(false);
     }
     const hasView = viewFromToolRef.current || descriptors.length > 0;
+    // Record the prose, not the raw reply: table/chart blocks already went to DisplayPanel,
+    // and the pointer sentence below is a UI cue, not something Larvis "said". Recorded
+    // before the early return so a reply that produces no audio still shows up in the log.
+    pushTurn("assistant", speech);
     const spoken = withPointer(speech, hasView, pointerRef.current);
     if (!spoken) return;
     const segments = splitForSpeech(spoken);
@@ -428,7 +454,9 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         else setNeuralSpeaking(false);
       }
     }
-  }, [audio, lang, voice]);
+    // pushTurn is stable (setState identity) so it does NOT change speakReply's identity —
+    // see the pointerRef note above for why that matters.
+  }, [audio, lang, voice, pushTurn]);
 
   const speakRef = useRef(speakReply);
   speakRef.current = speakReply;
@@ -514,13 +542,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     setCaption("");
     fullReplyRef.current = "";
     setCommand("");
+    pushTurn("user", msg);
     void chat.send({
       message: msg,
       ...(model ? { model } : {}),
       customAgentId: selectedAgentId,
       ...(requestedTool ? { requestedTool } : {}),
     });
-  }, [command, model, selectedAgentId, requestedTool, chat, voice]);
+  }, [command, model, selectedAgentId, requestedTool, chat, voice, pushTurn]);
 
   // Submit an arbitrary utterance (voice turn) through the same path as manual send,
   // including the "cut Jarvis off before a new turn" behavior.
@@ -532,6 +561,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       voice.cancelSpeak();
       setCaption("");
       fullReplyRef.current = "";
+      pushTurn("user", text);
       void chat.send({
         message: text,
         ...(model ? { model } : {}),
@@ -539,7 +569,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
         ...(requestedTool ? { requestedTool } : {}),
       });
     },
-    [chat, model, selectedAgentId, requestedTool, voice],
+    [chat, model, selectedAgentId, requestedTool, voice, pushTurn],
   );
 
   const { convState } = useVoiceConversation({
@@ -625,6 +655,18 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       <SysInfoPanel greetingName={greetingName} t={t} lang={lang} />
       <ConstellationNodes placed={placed} onPick={onPick} t={t} />
 
+      {logMounted && (
+        <ConversationLog
+          turns={turns}
+          open={logOpen}
+          onClose={() => setLogOpen(false)}
+          title={t("constellation.logTitle")}
+          emptyLabel={t("constellation.logEmpty")}
+          closeLabel={t("constellation.logClose")}
+          youLabel={t("constellation.logYou")}
+        />
+      )}
+
       {panelMounted && views.length > 0 && (
         <DisplayPanel
           views={views}
@@ -688,6 +730,23 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
                     .reduce((n, v) => n + (v.rows?.length ?? 0), 0);
                   return rows > 0 ? ` · ${rows}` : "";
                 })()}
+              </button>
+            )}
+            {/* Transcript toggle. Only offered once something has actually been said —
+                an empty log button on a fresh page is a dead control. */}
+            {turns.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setLogOpen((v) => !v)}
+                aria-label={t("constellation.logToggle")}
+                aria-pressed={logOpen}
+                className={`shrink-0 rounded-full border px-3 py-2 text-[12px] transition-colors ${
+                  logOpen
+                    ? "border-[#5bd6ff]/55 bg-[#5bd6ff]/15 text-[#d8f4ff]"
+                    : "border-white/10 text-[#a9e9ff]/90 hover:border-[#5bd6ff]/40 hover:bg-white/[0.06]"
+                }`}
+              >
+                <MessageSquare size={14} />
               </button>
             )}
             {models.length > 0 && (

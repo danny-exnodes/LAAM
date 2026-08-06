@@ -74,4 +74,16 @@ export const constellation: Dict = {
   "constellation.viewSourceAi": { vi: "AI tổng hợp", en: "AI generated", zh: "AI 生成" },
   "constellation.viewDensity": { vi: "Đổi mật độ hiển thị", en: "Toggle density", zh: "切换显示密度" },
   "constellation.viewTruncated": { vi: "{shown}/{total} dòng", en: "{shown}/{total} rows", zh: "{shown}/{total} 行" },
+
+  // In-page transcript (ConversationLog) — lets the user re-read the conversation without
+  // leaving for /chat, which would tear down the voice session.
+  "constellation.logTitle": { vi: "Hội thoại", en: "Conversation", zh: "对话" },
+  "constellation.logToggle": { vi: "Xem hội thoại", en: "View conversation", zh: "查看对话" },
+  "constellation.logClose": { vi: "Đóng hội thoại", en: "Close conversation", zh: "关闭对话" },
+  "constellation.logEmpty": {
+    vi: "Chưa có tin nhắn nào trong phiên này.",
+    en: "No messages in this session yet.",
+    zh: "本次会话暂无消息。",
+  },
+  "constellation.logYou": { vi: "Bạn", en: "You", zh: "您" },
 };
