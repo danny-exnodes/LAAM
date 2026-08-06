@@ -48,9 +48,19 @@ export function ConversationLog({
       ref={scrollRef}
       className={[
         // Sits above CommandDock's input (bottom-24, right-4) and matches its right edge,
-        // so the two read as one stack rather than two floating widgets. no-scrollbar:
-        // a scroll track drawn over the starfield reads as a seam (scrolling still works).
-        "absolute bottom-44 right-4 z-20 flex w-[min(460px,88vw)] max-h-[56vh] flex-col gap-2 overflow-y-auto no-scrollbar",
+        // so the two read as one stack rather than two floating widgets.
+        //
+        // bottom-40 makes the gap above the input equal to the gap below it. Measured
+        // from the same tokens rather than eyeballed, so a later edit can redo the math:
+        //   control dock  bottom-6 (24px) + p-1.5 (12px) + h-10 (40px)  → occupies 24..76
+        //   command input bottom-24 (96px) + py-1 (8px) + input py-2+13px text (~36px)
+        //                                                              → occupies 96..142
+        //   gap dock -> input = 96 - 76 = 20px, so the log wants ~142 + 20 = ~162px.
+        // bottom-40 (160px) lands within a couple of px and stays on the spacing scale.
+        //
+        // no-scrollbar: a scroll track drawn over the starfield reads as a seam
+        // (scrolling itself still works).
+        "absolute bottom-40 right-4 z-20 flex w-[min(460px,88vw)] max-h-[56vh] flex-col gap-2 overflow-y-auto no-scrollbar",
         open ? "pointer-events-auto anim-panel-in" : "pointer-events-none anim-panel-out",
       ].join(" ")}
     >
