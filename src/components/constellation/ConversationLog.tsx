@@ -4,30 +4,29 @@
 // meant hitting "Open in Chat", which leaves the page and tears down the voice session —
 // the one thing a hands-free user must not have to do to re-read a number.
 //
+// Chromeless by design: no frame, no header, no close button — just bubbles floating over
+// the starfield, stacked directly above the command input and shown/hidden with it. The
+// framed left-hand panel it replaced read as a second window bolted onto the page.
+//
 // Deliberately NOT modal and NOT a dialog: the user keeps talking while it is open, so
 // there is no focus trap and no backdrop. Same reasoning as DisplayPanel (role="region").
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
 import { ChatMarkdown } from "@/components/render/ChatMarkdown";
 import type { Turn } from "./turns";
 
 export function ConversationLog({
   turns,
   open,
-  onClose,
   title,
-  emptyLabel,
-  closeLabel,
   youLabel,
 }: {
   turns: Turn[];
   // false = playing the exit animation while still mounted; the parent unmounts it after
   // PANEL_EXIT_MS (same pattern as DisplayPanel).
   open: boolean;
-  onClose: () => void;
+  // Not rendered — there is no visible header any more. Kept as the region's accessible
+  // name so the landmark is still announced with something meaningful.
   title: string;
-  emptyLabel: string;
-  closeLabel: string;
   youLabel: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -39,70 +38,49 @@ export function ConversationLog({
     if (el) el.scrollTop = el.scrollHeight;
   }, [turns]);
 
+  if (turns.length === 0) return null; // nothing to say yet — don't float an empty box
+
   return (
     <section
       role="region"
       aria-label={title}
       aria-hidden={!open}
+      ref={scrollRef}
       className={[
-        // Left column, spanning the free band between the header row and the bottom dock.
-        // z-20 keeps it UNDER DisplayPanel (z-30): when both are open the current answer
-        // stays on top, the transcript is reference material behind it.
-        // 420px, not the 340 it started at: turns now render full markdown like /chat, and
-        // a GFM table or a ```chart at 340px wraps into something unreadable.
-        "absolute left-6 top-[28%] bottom-28 z-20 flex w-[420px] max-w-[calc(100vw-3rem)] flex-col",
-        "rounded-2xl border border-[#5bd6ff]/20 bg-[#08182a]/40 backdrop-blur-md",
-        "text-[#eaf6ff]",
-        "shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_12px_40px_-12px_rgba(0,0,0,0.5)]",
+        // Sits directly above CommandDock's input (bottom-24, right-4) and matches its
+        // right edge, so the two read as one stack rather than two floating widgets.
+        "absolute bottom-36 right-4 z-20 flex w-[min(400px,86vw)] max-h-[46vh] flex-col gap-2 overflow-y-auto",
         open ? "pointer-events-auto anim-panel-in" : "pointer-events-none anim-panel-out",
       ].join(" ")}
     >
-      <header className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
-        <h2 className="min-w-0 flex-1 truncate text-[11px] uppercase tracking-[0.18em] text-[#a9e9ff]">
-          {title}
-        </h2>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label={closeLabel}
-          className="rounded-full border border-[#5bd6ff]/30 p-1 text-[#a9e9ff] transition-colors hover:bg-white/5"
+      {turns.map((turn, i) => (
+        <div
+          key={i}
+          className={[
+            "rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
+            // Each bubble carries its own opaque background: with the wrapper gone there is
+            // nothing else between the text and the moving starfield.
+            // Solid rgba, NOT backdrop-blur — one blurred surface over the WebGL canvas was
+            // already costly (see DisplayPanel); N of them per turn would be far worse.
+            turn.role === "user"
+              ? "ml-8 self-end border border-[#ffd479]/30 bg-[#3a2c12]/85 text-[#ffe2a6]"
+              : "mr-8 border border-[#5bd6ff]/20 bg-[#08182a]/85 text-[#eaf6ff]",
+          ].join(" ")}
         >
-          <X size={12} />
-        </button>
-      </header>
-
-      <div ref={scrollRef} className="flex-1 space-y-2 overflow-y-auto p-3">
-        {turns.length === 0 ? (
-          <p className="text-[12px] text-[#a9e9ff]/60">{emptyLabel}</p>
-        ) : (
-          turns.map((turn, i) => (
-            <div
-              key={i}
-              className={[
-                "rounded-xl px-3 py-2 text-[12px] leading-relaxed",
-                // The user's own words sit right and warm, Larvis left and cool — the same
-                // colour split the constellation already uses for "you" vs "the system".
-                turn.role === "user"
-                  ? "ml-6 border border-[#ffd479]/25 bg-[#ffc450]/10 text-[#ffe2a6]"
-                  : "mr-6 border border-[#5bd6ff]/20 bg-white/[0.04] text-[#eaf6ff]",
-              ].join(" ")}
-            >
-              <span className="mb-0.5 block text-[10px] uppercase tracking-wider opacity-60">
-                {turn.role === "user" ? youLabel : "Larvis"}
-              </span>
-              {/* Assistant replies go through the SAME renderer as /chat so both surfaces
-                  format identically. The user's own message is plain text there too — it
-                  is typed/spoken input, not markup, and rendering it would let a stray
-                  asterisk silently reflow what the user actually said. */}
-              {turn.role === "assistant" ? (
-                <ChatMarkdown source={turn.text} className="chat-md" />
-              ) : (
-                turn.text
-              )}
-            </div>
-          ))
-        )}
-      </div>
+          <span className="mb-0.5 block text-[10px] uppercase tracking-wider opacity-60">
+            {turn.role === "user" ? youLabel : "Larvis"}
+          </span>
+          {/* Assistant replies go through the SAME renderer as /chat so both surfaces
+              format identically. The user's own message is plain text there too — it is
+              typed/spoken input, not markup, and rendering it would let a stray asterisk
+              silently reflow what the user actually said. */}
+          {turn.role === "assistant" ? (
+            <ChatMarkdown source={turn.text} className="chat-md" />
+          ) : (
+            turn.text
+          )}
+        </div>
+      ))}
     </section>
   );
 }

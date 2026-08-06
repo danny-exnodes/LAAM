@@ -103,16 +103,18 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   // In-page transcript, so the user can re-read a number without leaving for /chat (which
   // would tear down the voice session).
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [logOpen, setLogOpen] = useState(false);
+  // Visibility rides on `chatOpen` — the transcript stacks directly above the command
+  // input and the two show and hide together, so a separate toggle would be a second
+  // control for one surface.
   const [logMounted, setLogMounted] = useState(false);
   useEffect(() => {
-    if (logOpen) {
+    if (chatOpen) {
       setLogMounted(true);
       return;
     }
     const id = setTimeout(() => setLogMounted(false), PANEL_EXIT_MS);
     return () => clearTimeout(id);
-  }, [logOpen]);
+  }, [chatOpen]);
   // setState is referentially stable, so this helper never re-creates the callbacks that
   // close over it (speakReply in particular must keep its identity — see pointerRef).
   const pushTurn = useCallback((role: Turn["role"], text: string) => {
@@ -693,11 +695,8 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       {logMounted && (
         <ConversationLog
           turns={turns}
-          open={logOpen}
-          onClose={() => setLogOpen(false)}
+          open={chatOpen}
           title={t("constellation.logTitle")}
-          emptyLabel={t("constellation.logEmpty")}
-          closeLabel={t("constellation.logClose")}
           youLabel={t("constellation.logYou")}
         />
       )}
@@ -765,23 +764,6 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
                     .reduce((n, v) => n + (v.rows?.length ?? 0), 0);
                   return rows > 0 ? ` · ${rows}` : "";
                 })()}
-              </button>
-            )}
-            {/* Transcript toggle. Only offered once something has actually been said —
-                an empty log button on a fresh page is a dead control. */}
-            {turns.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setLogOpen((v) => !v)}
-                aria-label={t("constellation.logToggle")}
-                aria-pressed={logOpen}
-                className={`shrink-0 rounded-full border px-3 py-2 text-[12px] transition-colors ${
-                  logOpen
-                    ? "border-[#5bd6ff]/55 bg-[#5bd6ff]/15 text-[#d8f4ff]"
-                    : "border-white/10 text-[#a9e9ff]/90 hover:border-[#5bd6ff]/40 hover:bg-white/[0.06]"
-                }`}
-              >
-                <MessageSquare size={14} />
               </button>
             )}
             {models.length > 0 && (

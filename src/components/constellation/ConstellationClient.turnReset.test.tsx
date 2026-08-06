@@ -93,15 +93,21 @@ describe("ConstellationClient — panel/pill không sót qua lượt (Critical 1
     await waitFor(() => screen.findByRole("button", { name: /trò chuyện|chat/i }), { timeout: 5000 });
     await openChat();
 
+    // Scoped by accessible name, NOT a bare role query: the conversation transcript is
+    // also a region and it renders whenever the command input is open (which openChat()
+    // just did), so `getByRole("region")` alone would match the wrong element. The panel
+    // names itself after the descriptor title.
+    const panel = () => screen.queryByRole("region", { name: "kg_list_stores" });
+
     // Turn 1: response carries a view frame → panel should appear.
     await send("lượt 1");
-    await waitFor(() => expect(screen.getByRole("region")).toBeTruthy(), { timeout: 5000 });
+    await waitFor(() => expect(panel()).toBeTruthy(), { timeout: 5000 });
 
     // Turn 2: response carries NO view frame → panel must close, no stale pill either.
     await send("lượt 2");
     await waitFor(
       () => {
-        expect(screen.queryByRole("region")).toBeNull();
+        expect(panel()).toBeNull();
         expect(screen.queryByText(/Xem bảng/)).toBeNull();
       },
       { timeout: 5000 },

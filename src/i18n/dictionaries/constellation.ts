@@ -76,14 +76,9 @@ export const constellation: Dict = {
   "constellation.viewTruncated": { vi: "{shown}/{total} dòng", en: "{shown}/{total} rows", zh: "{shown}/{total} 行" },
 
   // In-page transcript (ConversationLog) — lets the user re-read the conversation without
-  // leaving for /chat, which would tear down the voice session.
+  // leaving for /chat, which would tear down the voice session. It is chromeless (no
+  // header, no close button) and shows/hides with the command input, so the only strings
+  // it needs are the landmark's accessible name and the speaker label.
   "constellation.logTitle": { vi: "Hội thoại", en: "Conversation", zh: "对话" },
-  "constellation.logToggle": { vi: "Xem hội thoại", en: "View conversation", zh: "查看对话" },
-  "constellation.logClose": { vi: "Đóng hội thoại", en: "Close conversation", zh: "关闭对话" },
-  "constellation.logEmpty": {
-    vi: "Chưa có tin nhắn nào trong phiên này.",
-    en: "No messages in this session yet.",
-    zh: "本次会话暂无消息。",
-  },
   "constellation.logYou": { vi: "Bạn", en: "You", zh: "您" },
 };
