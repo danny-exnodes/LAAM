@@ -133,13 +133,81 @@ function McpCard({ s, t, reload }: { s: McpServer; t: T; reload: () => Promise<v
 }
 
 // Per-tool on/off. Every enabled tool is re-sent to the model on EVERY round, so this is a
-// real lever on token cost (measured 2026-08-06: one server = 55 tools ≈ 11k tokens/round,
-// of which a working session used four) and on how much there is for the model to mis-pick.
+// real lever on token cost (measured 2026-08-06: one server = 55 tools ≈ 11k tokens/round, of
+// which a working session used four) and on how much there is for the model to mis-pick.
+//
+// The card shows WHICH tools are on, not just how many — the count alone does not tell you
+// whether the four left on are the four you need. Picking happens in a modal because a real
+// server can advertise 50+ tools with a paragraph of description each; that does not fit in a
+// card, and choosing blind (name only) is how you switch off the one thing the demo needed.
 function ToolPicker({ s, t, reload }: { s: McpServer; t: T; reload: () => Promise<void> }) {
   const [open, setOpen] = useState(false);
   const details = useMemo(() => s.toolDetails ?? [], [s.toolDetails]);
-  const enabledNames = useMemo(() => s.enabledTools ?? details.map((d) => d.name), [s.enabledTools, details]);
+  const enabledNames = useMemo(
+    () => s.enabledTools ?? details.map((d) => d.name),
+    [s.enabledTools, details],
+  );
+
+  const shown = enabledNames.slice(0, 6);
+  const rest = enabledNames.length - shown.length;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] text-neutral-500">
+          {t("conn.mcp.toolsOn", { on: enabledNames.length, total: details.length })}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="text-[11px] font-semibold text-[var(--color-accent)] hover:underline"
+        >
+          {t("conn.mcp.pickTools")}
+        </button>
+      </div>
+
+      {enabledNames.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {shown.map((n) => (
+            <span
+              key={n}
+              className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300"
+            >
+              {n}
+            </span>
+          ))}
+          {rest > 0 && (
+            <span className="px-1 py-0.5 text-[10px] text-neutral-400">
+              {t("conn.mcp.moreTools", { n: rest })}
+            </span>
+          )}
+        </div>
+      )}
+
+      {open && (
+        <ToolDialog s={s} t={t} reload={reload} details={details} enabledNames={enabledNames} onClose={() => setOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+function ToolDialog({
+  s,
+  t,
+  reload,
+  details,
+  enabledNames,
+  onClose,
+}: {
+  s: McpServer;
+  t: T;
+  reload: () => Promise<void>;
+  details: McpToolDetail[];
+  enabledNames: string[];
+  onClose: () => void;
+}) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(enabledNames));
+  const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -149,6 +217,24 @@ function ToolPicker({ s, t, reload }: { s: McpServer; t: T; reload: () => Promis
     () => selected.size !== enabledNames.length || enabledNames.some((n) => !selected.has(n)),
     [selected, enabledNames],
   );
+  // Filter over name AND description — with 50+ tools "which one reads rows?" is a
+  // description question, not a name question.
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return details;
+    return details.filter(
+      (d) => d.name.toLowerCase().includes(needle) || d.description.toLowerCase().includes(needle),
+    );
+  }, [details, q]);
+
+  // Esc closes, like every other modal the user has met.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   const toggle = useCallback((name: string) => {
     setSelected((prev) => {
@@ -178,87 +264,116 @@ function ToolPicker({ s, t, reload }: { s: McpServer; t: T; reload: () => Promis
         return;
       }
       await reload();
+      onClose();
     } catch {
       setErr(t("conn.mcp.saveToolsErr"));
     } finally {
       setBusy(false);
     }
-  }, [s.slug, selected, all.length, reload, t]);
+  }, [s.slug, selected, all.length, reload, t, onClose]);
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] text-neutral-500">
-          {t("conn.mcp.toolsOn", { on: selected.size, total: all.length })}
-        </span>
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="text-[11px] font-semibold text-[var(--color-accent)] hover:underline"
-        >
-          {open ? t("conn.mcp.hideTools") : t("conn.mcp.pickTools")}
-        </button>
-      </div>
-
-      {open && (
-        <div className="flex flex-col gap-2 rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
-          <p className="text-[11px] leading-snug text-neutral-500">{t("conn.mcp.pickToolsHint")}</p>
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setSelected(new Set(all))}
-              className="text-[11px] font-semibold text-[var(--color-accent)] hover:underline"
-            >
-              {t("conn.mcp.selectAll")}
-            </button>
-            <button
-              type="button"
-              onClick={() => setSelected(new Set())}
-              className="text-[11px] font-semibold text-neutral-500 hover:underline"
-            >
-              {t("conn.mcp.selectNone")}
-            </button>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("conn.mcp.dialogTitle", { name: s.name })}
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-800 dark:bg-neutral-900"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold">{t("conn.mcp.dialogTitle", { name: s.name })}</h3>
+            <p className="mt-1 text-[11px] leading-snug text-neutral-500">{t("conn.mcp.pickToolsHint")}</p>
           </div>
-
-          <ul className="max-h-64 overflow-y-auto pr-1">
-            {details.map((d) => (
-              <li key={d.name}>
-                <label className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(d.name)}
-                    onChange={() => toggle(d.name)}
-                    className="h-3.5 w-3.5 flex-none accent-[var(--color-accent)]"
-                  />
-                  <span className="truncate font-mono text-[11px]">{d.name}</span>
-                  {d.kind === "write" && (
-                    <span className="ml-auto flex-none rounded px-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                      write
-                    </span>
-                  )}
-                </label>
-              </li>
-            ))}
-          </ul>
-
-          {selected.size === 0 && (
-            <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
-              {t("conn.mcp.allOffWarn")}
-            </p>
-          )}
-          {err && <p className="text-[11px] text-red-500">{err}</p>}
-
           <button
             type="button"
-            disabled={busy || !dirty}
-            onClick={() => void save()}
-            className={btn("primary") + " self-start"}
+            onClick={onClose}
+            aria-label={t("conn.mcp.close")}
+            className="flex-none rounded-lg px-2 py-1 text-sm text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
           >
-            {busy ? t("conn.mcp.savingTools") : t("conn.mcp.saveTools")}
+            ✕
           </button>
         </div>
-      )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("conn.mcp.searchTools")}
+            aria-label={t("conn.mcp.searchTools")}
+            className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-[var(--color-accent)] dark:border-neutral-700"
+          />
+          <span className="text-[11px] text-neutral-500">
+            {t("conn.mcp.toolsOn", { on: selected.size, total: all.length })}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set(all))}
+            className="text-[11px] font-semibold text-[var(--color-accent)] hover:underline"
+          >
+            {t("conn.mcp.selectAll")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="text-[11px] font-semibold text-neutral-500 hover:underline"
+          >
+            {t("conn.mcp.selectNone")}
+          </button>
+        </div>
+
+        <ul className="min-h-0 flex-1 overflow-y-auto pr-1">
+          {visible.length === 0 && (
+            <li className="py-6 text-center text-xs text-neutral-500">{t("conn.mcp.noMatch")}</li>
+          )}
+          {visible.map((d) => (
+            <li key={d.name} className="border-b border-neutral-100 last:border-0 dark:border-neutral-800">
+              <label className="flex cursor-pointer items-start gap-2.5 px-1 py-2 hover:bg-neutral-50 dark:hover:bg-neutral-800/60">
+                <input
+                  type="checkbox"
+                  checked={selected.has(d.name)}
+                  onChange={() => toggle(d.name)}
+                  className="mt-0.5 h-3.5 w-3.5 flex-none accent-[var(--color-accent)]"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate font-mono text-xs font-semibold">{d.name}</span>
+                    {d.kind === "write" && (
+                      <span className="flex-none rounded bg-amber-500/15 px-1.5 text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                        write
+                      </span>
+                    )}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] leading-snug text-neutral-500">
+                    {d.description?.trim() || t("conn.mcp.noDesc")}
+                  </span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+
+        {selected.size === 0 && (
+          <p className="text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+            {t("conn.mcp.allOffWarn")}
+          </p>
+        )}
+        {err && <p className="text-[11px] text-red-500">{err}</p>}
+
+        <div className="flex flex-none gap-2">
+          <button type="button" disabled={busy || !dirty} onClick={() => void save()} className={btn("primary")}>
+            {busy ? t("conn.mcp.savingTools") : t("conn.mcp.saveTools")}
+          </button>
+          <button type="button" onClick={onClose} className={btn("danger")}>
+            {t("conn.mcp.cancel")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

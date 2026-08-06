@@ -217,6 +217,13 @@ export const connectors: Dict = {
   },
   'conn.mcp.selectAll': { vi: 'Bật tất cả', en: 'Enable all', zh: '全部启用' },
   'conn.mcp.selectNone': { vi: 'Tắt tất cả', en: 'Disable all', zh: '全部禁用' },
+  'conn.mcp.dialogTitle': { vi: 'Chọn công cụ — {name}', en: 'Choose tools — {name}', zh: '选择工具 — {name}' },
+  'conn.mcp.searchTools': { vi: 'Tìm công cụ…', en: 'Search tools…', zh: '搜索工具…' },
+  'conn.mcp.noMatch': { vi: 'Không có công cụ nào khớp.', en: 'No tools match.', zh: '没有匹配的工具。' },
+  'conn.mcp.close': { vi: 'Đóng', en: 'Close', zh: '关闭' },
+  'conn.mcp.cancel': { vi: 'Huỷ', en: 'Cancel', zh: '取消' },
+  'conn.mcp.noDesc': { vi: 'Không có mô tả', en: 'No description', zh: '无描述' },
+  'conn.mcp.moreTools': { vi: '+{n} nữa', en: '+{n} more', zh: '还有 {n} 个' },
   'conn.mcp.saveTools': { vi: 'Lưu', en: 'Save', zh: '保存' },
   'conn.mcp.savingTools': { vi: 'Đang lưu…', en: 'Saving…', zh: '保存中…' },
   'conn.mcp.saveToolsErr': {

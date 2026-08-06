@@ -25,8 +25,8 @@ function server(over: Partial<McpServer> = {}): McpServer {
     trustReadHints: false,
     tools: ["mcp_list", "mcp_search"],
     toolDetails: [
-      { name: "mcp_list", nsName: "mcp__my-mcp__mcp_list", description: "d", kind: "read" },
-      { name: "mcp_search", nsName: "mcp__my-mcp__mcp_search", description: "d", kind: "read" },
+      { name: "mcp_list", nsName: "mcp__my-mcp__mcp_list", description: "liệt kê mọi thứ", kind: "read" },
+      { name: "mcp_search", nsName: "mcp__my-mcp__mcp_search", description: "tìm kiếm toàn văn", kind: "read" },
     ],
     enabledTools: ["mcp_list", "mcp_search"],
     ...over,
@@ -76,11 +76,11 @@ test("renders servers from GET including tool names and trust badge", async () =
   expect(await screen.findByText("My MCP")).toBeTruthy();
   // URL host, not the full URL
   expect(screen.getByText("mcp.example.com")).toBeTruthy();
-  // The card summarises how many tools are on; the names live behind "Chọn công cụ".
+  // The card shows the count AND which tools are on — a count alone does not tell you
+  // whether the ones left on are the ones you need.
   expect(screen.getByText("2/2 công cụ đang bật")).toBeTruthy();
-  fireEvent.click(screen.getByText("Chọn công cụ"));
-  expect(screen.getByText(/mcp_list/)).toBeTruthy();
-  expect(screen.getByText(/mcp_search/)).toBeTruthy();
+  expect(screen.getByText("mcp_list")).toBeTruthy();
+  expect(screen.getByText("mcp_search")).toBeTruthy();
   // trust-reads badge (vi label) appears — card badge + form checkbox both use it,
   // so there is more than one; assert at least one is present.
   expect(screen.getAllByText("Tin tưởng gợi ý chỉ-đọc").length).toBeGreaterThanOrEqual(1);
@@ -219,4 +219,40 @@ test("a server payload without toolDetails still renders", async () => {
 
   wrap();
   expect(await screen.findByText("Old MCP")).toBeTruthy();
+});
+
+// The picker is a modal so 50+ tools have room, and each row carries its DESCRIPTION —
+// choosing by name alone is how you switch off the one tool the task needed.
+test("the tool dialog shows each tool's description and can be filtered", async () => {
+  const fetchMock = mockFetch({ "GET /api/connectors/mcp": { servers: [server()] } });
+  vi.stubGlobal("fetch", fetchMock);
+
+  wrap();
+  await screen.findByText("My MCP");
+  fireEvent.click(screen.getByText("Chọn công cụ"));
+
+  const dialog = screen.getByRole("dialog");
+  expect(dialog).toBeTruthy();
+  expect(screen.getByText("liệt kê mọi thứ")).toBeTruthy();
+  expect(screen.getByText("tìm kiếm toàn văn")).toBeTruthy();
+
+  // Filtering matches the DESCRIPTION too, not only the tool name.
+  fireEvent.change(screen.getByLabelText("Tìm công cụ…"), { target: { value: "toàn văn" } });
+  expect(screen.queryByText("liệt kê mọi thứ")).toBeNull();
+  expect(screen.getByText("tìm kiếm toàn văn")).toBeTruthy();
+});
+
+test("Esc closes the tool dialog without saving", async () => {
+  const fetchMock = mockFetch({ "GET /api/connectors/mcp": { servers: [server()] } });
+  vi.stubGlobal("fetch", fetchMock);
+
+  wrap();
+  await screen.findByText("My MCP");
+  fireEvent.click(screen.getByText("Chọn công cụ"));
+  expect(screen.getByRole("dialog")).toBeTruthy();
+
+  fireEvent.keyDown(window, { key: "Escape" });
+
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === "PATCH")).toBe(false);
 });
