@@ -58,9 +58,11 @@ export function ConversationLog({
         <div
           key={i}
           className={[
-            // Every turn hugs the LEFT edge — who said what is carried by the colour and
-            // the label, so alternating sides only made the column zig-zag.
-            "mr-6 rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
+            // Every turn hugs the RIGHT edge, above the command input it belongs to — who
+            // said what is carried by the colour and the label, so alternating sides only
+            // made the column zig-zag. The indent stays on the opposite side, so bubble
+            // width is unchanged (they still stretch to the column).
+            "ml-6 rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
             // Each bubble carries its own background: with the wrapper gone there is
             // nothing else between the text and the moving starfield.
             // Solid rgba, NOT backdrop-blur — one blurred surface over the WebGL canvas was
