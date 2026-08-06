@@ -212,6 +212,12 @@ body::after {
 .anim-panel-in { animation: laam-panel-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-panel-out { animation: laam-panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
 
+/* Scrollable, but without the bar. For overlays floating on the constellation, where a
+   track drawn over the starfield reads as a seam. Scrolling itself is untouched — wheel,
+   trackpad, touch and keyboard all still work. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 .laam-bar { animation: laam-progress 0.9s ease-in-out infinite; }
 .anim-fade-in { animation: laam-fade-in 0.18s ease-out both; }
 .anim-slide-down { animation: laam-slide-down 0.18s ease-out both; }

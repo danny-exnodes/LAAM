@@ -47,9 +47,10 @@ export function ConversationLog({
       aria-hidden={!open}
       ref={scrollRef}
       className={[
-        // Sits directly above CommandDock's input (bottom-24, right-4) and matches its
-        // right edge, so the two read as one stack rather than two floating widgets.
-        "absolute bottom-36 right-4 z-20 flex w-[min(400px,86vw)] max-h-[46vh] flex-col gap-2 overflow-y-auto",
+        // Sits above CommandDock's input (bottom-24, right-4) and matches its right edge,
+        // so the two read as one stack rather than two floating widgets. no-scrollbar:
+        // a scroll track drawn over the starfield reads as a seam (scrolling still works).
+        "absolute bottom-44 right-4 z-20 flex w-[min(460px,88vw)] max-h-[56vh] flex-col gap-2 overflow-y-auto no-scrollbar",
         open ? "pointer-events-auto anim-panel-in" : "pointer-events-none anim-panel-out",
       ].join(" ")}
     >
@@ -57,14 +58,16 @@ export function ConversationLog({
         <div
           key={i}
           className={[
-            "rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
-            // Each bubble carries its own opaque background: with the wrapper gone there is
+            // Every turn hugs the LEFT edge — who said what is carried by the colour and
+            // the label, so alternating sides only made the column zig-zag.
+            "mr-6 rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
+            // Each bubble carries its own background: with the wrapper gone there is
             // nothing else between the text and the moving starfield.
             // Solid rgba, NOT backdrop-blur — one blurred surface over the WebGL canvas was
             // already costly (see DisplayPanel); N of them per turn would be far worse.
             turn.role === "user"
-              ? "ml-8 self-end border border-[#ffd479]/30 bg-[#3a2c12]/85 text-[#ffe2a6]"
-              : "mr-8 border border-[#5bd6ff]/20 bg-[#08182a]/85 text-[#eaf6ff]",
+              ? "border border-[#ffd479]/25 bg-[#3a2c12]/70 text-[#ffe2a6]"
+              : "border border-[#5bd6ff]/15 bg-[#08182a]/70 text-[#eaf6ff]",
           ].join(" ")}
         >
           <span className="mb-0.5 block text-[10px] uppercase tracking-wider opacity-60">
