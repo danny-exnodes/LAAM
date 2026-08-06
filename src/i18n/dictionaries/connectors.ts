@@ -203,6 +203,32 @@ export const connectors: Dict = {
   'conn.mcp.none': { vi: 'Chưa có máy chủ MCP nào.', en: 'No MCP servers yet.', zh: '尚无 MCP 服务器。' },
   'conn.mcp.toolsLabel': { vi: 'Công cụ', en: 'Tools', zh: '工具' },
   'conn.mcp.noTools': { vi: 'Chưa phát hiện công cụ nào', en: 'No tools discovered', zh: '未发现工具' },
+  'conn.mcp.toolsOn': {
+    vi: '{on}/{total} công cụ đang bật',
+    en: '{on}/{total} tools enabled',
+    zh: '已启用 {on}/{total} 个工具',
+  },
+  'conn.mcp.pickTools': { vi: 'Chọn công cụ', en: 'Choose tools', zh: '选择工具' },
+  'conn.mcp.hideTools': { vi: 'Thu gọn', en: 'Collapse', zh: '收起' },
+  'conn.mcp.pickToolsHint': {
+    vi: 'Mỗi công cụ đang bật đều được gửi kèm cho mô hình ở MỖI lượt gọi. Tắt bớt công cụ không dùng sẽ giảm token và giảm khả năng mô hình chọn nhầm.',
+    en: 'Every enabled tool is sent to the model on EVERY round. Turning off tools you do not use cuts tokens and leaves less for the model to mis-pick.',
+    zh: '每个已启用的工具都会在每一轮发送给模型。关闭不用的工具可减少 token，也降低模型选错的机会。',
+  },
+  'conn.mcp.selectAll': { vi: 'Bật tất cả', en: 'Enable all', zh: '全部启用' },
+  'conn.mcp.selectNone': { vi: 'Tắt tất cả', en: 'Disable all', zh: '全部禁用' },
+  'conn.mcp.saveTools': { vi: 'Lưu', en: 'Save', zh: '保存' },
+  'conn.mcp.savingTools': { vi: 'Đang lưu…', en: 'Saving…', zh: '保存中…' },
+  'conn.mcp.saveToolsErr': {
+    vi: 'Không lưu được danh sách công cụ',
+    en: 'Could not save the tool list',
+    zh: '无法保存工具列表',
+  },
+  'conn.mcp.allOffWarn': {
+    vi: 'Tắt hết công cụ nghĩa là trợ lý không gọi được gì từ máy chủ này.',
+    en: 'With every tool off the assistant cannot call anything on this server.',
+    zh: '全部关闭后，助手将无法调用此服务器的任何功能。',
+  },
   'conn.mcp.addErr': { vi: 'Không thêm được máy chủ MCP', en: 'Could not add MCP server', zh: '无法添加 MCP 服务器' },
   'conn.mcp.adding': { vi: 'Đang thêm…', en: 'Adding…', zh: '添加中…' },
 };

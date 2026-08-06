@@ -317,9 +317,13 @@ export async function chatTools(userId: string): Promise<ConnectorTool[]> {
     if (await isConnected(userId, def.id)) out.push(...def.tools);
   }
   // MCP servers (per-user, dynamic). Best-effort: a down server yields no tools.
+  // Only the tools the user left ON reach the model: every tool a server advertises is sent
+  // on EVERY round (measured 2026-08-06: one server = 55 tools / ~11k tokens per round), and
+  // a bigger menu is also more for the model to mis-pick from. Discovery still returns them
+  // all — the connectors page needs the OFF ones to offer them back.
   try {
-    const { tools } = await discoverForUser(userId);
-    out.push(...tools);
+    const { tools, enabled } = await discoverForUser(userId);
+    out.push(...tools.filter((t) => enabled.has(t.function.name)));
   } catch {
     /* MCP discovery failure must not break chat tool listing */
   }

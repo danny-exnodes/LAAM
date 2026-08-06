@@ -5,11 +5,18 @@ import { describe, expect, test, vi } from "vitest";
 vi.mock("./registry", () => ({ CONNECTORS: [] }));
 vi.mock("./mcp/discovery", () => ({
   discoverForUser: vi.fn(async () => ({
+    // `archive` is discovered but switched OFF by the user: discovery still returns it (the
+    // connectors page must be able to offer it back) while chatTools must not send it.
     tools: [
       { type: "function", kind: "read", function: { name: "mcp__slack__search", description: "d", parameters: {} } },
+      { type: "function", kind: "write", function: { name: "mcp__slack__archive", description: "d", parameters: {} } },
     ],
+    enabled: new Set(["mcp__slack__search"]),
     readAllow: new Set(["mcp__slack__search"]),
-    route: new Map([["mcp__slack__search", { slug: "slack", realName: "search" }]]),
+    route: new Map([
+      ["mcp__slack__search", { slug: "slack", realName: "search" }],
+      ["mcp__slack__archive", { slug: "slack", realName: "archive" }],
+    ]),
   })),
   invalidateUser: vi.fn(),
 }));
@@ -25,6 +32,13 @@ describe("index — MCP wiring", () => {
   test("chatTools appends discovered MCP tools", async () => {
     const tools = await chatTools("u1");
     expect(tools.map((t) => t.function.name)).toContain("mcp__slack__search");
+  });
+
+  // WHY (Rule 9): every tool sent is re-sent on every round, so a tool the user switched off
+  // must not reach the model at all — not merely be discouraged in the prompt.
+  test("chatTools omits a tool the user switched off, though discovery still knows it", async () => {
+    const tools = await chatTools("u1");
+    expect(tools.map((t) => t.function.name)).not.toContain("mcp__slack__archive");
   });
 
   test("mcpReadAllow returns the discovery readAllow set", async () => {

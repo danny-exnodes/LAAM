@@ -3,6 +3,8 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { I18nProvider } from "@/i18n/provider";
 import { McpServersSection } from "./McpServersSection";
 
+type McpToolDetail = { name: string; nsName: string; description: string; kind: "read" | "write" };
+
 type McpServer = {
   slug: string;
   name: string;
@@ -10,6 +12,8 @@ type McpServer = {
   hasToken: boolean;
   trustReadHints: boolean;
   tools: string[];
+  toolDetails?: McpToolDetail[];
+  enabledTools?: string[];
 };
 
 function server(over: Partial<McpServer> = {}): McpServer {
@@ -20,6 +24,11 @@ function server(over: Partial<McpServer> = {}): McpServer {
     hasToken: false,
     trustReadHints: false,
     tools: ["mcp_list", "mcp_search"],
+    toolDetails: [
+      { name: "mcp_list", nsName: "mcp__my-mcp__mcp_list", description: "d", kind: "read" },
+      { name: "mcp_search", nsName: "mcp__my-mcp__mcp_search", description: "d", kind: "read" },
+    ],
+    enabledTools: ["mcp_list", "mcp_search"],
     ...over,
   };
 }
@@ -67,7 +76,9 @@ test("renders servers from GET including tool names and trust badge", async () =
   expect(await screen.findByText("My MCP")).toBeTruthy();
   // URL host, not the full URL
   expect(screen.getByText("mcp.example.com")).toBeTruthy();
-  // tool names rendered
+  // The card summarises how many tools are on; the names live behind "Chọn công cụ".
+  expect(screen.getByText("2/2 công cụ đang bật")).toBeTruthy();
+  fireEvent.click(screen.getByText("Chọn công cụ"));
   expect(screen.getByText(/mcp_list/)).toBeTruthy();
   expect(screen.getByText(/mcp_search/)).toBeTruthy();
   // trust-reads badge (vi label) appears — card badge + form checkbox both use it,
@@ -145,4 +156,67 @@ test("remove calls DELETE with the slug", async () => {
     expect(del).toBeTruthy();
     expect(String(del?.[0])).toContain("slug=to-remove");
   });
+});
+
+// WHY (Rule 9): every enabled tool is re-sent to the model on EVERY round, so switching one
+// off has to actually stop it being sent — the checkbox must reach the server, not just the UI.
+test("turning a tool off PATCHes the remaining list", async () => {
+  const fetchMock = mockFetch({
+    "GET /api/connectors/mcp": { servers: [server()] },
+    "PATCH /api/connectors/mcp": { ok: true },
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  wrap();
+  await screen.findByText("My MCP");
+  fireEvent.click(screen.getByText("Chọn công cụ"));
+  fireEvent.click(screen.getByRole("checkbox", { name: /mcp_search/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === "PATCH");
+    expect(call).toBeTruthy();
+    expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({
+      slug: "my-mcp",
+      enabledTools: ["mcp_list"],
+    });
+  });
+});
+
+// Ticking everything stores `null`, not a frozen snapshot: a tool the server gains later
+// should then be ON by default, which is what "all" means to whoever ticked every box.
+test("enabling every tool PATCHes null rather than the full list", async () => {
+  const fetchMock = mockFetch({
+    "GET /api/connectors/mcp": { servers: [server({ enabledTools: ["mcp_list"] })] },
+    "PATCH /api/connectors/mcp": { ok: true },
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  wrap();
+  await screen.findByText("My MCP");
+  fireEvent.click(screen.getByText("Chọn công cụ"));
+  fireEvent.click(screen.getByText("Bật tất cả"));
+  fireEvent.click(screen.getByRole("button", { name: "Lưu" }));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === "PATCH");
+    expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({
+      slug: "my-mcp",
+      enabledTools: null,
+    });
+  });
+});
+
+// A response from before this feature (no toolDetails) must degrade to "no picker" instead of
+// crashing the card — a thrown render here would take the whole server list down.
+test("a server payload without toolDetails still renders", async () => {
+  const fetchMock = mockFetch({
+    "GET /api/connectors/mcp": {
+      servers: [{ slug: "old", name: "Old MCP", url: "https://old.example/sse", hasToken: false, trustReadHints: false, tools: [] }],
+    },
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  wrap();
+  expect(await screen.findByText("Old MCP")).toBeTruthy();
 });

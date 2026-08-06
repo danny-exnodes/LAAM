@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { listServers, addServer, removeServer } from "@/lib/connectors/mcp/store";
+import { listServers, addServer, removeServer, setEnabledTools } from "@/lib/connectors/mcp/store";
 import { discoverForUser, invalidateUser } from "@/lib/connectors/mcp/discovery";
 import { requireMutator } from "@/lib/auth/rbac";
 
@@ -10,6 +10,7 @@ import { requireMutator } from "@/lib/auth/rbac";
 //
 // GET    /api/connectors/mcp            → { servers: [{ slug, name, url, hasToken, trustReadHints, tools[] }] }
 // POST   /api/connectors/mcp            → add { name, url, authToken?, trustReadHints? } → { ok, slug? , error? }
+// PATCH  /api/connectors/mcp            → { slug, enabledTools: string[] | null } → { ok }
 // DELETE /api/connectors/mcp?slug=<s>   → { ok }
 
 export async function GET() {
@@ -23,8 +24,13 @@ export async function GET() {
   // `tools` string[] giữ nguyên cho UI hiện có).
   type ToolDetail = { name: string; nsName: string; description: string; parameters: object; kind: "read" | "write" };
   const detailsBySlug: Record<string, ToolDetail[]> = {};
+  // Real (un-namespaced) names of the tools currently switched ON, so the page can render a
+  // checkbox per tool. Absent `enabledTools` on the server config ⇒ everything is on.
+  const enabledBySlug: Record<string, string[]> = {};
   try {
-    const { route, tools } = await discoverForUser(userId);
+    const { route, tools, enabled } = await discoverForUser(userId);
+    // A result without `enabled` means every tool is on (same default as the config).
+    for (const [name, r] of route) if (!enabled || enabled.has(name)) (enabledBySlug[r.slug] ??= []).push(r.realName);
     for (const [name, r] of route) (toolsBySlug[r.slug] ??= []).push(name);
     for (const t of tools) {
       const r = route.get(t.function.name);
@@ -50,6 +56,7 @@ export async function GET() {
       trustReadHints: s.trustReadHints,
       tools: toolsBySlug[s.slug] ?? [],
       toolDetails: detailsBySlug[s.slug] ?? [],
+      enabledTools: enabledBySlug[s.slug] ?? [],
     })),
   });
 }
@@ -79,6 +86,34 @@ export async function POST(req: Request) {
     trustReadHints: !!body.trustReadHints,
   });
   if (result.ok) invalidateUser(userId); // new server must be discovered next call
+  return NextResponse.json(result, { status: result.ok ? 200 : 400 });
+}
+
+export async function PATCH(req: Request) {
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  // Changing which tools the model may call changes what the assistant can DO — a mutation,
+  // gated like adding/removing a server rather than treated as a display preference.
+  const gate = requireMutator(session);
+  if (gate instanceof Response) return gate;
+  const userId = session.user.id;
+
+  const body = (await req.json().catch(() => ({}))) as { slug?: string; enabledTools?: unknown };
+  if (!body.slug?.trim()) return NextResponse.json({ ok: false, error: "thiếu slug" }, { status: 400 });
+
+  // null ⇒ clear the choice (all tools). An array ⇒ exactly these, including the empty array,
+  // which is a deliberate "none" and must not be re-read as "unset".
+  let enabledTools: string[] | null;
+  if (body.enabledTools === null || body.enabledTools === undefined) {
+    enabledTools = null;
+  } else if (Array.isArray(body.enabledTools) && body.enabledTools.every((v) => typeof v === "string")) {
+    enabledTools = body.enabledTools as string[];
+  } else {
+    return NextResponse.json({ ok: false, error: "enabledTools phải là mảng chuỗi hoặc null" }, { status: 400 });
+  }
+
+  const result = await setEnabledTools(userId, body.slug.trim(), enabledTools);
+  if (result.ok) invalidateUser(userId); // the cached discovery still carries the old set
   return NextResponse.json(result, { status: result.ok ? 200 : 400 });
 }
 
