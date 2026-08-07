@@ -125,3 +125,29 @@ describe("ConstellationClient — panel/pill không sót qua lượt (Critical 1
     );
   }, 15000);
 });
+
+describe("ConstellationClient — bảng không nhân bản theo chunk", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  // INTENT: splitFrames() re-parses the WHOLE accumulated buffer on every chunk, so a view
+  // frame that lands mid-stream is handed to onView again with every chunk after it. The
+  // transcript must show the table ONCE — a per-sighting append stacked the same table N
+  // times, which is what the user reported. The frame here is deliberately NOT last: with it
+  // at the end of the stream (as in the test above) the bug cannot reproduce.
+  it("frame view giữa stream, còn nhiều chunk theo sau → chỉ 1 bảng trong transcript", async () => {
+    const frame = `${SEP}${JSON.stringify({ t: "view", d: VIEW_FRAME })}${SEP}`;
+    mockFetch([() => streamResponse(["Kết quả ", frame, "đây", " nhé", " bạn"])]);
+    const { container } = renderPage();
+
+    await waitFor(() => screen.findByRole("button", { name: /trò chuyện|chat/i }), { timeout: 5000 });
+    await openChat();
+    await send("lượt 1");
+
+    await waitFor(() => expect(container.querySelectorAll("figure").length).toBeGreaterThan(0), {
+      timeout: 5000,
+    });
+    expect(container.querySelectorAll("figure")).toHaveLength(1);
+  }, 15000);
+});

@@ -71,7 +71,7 @@ function ResultTable({ v }: { v: ViewDescriptor }) {
       </figcaption>
 
       {/* Wide results scroll inside their own box so the page body never scrolls sideways. */}
-      <div className="overflow-x-auto">
+      <div className="laam-scroll overflow-x-auto">
         <table className="w-full border-collapse text-left text-xs">
           <thead>
             <tr className="border-b border-neutral-200 dark:border-neutral-800">

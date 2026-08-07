@@ -29,7 +29,7 @@ import {
 } from "./types";
 import type { CatalogGroup, CatalogTool } from "@/lib/chat/toolCatalog";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
-import type { ViewDescriptor } from "@/lib/agent/view";
+import { viewKey, type ViewDescriptor } from "@/lib/agent/view";
 import { ResultTables } from "./ResultTables";
 import { isPdfFile, isDocxFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
 import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
@@ -399,7 +399,10 @@ export function ChatClient() {
         let pendingWrite: PendingWrite | undefined;
         // Several tables can arrive in one turn (a question may run several queries), so
         // accumulate — replacing would drop every table but the last, and the panel is the
-        // only place those rows exist outside the model's prose.
+        // only place those rows exist outside the model's prose. Accumulate by viewKey, not
+        // blindly: splitFrames() re-parses the WHOLE buffer on every chunk, so the same view
+        // frame is delivered again and again and a per-sighting append repeats one table
+        // once per chunk.
         let views: ViewDescriptor[] | undefined;
         const applyFrames = (frames: ChatFrame[]) => {
           for (const f of frames) {
@@ -415,7 +418,10 @@ export function ChatClient() {
               setProactive(f.alerts.filter((a) => !dismissed.has(a.key)));
             }
             else if (f.t === "tokens") tokens = { tokensIn: f.i, tokensOut: f.o };
-            else if (f.t === "view") views = [...(views ?? []), f.d];
+            else if (f.t === "view") {
+              const k = viewKey(f.d);
+              if (!(views ?? []).some((v) => viewKey(v) === k)) views = [...(views ?? []), f.d];
+            }
             else if (f.t === "pending_write")
               pendingWrite = {
                 token: f.token, tool: f.tool, title: f.title,

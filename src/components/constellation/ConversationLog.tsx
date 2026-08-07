@@ -12,6 +12,8 @@
 // there is no focus trap and no backdrop. Same reasoning as DisplayPanel (role="region").
 import { useEffect, useRef } from "react";
 import { ChatMarkdown } from "@/components/render/ChatMarkdown";
+import { ResultTables } from "@/components/chat/ResultTables";
+import type { ViewDescriptor } from "@/lib/agent/view";
 import type { Turn } from "./turns";
 
 export function ConversationLog({
@@ -28,6 +30,13 @@ export function ConversationLog({
   // name so the landmark is still announced with something meaningful.
   title: string;
   youLabel: string;
+  // Tables ride on each Turn (see turns.ts), built from the tool result by code (Rule 13).
+  //
+  // The floating DisplayPanel also shows the CURRENT turn's tables — but ONLY while this
+  // transcript is closed (`panelOpen = views.length > 0 && !viewClosed && !chatOpen`). The two
+  // were designed as alternatives, for a mode where the answer is heard rather than read. Open
+  // the transcript to re-read a number and the table vanished, leaving prose that deliberately
+  // no longer lists rows: the user could see 62 refunds summarised and nowhere to look at them.
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -102,6 +111,11 @@ export function ConversationLog({
           ) : (
             turn.text
           )}
+          {/* Each turn carries its OWN tables, so asking the next question no longer wipes
+              the table the previous answer was about. */}
+          {turn.role === "assistant" && turn.views?.length ? (
+            <ResultTables views={turn.views} />
+          ) : null}
         </div>
       ))}
     </section>
