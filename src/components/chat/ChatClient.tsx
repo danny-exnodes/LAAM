@@ -29,6 +29,8 @@ import {
 } from "./types";
 import type { CatalogGroup, CatalogTool } from "@/lib/chat/toolCatalog";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
+import type { ViewDescriptor } from "@/lib/agent/view";
+import { ResultTables } from "./ResultTables";
 import { isPdfFile, isDocxFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
 import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
 import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
@@ -245,6 +247,8 @@ export function ChatClient() {
           tokensIn?: number;
           tokensOut?: number;
           attachments?: AttachmentMeta[] | null;
+          // Rebuilt server-side from the stored tool results — see the conversation GET route.
+          views?: ViewDescriptor[] | null;
         }) => ({
           id: uid(),
           role: m.role === "user" ? "user" : "assistant",
@@ -253,6 +257,7 @@ export function ChatClient() {
           tokensIn: m.tokensIn,
           tokensOut: m.tokensOut,
           ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+          ...(m.views?.length ? { views: m.views } : {}),
         }),
       ),
     );
@@ -326,6 +331,7 @@ export function ChatClient() {
     toolTrace?: ToolTraceItem[],
     cites?: string[],
     pendingWrite?: PendingWrite,
+    views?: ViewDescriptor[],
   ): ChatMsg[] {
     const copy = [...prev];
     for (let i = copy.length - 1; i >= 0; i--) {
@@ -337,6 +343,7 @@ export function ChatClient() {
           ...(toolTrace !== undefined ? { toolTrace } : {}),
           ...(cites !== undefined ? { cites } : {}),
           ...(pendingWrite !== undefined ? { pendingWrite } : {}),
+          ...(views !== undefined ? { views } : {}),
         };
         break;
       }
@@ -390,6 +397,10 @@ export function ChatClient() {
         let cites: string[] | undefined;
         let tokens: { tokensIn: number; tokensOut: number } | undefined;
         let pendingWrite: PendingWrite | undefined;
+        // Several tables can arrive in one turn (a question may run several queries), so
+        // accumulate — replacing would drop every table but the last, and the panel is the
+        // only place those rows exist outside the model's prose.
+        let views: ViewDescriptor[] | undefined;
         const applyFrames = (frames: ChatFrame[]) => {
           for (const f of frames) {
             if (f.t === "tool") {
@@ -404,6 +415,7 @@ export function ChatClient() {
               setProactive(f.alerts.filter((a) => !dismissed.has(a.key)));
             }
             else if (f.t === "tokens") tokens = { tokensIn: f.i, tokensOut: f.o };
+            else if (f.t === "view") views = [...(views ?? []), f.d];
             else if (f.t === "pending_write")
               pendingWrite = {
                 token: f.token, tool: f.tool, title: f.title,
@@ -419,12 +431,12 @@ export function ChatClient() {
           const { text, frames } = splitFrames(raw);
           applyFrames(frames);
           const list = items();
-          setMessages((p) => setLastAssistant(p, text, undefined, list.length ? list : undefined, cites, pendingWrite));
+          setMessages((p) => setLastAssistant(p, text, undefined, list.length ? list : undefined, cites, pendingWrite, views));
         }
         const fin = splitFrames(raw);
         applyFrames(fin.frames);
         const list = items();
-        setMessages((p) => setLastAssistant(p, fin.text, tokens, list.length ? list : undefined, cites, pendingWrite));
+        setMessages((p) => setLastAssistant(p, fin.text, tokens, list.length ? list : undefined, cites, pendingWrite, views));
         if (!activeId && convId) setActiveId(convId);
         void loadConvs();
         return true;

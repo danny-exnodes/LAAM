@@ -14,9 +14,11 @@ export type ChatFrame =
   | { t: "tool"; phase: "call" | "result"; c: number; name: string; args?: string; ok?: boolean }
   | { t: "cite"; names: string[] }
   | { t: "pending_write"; token: string; tool: string; title: string; summary: string; fields?: { label: string; value: string }[] }
-  // Panel hiển thị (Larvis): bảng/biểu đồ render RIÊNG, không nối vào câu trả lời —
-  // cùng tinh thần pending_write/proactive. Số liệu do code suy từ tool result
-  // (Rule 13). Phát tối đa 1 lần mỗi lượt, ở cuối, cùng chuỗi frame đuôi.
+  // Panel hiển thị: bảng/biểu đồ render RIÊNG, không nối vào câu trả lời — cùng tinh thần
+  // pending_write/proactive. Số liệu do code suy từ tool result (Rule 13).
+  // Phát NGAY khi mỗi kết quả lớn về, NHIỀU lần mỗi lượt: một câu hỏi có thể chạy nhiều
+  // truy vấn (đo được: hai câu nặng nhất chạy 5 truy vấn mỗi câu), và giữ lại đúng một bảng
+  // nghĩa là giấu bốn bảng còn lại. Kết quả NHỎ không phát frame nào (xem worthShowing).
   | { t: "view"; d: ViewDescriptor }
   // SP-3/FEAT-2: proactive alert surfaced as a distinct card (not appended to the
   // model's reply). Numbers are code-derived from agent_session (Rule 13). `key`

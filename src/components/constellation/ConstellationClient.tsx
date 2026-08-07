@@ -311,7 +311,10 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       setViewClosed(false);
       setToolSteps(0); // new turn → status caption restarts at "thinking"
     },
-    onView: (d) => { viewFromToolRef.current = true; setViews([d]); setViewClosed(false); },
+    // Accumulate: a turn can produce several tables (the heaviest demo questions run five
+    // queries each) and replacing would show only the last — the others would exist nowhere,
+    // since the panel is the only place their rows reach the user.
+    onView: (d) => { viewFromToolRef.current = true; setViews((prev) => [...prev, d]); setViewClosed(false); },
     onActivity: setToolSteps,
     initialConversationId,
   });

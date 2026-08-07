@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveFromToolResult, pickTurnView, MAX_ROWS } from "./view";
+import { deriveFromToolResult, pickTurnView, MAX_ROWS, viewKey} from "./view";
 
 const AT = 1_700_000_000_000;
 
@@ -126,5 +126,101 @@ describe("pickTurnView", () => {
 
   it("rỗng → null", () => {
     expect(pickTurnView([])).toBeNull();
+  });
+});
+
+// Shapes taken from a real async query tool (chat_tool_call, 2026-08-06). Each of these was a
+// silent failure before: rows two levels deep were invisible, a capped result reported its
+// partial size as the whole answer, and every panel of a turn carried the same tool-name title.
+describe("async query result shape", () => {
+  const rows = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ refund_id: `REF-${i}`, store_id: "PH-001", amount: i }));
+
+  const payload = (n: number, rowCount: number) => ({
+    status: "completed",
+    natural_language_query: "Show every refund processed by Sarah Miller.",
+    results: { columns: ["refund_id", "store_id", "amount"], rows: rows(n), row_count: rowCount },
+  });
+
+  it("finds rows nested two levels down", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(12, 12), 1);
+    expect(d?.kind).toBe("table");
+    expect(d?.rows?.length).toBe(12);
+  });
+
+  // The caller asked for max_rows=50 and got 50 of 62. Reporting "50 rows" as the answer is
+  // the failure; the sibling row_count is the truth.
+  it("reports the real total from the sibling count, not the array length", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(50, 62), 1);
+    expect(d?.truncated).toEqual({ shown: 50, total: 62 });
+  });
+
+  it("does not claim truncation when the array IS the whole answer", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(12, 12), 1);
+    expect(d?.truncated).toBeUndefined();
+  });
+
+  // Several panels in one turn all come from the same tool; the tool name labels them
+  // identically and says nothing about which is which.
+  it("titles the panel with the question, not the tool name", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(12, 12), 1);
+    expect(d?.title).toBe("Show every refund processed by Sarah Miller.");
+  });
+
+  it("an explicit title still wins over the payload", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(12, 12), 1, "Câu hỏi gốc");
+    expect(d?.title).toBe("Câu hỏi gốc");
+  });
+});
+
+// Column ORDER is part of the answer. The payload serialises row keys alphabetically, so
+// Object.keys() put approving_manager_id / customer_id / days_after_purchase first and pushed
+// refund_id and refund_amount off the right edge — a table that is technically complete and
+// practically unreadable. The result declares its own order beside the rows; use it.
+describe("column order follows the result's own declaration", () => {
+  const declared = ["refund_id", "refund_amount", "store_id"];
+  const rows = Array.from({ length: 12 }, (_, i) => ({
+    // deliberately NOT in declared order, as JSON key order arrives
+    approving_manager_id: "EMP-0001",
+    store_id: "PH-001",
+    refund_amount: i,
+    refund_id: `REF-${i}`,
+  }));
+
+  it("leads with the declared columns", () => {
+    const d = deriveFromToolResult("q", { results: { columns: declared, rows } }, 1);
+    expect(d?.columns?.slice(0, 3).map((c) => c.key)).toEqual(declared);
+  });
+
+  // Dropping a column the result did not declare would hide data without saying so.
+  it("keeps undeclared columns rather than dropping them", () => {
+    const d = deriveFromToolResult("q", { results: { columns: declared, rows } }, 1);
+    expect(d?.columns?.map((c) => c.key)).toContain("approving_manager_id");
+  });
+
+  it("falls back to the row's own key order when nothing is declared", () => {
+    const d = deriveFromToolResult("q", { results: { rows } }, 1);
+    expect(d?.columns?.[0].key).toBe("approving_manager_id");
+  });
+});
+
+// Duplicate tables were the loudest thing wrong with the panel in use: one turn produced two
+// identical 50/62 tables live, and a reloaded conversation stacked several under one message.
+describe("viewKey identifies a table by its data", () => {
+  const make = (title: string, first: Record<string, unknown>, n = 12) =>
+    deriveFromToolResult("q", {
+      natural_language_query: title,
+      results: { rows: [first, ...Array.from({ length: n - 1 }, (_, i) => ({ ...first, a: i + 1 }))] },
+    }, 1)!;
+
+  it("treats the same data under a rephrased title as the SAME table", () => {
+    const a = make("list all refunds processed by X", { a: 0, b: "x" });
+    const b = make("Show all refund records processed by X", { a: 0, b: "x" });
+    expect(a.title).not.toBe(b.title);
+    expect(viewKey(a)).toBe(viewKey(b));
+  });
+
+  it("keeps genuinely different data apart", () => {
+    expect(viewKey(make("q", { a: 0, b: "x" }))).not.toBe(viewKey(make("q", { a: 99, b: "y" })));
   });
 });
