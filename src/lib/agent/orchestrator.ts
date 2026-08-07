@@ -8,7 +8,6 @@ import { deriveFromToolResult, worthShowing, viewKey, type ViewDescriptor } from
 import { annotateEmptyResult } from "./empty-result";
 import { digestMessagesForModel } from "./digest";
 import { queryTextFromArgs } from "./empty-result";
-import { raiseRowLimit } from "./row-limit";
 
 // W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
 // Ollama multimodal. Optional/additive: vắng mặt ⇒ wire-format y như cũ.
@@ -291,9 +290,7 @@ export async function runToolRounds(
         if (name === "web_read") webReadNudged = true; // đã đọc rồi → khỏi nhắc
         if (dataFetchTools.has(name)) calledDataFetchTool = true; // G5: đã chạm dữ liệu thật
         if (name === LAAM_AUDIT_TOOL_NAME) calledAuditTool = true; // G5: đổi nội dung nhắc
-        // Ask for the whole result set, not the first page: the rows go to the panel, and the
-        // model only ever sees the digest, so a bigger result costs it nothing (row-limit.ts).
-        const callArgs = raiseRowLimit(args);
+        const callArgs = args;
         const result = await deps.dispatch(name, callArgs);
         toolCallCount++;
         // Empty result → tell the model (in the tool result) that emptiness is not absence.
