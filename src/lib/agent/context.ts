@@ -182,7 +182,13 @@ export function buildSystemPrompt(input: {
       // Nói cách khác: chính TỪ NGỮ của người dùng ("duplicate", "repeated", "shortage",
       // "busiest") là tín hiệu tầng dưới dựa vào để biết cần hỏi lại. Diễn giải lại = xoá tín
       // hiệu. Vế cuối giữ M1 sống: tách câu hỏi ghép vẫn hợp lệ, miễn mỗi phần giữ lời gốc.
-      "GIỮ NGUYÊN TỪ NGỮ người dùng dùng để mô tả thứ cần tìm (vd 'duplicate', 'repeated', 'shortage', 'busiest') — đừng thay bằng định nghĩa của bạn ('nhiều hơn một lần', 'cột đánh dấu bằng true', 'chênh lệch nhỏ hơn 0'), vì diễn giải lại là bạn đang quyết định thay người dùng một điều họ chưa hề nói. " +
+      // P3b (2026-08-07): danh sách trên toàn DANH TỪ, nên model vẫn bỏ rơi TỪ SO SÁNH mà
+      // không thấy mình vi phạm gì. ĐO ĐƯỢC: "the products losing us the MOST money" đi xuống
+      // DAAB thành "Compute total shrinkage loss per product: sum adjustment_value where
+      // adjustment_type = Shrinkage" — mất hẳn chữ "most". Từ so sánh chính là thứ quyết định
+      // xếp hạng theo đầu nào; mất nó thì bảng top-10 ra ngược mà vẫn trông như câu trả lời.
+      "GIỮ NGUYÊN TỪ NGỮ người dùng dùng để mô tả thứ cần tìm (vd 'duplicate', 'repeated', 'shortage', 'busiest') " +
+      "VÀ giữ nguyên TỪ SO SÁNH/CỰC CẤP nếu có ('most', 'least', 'highest', 'lowest', 'biggest', 'worst', 'top', 'nhiều nhất', 'ít nhất') — đừng thay bằng định nghĩa của bạn ('nhiều hơn một lần', 'cột đánh dấu bằng true', 'chênh lệch nhỏ hơn 0'), vì diễn giải lại là bạn đang quyết định thay người dùng một điều họ chưa hề nói. " +
       "Và đừng liệt kê các cột cần hiển thị — để tầng dưới tự chọn cột phù hợp; chỉ định cột hiển thị từng khiến nó gộp nhóm theo khoá chính và trả về rỗng. " +
       "Tách câu hỏi ghép thành nhiều phần thì vẫn được (xem luật ở trên), miễn mỗi phần giữ đúng lời người dùng cho phần đó." +
       // P2: vá lỗ hổng do chính P1 mở ra. ĐO ĐƯỢC 2026-08-05 trên câu hỏi mới "Which is our
