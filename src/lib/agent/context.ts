@@ -168,6 +168,28 @@ export function buildSystemPrompt(input: {
       "nhưng KHÔNG tự chọn hộ cột khi có nhiều cột cùng hợp lý — bạn KHÔNG nhìn thấy dữ liệu thật nên không có cơ sở để chọn, và một lựa chọn sai sẽ trông y hệt câu trả lời đúng. " +
       "Nếu công cụ có cơ chế hỏi lại khi mơ hồ, việc chốt sẵn còn làm cơ chế đó im lặng luôn. " +
       "Tuyệt đối không gửi câu SQL vào ô câu hỏi ngôn ngữ tự nhiên." +
+      // V1 (2026-08-07): công cụ truy vấn NL thường TRẢ VỀ luôn câu SQL/kế hoạch nó đã dựng,
+      // và trường đó VẪN nằm trong kết quả model nhận (digest chỉ rút gọn mảng rows). Nhưng
+      // chưa ai bảo model đọc nó, nên nó không đọc. ĐO ĐƯỢC trên "Show duplicate refunds
+      // across stores.": kế hoạch trả về ghi `ON r1.customer_id = r2.customer_id` — gộp theo
+      // KHÁCH HÀNG trong khi câu hỏi nói về refund trùng lặp — và model tường thuật các dòng
+      // như thể chúng trả lời đúng câu hỏi. Người kiểm tra (agent khác) chỉ cần LIẾC dòng SQL
+      // đó là thấy sai khoá ngay; đúng thông tin ấy đã có sẵn trên dây.
+      // PORTABILITY: nêu theo điều kiện "NẾU công cụ có trả về" — connector không trả thì luật
+      // này im lặng, không ép model bịa ra một câu SQL để tự soi.
+      "NẾU công cụ truy vấn có trả về câu truy vấn/kế hoạch mà nó đã dựng (thường ở trường tên `sql`, `query` hoặc `plan`), " +
+      "hãy ĐỌC nó TRƯỚC KHI trả lời và tự hỏi: nó có gộp/lọc/nối theo đúng thứ người dùng hỏi không? " +
+      "Cụ thể là cột dùng để GỘP hoặc để NỐI có phải là cột định nghĩa nên khái niệm người dùng nêu không — " +
+      "vd hỏi về giao dịch trùng lặp mà kế hoạch lại gộp theo khách hàng hay theo ngày thì đó là một khái niệm KHÁC, " +
+      "và các dòng trả về không trả lời câu hỏi đã hỏi dù chúng trông hoàn toàn hợp lệ. " +
+      "Khi kế hoạch không khớp câu hỏi: NÓI RÕ nó đã tính theo cách nào, và hỏi lại hoặc truy vấn lại — " +
+      "ĐỪNG tường thuật các dòng đó như thể chúng là câu trả lời. " +
+      // Bước nhảy đã đo được ở lượt 4 cùng ngày: model đọc ghi chú cảnh báo của công cụ, ĐÚNG
+      // ĐẮN không tin 2 dòng nhận được, rồi kết luận "không có trường hợp nào" — đi từ "tôi
+      // không dùng được kết quả này" sang "vậy là không tồn tại". Cùng một bước nhảy sai mà
+      // luật kết-quả-rỗng sinh ra để chặn, chỉ khác đường vào.
+      "Và một kết quả mà bạn KHÔNG dùng được (kế hoạch sai, hoặc công cụ kèm ghi chú cảnh báo) cũng KHÔNG chứng minh được điều gì KHÔNG tồn tại — " +
+      "hãy nói cách đọc này chưa kết luận được, tuyệt đối đừng báo là 'không có trường hợp nào'." +
       // P3: P1 chặn được việc chốt TÊN CỘT, nhưng chạy lại đủ 12 câu (2026-08-05) cho thấy còn
       // HAI kiểu viết lại khác cũng phá cơ chế hỏi-lại, và cả hai đều KHÔNG nhắc tên cột nào:
       //   Q4 — LAAM thêm "Show refund_id, store_id…" (chỉ định cột HIỂN THỊ). Planner bèn
