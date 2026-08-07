@@ -20,6 +20,7 @@ import { claudeStream, isClaudeModel, ClaudeUnavailableError } from "@/lib/llm/c
 import { isBytePlusModel, byteplusChat, byteplusStream, BytePlusUnavailableError } from "@/lib/llm/byteplus";
 import { replayBudgetFor } from "@/lib/chat/replay-budget";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
+import { digestMessagesForModel } from "@/lib/agent/digest";
 import { synthNudge, loopTruncatedNotice, restateQuestion } from "@/lib/chat/backstop-notice";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
@@ -637,6 +638,9 @@ function streamMainTurn(opts: {
         try {
           if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
           convo = await runToolRounds(payload.messages, tools, { callOllama: callByteplus, dispatch }, {
+            // Big tabular results get their own panel, emitted live as each lands. Without
+            // this the ONLY way a row reaches the user is the model retyping it in prose.
+            onView: (d) => emit({ t: "view", d }),
             drilldownPairs: DRILLDOWN_PAIRS,
             dataFetchTools: DATA_FETCH_TOOLS,
             maxRounds: CHAT_MAX_ROUNDS,
@@ -706,7 +710,7 @@ function streamMainTurn(opts: {
         let gotUsage = false; // billed provider: omit token frame if usage never arrived (no fake $0)
         let hbCount = 0;
         try {
-          for await (const ev of byteplusStream({ model: payload.model, messages: convo, options: payload.options, signal: reqSignal })) {
+          for await (const ev of byteplusStream({ model: payload.model, messages: digestMessagesForModel(convo), options: payload.options, signal: reqSignal })) {
             if (ev.delta) {
               full += ev.delta;
               if (!guardWrites) {
@@ -763,7 +767,7 @@ function streamMainTurn(opts: {
           console.warn(`[chat] byteplus stream produced no content, retrying once (conv=${convId}, model=${payload.model})`);
           const retryConvo = [...convo, { role: "user", content: synthNudge(lang, userText) }];
           try {
-            for await (const ev of byteplusStream({ model: payload.model, messages: retryConvo, options: payload.options, signal: reqSignal })) {
+            for await (const ev of byteplusStream({ model: payload.model, messages: digestMessagesForModel(retryConvo), options: payload.options, signal: reqSignal })) {
               if (ev.delta) {
                 full += ev.delta;
                 if (!guardWrites) {
@@ -867,6 +871,7 @@ function streamMainTurn(opts: {
         // → tool frame tự emit, write vẫn suspend PendingWriteSignal vào catch dưới).
         if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
         convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch }, {
+          onView: (d) => emit({ t: "view", d }),
           drilldownPairs: DRILLDOWN_PAIRS,
           dataFetchTools: DATA_FETCH_TOOLS,
           maxRounds: CHAT_MAX_ROUNDS,
@@ -923,7 +928,7 @@ function streamMainTurn(opts: {
         ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: payload.model, messages: convo, options: payload.options, stream: true }),
+          body: JSON.stringify({ model: payload.model, messages: digestMessagesForModel(convo), options: payload.options, stream: true }),
         });
       } catch {
         try {
@@ -1304,7 +1309,7 @@ async function handleConfirm(
     ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(buildResumeRequest(confirmModel, outcome.messages, { num_ctx: NUM_CTX })),
+      body: JSON.stringify(buildResumeRequest(confirmModel, digestMessagesForModel(outcome.messages), { num_ctx: NUM_CTX })),
     });
   } catch {
     return new Response("Đã thực hiện hành động nhưng không tạo được phản hồi (Ollama).", {
