@@ -56,17 +56,42 @@ function foundNothingShallow(obj: Record<string, unknown>): boolean {
 
 // The note is an instruction to the MODEL inside a tool result — never shown to the user
 // verbatim. It states the epistemic limit and, when we know it, the exact query text used.
-export function emptyResultNote(queryText?: string): string {
+export function emptyResultNote(queryText?: string, userQuestion?: string): string {
   const asked = queryText?.trim();
+  const rewritten = !!userQuestion?.trim() && !!asked && !sameQuestion(asked, userQuestion);
   return (
     "KHÔNG TÌM THẤY BẢN GHI NÀO với cách hỏi này" +
     (asked ? ` (đã hỏi: “${asked}”)` : "") +
     ". Đây KHÔNG phải bằng chứng rằng không tồn tại — chỉ là cách diễn đạt này không khớp gì. " +
     "Khi trả lời, hãy nói rõ bạn đã tìm theo cách hiểu nào và rằng không có kết quả theo cách hiểu ĐÓ; " +
     "TUYỆT ĐỐI không khẳng định chung chung kiểu “không có trường hợp nào” / “không phát hiện bất thường”. " +
-    "Nếu câu hỏi của người dùng có thể hiểu theo cách khác, hãy thử lại bằng chính lời người dùng, " +
-    "hoặc nêu các cách hiểu có thể để người dùng chọn."
+    // ĐO ĐƯỢC 2026-08-07 (sweep lượt B, Q4): lệnh trên đã có tác dụng một nửa — model MỞ ĐẦU
+    // đúng bằng cách hiểu nó đã thử, rồi NỐI THÊM "Vì vậy không có duplicate refunds trong hệ
+    // thống hiện tại". Khai giới hạn xong lại bỏ giới hạn ở câu kết vẫn ra đúng lời trấn an
+    // sai. Lệnh cấm chung chung không chặn được nên phải gọi thẳng tên hình dạng câu đó.
+    "Mệnh đề giới hạn phải nằm TRONG câu kết luận, không phải chỉ ở câu mở đầu: " +
+    "không được viết câu nào kiểu “Vì vậy / Do đó không có … trong hệ thống” sau khi đã nêu cách hiểu. " +
+    (rewritten
+      ? // Đòn bẩy đo được: cùng sweep đó, ĐÚNG lời người dùng "list duplicate refunds across
+        // stores" xuống DAAB nguyên vẹn một lần và trả về 8 dòng, trong khi mọi định nghĩa do
+        // model tự đặt đều ra 0 hoặc 2. Nên khi thứ trả về rỗng KHÔNG phải lời người dùng,
+        // hỏi lại bằng lời họ không còn là gợi ý. Đây là lệnh cho MODEL tự gọi lại, không
+        // phải code thay chữ (xem `decisions/nl-query-pinning-rejected` — thay chữ đã bị loại).
+        `Cách hỏi trên là bản BẠN tự diễn đạt lại, không phải lời người dùng (“${userQuestion!.trim()}”). ` +
+        "BẮT BUỘC gọi lại công cụ MỘT lần bằng ĐÚNG lời người dùng trước khi kết luận bất cứ điều gì."
+      : // Đã hỏi đúng lời người dùng rồi mà vẫn rỗng — đòi hỏi lại nữa là bảo model lặp y
+        // nguyên lời gọi vừa chạy, tức một vòng lặp không có điểm dừng.
+        "Nếu câu hỏi của người dùng có thể hiểu theo cách khác, hãy nêu các cách hiểu có thể để người dùng chọn.")
   );
+}
+
+// So hai câu hỏi theo NGHĨA gõ ra, bỏ qua hoa/thường, khoảng trắng thừa và dấu câu cuối —
+// model hay trả về đúng câu người dùng nhưng khác cách viết, và bắt nó gọi lại vì một dấu
+// chấm là đúng cái vòng lặp vô ích ở trên.
+function sameQuestion(a: string, b: string): boolean {
+  const norm = (s: string) =>
+    s.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:!?…"'“”‘’]+$/g, "").trim();
+  return norm(a) === norm(b);
 }
 
 // Extract the natural-language question the model sent, so the note can quote it. Accepts any
@@ -91,9 +116,9 @@ export function queryTextFromArgs(args: unknown): string | undefined {
 
 // Attach the note to an empty result. Returns the result UNCHANGED when it is not empty or
 // not a shape we recognise — so this can sit on every tool result without special-casing.
-export function annotateEmptyResult(result: unknown, args?: unknown): unknown {
+export function annotateEmptyResult(result: unknown, args?: unknown, userQuestion?: string): unknown {
   if (!foundNothing(result)) return result;
-  const note = emptyResultNote(queryTextFromArgs(args));
+  const note = emptyResultNote(queryTextFromArgs(args), userQuestion);
   if (Array.isArray(result)) return { _empty: true, rows: result, note };
   if (isRecord(result)) return { ...result, note };
   return result;

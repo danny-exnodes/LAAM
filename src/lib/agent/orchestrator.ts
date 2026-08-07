@@ -295,7 +295,7 @@ export async function runToolRounds(
         toolCallCount++;
         // Empty result → tell the model (in the tool result) that emptiness is not absence.
         // Only the convo copy is annotated; `result` below stays raw for the view/drilldown.
-        convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, callArgs)) });
+        convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, callArgs, lastUserMessage)) });
         // Panel per BIG result, emitted as it lands. A turn can run several queries (measured:
         // the two heaviest demo questions run five each), so one panel per turn would hide four
         // of them — and hiding them is exactly what makes reducing the model's copy unsafe.
@@ -320,7 +320,7 @@ export async function runToolRounds(
               const detail = await deps.dispatch(plan.name, plan.args);
               toolCallCount++;
               convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: plan.name, arguments: plan.args } }] });
-              convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(detail, plan.args)) });
+              convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(detail, plan.args, lastUserMessage)) });
               if (opts.onView && worthShowing(detail)) {
                 const detailView = deriveFromToolResult(plan.name, detail, Date.now(), queryTextFromArgs(plan.args));
                 if (detailView) emitViewOnce(detailView);

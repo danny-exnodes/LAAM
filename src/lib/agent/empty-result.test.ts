@@ -84,3 +84,50 @@ describe("annotateEmptyResult", () => {
     expect(out.sql).toBe("SELECT 1");
   });
 });
+
+// Measured 2026-08-07 (sweep run B, Q4 "Show duplicate refunds across stores"): the note
+// above WORKED as far as it went — the answer did open by naming the reading it had tested
+// ("cùng số tiền, cùng thời gian và cùng khách hàng") — and then appended one more sentence,
+// "Vì vậy không có duplicate refunds trong hệ thống hiện tại", which is the false all-clear
+// the whole module exists to prevent. Disclosing the scope and then dropping it in the
+// conclusion has to be named explicitly, because a general ban on "khẳng định chung chung"
+// did not stop it.
+//
+// The second half is the part with measured leverage. In the SAME sweep, the user's own
+// wording, "list duplicate refunds across stores", reached DAAB unchanged once and returned
+// 8 rows — while every self-authored definition returned 0 or 2. So when the text that came
+// back empty is NOT the user's, retrying with the user's words is not a suggestion.
+describe("annotateEmptyResult when the model rewrote the question", () => {
+  const empty = { status: "completed", results: { row_count: 0, rows: [] } };
+  const noteOf = (args: unknown, userQuestion?: string) =>
+    (annotateEmptyResult(empty, args, userQuestion) as Record<string, string>).note;
+
+  it("requires re-asking in the user's own words before concluding", () => {
+    const note = noteOf(
+      { natural_language_query: "refunds with the same refund_amount, refund_datetime and customer_id" },
+      "Show duplicate refunds across stores.",
+    );
+    expect(note).toContain("Show duplicate refunds across stores.");
+    expect(note).toMatch(/BẮT BUỘC/);
+  });
+
+  it("does NOT demand a retry once the user's own words are what came back empty", () => {
+    // Otherwise the retry never terminates: the same call would be asked for again forever.
+    const q = "Show duplicate refunds across stores.";
+    const note = noteOf({ natural_language_query: q }, q);
+    expect(note).not.toMatch(/BẮT BUỘC/);
+  });
+
+  it("ignores casing, spacing and trailing punctuation when comparing the two", () => {
+    const note = noteOf(
+      { natural_language_query: "show   duplicate refunds across stores" },
+      "Show duplicate refunds across stores.",
+    );
+    expect(note).not.toMatch(/BẮT BUỘC/);
+  });
+
+  it("names the trailing-conclusion shape that actually got past the old note", () => {
+    const note = noteOf({ natural_language_query: "anything" }, "Show duplicate refunds across stores.");
+    expect(note).toMatch(/Vì vậy|Do đó/);
+  });
+});
