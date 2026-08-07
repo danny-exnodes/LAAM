@@ -131,3 +131,38 @@ describe("annotateEmptyResult when the model rewrote the question", () => {
     expect(note).toMatch(/Vì vậy|Do đó/);
   });
 });
+
+// The bug that made every test above pass while the module did nothing in production.
+//
+// An MCP tool result arrives as { text: "<json>" } — client.ts flattens text blocks to one
+// string before the orchestrator ever sees it. foundNothing read `text` as a plain string,
+// matched no count/rows key, and returned false, so the note was never attached to a single
+// DAAB result. `drilldown.unwrapToolResult` exists for exactly this shape and view.ts already
+// uses it; this module simply never did.
+//
+// Measured 2026-08-07: five fresh runs of "Show duplicate refunds across stores" — three
+// answered "there are no duplicate refunds" off a 0-row result (`ai_queries` 09:31:31,
+// 09:31:42, 09:31:53) with no note in the conversation to stop them.
+describe("MCP results arrive stringified", () => {
+  const wrapped = (payload: unknown) => ({ text: JSON.stringify(payload) });
+
+  it("sees an empty result through the { text: json } wrapper", () => {
+    expect(foundNothing(wrapped({ status: "completed", results: { row_count: 0, rows: [] } }))).toBe(true);
+  });
+
+  it("still does not fire when the wrapped result has rows", () => {
+    expect(foundNothing(wrapped({ status: "completed", results: { row_count: 8, rows: [{ a: 1 }] } }))).toBe(false);
+  });
+
+  it("annotates the wrapped result without destroying the text the model reads", () => {
+    const out = annotateEmptyResult(wrapped({ results: { row_count: 0, rows: [] } }), {
+      natural_language_query: "same amount and datetime",
+    }, "Show duplicate refunds across stores.") as Record<string, string>;
+    expect(out.text).toContain("row_count");
+    expect(out.note).toMatch(/BẮT BUỘC/);
+  });
+
+  it("leaves text that is not JSON alone rather than guessing", () => {
+    expect(foundNothing({ text: "no results found" })).toBe(false);
+  });
+});

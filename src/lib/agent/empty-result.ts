@@ -15,6 +15,8 @@
 //
 // PURE — no I/O, no model calls (Rule 5). Connector-agnostic: nothing here knows about DAAB.
 
+import { unwrapToolResult } from "@/lib/agent/drilldown";
+
 // Keys a connector might use for "how many rows came back". Checked before the array scan
 // because a truncated/paged result can carry a count without carrying the rows.
 const COUNT_KEYS = ["row_count", "rowcount", "total", "total_count", "count", "n"];
@@ -27,7 +29,15 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 // A result "found nothing" when a recognised count field is 0, or a recognised rows field is
 // an empty array. Deliberately conservative: an unrecognised shape returns false, so an
 // unfamiliar connector is left completely alone rather than annotated on a guess.
-export function foundNothing(payload: unknown): boolean {
+export function foundNothing(result: unknown): boolean {
+  // An MCP tool result reaches here as { text: "<json>" } — client.ts flattens text blocks to
+  // one string before the orchestrator sees anything. Without this the scan below read `text`
+  // as a plain string, matched no key, and returned false, so this module never once fired on
+  // a DAAB result: measured 2026-08-07, three of five runs of "Show duplicate refunds across
+  // stores" answered "there are no duplicate refunds" off a 0-row result with nothing in the
+  // conversation to stop them. unwrapToolResult is the same helper view.ts and drilldown.ts
+  // already use for this shape.
+  const payload = unwrapToolResult(result);
   if (Array.isArray(payload)) return payload.length === 0;
   if (!isRecord(payload)) return false;
 
