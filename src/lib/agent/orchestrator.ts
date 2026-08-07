@@ -6,6 +6,7 @@ import { planDrilldown, type DrilldownPair } from "./drilldown";
 import { PendingWriteSignal } from "@/lib/agent/safety/gate";
 import { deriveFromToolResult, worthShowing, viewKey, type ViewDescriptor } from "./view";
 import { annotateEmptyResult, foundNothing, queryTextFromArgs, reAskDemanded } from "./empty-result";
+import { annotatePanelShown } from "./panel-note";
 import { digestMessagesForModel } from "./digest";
 
 // W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
@@ -307,14 +308,29 @@ export async function runToolRounds(
         if (mayReAsk && foundNothing(result)) reAskSpent = true;
         // Empty result → tell the model (in the tool result) that emptiness is not absence.
         // Only the convo copy is annotated; `result` below stays raw for the view/drilldown.
-        convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, callArgs, mayReAsk ? lastUserMessage : undefined, lastQueryText)) });
         // Panel per BIG result, emitted as it lands. A turn can run several queries (measured:
         // the two heaviest demo questions run five each), so one panel per turn would hide four
         // of them — and hiding them is exactly what makes reducing the model's copy unsafe.
-        if (opts.onView && worthShowing(result)) {
-          const view = deriveFromToolResult(name, result, Date.now(), queryTextFromArgs(callArgs));
-          if (view) emitViewOnce(view);
-        }
+        //
+        // Derived BEFORE the result is handed to the model, because whether a panel is on
+        // screen is something the model has to be told: shown a table it cannot see, it types
+        // the rows out again and mistypes them (measured: a unit price of 10.22 printed as
+        // 1022). The note used to live only in the digest, which starts at 10 rows — the panel
+        // starts at 3, and everything in between got a panel and no note.
+        const view =
+          opts.onView && worthShowing(result)
+            ? deriveFromToolResult(name, result, Date.now(), queryTextFromArgs(callArgs))
+            : null;
+        convo.push({
+          role: "tool",
+          content: JSON.stringify(
+            annotatePanelShown(
+              annotateEmptyResult(result, callArgs, mayReAsk ? lastUserMessage : undefined, lastQueryText),
+              view,
+            ),
+          ),
+        });
+        if (view) emitViewOnce(view);
         if (name === "web_search" && searchResultHasUrl(result)) sawWebSearchWithUrl = true;
         // D2: tool liệt kê vừa chạy + câu hỏi nhắc đúng tên một mục trong kết quả →
         // CODE đi tiếp bước chi tiết (xem drilldown.ts). Một lần/lượt: nếu không, model
@@ -332,11 +348,20 @@ export async function runToolRounds(
               const detail = await deps.dispatch(plan.name, plan.args);
               toolCallCount++;
               convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: plan.name, arguments: plan.args } }] });
-              convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(detail, plan.args, lastUserMessage, lastQueryText)) });
-              if (opts.onView && worthShowing(detail)) {
-                const detailView = deriveFromToolResult(plan.name, detail, Date.now(), queryTextFromArgs(plan.args));
-                if (detailView) emitViewOnce(detailView);
-              }
+              const detailView =
+                opts.onView && worthShowing(detail)
+                  ? deriveFromToolResult(plan.name, detail, Date.now(), queryTextFromArgs(plan.args))
+                  : null;
+              convo.push({
+                role: "tool",
+                content: JSON.stringify(
+                  annotatePanelShown(
+                    annotateEmptyResult(detail, plan.args, lastUserMessage, lastQueryText),
+                    detailView,
+                  ),
+                ),
+              });
+              if (detailView) emitViewOnce(detailView);
             } catch (e) {
               if (e instanceof PendingWriteSignal) throw e;
               console.warn(`[drilldown] ${plan.name} lỗi — bỏ qua bước chi tiết`, e);
