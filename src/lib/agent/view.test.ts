@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveFromToolResult, pickTurnView, MAX_ROWS, viewKey} from "./view";
+import { deriveFromToolResult, pickTurnView, MAX_ROWS, viewKey, worthShowing } from "./view";
 
 const AT = 1_700_000_000_000;
 
@@ -222,5 +222,103 @@ describe("viewKey identifies a table by its data", () => {
 
   it("keeps genuinely different data apart", () => {
     expect(viewKey(make("q", { a: 0, b: "x" }))).not.toBe(viewKey(make("q", { a: 99, b: "y" })));
+  });
+});
+
+// A table is built for a result whose SHAPE is tabular, not one whose payload is large.
+//
+// The gate used to require >=6000 chars AND >=10 rows. Bytes are the wrong test: a top-10
+// ranking of "name + number" is about 700 chars, so it never qualified — and a result with no
+// table is a result the model retypes. Measured 2026-08-07 across 13 Larvis questions, only
+// 2 produced a table, and the retyped ones corrupted the data: "Blood Pressure Cuff" came out
+// "Blood Pressure uff", "OatmealLarge" gained a space (which sent a later investigation
+// chasing a product that appeared not to exist), and one table lost a cell and repeated a row.
+//
+// The size rule existed to keep INCIDENTAL lookups out of the panel — an id-by-name probe, a
+// "not found". Those are 0 or 1 rows, so the row floor still excludes them; the byte floor was
+// never what did that work.
+describe("worthShowing — tabular shape, not payload size", () => {
+  const rows = (n: number, cols = 2) =>
+    Array.from({ length: n }, (_, i) =>
+      Object.fromEntries(Array.from({ length: cols }, (_, c) => [`c${c}`, c === 0 ? `r${i}` : i])),
+    );
+  const wrap = (r: unknown[]) => ({ results: { rows: r } });
+
+  it("shows a small top-10 ranking — the case the byte floor excluded", () => {
+    const top10 = wrap(rows(10));
+    expect(JSON.stringify(top10).length).toBeLessThan(6000); // the old gate would reject this
+    expect(worthShowing(top10)).toBe(true);
+  });
+
+  it("still shows a large result", () => {
+    expect(worthShowing(wrap(rows(62, 30)))).toBe(true);
+  });
+
+  // The reason the old gate existed, and it must keep holding.
+  it("hides an id-by-name probe (1 row)", () => {
+    expect(worthShowing(wrap(rows(1)))).toBe(false);
+  });
+
+  it("hides an empty result", () => {
+    expect(worthShowing(wrap([]))).toBe(false);
+  });
+
+  // A single column is a list, not a table — prose says it better.
+  it("hides a single-column result", () => {
+    expect(worthShowing(wrap(rows(8, 1)))).toBe(false);
+  });
+
+  it("hides a result with no rows at all", () => {
+    expect(worthShowing({ status: "ok", count: 3 })).toBe(false);
+  });
+});
+
+// A connector that had to INTERPRET the request (reversing a ranking because the measure is
+// negative for a loss) reports how it read it. Carrying that to the panel is the whole point of
+// the correction: reversed-and-silent is still invisible, and a reader who wanted the other end
+// has no way to tell. Read from a sibling key of the rows, same idiom as row_count.
+describe("ranking note", () => {
+  const withNote = (note: unknown) => ({
+    results: {
+      ranking_note: note,
+      rows: [
+        { product: "a", total: -600 },
+        { product: "b", total: -5 },
+      ],
+    },
+  });
+
+  it("carries the note from the result onto the descriptor", () => {
+    const d = deriveFromToolResult("q", withNote("Ranked by largest total: reversed."), AT);
+    expect(d?.note).toBe("Ranked by largest total: reversed.");
+  });
+
+  it("omits the field when the result has no note", () => {
+    const d = deriveFromToolResult("q", { results: { rows: [{ a: 1, b: 2 }, { a: 3, b: 4 }] } }, AT);
+    expect(d?.note).toBeUndefined();
+  });
+
+  // A blank or non-string note must not render an empty grey strip under the table.
+  it("ignores a blank or non-string note", () => {
+    expect(deriveFromToolResult("q", withNote("   "), AT)?.note).toBeUndefined();
+    expect(deriveFromToolResult("q", withNote(42), AT)?.note).toBeUndefined();
+  });
+})
+
+// The row floor is what keeps a drilldown's intermediate step off screen — "list" before
+// "detail" is one or two rows, and panelling it shows a table for a step nobody asked about.
+// Pinned here because two other suites depend on it (orchestrator onView, chat route frames)
+// and a change to the constant should fail HERE, next to the reasoning, not only over there.
+describe("worthShowing — the row floor protects intermediate steps", () => {
+  const shaped = (n: number) => ({
+    results: { rows: Array.from({ length: n }, (_, i) => ({ name: `x${i}`, n: i })) },
+  });
+
+  it("hides a two-row lookup", () => {
+    expect(worthShowing(shaped(2))).toBe(false);
+  });
+
+  it("shows three rows — the smallest result read as an answer", () => {
+    expect(worthShowing(shaped(3))).toBe(true);
   });
 });

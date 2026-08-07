@@ -115,6 +115,16 @@ function ResultTable({ v }: { v: ViewDescriptor }) {
         </button>
       )}
 
+      {/* How the tool read the request when it had to interpret it — today, a ranking it
+          reversed because the measure is negative for a loss. Shown because the correction is
+          only useful if it is VISIBLE: a reader who asked for the other end sees immediately
+          that they got this one, instead of trusting a table that looks perfectly plausible. */}
+      {v.note && (
+        <p className="border-t border-neutral-200 px-3 py-1.5 text-[11px] text-neutral-500 dark:border-neutral-800">
+          {v.note}
+        </p>
+      )}
+
       {/* Fail loud (Rule 12): the descriptor was capped, so "N dòng" above is not the whole
           answer and the user must be told rather than shown a quietly short table. */}
       {v.truncated && (
