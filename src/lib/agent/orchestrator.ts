@@ -5,9 +5,8 @@ import { evictOldToolResults } from "./loop-context";
 import { planDrilldown, type DrilldownPair } from "./drilldown";
 import { PendingWriteSignal } from "@/lib/agent/safety/gate";
 import { deriveFromToolResult, worthShowing, viewKey, type ViewDescriptor } from "./view";
-import { annotateEmptyResult } from "./empty-result";
+import { annotateEmptyResult, foundNothing, queryTextFromArgs, reAskDemanded } from "./empty-result";
 import { digestMessagesForModel } from "./digest";
-import { queryTextFromArgs } from "./empty-result";
 
 // W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
 // Ollama multimodal. Optional/additive: vắng mặt ⇒ wire-format y như cũ.
@@ -237,6 +236,7 @@ export async function runToolRounds(
   // theo câu người dùng vừa hỏi, không phải theo cả hội thoại).
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
   let lastQueryText: string | undefined; // question from the most recent query-shaped tool call this turn
+  let reAskSpent = false; // the turn gets one "ask again in the user's words" instruction, not one per empty result
   let drilledDown = false;
   // A turn can run the SAME query twice (measured: "show every refund…" produced two identical
   // 50/62 tables). Showing the user the same table twice is noise, so emit each shape once.
@@ -299,9 +299,15 @@ export async function runToolRounds(
         lastQueryText = queryTextFromArgs(callArgs) ?? lastQueryText;
         const result = await deps.dispatch(name, callArgs);
         toolCallCount++;
+        // ONE mandatory re-ask per turn. The note's own termination check compares the sent
+        // text to the user's question, and the model rewords every attempt, so it never fired:
+        // measured, a turn spent 24 tool calls re-asking and still held the correct answer it
+        // had already been given. Counting the budget in code does not care how it is worded.
+        const mayReAsk = !reAskSpent && reAskDemanded(lastQueryText, lastUserMessage);
+        if (mayReAsk && foundNothing(result)) reAskSpent = true;
         // Empty result → tell the model (in the tool result) that emptiness is not absence.
         // Only the convo copy is annotated; `result` below stays raw for the view/drilldown.
-        convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, callArgs, lastUserMessage, lastQueryText)) });
+        convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, callArgs, mayReAsk ? lastUserMessage : undefined, lastQueryText)) });
         // Panel per BIG result, emitted as it lands. A turn can run several queries (measured:
         // the two heaviest demo questions run five each), so one panel per turn would hide four
         // of them — and hiding them is exactly what makes reducing the model's copy unsafe.

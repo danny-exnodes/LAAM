@@ -971,3 +971,69 @@ describe("digest is applied to the model's copy only", () => {
     expect(sentToModel.content.length).toBeLessThan(stored.content.length / 2);
   });
 });
+
+// Convergence. The empty-result note tells the model to call the tool again in the user's own
+// words; the prompt separately tells it to re-query when the plan does not match the question.
+// Each is defensible alone. Together they removed the loop's natural exit — the model returning
+// no tool calls — and the only one left was the 25-round backstop.
+//
+// Measured 2026-08-07, "Show duplicate refunds across stores." in a Larvis thread: 24 tool calls
+// and 109.7s, reproduced at 23 calls and 108.5s. DAAB's `ai_queries` shows it had the complete
+// correct answer (18 rows) mid-loop and kept going.
+//
+// The termination check that was supposed to prevent this compares the sent text to the user's
+// question, and the model rewords every attempt, so it never matched — green in tests that fed
+// it an exact string, useless against the thing it was written for. So the budget is counted in
+// code instead: ONE mandatory re-ask per turn, whatever the model types.
+describe("the mandatory re-ask is spent once per turn", () => {
+  const emptyResult = { text: JSON.stringify({ status: "completed", results: { row_count: 0, rows: [] } }) };
+  const queryTool = [
+    { type: "function" as const, kind: "read" as const, function: { name: "kg_query", description: "ask", parameters: {} } },
+  ];
+
+  test("a second empty result does not demand another re-ask", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query", arguments: { query: "my own wording" } } }] },
+      })
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query", arguments: { query: "a different wording" } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "done" } });
+    const dispatch = vi.fn(async () => emptyResult);
+
+    const out = await runToolRounds(
+      [{ role: "system", content: "SYS" }, { role: "user", content: "Show duplicate refunds across stores." }],
+      queryTool,
+      { callOllama, dispatch },
+    );
+
+    const demands = out.filter((m) => m.role === "tool" && /BẮT BUỘC/.test(String(m.content)));
+    expect(demands).toHaveLength(1);
+  });
+
+  test("both empty results still say emptiness is not absence", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query", arguments: { query: "one" } } }] },
+      })
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query", arguments: { query: "two" } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "done" } });
+    const dispatch = vi.fn(async () => emptyResult);
+
+    const out = await runToolRounds(
+      [{ role: "system", content: "SYS" }, { role: "user", content: "Show duplicate refunds across stores." }],
+      queryTool,
+      { callOllama, dispatch },
+    );
+
+    // Spending the re-ask budget must not silence the note itself — that is the part that
+    // stops "0 rows" being read as "none exist", and it is needed on every empty result.
+    const noted = out.filter((m) => m.role === "tool" && /KHÔNG TÌM THẤY BẢN GHI NÀO/.test(String(m.content)));
+    expect(noted).toHaveLength(2);
+  });
+});

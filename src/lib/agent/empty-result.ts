@@ -68,7 +68,7 @@ function foundNothingShallow(obj: Record<string, unknown>): boolean {
 // verbatim. It states the epistemic limit and, when we know it, the exact query text used.
 export function emptyResultNote(queryText?: string, userQuestion?: string): string {
   const asked = queryText?.trim();
-  const rewritten = !!userQuestion?.trim() && !!asked && !sameQuestion(asked, userQuestion);
+  const rewritten = reAskDemanded(asked, userQuestion);
   return (
     "KHÔNG TÌM THẤY BẢN GHI NÀO với cách hỏi này" +
     (asked ? ` (đã hỏi: “${asked}”)` : "") +
@@ -93,6 +93,14 @@ export function emptyResultNote(queryText?: string, userQuestion?: string): stri
         // nguyên lời gọi vừa chạy, tức một vòng lặp không có điểm dừng.
         "Nếu câu hỏi của người dùng có thể hiểu theo cách khác, hãy nêu các cách hiểu có thể để người dùng chọn.")
   );
+}
+
+// Whether the note would order a re-ask: the tool was asked something OTHER than what the user
+// said. Exported so the caller can COUNT these — the note itself cannot, being pure, and an
+// uncounted "call it again" has no stopping condition once the model rewords each attempt.
+export function reAskDemanded(queryText?: string, userQuestion?: string): boolean {
+  const asked = queryText?.trim();
+  return !!userQuestion?.trim() && !!asked && !sameQuestion(asked, userQuestion);
 }
 
 // So hai câu hỏi theo NGHĨA gõ ra, bỏ qua hoa/thường, khoảng trắng thừa và dấu câu cuối —
