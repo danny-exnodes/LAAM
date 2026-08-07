@@ -3,12 +3,12 @@ import { connectors } from './connectors';
 import { resolve } from '../index';
 import { CONNECTORS } from '@/lib/connectors/registry';
 
-test('connectors has every key (17 v1 + 13 OAuth/authorize + 23 per-connector + 31 MCP = 84) across 3 langs', () => {
+test('connectors has every key (17 v1 + 13 OAuth/authorize + 23 per-connector + 35 MCP = 88) across 3 langs', () => {
   // 2026-06-12 multi-provider OAuth expansion: +3 flow keys (connectWith /
   // manualOption / trelloFinishing), −1 dead key (connectGoogle → connectWith),
   // +9 svc keys (jira.setup, slack ×3, whatsapp ×2, zalo ×3); review-fix 06-12 +1 (errForbidden).
   const keys = Object.keys(connectors);
-  expect(keys.length).toBe(84);
+  expect(keys.length).toBe(88);
   for (const k of keys) {
     expect(typeof connectors[k].vi).toBe('string');
     expect(typeof connectors[k].en).toBe('string');

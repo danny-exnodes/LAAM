@@ -199,6 +199,18 @@ export const connectors: Dict = {
     en: "Trust this server's read hints → skip confirm for read-only tools.",
     zh: '信任此服务器的只读提示 → 对只读工具跳过确认。',
   },
+  'conn.mcp.editUrl': { vi: 'Sửa URL', en: 'Edit URL', zh: '编辑 URL' },
+  'conn.mcp.saveUrl': { vi: 'Lưu URL', en: 'Save URL', zh: '保存 URL' },
+  'conn.mcp.saveUrlErr': {
+    vi: 'Không lưu được URL',
+    en: 'Could not save the URL',
+    zh: '无法保存 URL',
+  },
+  'conn.mcp.urlHint': {
+    vi: 'Nhiều máy chủ MCP nhận tuỳ chọn theo từng kết nối ngay trên URL (vd ?row_cap=off). Đổi URL không làm mất lựa chọn công cụ.',
+    en: 'Many MCP servers take per-connection options on the URL itself (e.g. ?row_cap=off). Changing it keeps your tool selection.',
+    zh: '许多 MCP 服务器通过 URL 接受按连接的选项（如 ?row_cap=off）。修改它不会影响已选工具。',
+  },
   'conn.mcp.remove': { vi: 'Gỡ', en: 'Remove', zh: '移除' },
   'conn.mcp.none': { vi: 'Chưa có máy chủ MCP nào.', en: 'No MCP servers yet.', zh: '尚无 MCP 服务器。' },
   'conn.mcp.toolsLabel': { vi: 'Công cụ', en: 'Tools', zh: '工具' },

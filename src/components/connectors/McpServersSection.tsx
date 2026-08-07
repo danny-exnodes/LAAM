@@ -33,10 +33,14 @@ type McpServer = {
 
 type T = ReturnType<typeof useT>;
 
-// Show the host of a server URL; fall back to the raw string if it won't parse.
-function hostOf(url: string): string {
+// Host plus path and query, because per-connection options live in the query string on many
+// MCP servers (Supabase takes ?features=…, this project's bridge takes ?row_cap=…). Showing
+// only the host hid them completely: a setting was in effect and the page looked unchanged.
+// Falls back to the raw string when it will not parse.
+function endpointOf(url: string): string {
   try {
-    return new URL(url).host;
+    const u = new URL(url);
+    return u.host + (u.pathname === "/" ? "" : u.pathname) + u.search;
   } catch {
     return url;
   }
@@ -108,7 +112,7 @@ function McpCard({ s, t, reload }: { s: McpServer; t: T; reload: () => Promise<v
         </span>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-bold">{s.name}</div>
-          <div className="mt-0.5 truncate text-xs text-neutral-500">{hostOf(s.url)}</div>
+          <div className="mt-0.5 truncate text-xs text-neutral-500" title={s.url}>{endpointOf(s.url)}</div>
         </div>
         {s.trustReadHints && (
           <span className="flex-none rounded-full bg-[var(--color-accent)]/15 px-2.5 py-0.5 text-xs font-bold text-[var(--color-accent)]">
@@ -123,9 +127,84 @@ function McpCard({ s, t, reload }: { s: McpServer; t: T; reload: () => Promise<v
         <div className="text-[11px] text-neutral-400">{t("conn.mcp.noTools")}</div>
       )}
 
+      <UrlEditor s={s} t={t} reload={reload} />
+
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={busy} onClick={() => void remove()} className={btn("danger")}>
           {t("conn.mcp.remove")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Repointing a connector without losing anything. This exists because per-connection options
+// are part of the URL on many MCP servers, so "change the URL" is a real setting surface — and
+// the alternative (remove, re-add) silently discards which tools were enabled.
+function UrlEditor({ s, t, reload }: { s: McpServer; t: T; reload: () => Promise<void> }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState(s.url);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  const save = useCallback(async () => {
+    setBusy(true);
+    setErr("");
+    try {
+      const res = await fetch("/api/connectors/mcp", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug: s.slug, url: url.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) {
+        setErr(data?.error || t("conn.mcp.saveUrlErr"));
+        return;
+      }
+      await reload();
+      setOpen(false);
+    } catch {
+      setErr(t("conn.mcp.saveUrlErr"));
+    } finally {
+      setBusy(false);
+    }
+  }, [s.slug, url, reload, t]);
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="self-start text-[11px] font-semibold text-[var(--color-accent)] hover:underline"
+      >
+        {t("conn.mcp.editUrl")}
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-neutral-200 p-3 dark:border-neutral-800">
+      <label className="flex flex-col gap-1">
+        <span className="text-[11px] font-semibold text-neutral-500">URL</span>
+        <input
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          className="w-full rounded-lg border border-neutral-200 bg-transparent px-3 py-1.5 font-mono text-[11px] outline-none focus:border-[var(--color-accent)] dark:border-neutral-700"
+        />
+      </label>
+      <p className="text-[11px] leading-snug text-neutral-500">{t("conn.mcp.urlHint")}</p>
+      {err && <p className="text-[11px] text-red-500">{err}</p>}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={busy || !url.trim() || url.trim() === s.url}
+          onClick={() => void save()}
+          className={btn("primary")}
+        >
+          {busy ? t("conn.mcp.savingTools") : t("conn.mcp.saveUrl")}
+        </button>
+        <button type="button" onClick={() => { setUrl(s.url); setOpen(false); }} className={btn("danger")}>
+          {t("conn.mcp.cancel")}
         </button>
       </div>
     </div>

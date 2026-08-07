@@ -74,8 +74,9 @@ test("renders servers from GET including tool names and trust badge", async () =
   wrap();
 
   expect(await screen.findByText("My MCP")).toBeTruthy();
-  // URL host, not the full URL
-  expect(screen.getByText("mcp.example.com")).toBeTruthy();
+  // Host AND path/query: per-connection options live in the query string on many MCP servers,
+  // and showing only the host meant a setting could be in effect with the page looking untouched.
+  expect(screen.getByText("mcp.example.com/sse")).toBeTruthy();
   // The card shows the count AND which tools are on — a count alone does not tell you
   // whether the ones left on are the ones you need.
   expect(screen.getByText("2/2 công cụ đang bật")).toBeTruthy();
@@ -255,4 +256,41 @@ test("Esc closes the tool dialog without saving", async () => {
 
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === "PATCH")).toBe(false);
+});
+
+// Changing the endpoint is a real setting surface — several MCP servers take per-connection
+// options on the URL — and it must not cost the tool selection, which remove-and-re-add would.
+test("editing the URL PATCHes it and keeps the connector", async () => {
+  const fetchMock = mockFetch({
+    "GET /api/connectors/mcp": { servers: [server()] },
+    "PATCH /api/connectors/mcp": { ok: true },
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  wrap();
+  await screen.findByText("My MCP");
+  fireEvent.click(screen.getByText("Sửa URL"));
+  // Pick the editor by the URL it is showing — the add-form below has a "URL" label too.
+  fireEvent.change(screen.getByDisplayValue("https://mcp.example.com/sse"), {
+    target: { value: "https://mcp.example.com/sse?row_cap=off" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Lưu URL" }));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === "PATCH");
+    expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({
+      slug: "my-mcp",
+      url: "https://mcp.example.com/sse?row_cap=off",
+    });
+  });
+});
+
+test("the query string is visible on the card, not hidden behind the host", async () => {
+  const fetchMock = mockFetch({
+    "GET /api/connectors/mcp": { servers: [server({ url: "https://mcp.example.com/sse?row_cap=off" })] },
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  wrap();
+  expect(await screen.findByText("mcp.example.com/sse?row_cap=off")).toBeTruthy();
 });

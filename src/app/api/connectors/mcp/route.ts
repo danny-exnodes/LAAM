@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { listServers, addServer, removeServer, setEnabledTools } from "@/lib/connectors/mcp/store";
+import { listServers, addServer, removeServer, setEnabledTools, updateServer } from "@/lib/connectors/mcp/store";
 import { discoverForUser, invalidateUser } from "@/lib/connectors/mcp/discovery";
 import { requireMutator } from "@/lib/auth/rbac";
 
@@ -10,7 +10,7 @@ import { requireMutator } from "@/lib/auth/rbac";
 //
 // GET    /api/connectors/mcp            → { servers: [{ slug, name, url, hasToken, trustReadHints, tools[] }] }
 // POST   /api/connectors/mcp            → add { name, url, authToken?, trustReadHints? } → { ok, slug? , error? }
-// PATCH  /api/connectors/mcp            → { slug, enabledTools: string[] | null } → { ok }
+// PATCH  /api/connectors/mcp            → { slug, enabledTools?, url?, name? } → { ok }
 // DELETE /api/connectors/mcp?slug=<s>   → { ok }
 
 export async function GET() {
@@ -98,8 +98,28 @@ export async function PATCH(req: Request) {
   if (gate instanceof Response) return gate;
   const userId = session.user.id;
 
-  const body = (await req.json().catch(() => ({}))) as { slug?: string; enabledTools?: unknown };
+  const body = (await req.json().catch(() => ({}))) as {
+    slug?: string;
+    enabledTools?: unknown;
+    url?: string;
+    name?: string;
+  };
   if (!body.slug?.trim()) return NextResponse.json({ ok: false, error: "thiếu slug" }, { status: 400 });
+
+  // Label / endpoint edit. Repointing a connector (e.g. adding a per-connection option to the
+  // query string) or renaming it must not cost the tool selection, which remove-and-re-add
+  // would. The slug never changes — see updateServer.
+  const hasUrl = typeof body.url === "string" && body.url.trim();
+  const hasName = typeof body.name === "string" && body.name.trim();
+  if (hasUrl || hasName) {
+    const patched = await updateServer(userId, body.slug.trim(), {
+      ...(hasUrl ? { url: body.url!.trim() } : {}),
+      ...(hasName ? { name: body.name!.trim() } : {}),
+    });
+    if (!patched.ok) return NextResponse.json(patched, { status: 400 });
+    invalidateUser(userId);
+    if (body.enabledTools === undefined) return NextResponse.json(patched);
+  }
 
   // null ⇒ clear the choice (all tools). An array ⇒ exactly these, including the empty array,
   // which is a deliberate "none" and must not be re-read as "unset".

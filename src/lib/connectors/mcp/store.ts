@@ -145,6 +145,51 @@ export async function setEnabledTools(
   return { ok: true };
 }
 
+// Change a server's label or endpoint in place, keeping everything else — token, trust flag and
+// tool selection.
+//
+// The SLUG is deliberately not derived again. It is the row key, it is embedded in every tool
+// name the model sees (mcp__<slug>__<tool>), and deployments reference those names in config
+// (TOOL_DATA_FETCH, TOOL_DRILLDOWN_PAIRS). Recomputing it from a new label would silently
+// detach those guards, so renaming changes what people read and nothing that code matches on.
+export async function updateServer(
+  userId: string,
+  slug: string,
+  patch: { name?: string; url?: string },
+): Promise<{ ok: boolean; error?: string }> {
+  if (patch.url !== undefined) {
+    try {
+      assertSafeUrl(patch.url);
+    } catch (e) {
+      return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    }
+  }
+  const current = await getServer(userId, slug);
+  if (!current) return { ok: false, error: "không tìm thấy MCP server" };
+
+  const blob: StoredServer = {
+    name: patch.name?.trim() || current.name,
+    url: patch.url?.trim() || current.url,
+    authToken: current.authToken,
+    trustReadHints: current.trustReadHints,
+    ...(current.enabledTools ? { enabledTools: current.enabledTools } : {}),
+  };
+  try {
+    await db
+      .update(connectorCredentials)
+      .set({ secret: encryptJsonForUser(userId, blob), updatedAt: new Date() })
+      .where(
+        and(
+          eq(connectorCredentials.userId, userId),
+          eq(connectorCredentials.connectorId, PREFIX + slug),
+        ),
+      );
+  } catch {
+    return { ok: false, error: "không lưu được thay đổi" };
+  }
+  return { ok: true };
+}
+
 export async function removeServer(userId: string, slug: string): Promise<{ ok: boolean }> {
   await db
     .delete(connectorCredentials)
