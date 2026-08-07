@@ -166,3 +166,39 @@ describe("MCP results arrive stringified", () => {
     expect(foundNothing({ text: "no results found" })).toBe(false);
   });
 });
+
+// The other half of the same bug, found in the UI 2026-08-07 on "Show duplicate refunds
+// across stores." The model queried for "the same refund_id appearing in more than one store"
+// — refund_id is the primary key, so that is empty BY CONSTRUCTION — and concluded "there are
+// no refund records that are duplicated across stores". Truth: 9 pairs.
+//
+// The note did fire this time, but on its weak branch: DAAB's query tool is two-step, and it
+// is the STATUS POLL that carries the rows. Its args are { id, wait_seconds } — no question
+// text — so queryTextFromArgs found nothing, `rewritten` stayed false, and the mandatory
+// "ask again in the user's own words" branch (the half with the measured 3/5 → 0/5 effect)
+// had never once run on the DAAB path. The question is known one call earlier; the caller
+// passes it down.
+describe("two-step query tools (submit then poll)", () => {
+  const empty = { text: JSON.stringify({ status: "completed", results: { row_count: 0, rows: [] } }) };
+  const pollArgs = { id: "abc-123", wait_seconds: 20 };
+
+  it("uses the question from the earlier submit call when the poll has none", () => {
+    const note = (annotateEmptyResult(empty, pollArgs, "Show duplicate refunds across stores.",
+      "refunds where the same refund_id appears in more than one store") as Record<string, string>).note;
+    expect(note).toContain("refund_id");
+    expect(note).toMatch(/BẮT BUỘC/);
+  });
+
+  it("prefers the poll's own args when it does carry a question", () => {
+    const note = (annotateEmptyResult(empty, { ...pollArgs, query: "its own wording" },
+      "Show duplicate refunds across stores.", "the earlier one") as Record<string, string>).note;
+    expect(note).toContain("its own wording");
+    expect(note).not.toContain("the earlier one");
+  });
+
+  it("still terminates when the remembered question IS the user's own words", () => {
+    const q = "Show duplicate refunds across stores.";
+    const note = (annotateEmptyResult(empty, pollArgs, q, q) as Record<string, string>).note;
+    expect(note).not.toMatch(/BẮT BUỘC/);
+  });
+});

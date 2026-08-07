@@ -126,9 +126,19 @@ export function queryTextFromArgs(args: unknown): string | undefined {
 
 // Attach the note to an empty result. Returns the result UNCHANGED when it is not empty or
 // not a shape we recognise — so this can sit on every tool result without special-casing.
-export function annotateEmptyResult(result: unknown, args?: unknown, userQuestion?: string): unknown {
+// `fallbackQueryText` is the question asked by an EARLIER call in the same turn. A two-step
+// query tool submits the question, gets an id back, and returns the rows from a later poll
+// whose args carry only that id — so at the moment the emptiness is visible, the question is
+// one call behind. Without it the note drops to its weak branch on exactly the path that
+// matters (measured 2026-08-07 in the UI: the mandatory re-ask had never run against DAAB).
+export function annotateEmptyResult(
+  result: unknown,
+  args?: unknown,
+  userQuestion?: string,
+  fallbackQueryText?: string,
+): unknown {
   if (!foundNothing(result)) return result;
-  const note = emptyResultNote(queryTextFromArgs(args), userQuestion);
+  const note = emptyResultNote(queryTextFromArgs(args) ?? fallbackQueryText, userQuestion);
   if (Array.isArray(result)) return { _empty: true, rows: result, note };
   if (isRecord(result)) return { ...result, note };
   return result;

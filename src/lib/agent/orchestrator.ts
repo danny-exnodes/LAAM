@@ -236,6 +236,7 @@ export async function runToolRounds(
   // Câu hỏi của lượt này = message user CUỐI trong lịch sử truyền vào (drilldown khớp tên
   // theo câu người dùng vừa hỏi, không phải theo cả hội thoại).
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  let lastQueryText: string | undefined; // question from the most recent query-shaped tool call this turn
   let drilledDown = false;
   // A turn can run the SAME query twice (measured: "show every refund…" produced two identical
   // 50/62 tables). Showing the user the same table twice is noise, so emit each shape once.
@@ -291,11 +292,16 @@ export async function runToolRounds(
         if (dataFetchTools.has(name)) calledDataFetchTool = true; // G5: đã chạm dữ liệu thật
         if (name === LAAM_AUDIT_TOOL_NAME) calledAuditTool = true; // G5: đổi nội dung nhắc
         const callArgs = args;
+        // A two-step query tool submits the question and returns the rows from a LATER poll
+        // whose args carry only an id — so remember the last question seen this turn and hand
+        // it to the annotator, which otherwise has nothing to quote at the one moment it
+        // matters. Turn-scoped: a stale question from a previous turn would misattribute.
+        lastQueryText = queryTextFromArgs(callArgs) ?? lastQueryText;
         const result = await deps.dispatch(name, callArgs);
         toolCallCount++;
         // Empty result → tell the model (in the tool result) that emptiness is not absence.
         // Only the convo copy is annotated; `result` below stays raw for the view/drilldown.
-        convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, callArgs, lastUserMessage)) });
+        convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, callArgs, lastUserMessage, lastQueryText)) });
         // Panel per BIG result, emitted as it lands. A turn can run several queries (measured:
         // the two heaviest demo questions run five each), so one panel per turn would hide four
         // of them — and hiding them is exactly what makes reducing the model's copy unsafe.
@@ -320,7 +326,7 @@ export async function runToolRounds(
               const detail = await deps.dispatch(plan.name, plan.args);
               toolCallCount++;
               convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: plan.name, arguments: plan.args } }] });
-              convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(detail, plan.args, lastUserMessage)) });
+              convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(detail, plan.args, lastUserMessage, lastQueryText)) });
               if (opts.onView && worthShowing(detail)) {
                 const detailView = deriveFromToolResult(plan.name, detail, Date.now(), queryTextFromArgs(plan.args));
                 if (detailView) emitViewOnce(detailView);
