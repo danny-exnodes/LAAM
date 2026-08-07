@@ -19,6 +19,9 @@ const DELIMITER_ROW = /^[\s|:-]*$/;
 const isDelimiterRow = (line: string) =>
   line.includes("|") && line.includes("-") && DELIMITER_ROW.test(line);
 
+// A single delimiter cell: dashes, optionally anchored by a colon at either end.
+const isDelimiterCell = (cell: string) => /^:?-+:?$/.test(cell.trim());
+
 // Split a row into cells, dropping the optional leading and trailing pipe. `| a | b |` and
 // `a | b` both yield two cells, which is how GFM counts them.
 function cells(line: string): string[] {
@@ -60,7 +63,10 @@ export function repairTableDelimiters(source: string): string {
 
     const width = cells(header).length;
     const written = cells(lines[i]);
-    if (written.length === width) continue; // already well-formed — leave it byte-identical
+    // The count is only half the rule. GFM also requires EVERY delimiter cell to be dashes
+    // with optional colons — measured live, "||---|---|…" counts correctly and is still
+    // rejected, because its first cell is empty. Checking only the count passed it through.
+    if (written.length === width && written.every(isDelimiterCell)) continue;
 
     lines[i] = delimiterRow(written, width);
   }

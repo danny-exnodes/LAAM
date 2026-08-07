@@ -63,3 +63,37 @@ describe("repairTableDelimiters", () => {
     expect(repairTableDelimiters(src)).toBe(src);
   });
 });
+
+// Seen in the demo UI 2026-08-07 on the receipt for TXN-0004917, and NOT caught by the
+// cell-count check above:
+//
+//   | Item ID | Product ID | ... | Line total |     <- 9 cells
+//   ||---|---|---|---|---|---|---|---|             <- also 9, but the first one is EMPTY
+//
+// The counts agree, so the repair passed it through, and GFM still refused it: a delimiter
+// cell must be dashes with optional colons, and an empty cell is not. Counting was never the
+// rule — it was one of two rules, and this file only implemented the one.
+describe("delimiter cells must each be valid, not merely the right number of them", () => {
+  it("repairs a leading empty cell even though the count already matches", () => {
+    const out = repairTableDelimiters("| A | B |\n||---|\n| 1 | 2 |");
+    expect(out).toBe("| A | B |\n| --- | --- |\n| 1 | 2 |");
+  });
+
+  it("repairs a trailing empty cell too", () => {
+    const out = repairTableDelimiters("| A | B |\n| --- | --- ||\n| 1 | 2 |");
+    expect(out).toBe("| A | B |\n| --- | --- |\n| 1 | 2 |");
+  });
+
+  // Deliberately out of scope: a row holding anything other than pipes, dashes, colons and
+  // spaces is indistinguishable from a data row, and rewriting a data row into a delimiter
+  // would destroy content. Only rows that already look like delimiters are touched.
+  it("does not touch a row carrying real content", () => {
+    const src = "| A | B |\n| --- | x |\n| 1 | 2 |";
+    expect(repairTableDelimiters(src)).toBe(src);
+  });
+
+  it("still leaves a valid aligned row untouched", () => {
+    const src = "| A | B |\n| :--- | ---: |\n| 1 | 2 |";
+    expect(repairTableDelimiters(src)).toBe(src);
+  });
+});
