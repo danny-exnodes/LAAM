@@ -191,22 +191,69 @@ function mapStatus(status: number, text: string): Error {
   return new Error(`BytePlus ${status}: ${text}`); // unexpected → route surfaces 'api'
 }
 
+// Transient on BytePlus's side, not ours: 429 is returned for their OWN capacity
+// ("ServerOverloaded"/"TooManyRequests"), not only for a per-key quota, and 503/529 mean the
+// same thing. Observed 2026-08-07: two of three consecutive turns died this way while the
+// requests were seconds apart and strictly sequential — nothing a client can pace its way out
+// of. Losing the whole turn costs far more than one extra call, because the tool rounds have
+// already run and only the final generation failed.
+const RETRY_STATUSES: ReadonlySet<number> = new Set([429, 503, 529]);
+const MAX_RETRIES = 1; // one extra attempt — retrying harder into an overloaded server makes it worse
+const DEFAULT_RETRY_DELAY_MS = 2000;
+
+// Tunable per deployment (BYTEPLUS_RETRY_DELAY_MS): a dedicated endpoint can drop it, a shared
+// one can raise it. 0 is a legitimate setting — retry immediately — so only a negative or
+// unparseable value falls back to the default.
+function retryDelayMs(): number {
+  const n = Number(process.env.BYTEPLUS_RETRY_DELAY_MS);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_RETRY_DELAY_MS;
+}
+
+// Resolves early when the caller aborts, so a cancelled turn does not sit out the backoff;
+// the retry's fetch then rejects immediately on the aborted signal.
+const backoff = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const id = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(id);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+
 // Shared POST → returns the raw Response (caller reads json or SSE body). Network
 // rejects → 'connection'; non-ok status → typed/plain error via mapStatus.
+//
+// Retries live HERE and nowhere else: request() returns before a single byte of the body is
+// read, so both callers (byteplusChat's json, byteplusStream's SSE) are safe to restart. A
+// failure after this point — mid-stream, tokens already emitted — must never be retried, or
+// the user would see the answer twice.
 async function request(key: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl()}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal,
-    });
-  } catch (e) {
-    throw new BytePlusUnavailableError("connection", e instanceof Error ? e.message : String(e));
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl()}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      });
+    } catch (e) {
+      // Network rejects are NOT retried: unlike a 429 they carry no signal that waiting helps,
+      // and an aborted turn arrives here too.
+      throw new BytePlusUnavailableError("connection", e instanceof Error ? e.message : String(e));
+    }
+    if (res.ok) return res;
+    const text = await safeText(res);
+    if (attempt < MAX_RETRIES && RETRY_STATUSES.has(res.status) && !signal?.aborted) {
+      await backoff(retryDelayMs(), signal);
+      continue;
+    }
+    throw mapStatus(res.status, text);
   }
-  if (!res.ok) throw mapStatus(res.status, await safeText(res));
-  return res;
 }
 
 // One non-streaming tool round. Returns the OllamaChatResponse shape so the route's
