@@ -52,12 +52,30 @@ const VOICE_GUIDE =
   "(để thấy chênh lệch/xu hướng). Với dữ liệu xếp hạng, CẢ BẢNG LẪN BIỂU ĐỒ đều hữu ích — " +
   "cứ chèn cả hai, panel hiện được nhiều khối. " +
   "Người dùng KHÔNG cần phải yêu cầu \"cho xem bảng/biểu đồ\" thì bạn mới chèn — dữ liệu nhiều mục thì tự chèn. " +
+  // NGOẠI LỆ (2026-08-07): luật "tự chèn bảng markdown" ra đời khi CHƯA có panel do code dựng —
+  // hồi đó lời của model là đường DUY NHẤT để một dòng dữ liệu tới được người dùng. Nay kết quả
+  // lớn được code dựng thành bảng và hiện sẵn, còn phần dòng thì đã bị rút gọn trước khi vào ngữ
+  // cảnh, nên model KHÔNG còn đủ dòng để gõ lại. Không nêu ngoại lệ này thì model kẹt giữa hai
+  // chỉ thị ngược nhau và nó chọn cách xin lỗi: đo được câu "show every refund" trả về "tôi
+  // không thể hiển thị bảng đầy đủ" trong khi bảng 62 dòng ĐANG hiện ngay dưới. Việc bỏ bảng do
+  // model gõ cũng xoá luôn một lớp lỗi: bản model từng in "PH-1" cho ô thật là "PH-001" (mã cửa
+  // hàng không tồn tại) và kết luận "All 62 records were returned" trong khi mới in 50.
+  "NGOẠI LỆ: khi kết quả trả về đã kèm ghi chú nói rằng hệ thống ĐÃ DỰNG SẴN bảng cho người dùng, " +
+  "thì ĐỪNG tự gõ lại bảng đó — bảng đã hiện rồi, và bạn cũng chỉ còn vài dòng mẫu nên gõ lại sẽ " +
+  "ra một danh sách thiếu trông như đầy đủ. Lúc đó chỉ nói phần nhận định và số tổng hợp. " +
   "Khối đó KHÔNG được đọc lên — nó được tách ra và hiện trên một bảng nổi giữa màn hình. " +
   // Người dùng đang NGHE: nếu phần đọc chỉ nói "xem bảng ở trên" thì với họ câu hỏi chưa
   // được trả lời. Câu trỏ panel đã do CODE chèn sẵn ở cuối (constellation.viewPointer),
   // model không cần và không nên tự viết câu đó.
   "Vì vậy phần văn xuôi phải TỰ NÓ trả lời xong câu hỏi, KHÔNG được đẩy người dùng sang khối " +
   "(đừng viết \"xem bảng ở trên/bên dưới\", \"chi tiết trong bảng\" — hệ thống tự thêm câu đó). " +
+  // Luật trên cấm DÙNG panel để né trả lời. Nó KHÔNG có nghĩa là phải phủ nhận panel tồn tại:
+  // đo được khi người dùng hỏi thẳng "cho xem bảng đầy đủ", model trả lời "mình không thể hiển
+  // thị bảng đầy đủ" trong khi bảng 62 dòng ĐANG hiện — vừa sai sự thật vừa vô ích. Hỏi thẳng
+  // về bảng thì câu trả lời đúng là xác nhận nó đã hiện, kèm số dòng.
+  "NHƯNG nếu người dùng hỏi THẲNG về bảng (\"cho xem bảng đầy đủ\", \"hiện hết đi\"), " +
+  "hãy xác nhận bảng đã được hiển thị kèm số dòng — TUYỆT ĐỐI không nói bạn không thể hiển thị " +
+  "khi hệ thống đã dựng bảng đó. " +
   "Với câu hỏi xếp hạng/top N, hãy ĐỌC LẦN LƯỢT từng mục kèm con số của nó — " +
   "\"đứng đầu là A với …, thứ hai là B với …\" — chứ không chỉ nêu tên hay nói \"có 5 mục\". " +
   "Ngược lại, câu trò chuyện, câu xác nhận, hay một hai con số thì KHÔNG cần khối nào. " +
