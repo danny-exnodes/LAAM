@@ -6,6 +6,7 @@ import { planDrilldown, type DrilldownPair } from "./drilldown";
 import { PendingWriteSignal } from "@/lib/agent/safety/gate";
 import { deriveFromToolResult, worthShowing, viewKey, type ViewDescriptor } from "./view";
 import { annotateEmptyResult, foundNothing, queryTextFromArgs, reAskDemanded } from "./empty-result";
+import { intendedToolName } from "./tool-intent";
 import { annotatePanelShown } from "./panel-note";
 import { digestMessagesForModel } from "./digest";
 
@@ -164,8 +165,13 @@ const repeatFeedback = (name: string, n: number) =>
 
 // gpt-oss-120b qua BytePlus đôi khi trả tool_calls[].function.name dính rác từ định
 // dạng harmony nội bộ của chính model. Đo được BA dạng khác nhau, mỗi dạng cần một
-// cách sửa riêng — validNames luôn là chính danh sách tool đã đưa cho model nên
-// không thể đoán nhầm sang một tool khác đang tồn tại:
+// cách sửa riêng. LƯU Ý một khẳng định CŨ ở đây đã sai và bị gỡ: "validNames luôn là chính
+// danh sách tool đã đưa cho model nên không thể đoán nhầm sang một tool khác đang tồn tại".
+// Đoán nhầm ĐƯỢC: một tên tool có thể là tiền tố THỰC SỰ của tên khác (kg_query của
+// kg_query_datasource), nên rác phá đúng đoạn "_datasource" sẽ khiến bước tiền tố trả về
+// kg_query — một tool khác hẳn, hợp lệ, và sai. Tái hiện bằng test, CHƯA quan sát thấy ngoài
+// thực tế: lỗi Cerebras 2026-08-10 trông giống hệt nhưng có nguyên nhân khác (model phát ra
+// thẳng tên ngắn hợp lệ, hàm này không hề can thiệp).
 //   (a) rác có ký tự đặc biệt phân cách — "kg_list_projects[]",
 //       "kg_query_datasource_status<|channel|>commentary" → cắt tại ký tự đặc biệt đầu tiên.
 //   (b) rác dính liền chữ/số, KHÔNG có ký tự đặc biệt để cắt — "kg_list_datasourcesjson"
@@ -189,21 +195,29 @@ function sanitizeToolCallName(rawName: string, validNames: ReadonlySet<string>):
   const symbolCut = cut === -1 ? rawName : rawName.slice(0, cut);
   if (validNames.has(symbolCut)) return warn(symbolCut);
 
-  // (b) tiền tố hợp lệ DÀI NHẤT khớp với phần đầu chuỗi (đã cắt rác ký tự đặc biệt ở (a),
-  // nếu có) — bắt hậu tố rác dính liền chữ/số mà (a) không cắt được.
-  let longestPrefix = "";
-  for (const name of validNames) {
-    if (symbolCut.startsWith(name) && name.length > longestPrefix.length) longestPrefix = name;
-  }
-  if (longestPrefix) return warn(longestPrefix);
-
-  // (c) chuẩn hoá "-"/"_" về cùng ký tự rồi so khớp — bắt trường hợp model đổi lẫn hai
-  // ký tự đó ở giữa tên (thường ở phần tên connector do người dùng đặt, có cả hai ký tự).
+  // (b) chuẩn hoá "-"/"_" về cùng ký tự rồi so khớp NGUYÊN CHUỖI — bắt trường hợp model đổi
+  // lẫn hai ký tự đó ở giữa tên (thường ở phần tên connector do người dùng đặt, có cả hai).
+  //
+  // Chạy TRƯỚC bước tiền tố, không phải sau: khớp nguyên chuỗi (dù đã chuẩn hoá) là bằng
+  // chứng MẠNH HƠN khớp tiền tố, vì tiền tố có thể rơi trúng một tool KHÁC đang tồn tại.
   const normalize = (s: string) => s.replace(/[-_]/g, "_");
   const normalizedRaw = normalize(symbolCut);
   for (const name of validNames) {
     if (normalize(name) === normalizedRaw) return warn(name);
   }
+
+  // (c) tiền tố hợp lệ DÀI NHẤT khớp với phần đầu chuỗi (đã cắt rác ký tự đặc biệt ở (a),
+  // nếu có) — bắt hậu tố rác dính liền chữ/số mà (a) không cắt được.
+  //
+  // So khớp trên chuỗi ĐÃ CHUẨN HOÁ ở cả hai phía, vì một tên tool có thể là tiền tố thực sự
+  // của một tên khác (kg_query của kg_query_datasource). Nếu rác phá đúng đoạn phân biệt hai
+  // tên đó, so khớp thô sẽ chọn tên NGẮN — tức một tool khác hẳn — và trả về ngay. Chuẩn hoá
+  // trước khi so làm tên dài lại khớp và thắng nhờ luật "dài nhất".
+  let longestPrefix = "";
+  for (const name of validNames) {
+    if (normalizedRaw.startsWith(normalize(name)) && name.length > longestPrefix.length) longestPrefix = name;
+  }
+  if (longestPrefix) return warn(longestPrefix);
 
   return rawName; // không khớp gì — giữ nguyên, gate vẫn fail-closed nếu thật sự lạ
 }
@@ -268,11 +282,21 @@ export async function runToolRounds(
     const rawCalls = isLastRound ? [] : Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
     // Sửa TÊN trước khi lưu vào convo — nếu không, lượt sau model thấy lại chính tên
     // rác của nó trong lịch sử và có xu hướng lặp lại kiểu hỏng đó.
-    const calls = rawCalls.map((tc) =>
-      tc.function
-        ? { ...tc, function: { ...tc.function, name: sanitizeToolCallName(tc.function.name ?? "", validToolNames) } }
-        : tc,
-    );
+    const calls = rawCalls.map((tc) => {
+      if (!tc.function) return tc;
+      const cleaned = sanitizeToolCallName(tc.function.name ?? "", validToolNames);
+      // A name can be perfectly VALID and still be the wrong tool — measured on Cerebras,
+      // which called kg_query carrying kg_query_datasource's arguments. sanitize only repairs
+      // garbled names, so it returns that one untouched; the arguments are what give the
+      // intent away. Runs after sanitize so a name that is both garbled AND wrong gets both
+      // repairs, and stores the corrected name in convo for the same reason sanitize does —
+      // the model copies its own history.
+      const byArgs = intendedToolName(cleaned, tc.function.arguments, tools);
+      if (byArgs) {
+        console.warn(`[orchestrator] tool_call "${cleaned}" mang tham số của "${byArgs}" — đã định tuyến lại`);
+      }
+      return { ...tc, function: { ...tc.function, name: byArgs ?? cleaned } };
+    });
     if (calls.length) {
       convo.push({ role: "assistant", content: msg.content ?? "", tool_calls: calls });
       let sawWebSearchWithUrl = false;

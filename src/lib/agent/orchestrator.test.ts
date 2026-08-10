@@ -104,6 +104,102 @@ describe("runToolRounds", () => {
     expect(dispatch).toHaveBeenCalledWith("mcp__daab-michael-pharmacy-chain__kg_list_datasources", {});
   });
 
+  // REGRESSION (Cerebras, 2026-08-10): cùng câu hỏi chạy tốt trên BytePlus nhưng hỏng trên
+  // Cerebras — 5 lượt gọi liên tiếp vào kg_query rồi bỏ cuộc với "no refund data was returned
+  // from the knowledge-graph query tool". chat_tool_call cho thấy các lời gọi đó mang
+  // natural_language_query + data_source_id (tham số CHỈ kg_query_datasource nhận) và nhận về
+  // "Schema validation failed for kg_query: [node_type] required field is missing".
+  //
+  // kg_query là TIỀN TỐ THỰC SỰ của kg_query_datasource. Khi rác phá đúng đoạn "_datasource",
+  // bước (b) khớp tiền tố tìm thấy kg_query, trả về nó, và bước (c) chuẩn hoá "-"/"_" — vốn
+  // sẽ khôi phục đúng tên — không bao giờ được chạy. Một tên hỏng có thể sửa được bị biến
+  // thành một tool KHÁC đang tồn tại, im lặng.
+  const kgTools = [
+    { type: "function" as const, kind: "read" as const,
+      function: { name: "mcp__daab-pharmacy-chain__kg_query", description: "", parameters: {} } },
+    { type: "function" as const, kind: "read" as const,
+      function: { name: "mcp__daab-pharmacy-chain__kg_query_datasource", description: "", parameters: {} } },
+  ];
+
+  test("rác phá dấu gạch dưới KHÔNG được rơi xuống tool ngắn hơn cùng tiền tố", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: {
+          content: "",
+          tool_calls: [{
+            function: {
+              // "_datasource" thành "-datasource": gạch ngang hợp lệ nên bước (a) không cắt.
+              name: "mcp__daab-pharmacy-chain__kg_query-datasource",
+              arguments: { natural_language_query: "Which employee refunds the most?", data_source_id: "ds-1" },
+            },
+          }],
+        },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ ok: true }));
+
+    await runToolRounds(baseMessages, kgTools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      "mcp__daab-pharmacy-chain__kg_query_datasource",
+      expect.objectContaining({ natural_language_query: "Which employee refunds the most?" }),
+    );
+  });
+
+  // Hai kiểu rác cùng lúc: ký tự bị đổi Ở GIỮA và hậu tố dính liền ở cuối. Khớp nguyên chuỗi
+  // không cứu được (còn hậu tố "json"), nên phải là bước tiền tố xử lý — và nó chỉ chọn đúng
+  // nếu so trên chuỗi đã chuẩn hoá; so thô sẽ lại rơi xuống kg_query.
+  test("rác giữa chuỗi CỘNG hậu tố dính liền → vẫn về đúng tool dài hơn", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: {
+          content: "",
+          tool_calls: [{ function: { name: "mcp__daab-pharmacy-chain__kg_query-datasourcejson", arguments: {} } }],
+        },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ ok: true }));
+
+    await runToolRounds(baseMessages, kgTools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith("mcp__daab-pharmacy-chain__kg_query_datasource", {});
+  });
+
+  // End-to-end through the loop: the provider names a VALID tool, so sanitize leaves it alone,
+  // and only the argument check saves the turn. This is the Cerebras failure in miniature.
+  test("tên hợp lệ nhưng tham số của tool khác → dispatch tới tool mà THAM SỐ chỉ tới", async () => {
+    const props = (...keys: string[]) =>
+      Object.fromEntries(keys.map((k) => [k, { type: "string" }]));
+    const argTools = [
+      { type: "function" as const, kind: "read" as const,
+        function: { name: "mcp__daab-pharmacy-chain__kg_query", description: "",
+                    parameters: { type: "object", properties: props("node_type", "project_id"), required: ["node_type"] } } },
+      { type: "function" as const, kind: "read" as const,
+        function: { name: "mcp__daab-pharmacy-chain__kg_query_datasource", description: "",
+                    parameters: { type: "object", properties: props("natural_language_query", "data_source_id", "project_id"),
+                                  required: ["natural_language_query", "data_source_id"] } } },
+    ];
+    const args = { data_source_id: "ds-1", natural_language_query: "Which employee refunds the most?" };
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "mcp__daab-pharmacy-chain__kg_query", arguments: args } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "Done." } });
+    const dispatch = vi.fn(async () => ({ rows: [{ employee_id: "EMP-0006" }] }));
+
+    const out = await runToolRounds(baseMessages, argTools, { callOllama, dispatch });
+
+    expect(dispatch).toHaveBeenCalledWith("mcp__daab-pharmacy-chain__kg_query_datasource", args);
+    // Stored corrected in convo too: the model copies its own history, so leaving the wrong
+    // name there invites it to repeat the mistake next round.
+    const assistantMsg = out.find((m) => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length);
+    expect((assistantMsg!.tool_calls![0] as { function: { name: string } }).function.name)
+      .toBe("mcp__daab-pharmacy-chain__kg_query_datasource");
+  });
+
   test("tiền tố khớp chọn tên DÀI NHẤT — không dừng ở tên ngắn hơn cũng khớp một phần", async () => {
     const callOllama = vi
       .fn()
