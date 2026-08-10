@@ -10,7 +10,7 @@ const h = vi.hoisted(() => ({
 vi.mock("./store", () => ({ listServers: h.listServers }));
 vi.mock("./client", () => ({ listTools: h.listTools }));
 
-import { discoverForUser, invalidateUser } from "./discovery";
+import { deCollideNames, discoverForUser, invalidateUser } from "./discovery";
 
 const server = (over: Partial<McpServerConfig> = {}): McpServerConfig => ({
   slug: "srv",
@@ -130,5 +130,82 @@ describe("mcp discovery", () => {
     invalidateUser("u1");
     await discoverForUser("u1");
     expect(h.listServers).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Measured 2026-08-10: gpt-oss-120b on Cerebras picks the SHORTER of two tool names whenever one
+// is a strict prefix of the other — 0/6 on kg_query vs kg_query_datasource, 0/5 on kg_search vs
+// kg_search_chunks, and 6/6 and 5/5 once the prefix was broken. Order, parallel_tool_calls and
+// every reasoning_effort level made no difference, so the prefix relation is the whole cause.
+describe("deCollideNames", () => {
+  test("renames the shorter name until it no longer prefixes the longer one", () => {
+    const out = deCollideNames(["a__kg_query", "a__kg_query_datasource"]);
+    const renamed = out.get("a__kg_query")!;
+    expect(renamed).toBeDefined();
+    expect("a__kg_query_datasource".startsWith(renamed)).toBe(false);
+  });
+
+  // A single underscore is NOT enough and this is measured, not theoretical: "kg_query_" is
+  // still a prefix of "kg_query_datasource" and still scored 0/5 against the live provider.
+  test("one underscore is not enough when the longer name continues with one", () => {
+    expect(deCollideNames(["a__kg_query", "a__kg_query_datasource"]).get("a__kg_query"))
+      .not.toBe("a__kg_query_");
+  });
+
+  test("leaves names alone when nothing is nested", () => {
+    expect(deCollideNames(["a__kg_search", "a__kg_get_node"]).size).toBe(0);
+  });
+
+  // kg_query_datasource is BOTH the longer name of one pair and the shorter of another. After
+  // renaming, no advertised name may prefix another or the fix just moves the problem.
+  test("a chain of three nested names ends with no prefix relation left", () => {
+    const names = ["a__kg_query", "a__kg_query_datasource", "a__kg_query_datasource_status"];
+    const out = deCollideNames(names);
+    const finalNames = names.map((n) => out.get(n) ?? n);
+    for (const x of finalNames) {
+      for (const y of finalNames) {
+        if (x !== y) expect(y.startsWith(x)).toBe(false);
+      }
+    }
+  });
+
+  test("never produces a name that already belongs to another tool", () => {
+    const names = ["a__t", "a__t_", "a__t_x"];
+    const out = deCollideNames(names);
+    for (const [, renamed] of out) expect(names).not.toContain(renamed);
+  });
+
+  // Providers cap function names at 64 characters, so the fix must give up rather than emit a
+  // name that will be rejected outright.
+  test("gives up instead of exceeding the 64-character name cap", () => {
+    const long = "a__" + "x".repeat(61); // 64 exactly
+    expect(deCollideNames([long, long + "_more"]).size).toBe(0);
+  });
+});
+
+describe("discovery de-collision wiring", () => {
+  const listing = (tools: RemoteTool[], instructions?: string) => ({ tools, instructions });
+
+  test("model sees the de-collided name, and the original still routes", async () => {
+    h.listServers.mockResolvedValue([server({ slug: "daab", trustReadHints: true })]);
+    h.listTools.mockResolvedValue(listing([
+      tool({ name: "kg_query", annotations: { readOnlyHint: true } }),
+      tool({ name: "kg_query_datasource", annotations: { readOnlyHint: true } }),
+    ]));
+    const { tools, route, readAllow, enabled } = await discoverForUser("u1");
+
+    const advertised = tools.map((t) => t.function.name);
+    expect(advertised).not.toContain("mcp__daab__kg_query");
+    const renamed = advertised.find((n) => n.startsWith("mcp__daab__kg_query_") && !n.includes("datasource"))!;
+    expect(enabled.has(renamed)).toBe(true);
+
+    // Both keys reach the SAME real tool — this is what keeps saved workflows working, since
+    // they rebuild "mcp__<server>__<tool>" from the stored real name at run time.
+    expect(route.get(renamed)).toEqual({ slug: "daab", realName: "kg_query" });
+    expect(route.get("mcp__daab__kg_query")).toEqual({ slug: "daab", realName: "kg_query" });
+    // …and the safety gate must classify the legacy name the same way, or replayed calls
+    // suddenly start demanding write confirmation.
+    expect(readAllow.has("mcp__daab__kg_query")).toBe(true);
+    expect(readAllow.has(renamed)).toBe(true);
   });
 });
