@@ -2,7 +2,7 @@ import { eq, asc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages, chatToolCalls } from "@/db/schema";
-import { chatTools, mcpReadAllow } from "@/lib/connectors";
+import { chatTools, mcpReadAllow, mcpInstructions } from "@/lib/connectors";
 import { sanitizeAttachments } from "@/lib/chat/attachment-meta";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { getCustomAgent } from "@/lib/customAgents";
@@ -420,6 +420,9 @@ export async function POST(req: Request) {
   // MCP tools the user trusts as read (opt-in) → safety gate skips confirm for them; all
   // other MCP tools fail-closed to write.
   const readAllow = await mcpReadAllow(userId);
+  // What each connected MCP server said about itself at initialize (scope, ids it is
+  // already bound to). Same 30s discovery cache as the tools above, so no extra round-trip.
+  const serverNotes = await mcpInstructions(userId);
 
   // P1 quick-tools: user picked tool → validate SỚM, fail-loud (Rule 12). Tên phải
   // nằm trong union tool khả dụng của CHÍNH user này + args qua CÙNG chuẩn
@@ -466,6 +469,8 @@ export async function POST(req: Request) {
         // handleConfirm) — liệt kê tool + "BẮT BUỘC gọi công cụ" cho model không
         // có tool sẽ làm nó bịa cú pháp tool / claim sai.
         tools: isClaudeModel(model) ? [] : tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+        // Same tool-less rule as above: no tools rendered → no server notes either.
+        serverNotes: isClaudeModel(model) ? [] : serverNotes,
         mode: body.mode,
         // Persona base (or undefined → default BASE) per resolveAgentBase precedence.
         base: resolveAgentBase(hasSystemOverride, agentPreset),

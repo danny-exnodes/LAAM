@@ -330,6 +330,20 @@ export async function chatTools(userId: string): Promise<ConnectorTool[]> {
   return out;
 }
 
+// Free-text `instructions` each connected MCP server returned at initialize, for
+// servers contributing at least one enabled tool. Fed into the system prompt so the
+// model knows what a connection is scoped to BEFORE it picks a tool — DAAB uses it to
+// hand over the project_id / data_source_id it is already bound to, which removes the
+// discovery round-trip the model otherwise runs on every question.
+export async function mcpInstructions(userId: string): Promise<{ slug: string; text: string }[]> {
+  try {
+    return (await discoverForUser(userId)).instructions;
+  } catch {
+    /* discovery failure must not break chat — the prompt just loses the hint */
+    return [];
+  }
+}
+
 // Names of MCP tools the user opted to trust as read (fed to the safety gate's
 // readAllow so they skip the write confirm-card). Everything else stays fail-closed.
 export async function mcpReadAllow(userId: string): Promise<ReadonlySet<string>> {

@@ -11,6 +11,7 @@ vi.mock("@/db", () => ({ get db() { return _db; } }));
 vi.mock("@/lib/connectors", () => ({
   chatTools: vi.fn(async () => []),
   mcpReadAllow: vi.fn(async () => new Set<string>()),
+  mcpInstructions: vi.fn(async () => []),
   execute: vi.fn(async () => ({})),
 }));
 // C1 contract: spy PASS-THROUGH quanh runToolRounds (giữ behavior thật) để assert
