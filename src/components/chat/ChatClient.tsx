@@ -76,6 +76,7 @@ export function ChatClient() {
   const [models, setModels] = useState<string[]>([]);
   const [claudeModels, setClaudeModels] = useState<string[]>([]); // C2: from /api/chat/info
   const [byteplusModels, setByteplusModels] = useState<string[]>([]); // from /api/chat/info (env-gated)
+  const [cerebrasModels, setCerebrasModels] = useState<string[]>([]); // from /api/chat/info (env-gated)
   const [customAgents, setCustomAgents] = useState<{ id: string; name: string }[]>([]); // P3: persona presets
   const [ocrAvailable, setOcrAvailable] = useState(true); // F3/FEAT-4: degrade if tesseract missing
   const [toolGroups, setToolGroups] = useState<CatalogGroup[]>([]); // P1 quick-tools catalog
@@ -100,12 +101,14 @@ export function ChatClient() {
       .catch(() => {});
     fetch("/api/chat/info")
       .then((r) => r.json())
-      .then((d: { model?: string; claudeModels?: string[]; byteplusModels?: string[] }) => {
+      .then((d: { model?: string; claudeModels?: string[]; byteplusModels?: string[]; cerebrasModels?: string[] }) => {
         if (d.model) setSettings((s) => ({ ...s, model: d.model! }));
         // C2: expose Claude model whitelist to the picker; empty array = no Claude key.
         if (Array.isArray(d.claudeModels)) setClaudeModels(d.claudeModels);
         // BytePlus whitelist (same env-gated pattern); empty = no BytePlus key.
         if (Array.isArray(d.byteplusModels)) setByteplusModels(d.byteplusModels);
+        // Cerebras whitelist (same env-gated pattern); empty = no Cerebras key.
+        if (Array.isArray(d.cerebrasModels)) setCerebrasModels(d.cerebrasModels);
       })
       .catch(() => {});
     // Probe OCR once so the composer can warn up front instead of failing an
@@ -791,9 +794,9 @@ export function ChatClient() {
   const totalTokens = messages.reduce((s, m) => s + (m.tokensIn ?? 0) + (m.tokensOut ?? 0), 0);
   // C2: whether the currently-selected model is a Claude API model.
   const isCurrentClaude = claudeModels.includes(settings.model);
-  // Any billed API model (Claude or BytePlus) — the empty state must not claim it runs
-  // locally now that the default can be a cloud model.
-  const isCurrentCloud = isCurrentClaude || byteplusModels.includes(settings.model);
+  // Any billed API model (Claude, BytePlus, or Cerebras) — the empty state must not claim
+  // it runs locally now that the default can be a cloud model.
+  const isCurrentCloud = isCurrentClaude || byteplusModels.includes(settings.model) || cerebrasModels.includes(settings.model);
   // C2: estimated cost for the current conversation when a Claude model is selected.
   // In/out ARE tracked per message (tokensIn/tokensOut from the {t:"tokens"} frame +
   // DB columns) — use the real split. "Ước tính" remains because MODEL attribution is
@@ -930,7 +933,7 @@ export function ChatClient() {
 
         {settingsOpen && (
           <div className="anim-slide-down p-4">
-            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} byteplusModels={byteplusModels} customAgents={customAgents} onChange={setSettings} />
+            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} byteplusModels={byteplusModels} cerebrasModels={cerebrasModels} customAgents={customAgents} onChange={setSettings} />
           </div>
         )}
 

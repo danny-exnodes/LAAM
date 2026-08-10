@@ -165,14 +165,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     return () => { alive = false; };
   }, []);
 
-  // ---- model list — INDEPENDENT (never blocks boot); CLOUD ONLY (BytePlus → Claude).
-  //      Ollama is intentionally NOT queried: it's unused, and hitting
+  // ---- model list — INDEPENDENT (never blocks boot); CLOUD ONLY (BytePlus/Cerebras →
+  //      Claude). Ollama is intentionally NOT queried: it's unused, and hitting
   //      /api/ollama/models when the local server is down logs an error in the
-  //      browser console. Default selection is the first BytePlus model. ----
+  //      browser console. Default selection is the first BytePlus (then Cerebras) model. ----
   useEffect(() => {
     let alive = true;
     (async () => {
-      let info: { model?: unknown; claudeModels?: unknown; byteplusModels?: unknown } | null = null;
+      let info: { model?: unknown; claudeModels?: unknown; byteplusModels?: unknown; cerebrasModels?: unknown } | null = null;
       try {
         const r = await fetch("/api/chat/info", { signal: AbortSignal.timeout(6000) });
         info = r.ok ? await r.json() : null;
@@ -180,15 +180,16 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       if (!alive) return;
       const str = (m: unknown): m is string => typeof m === "string" && m.length > 0;
       const bp = (Array.isArray(info?.byteplusModels) ? info.byteplusModels : []).filter(str);
+      const cb = (Array.isArray(info?.cerebrasModels) ? info.cerebrasModels : []).filter(str);
       const cl = (Array.isArray(info?.claudeModels) ? info.claudeModels : []).filter(str);
       const rawModel = info?.model;
       const defaultModel = str(rawModel) ? rawModel : "";
-      const cloud = Array.from(new Set([...bp, ...cl]));
+      const cloud = Array.from(new Set([...bp, ...cb, ...cl]));
       // Only fall back to the deployed default (may be an Ollama model) if no cloud model exists.
       const list = cloud.length ? cloud : defaultModel ? [defaultModel] : [];
       setModels(list);
       const stored = typeof window !== "undefined" ? localStorage.getItem("laam:chat:model") : null;
-      const def = stored && list.includes(stored) ? stored : (bp[0] ?? cl[0] ?? defaultModel ?? "");
+      const def = stored && list.includes(stored) ? stored : (bp[0] ?? cb[0] ?? cl[0] ?? defaultModel ?? "");
       if (def) {
         setModel(def);
         if (typeof window !== "undefined") localStorage.setItem("laam:chat:model", def);
