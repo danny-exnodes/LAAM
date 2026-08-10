@@ -702,47 +702,67 @@ describe("runToolRounds", () => {
 // bảng/biểu đồ CUỐI CÙNG (pickTurnView) — để drilldown list→detail hiện bước chi
 // tiết chứ không phải bước liệt kê ban đầu.
 describe("onView", () => {
+  // A panel is shown per BIG result now (view.ts worthShowing: >=10 rows AND >=6000 chars).
+  // The old contract — at most ONE panel per turn, the last one, and only when the turn made
+  // >=2 tool calls — is gone: a turn can run several queries (measured: the two heaviest demo
+  // questions run five each) and keeping one panel hides the rest, which is precisely what
+  // makes trimming the model's copy of those rows unsafe. Small results still show nothing,
+  // so the incidental-lookup noise the old gate existed to stop stays stopped.
   const rows = (tag: string) => [{ name: `${tag}-1`, n: 1 }, { name: `${tag}-2`, n: 2 }];
+  const bigRows = (tag: string) =>
+    Array.from({ length: 12 }, (_, i) => ({
+      id: `${tag}-${i}`,
+      n: i,
+      note: "padding so the payload clears the size gate ".repeat(12),
+    }));
 
-  test("gọi ĐÚNG MỘT LẦN cho cả lượt, dù có nhiều tool result", async () => {
+  test("mỗi kết quả LỚN được một panel riêng — không gộp, không bỏ bớt", async () => {
     const callOllama = vi
       .fn()
       .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "list", arguments: {} } }] } })
       .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "detail", arguments: {} } }] } })
       .mockResolvedValueOnce({ message: { content: "xong" } });
-    const dispatch = vi.fn(async (name: string) => rows(name));
+    const dispatch = vi.fn(async (name: string) => bigRows(name));
     const onView = vi.fn();
 
     await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onView });
 
-    expect(onView).toHaveBeenCalledTimes(1);
+    expect(onView).toHaveBeenCalledTimes(2);
+    const names = onView.mock.calls.map((c) => (c[0] as { source: { toolName: string } }).source.toolName);
+    expect(names).toEqual(["list", "detail"]);
   });
 
-  test("chọn tool result CUỐI CÙNG — bước chi tiết, không phải bước liệt kê", async () => {
-    const callOllama = vi
-      .fn()
-      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "list", arguments: {} } }] } })
-      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "detail", arguments: {} } }] } })
-      .mockResolvedValueOnce({ message: { content: "xong" } });
-    const dispatch = vi.fn(async (name: string) => rows(name));
-    const onView = vi.fn();
-
-    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onView });
-
-    expect(onView).toHaveBeenCalledWith(expect.objectContaining({ source: expect.objectContaining({ toolName: "detail" }) }));
-  });
-
-  test("KHÔNG gọi khi lượt chỉ có ĐÚNG 1 tool call, dù ra descriptor hợp lệ — tra cứu thoáng qua không đáng hiện panel", async () => {
+  // A single query returning one big table is the case that most needs a panel — Q2 of the
+  // demo set ("show every refund by X") is exactly this — so it must not be gated on the turn
+  // having made two tool calls.
+  test("MỘT tool call vẫn hiện panel nếu kết quả lớn", async () => {
     const callOllama = vi
       .fn()
       .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "list", arguments: {} } }] } })
       .mockResolvedValueOnce({ message: { content: "xong" } });
-    const dispatch = vi.fn(async (name: string) => rows(name));
+    const dispatch = vi.fn(async (name: string) => bigRows(name));
     const onView = vi.fn();
 
     await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onView });
 
     expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(onView).toHaveBeenCalledTimes(1);
+  });
+
+  // The reason the old one-panel rule existed: an id-by-name probe or a "not found" is not an
+  // answer, and showing it as a panel reads like one. Size keeps those out without code having
+  // to judge relevance.
+  test("KHÔNG hiện panel cho kết quả NHỎ — tra cứu thoáng qua", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "list", arguments: {} } }] } })
+      .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "detail", arguments: {} } }] } })
+      .mockResolvedValueOnce({ message: { content: "xong" } });
+    const dispatch = vi.fn(async (name: string) => rows(name));
+    const onView = vi.fn();
+
+    await runToolRounds(baseMessages, tools, { callOllama, dispatch }, { onView });
+
     expect(onView).not.toHaveBeenCalled();
   });
 
@@ -776,7 +796,9 @@ describe("onView", () => {
       .fn()
       .mockResolvedValueOnce({ message: { content: "", tool_calls: [{ function: { name: "x_list_projects", arguments: {} } }] } })
       .mockResolvedValueOnce({ message: { content: "Xong." } });
-    const dispatch = vi.fn(async (name: string) => (name === "x_list_projects" ? listResult : rows("detail")));
+    // detail must clear the size gate — the point of this test is that the DRILLDOWN branch
+    // emits, not that a small result does.
+    const dispatch = vi.fn(async (name: string) => (name === "x_list_projects" ? listResult : bigRows("detail")));
     const onView = vi.fn();
 
     await runToolRounds(askDetail, tools, { callOllama, dispatch }, { drilldownPairs, onView });
@@ -798,7 +820,13 @@ describe("seedRequestedTool (P1 - user picked tool, code dispatches)", () => {
       role: "assistant",
       tool_calls: [{ function: { name: "mcp__daab__kg_query", arguments: { project_id: "1f991b74-x" } } }],
     });
-    expect(convo[2]).toEqual({ role: "tool", content: JSON.stringify({ rows: [] }) });
+    // Result carries through as a tool message. This dispatch returns ZERO rows, so the
+    // content also carries the empty-result note (see empty-result.ts): the model must not
+    // be able to read "no rows" as "no such thing exists".
+    expect(convo[2]).toMatchObject({ role: "tool" });
+    const seeded = JSON.parse(String((convo[2] as { content: string }).content));
+    expect(seeded.rows).toEqual([]);
+    expect(String(seeded.note)).toContain("KHÔNG phải bằng chứng");
   });
 
   // D2 — drilldown xác định trong tool-loop. Logic khớp tên nằm ở drilldown.ts (đã test
@@ -901,5 +929,111 @@ describe("seedRequestedTool (P1 - user picked tool, code dispatches)", () => {
       seedRequestedTool(convo, { name: "demo_create_task", args: { title: "x" } }, dispatch),
     ).rejects.toBeInstanceOf(PendingWriteSignal);
     expect(convo.some((m) => m.role === "tool")).toBe(false);
+  });
+});
+// The single constraint that makes digesting safe: `convo` — which is what gets persisted to
+// chat_tool_call and what the panel is derived from — must keep the WHOLE result. Only the
+// copy handed to the model is reduced. Getting this backwards would write digests into the
+// conversation history, and a reloaded conversation could never show its tables again.
+describe("digest is applied to the model's copy only", () => {
+  const bigResult = {
+    status: "completed",
+    results: {
+      rows: Array.from({ length: 40 }, (_, i) => ({
+        refund_id: `REF-${i}`,
+        amount: i,
+        note: "padding so the payload clears the digest threshold ".repeat(6),
+      })),
+      row_count: 40,
+    },
+  };
+
+  test("convo giữ NGUYÊN kết quả, chỉ bản gửi model bị rút gọn", async () => {
+    const seen: ChatMessage[][] = [];
+    const callOllama = vi
+      .fn(async (messages: ChatMessage[]) => {
+        seen.push(messages.map((m) => ({ ...m })));
+        return seen.length === 1
+          ? { message: { content: "", tool_calls: [{ function: { name: "q", arguments: {} } }] } }
+          : { message: { content: "xong" } };
+      });
+    const dispatch = vi.fn(async () => bigResult);
+
+    const convo = await runToolRounds(baseMessages, tools, { callOllama, dispatch });
+
+    const stored = convo.find((m) => m.role === "tool")!;
+    expect(stored.content).toContain("REF-39"); // every row still there for persist + panel
+    expect(stored.content).not.toContain("_digest");
+
+    const sentToModel = seen[seen.length - 1].find((m) => m.role === "tool")!;
+    expect(sentToModel.content).toContain("_digest");
+    expect(sentToModel.content).not.toContain("REF-39"); // beyond the sample
+    expect(sentToModel.content.length).toBeLessThan(stored.content.length / 2);
+  });
+});
+
+// Convergence. The empty-result note tells the model to call the tool again in the user's own
+// words; the prompt separately tells it to re-query when the plan does not match the question.
+// Each is defensible alone. Together they removed the loop's natural exit — the model returning
+// no tool calls — and the only one left was the 25-round backstop.
+//
+// Measured 2026-08-07, "Show duplicate refunds across stores." in a Larvis thread: 24 tool calls
+// and 109.7s, reproduced at 23 calls and 108.5s. DAAB's `ai_queries` shows it had the complete
+// correct answer (18 rows) mid-loop and kept going.
+//
+// The termination check that was supposed to prevent this compares the sent text to the user's
+// question, and the model rewords every attempt, so it never matched — green in tests that fed
+// it an exact string, useless against the thing it was written for. So the budget is counted in
+// code instead: ONE mandatory re-ask per turn, whatever the model types.
+describe("the mandatory re-ask is spent once per turn", () => {
+  const emptyResult = { text: JSON.stringify({ status: "completed", results: { row_count: 0, rows: [] } }) };
+  const queryTool = [
+    { type: "function" as const, kind: "read" as const, function: { name: "kg_query", description: "ask", parameters: {} } },
+  ];
+
+  test("a second empty result does not demand another re-ask", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query", arguments: { query: "my own wording" } } }] },
+      })
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query", arguments: { query: "a different wording" } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "done" } });
+    const dispatch = vi.fn(async () => emptyResult);
+
+    const out = await runToolRounds(
+      [{ role: "system", content: "SYS" }, { role: "user", content: "Show duplicate refunds across stores." }],
+      queryTool,
+      { callOllama, dispatch },
+    );
+
+    const demands = out.filter((m) => m.role === "tool" && /BẮT BUỘC/.test(String(m.content)));
+    expect(demands).toHaveLength(1);
+  });
+
+  test("both empty results still say emptiness is not absence", async () => {
+    const callOllama = vi
+      .fn()
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query", arguments: { query: "one" } } }] },
+      })
+      .mockResolvedValueOnce({
+        message: { content: "", tool_calls: [{ function: { name: "kg_query", arguments: { query: "two" } } }] },
+      })
+      .mockResolvedValueOnce({ message: { content: "done" } });
+    const dispatch = vi.fn(async () => emptyResult);
+
+    const out = await runToolRounds(
+      [{ role: "system", content: "SYS" }, { role: "user", content: "Show duplicate refunds across stores." }],
+      queryTool,
+      { callOllama, dispatch },
+    );
+
+    // Spending the re-ask budget must not silence the note itself — that is the part that
+    // stops "0 rows" being read as "none exist", and it is needed on every empty result.
+    const noted = out.filter((m) => m.role === "tool" && /KHÔNG TÌM THẤY BẢN GHI NÀO/.test(String(m.content)));
+    expect(noted).toHaveLength(2);
   });
 });

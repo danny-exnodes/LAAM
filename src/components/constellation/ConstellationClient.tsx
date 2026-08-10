@@ -21,7 +21,7 @@ import type { ConnectorStatus } from "@/lib/connectors/types";
 import { useVoice } from "@/components/chat/useVoice";
 import { splitForSpeech, extractForSpeech } from "@/lib/chat/voice";
 import { withPointer } from "@/lib/chat/speech-pointer";
-import { pickTurnView, type ViewDescriptor } from "@/lib/agent/view";
+import { pickTurnView, viewKey, type ViewDescriptor } from "@/lib/agent/view";
 import { playPcmStream } from "@/lib/chat/streamingAudio";
 import { useAudioAnalyser } from "./useAudioAnalyser";
 import { AudioWave } from "./AudioWave";
@@ -121,12 +121,16 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
   }, [chatOpen]);
   // setState is referentially stable, so this helper never re-creates the callbacks that
   // close over it (speakReply in particular must keep its identity — see pointerRef).
-  const pushTurn = useCallback((role: Turn["role"], text: string) => {
-    if (text) setTurns((prev) => [...prev, { role, text }]);
+  const pushTurn = useCallback((role: Turn["role"], text: string, views?: ViewDescriptor[]) => {
+    if (text) setTurns((prev) => [...prev, { role, text, views: views?.length ? views : undefined }]);
   }, []);
 
   // (History for a resumed ?conv= is loaded further down, once initialConversationId exists.)
   const viewFromToolRef = useRef(false); // lượt này đã có nguồn A chưa (A thắng B)
+  // Mirrors the `views` state through a ref so speakReply can attach this turn's tables to the
+  // turn it pushes WITHOUT taking `views` as a dependency — speakReply must keep its identity
+  // (see pointerRef), and reading state through deps would change it on every table.
+  const turnViewsRef = useRef<ViewDescriptor[]>([]);
   // Câu trỏ panel đọc qua ref để speakReply KHÔNG phải nhận `t` làm dependency —
   // useT trả hàm mới mỗi lần render, thêm nó vào deps sẽ làm speakReply đổi identity
   // liên tục và kéo theo mọi effect/ref phụ thuộc nó.
@@ -161,14 +165,14 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     return () => { alive = false; };
   }, []);
 
-  // ---- model list — INDEPENDENT (never blocks boot); CLOUD ONLY (BytePlus → Claude).
-  //      Ollama is intentionally NOT queried: it's unused, and hitting
+  // ---- model list — INDEPENDENT (never blocks boot); CLOUD ONLY (BytePlus/Cerebras →
+  //      Claude). Ollama is intentionally NOT queried: it's unused, and hitting
   //      /api/ollama/models when the local server is down logs an error in the
-  //      browser console. Default selection is the first BytePlus model. ----
+  //      browser console. Default selection is the first BytePlus (then Cerebras) model. ----
   useEffect(() => {
     let alive = true;
     (async () => {
-      let info: { model?: unknown; claudeModels?: unknown; byteplusModels?: unknown } | null = null;
+      let info: { model?: unknown; claudeModels?: unknown; byteplusModels?: unknown; cerebrasModels?: unknown } | null = null;
       try {
         const r = await fetch("/api/chat/info", { signal: AbortSignal.timeout(6000) });
         info = r.ok ? await r.json() : null;
@@ -176,15 +180,16 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       if (!alive) return;
       const str = (m: unknown): m is string => typeof m === "string" && m.length > 0;
       const bp = (Array.isArray(info?.byteplusModels) ? info.byteplusModels : []).filter(str);
+      const cb = (Array.isArray(info?.cerebrasModels) ? info.cerebrasModels : []).filter(str);
       const cl = (Array.isArray(info?.claudeModels) ? info.claudeModels : []).filter(str);
       const rawModel = info?.model;
       const defaultModel = str(rawModel) ? rawModel : "";
-      const cloud = Array.from(new Set([...bp, ...cl]));
+      const cloud = Array.from(new Set([...bp, ...cb, ...cl]));
       // Only fall back to the deployed default (may be an Ollama model) if no cloud model exists.
       const list = cloud.length ? cloud : defaultModel ? [defaultModel] : [];
       setModels(list);
       const stored = typeof window !== "undefined" ? localStorage.getItem("laam:chat:model") : null;
-      const def = stored && list.includes(stored) ? stored : (bp[0] ?? cl[0] ?? defaultModel ?? "");
+      const def = stored && list.includes(stored) ? stored : (bp[0] ?? cb[0] ?? cl[0] ?? defaultModel ?? "");
       if (def) {
         setModel(def);
         if (typeof window !== "undefined") localStorage.setItem("laam:chat:model", def);
@@ -274,11 +279,16 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       try {
         const res = await fetch(`/api/conversations/${initialConversationId}`);
         if (!res.ok) return; // fail-soft: missing history is bad, a crashed page is worse
-        const data = (await res.json()) as { messages?: { role?: string; content?: string }[] };
+        // The route rebuilds each message's tables from its stored tool results, so a resumed
+        // conversation shows the same tables it did live — not prose referring to a table
+        // that is no longer anywhere on screen.
+        const data = (await res.json()) as {
+          messages?: { role?: string; content?: string; views?: ViewDescriptor[] }[];
+        };
         if (cancelled || !Array.isArray(data.messages)) return;
         const history: Turn[] = data.messages
           .filter((m) => (m.role === "user" || m.role === "assistant") && m.content)
-          .map((m) => ({ role: m.role as Turn["role"], text: m.content as string }));
+          .map((m) => ({ role: m.role as Turn["role"], text: m.content as string, views: m.views }));
         // Prepend: the greeting Larvis speaks on load pushes a live turn before this fetch
         // resolves, and it belongs AFTER the restored history, not in front of it.
         if (history.length) setTurns((prev) => [...history, ...prev]);
@@ -308,10 +318,24 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       // nhận được — một lượt confirm cũng là một lượt hội thoại MỚI, panel của lượt
       // trước không còn ăn khớp với phản hồi sắp tới.
       setViews([]);
+      turnViewsRef.current = [];
       setViewClosed(false);
       setToolSteps(0); // new turn → status caption restarts at "thinking"
     },
-    onView: (d) => { viewFromToolRef.current = true; setViews([d]); setViewClosed(false); },
+    // Accumulate: a turn can produce several tables (the heaviest demo questions run five
+    // queries each) and replacing would show only the last — the others would exist nowhere,
+    // since the panel is the only place their rows reach the user.
+    // Accumulate by viewKey: splitFrames() re-parses the WHOLE accumulated buffer on every
+    // chunk, so the same view frame arrives again and again — a plain append would stack the
+    // same table once per chunk.
+    onView: (d) => {
+      viewFromToolRef.current = true;
+      const k = viewKey(d);
+      if (!turnViewsRef.current.some((v) => viewKey(v) === k))
+        turnViewsRef.current = [...turnViewsRef.current, d];
+      setViews(turnViewsRef.current);
+      setViewClosed(false);
+    },
     onActivity: setToolSteps,
     initialConversationId,
   });
@@ -406,6 +430,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
       const ordered = [...descriptors].sort(
         (a, b) => Number(a.kind === "chart") - Number(b.kind === "chart"),
       );
+      turnViewsRef.current = ordered;
       setViews(ordered);
       setViewClosed(false);
     }
@@ -415,7 +440,7 @@ export function ConstellationClient({ greetingName, lang }: { greetingName: stri
     // `speech` is the TTS input — stripping blocks is a speech concern, not a display one.
     // Recorded before the early return below so a reply that produces no audio (empty
     // prose, e.g. a table-only answer) still lands in the log.
-    pushTurn("assistant", text);
+    pushTurn("assistant", text, turnViewsRef.current);
     const spoken = withPointer(speech, hasView, pointerRef.current);
     if (!spoken) return;
     const segments = splitForSpeech(spoken);

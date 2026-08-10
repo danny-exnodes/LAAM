@@ -29,6 +29,8 @@ import {
 } from "./types";
 import type { CatalogGroup, CatalogTool } from "@/lib/chat/toolCatalog";
 import { splitFrames, type ChatFrame } from "@/lib/chat/frames";
+import { viewKey, type ViewDescriptor } from "@/lib/agent/view";
+import { ResultTables } from "./ResultTables";
 import { isPdfFile, isDocxFile, looksBinaryText, stripNul } from "@/lib/chat/attach";
 import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
 import { MAX_RAW_IMAGES, rawImageVerdict } from "./imageCap";
@@ -74,6 +76,7 @@ export function ChatClient() {
   const [models, setModels] = useState<string[]>([]);
   const [claudeModels, setClaudeModels] = useState<string[]>([]); // C2: from /api/chat/info
   const [byteplusModels, setByteplusModels] = useState<string[]>([]); // from /api/chat/info (env-gated)
+  const [cerebrasModels, setCerebrasModels] = useState<string[]>([]); // from /api/chat/info (env-gated)
   const [customAgents, setCustomAgents] = useState<{ id: string; name: string }[]>([]); // P3: persona presets
   const [ocrAvailable, setOcrAvailable] = useState(true); // F3/FEAT-4: degrade if tesseract missing
   const [toolGroups, setToolGroups] = useState<CatalogGroup[]>([]); // P1 quick-tools catalog
@@ -98,12 +101,14 @@ export function ChatClient() {
       .catch(() => {});
     fetch("/api/chat/info")
       .then((r) => r.json())
-      .then((d: { model?: string; claudeModels?: string[]; byteplusModels?: string[] }) => {
+      .then((d: { model?: string; claudeModels?: string[]; byteplusModels?: string[]; cerebrasModels?: string[] }) => {
         if (d.model) setSettings((s) => ({ ...s, model: d.model! }));
         // C2: expose Claude model whitelist to the picker; empty array = no Claude key.
         if (Array.isArray(d.claudeModels)) setClaudeModels(d.claudeModels);
         // BytePlus whitelist (same env-gated pattern); empty = no BytePlus key.
         if (Array.isArray(d.byteplusModels)) setByteplusModels(d.byteplusModels);
+        // Cerebras whitelist (same env-gated pattern); empty = no Cerebras key.
+        if (Array.isArray(d.cerebrasModels)) setCerebrasModels(d.cerebrasModels);
       })
       .catch(() => {});
     // Probe OCR once so the composer can warn up front instead of failing an
@@ -245,6 +250,8 @@ export function ChatClient() {
           tokensIn?: number;
           tokensOut?: number;
           attachments?: AttachmentMeta[] | null;
+          // Rebuilt server-side from the stored tool results — see the conversation GET route.
+          views?: ViewDescriptor[] | null;
         }) => ({
           id: uid(),
           role: m.role === "user" ? "user" : "assistant",
@@ -253,6 +260,7 @@ export function ChatClient() {
           tokensIn: m.tokensIn,
           tokensOut: m.tokensOut,
           ...(m.attachments?.length ? { attachments: m.attachments } : {}),
+          ...(m.views?.length ? { views: m.views } : {}),
         }),
       ),
     );
@@ -326,6 +334,7 @@ export function ChatClient() {
     toolTrace?: ToolTraceItem[],
     cites?: string[],
     pendingWrite?: PendingWrite,
+    views?: ViewDescriptor[],
   ): ChatMsg[] {
     const copy = [...prev];
     for (let i = copy.length - 1; i >= 0; i--) {
@@ -337,6 +346,7 @@ export function ChatClient() {
           ...(toolTrace !== undefined ? { toolTrace } : {}),
           ...(cites !== undefined ? { cites } : {}),
           ...(pendingWrite !== undefined ? { pendingWrite } : {}),
+          ...(views !== undefined ? { views } : {}),
         };
         break;
       }
@@ -390,6 +400,13 @@ export function ChatClient() {
         let cites: string[] | undefined;
         let tokens: { tokensIn: number; tokensOut: number } | undefined;
         let pendingWrite: PendingWrite | undefined;
+        // Several tables can arrive in one turn (a question may run several queries), so
+        // accumulate — replacing would drop every table but the last, and the panel is the
+        // only place those rows exist outside the model's prose. Accumulate by viewKey, not
+        // blindly: splitFrames() re-parses the WHOLE buffer on every chunk, so the same view
+        // frame is delivered again and again and a per-sighting append repeats one table
+        // once per chunk.
+        let views: ViewDescriptor[] | undefined;
         const applyFrames = (frames: ChatFrame[]) => {
           for (const f of frames) {
             if (f.t === "tool") {
@@ -404,6 +421,10 @@ export function ChatClient() {
               setProactive(f.alerts.filter((a) => !dismissed.has(a.key)));
             }
             else if (f.t === "tokens") tokens = { tokensIn: f.i, tokensOut: f.o };
+            else if (f.t === "view") {
+              const k = viewKey(f.d);
+              if (!(views ?? []).some((v) => viewKey(v) === k)) views = [...(views ?? []), f.d];
+            }
             else if (f.t === "pending_write")
               pendingWrite = {
                 token: f.token, tool: f.tool, title: f.title,
@@ -419,12 +440,12 @@ export function ChatClient() {
           const { text, frames } = splitFrames(raw);
           applyFrames(frames);
           const list = items();
-          setMessages((p) => setLastAssistant(p, text, undefined, list.length ? list : undefined, cites, pendingWrite));
+          setMessages((p) => setLastAssistant(p, text, undefined, list.length ? list : undefined, cites, pendingWrite, views));
         }
         const fin = splitFrames(raw);
         applyFrames(fin.frames);
         const list = items();
-        setMessages((p) => setLastAssistant(p, fin.text, tokens, list.length ? list : undefined, cites, pendingWrite));
+        setMessages((p) => setLastAssistant(p, fin.text, tokens, list.length ? list : undefined, cites, pendingWrite, views));
         if (!activeId && convId) setActiveId(convId);
         void loadConvs();
         return true;
@@ -773,9 +794,9 @@ export function ChatClient() {
   const totalTokens = messages.reduce((s, m) => s + (m.tokensIn ?? 0) + (m.tokensOut ?? 0), 0);
   // C2: whether the currently-selected model is a Claude API model.
   const isCurrentClaude = claudeModels.includes(settings.model);
-  // Any billed API model (Claude or BytePlus) — the empty state must not claim it runs
-  // locally now that the default can be a cloud model.
-  const isCurrentCloud = isCurrentClaude || byteplusModels.includes(settings.model);
+  // Any billed API model (Claude, BytePlus, or Cerebras) — the empty state must not claim
+  // it runs locally now that the default can be a cloud model.
+  const isCurrentCloud = isCurrentClaude || byteplusModels.includes(settings.model) || cerebrasModels.includes(settings.model);
   // C2: estimated cost for the current conversation when a Claude model is selected.
   // In/out ARE tracked per message (tokensIn/tokensOut from the {t:"tokens"} frame +
   // DB columns) — use the real split. "Ước tính" remains because MODEL attribution is
@@ -912,11 +933,11 @@ export function ChatClient() {
 
         {settingsOpen && (
           <div className="anim-slide-down p-4">
-            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} byteplusModels={byteplusModels} customAgents={customAgents} onChange={setSettings} />
+            <SettingsPanel settings={settings} models={models} claudeModels={claudeModels} byteplusModels={byteplusModels} cerebrasModels={cerebrasModels} customAgents={customAgents} onChange={setSettings} />
           </div>
         )}
 
-        <div ref={scrollRef} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={scrollRef} onScroll={onScroll} className="laam-scroll min-h-0 flex-1 overflow-y-auto">
           {messages.length === 0 ? (
             <div className="mx-auto flex min-h-full max-w-md flex-col items-center justify-center px-4 py-8 text-center">
               <h2 className="mb-1 text-lg font-bold tracking-tight">{t("chat.emptyTitle")}</h2>

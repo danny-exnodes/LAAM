@@ -374,3 +374,39 @@ test("D3: link Orbit mang theo hội thoại đang mở (?conv=<activeId>) sau k
     expect(link.getAttribute("href")).toBe("/constellation?conv=conv-1");
   });
 });
+
+// INTENT: splitFrames() re-parses the WHOLE accumulated buffer on every chunk, so a `view`
+// frame that lands mid-stream is delivered again with every chunk that follows it. The panel
+// must show the table ONCE — a per-sighting append stacked the same table N times, which is
+// exactly what the user saw. The stream below puts the frame early and keeps streaming after
+// it; a test where the frame arrives last cannot fail on this.
+test("bảng chỉ hiện 1 lần dù frame view được stream lặp lại theo từng chunk", async () => {
+  const viewFrame =
+    "\x1e" +
+    JSON.stringify({
+      t: "view",
+      d: {
+        kind: "table",
+        title: "Hoàn tiền của Sarah Miller",
+        source: { type: "tool", toolName: "kg_query_datasource", at: 1 },
+        columns: [
+          { key: "id", label: "Mã" },
+          { key: "amount", label: "Số tiền" },
+        ],
+        rows: [{ id: "TXN-1", amount: 10 }],
+      },
+    }) +
+    "\x1e";
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/chat" && init?.method === "POST")
+      return streamResponse(["Kết quả ", viewFrame, "đây", " nhé", " bạn"]);
+    return { ok: true, json: async () => ({ conversations: [] }) } as unknown as Response;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const { container } = renderChat();
+  fireEvent.change(await screen.findByLabelText("Soạn tin nhắn"), { target: { value: "hi" } });
+  fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+
+  await screen.findByText("Hoàn tiền của Sarah Miller");
+  await waitFor(() => expect(container.querySelectorAll("figure")).toHaveLength(1));
+});

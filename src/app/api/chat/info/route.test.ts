@@ -8,6 +8,7 @@ vi.mock("@/auth", () => ({ auth: vi.fn(async () => h.authResult) }));
 
 import { GET } from "./route";
 import { BYTEPLUS_MODELS } from "@/lib/llm/byteplus";
+import { CEREBRAS_MODELS } from "@/lib/llm/cerebras";
 
 afterEach(() => {
   h.authResult = null;
@@ -80,5 +81,31 @@ describe("GET /api/chat/info", () => {
     h.authResult = { user: { id: "u1" } };
     const body = await (await GET()).json();
     expect(body.byteplusModels).toEqual([]);
+  });
+
+  // Same env-gated pattern for Cerebras: the picker only offers Cerebras models when the
+  // server holds a CEREBRAS_API_KEY (read at request time, not import).
+  test("cerebrasModels = whitelist khi có CEREBRAS_API_KEY", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "csk-test");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.cerebrasModels).toEqual([...CEREBRAS_MODELS]);
+  });
+
+  test("cerebrasModels = [] khi không có CEREBRAS_API_KEY", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.cerebrasModels).toEqual([]);
+  });
+
+  // Cerebras only (no BytePlus) still preselects cloud-first, like BytePlus does.
+  test("model = default Cerebras model when CEREBRAS_API_KEY is set and BytePlus is not", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "");
+    vi.stubEnv("CEREBRAS_API_KEY", "csk-test");
+    vi.stubEnv("DEFAULT_CHAT_MODEL", "gemma4:e4b");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.model).toBe(CEREBRAS_MODELS[0]);
   });
 });

@@ -4,7 +4,10 @@ import type { ConnectorTool } from "@/lib/connectors/types";
 import { evictOldToolResults } from "./loop-context";
 import { planDrilldown, type DrilldownPair } from "./drilldown";
 import { PendingWriteSignal } from "@/lib/agent/safety/gate";
-import { deriveFromToolResult, pickTurnView, type ViewDescriptor } from "./view";
+import { deriveFromToolResult, worthShowing, viewKey, type ViewDescriptor } from "./view";
+import { annotateEmptyResult, foundNothing, queryTextFromArgs, reAskDemanded } from "./empty-result";
+import { annotatePanelShown } from "./panel-note";
+import { digestMessagesForModel } from "./digest";
 
 // W3 vision: `images` = raw base64 (không prefix data:) trên message user — format
 // Ollama multimodal. Optional/additive: vắng mặt ⇒ wire-format y như cũ.
@@ -100,7 +103,7 @@ export async function seedRequestedTool(
 ): Promise<void> {
   convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: rt.name, arguments: rt.args } }] });
   const result = await dispatch(rt.name, rt.args);
-  convo.push({ role: "tool", content: JSON.stringify(result) });
+  convo.push({ role: "tool", content: JSON.stringify(annotateEmptyResult(result, rt.args)) });
 }
 
 // Runaway BACKSTOP on tool rounds — NOT a task-shaping cap. The loop's real exit is
@@ -233,9 +236,19 @@ export async function runToolRounds(
   // Câu hỏi của lượt này = message user CUỐI trong lịch sử truyền vào (drilldown khớp tên
   // theo câu người dùng vừa hỏi, không phải theo cả hội thoại).
   const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  let lastQueryText: string | undefined; // question from the most recent query-shaped tool call this turn
+  let reAskSpent = false; // the turn gets one "ask again in the user's words" instruction, not one per empty result
   let drilledDown = false;
+  // A turn can run the SAME query twice (measured: "show every refund…" produced two identical
+  // 50/62 tables). Showing the user the same table twice is noise, so emit each shape once.
+  const emittedViews = new Set<string>();
+  const emitViewOnce = (d: ViewDescriptor) => {
+    const k = viewKey(d);
+    if (emittedViews.has(k)) return;
+    emittedViews.add(k);
+    opts.onView?.(d);
+  };
   const seen = new Map<string, number>(); // repeat-detection: tool+args → count
-  const views: ViewDescriptor[] = []; // gom cả lượt, chọn 1 ở cuối (pickTurnView)
   // Đếm SỐ LẦN dispatch() thật sự chạy trong lượt (không tính lần bị chặn bởi
   // repeat-detection). 1 lần = tra cứu thoáng qua để trả lời bằng lời, không đáng hiện
   // panel; ≥2 lần = model đang đào sâu (vd. list→detail), panel mới đáng xem. Luật thuần
@@ -245,7 +258,12 @@ export async function runToolRounds(
 
   for (let i = 0; i < maxRounds; i++) {
     const isLastRound = i === maxRounds - 1; // ONLY the backstop forces a text answer
-    const res = await deps.callOllama(convo, isLastRound ? [] : tools);
+    // Big tool results reach the MODEL reduced; `convo` itself keeps them whole. Doing it here
+    // — on a copy, at the wire boundary — rather than on the stored messages is what keeps the
+    // rows available to the panel and to chat_tool_call, so a reloaded conversation can still
+    // show its tables (see digest.ts). It also re-applies on EVERY round, so a large result
+    // stays small on each replay instead of only the first.
+    const res = await deps.callOllama(digestMessagesForModel(convo), isLastRound ? [] : tools);
     const msg = res?.message ?? {};
     const rawCalls = isLastRound ? [] : Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
     // Sửa TÊN trước khi lưu vào convo — nếu không, lượt sau model thấy lại chính tên
@@ -274,13 +292,45 @@ export async function runToolRounds(
         if (name === "web_read") webReadNudged = true; // đã đọc rồi → khỏi nhắc
         if (dataFetchTools.has(name)) calledDataFetchTool = true; // G5: đã chạm dữ liệu thật
         if (name === LAAM_AUDIT_TOOL_NAME) calledAuditTool = true; // G5: đổi nội dung nhắc
-        const result = await deps.dispatch(name, args);
+        const callArgs = args;
+        // A two-step query tool submits the question and returns the rows from a LATER poll
+        // whose args carry only an id — so remember the last question seen this turn and hand
+        // it to the annotator, which otherwise has nothing to quote at the one moment it
+        // matters. Turn-scoped: a stale question from a previous turn would misattribute.
+        lastQueryText = queryTextFromArgs(callArgs) ?? lastQueryText;
+        const result = await deps.dispatch(name, callArgs);
         toolCallCount++;
-        convo.push({ role: "tool", content: JSON.stringify(result) });
-        if (opts.onView) {
-          const view = deriveFromToolResult(name, result, Date.now());
-          if (view) views.push(view);
-        }
+        // ONE mandatory re-ask per turn. The note's own termination check compares the sent
+        // text to the user's question, and the model rewords every attempt, so it never fired:
+        // measured, a turn spent 24 tool calls re-asking and still held the correct answer it
+        // had already been given. Counting the budget in code does not care how it is worded.
+        const mayReAsk = !reAskSpent && reAskDemanded(lastQueryText, lastUserMessage);
+        if (mayReAsk && foundNothing(result)) reAskSpent = true;
+        // Empty result → tell the model (in the tool result) that emptiness is not absence.
+        // Only the convo copy is annotated; `result` below stays raw for the view/drilldown.
+        // Panel per BIG result, emitted as it lands. A turn can run several queries (measured:
+        // the two heaviest demo questions run five each), so one panel per turn would hide four
+        // of them — and hiding them is exactly what makes reducing the model's copy unsafe.
+        //
+        // Derived BEFORE the result is handed to the model, because whether a panel is on
+        // screen is something the model has to be told: shown a table it cannot see, it types
+        // the rows out again and mistypes them (measured: a unit price of 10.22 printed as
+        // 1022). The note used to live only in the digest, which starts at 10 rows — the panel
+        // starts at 3, and everything in between got a panel and no note.
+        const view =
+          opts.onView && worthShowing(result)
+            ? deriveFromToolResult(name, result, Date.now(), queryTextFromArgs(callArgs))
+            : null;
+        convo.push({
+          role: "tool",
+          content: JSON.stringify(
+            annotatePanelShown(
+              annotateEmptyResult(result, callArgs, mayReAsk ? lastUserMessage : undefined, lastQueryText),
+              view,
+            ),
+          ),
+        });
+        if (view) emitViewOnce(view);
         if (name === "web_search" && searchResultHasUrl(result)) sawWebSearchWithUrl = true;
         // D2: tool liệt kê vừa chạy + câu hỏi nhắc đúng tên một mục trong kết quả →
         // CODE đi tiếp bước chi tiết (xem drilldown.ts). Một lần/lượt: nếu không, model
@@ -298,11 +348,20 @@ export async function runToolRounds(
               const detail = await deps.dispatch(plan.name, plan.args);
               toolCallCount++;
               convo.push({ role: "assistant", content: "", tool_calls: [{ function: { name: plan.name, arguments: plan.args } }] });
-              convo.push({ role: "tool", content: JSON.stringify(detail) });
-              if (opts.onView) {
-                const detailView = deriveFromToolResult(plan.name, detail, Date.now());
-                if (detailView) views.push(detailView);
-              }
+              const detailView =
+                opts.onView && worthShowing(detail)
+                  ? deriveFromToolResult(plan.name, detail, Date.now(), queryTextFromArgs(plan.args))
+                  : null;
+              convo.push({
+                role: "tool",
+                content: JSON.stringify(
+                  annotatePanelShown(
+                    annotateEmptyResult(detail, plan.args, lastUserMessage, lastQueryText),
+                    detailView,
+                  ),
+                ),
+              });
+              if (detailView) emitViewOnce(detailView);
             } catch (e) {
               if (e instanceof PendingWriteSignal) throw e;
               console.warn(`[drilldown] ${plan.name} lỗi — bỏ qua bước chi tiết`, e);
@@ -404,10 +463,9 @@ export async function runToolRounds(
     if (isLastRound) opts.onBackstop?.("rounds"); // reached the backstop round → forced text → honest signal
     break;
   }
-  // 1 tool call = tra cứu thoáng qua (vd. tìm ID theo tên) để trả lời bằng lời — không
-  // đáng hiện panel, và hay ra bảng "không liên quan" tới câu trả lời cuối. ≥2 = model
-  // đang đào sâu (list→detail hoặc nhiều bước), panel mới thật sự phản ánh câu trả lời.
-  const view = toolCallCount >= 2 ? pickTurnView(views) : null;
-  if (view) opts.onView?.(view);
+  // (The old tail picked ONE view here, gated on toolCallCount >= 2. Both are gone: the
+  // "incidental lookup" problem that gate solved is now handled by worthShowing()'s size test
+  // at the point each result lands, and the single-question-single-big-table case — the one
+  // that most needs a panel — has exactly one tool call.)
   return convo;
 }

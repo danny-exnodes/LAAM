@@ -82,3 +82,61 @@ describe("ConversationLog", () => {
     expect(region.className).toContain("pointer-events-none");
   });
 });
+
+// The floating DisplayPanel shows a turn's tables only while this transcript is CLOSED
+// (panelOpen requires !chatOpen). Opening the transcript to re-read a number therefore hid the
+// table — and the prose deliberately no longer lists rows, so "62 refunds" was summarised with
+// nowhere to look at them. Measured on Larvis with the exact demo question.
+describe("tables of a turn", () => {
+  const view = {
+    kind: "table" as const,
+    title: "list all refunds processed by Sarah Miller",
+    source: { type: "tool" as const, toolName: "q", at: 1 },
+    columns: [{ key: "refund_id", label: "refund_id" }],
+    rows: [{ refund_id: "REF-000001" }, { refund_id: "REF-000002" }],
+  };
+
+  const withTable: Turn[] = [
+    { role: "user", text: "câu hỏi" },
+    { role: "assistant", text: "trả lời", views: [view] },
+  ];
+
+  it("renders the table inside the transcript", () => {
+    renderLog(<ConversationLog {...props} turns={withTable} open />);
+    expect(screen.getByText("REF-000001")).toBeTruthy();
+    expect(screen.getByText("list all refunds processed by Sarah Miller")).toBeTruthy();
+  });
+
+  it("files a turn's table under that turn's answer, not a later one", () => {
+    const older: Turn[] = [
+      { role: "user", text: "câu cũ" },
+      { role: "assistant", text: "trả lời cũ", views: [view] },
+      { role: "user", text: "câu mới" },
+      { role: "assistant", text: "trả lời mới" },
+    ];
+    const { container } = renderLog(<ConversationLog {...props} turns={older} open />);
+    const bubbles = container.querySelectorAll("section > div");
+    expect(bubbles[1].textContent).toContain("REF-000001");
+    expect(bubbles[bubbles.length - 1].textContent).not.toContain("REF-000001");
+  });
+
+  // INTENT (reported bug): the table lived in ONE "current turn" state that the next question
+  // cleared, so asking anything afterwards — including a turn that errored out before it could
+  // query — erased the table the previous answer was still talking about. A transcript is a
+  // log: an answer's data must survive the next question.
+  it("keeps an earlier turn's table after a later turn produces none", () => {
+    const afterFailure: Turn[] = [
+      { role: "user", text: "Show every refund processed by Sarah Miller." },
+      { role: "assistant", text: "62 refund records", views: [view] },
+      { role: "user", text: "Which employee has repeated cash drawer shortages?" },
+      { role: "assistant", text: "Could not reach the BytePlus API (rate_limit)." },
+    ];
+    renderLog(<ConversationLog {...props} turns={afterFailure} open />);
+    expect(screen.getByText("REF-000001")).toBeTruthy();
+  });
+
+  it("renders nothing extra when the turn produced no table", () => {
+    renderLog(<ConversationLog {...props} turns={turns} open />);
+    expect(screen.queryByText("REF-000001")).toBeNull();
+  });
+});

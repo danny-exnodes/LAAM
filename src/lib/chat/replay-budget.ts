@@ -8,12 +8,13 @@
 // là mỗi turn gửi nhiều token hơn (chậm + tốn hơn) — 150k chars (~43k token) là điểm
 // cân; chỉnh qua env CLOUD_REPLAY_BUDGET_CHARS. Không bao giờ thấp hơn budget local.
 import { isBytePlusModel } from "@/lib/llm/byteplus";
+import { isCerebrasModel } from "@/lib/llm/cerebras";
 import { isClaudeModel } from "@/lib/llm/claude";
 
 export const DEFAULT_CLOUD_REPLAY_BUDGET_CHARS = 150_000;
 
 export function replayBudgetFor(model: string, localBudgetChars: number): number {
-  if (!isBytePlusModel(model) && !isClaudeModel(model)) return localBudgetChars;
+  if (!isBytePlusModel(model) && !isCerebrasModel(model) && !isClaudeModel(model)) return localBudgetChars;
   const cloud = Number(process.env.CLOUD_REPLAY_BUDGET_CHARS) || DEFAULT_CLOUD_REPLAY_BUDGET_CHARS;
   return Math.max(localBudgetChars, cloud);
 }

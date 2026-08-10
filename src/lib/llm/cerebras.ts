@@ -1,67 +1,74 @@
-// BytePlus ModelArk provider adapter — full-agent (tool-loop) sibling of ollama.ts.
-// BytePlus ModelArk exposes an OpenAI-compatible /chat/completions API (verified:
-// docs.byteplus.com/ModelArk/1330626 "Compatible with OpenAI API"). We call it with
-// plain fetch (NO new SDK dependency — the Ollama path already establishes the raw-
-// fetch pattern, and adding a dep in this shared-worktree setup is hazardous). Two
-// entry points mirror the Ollama seam in /api/chat:
-//   - byteplusChat()   : one NON-streaming tool round → OllamaChatResponse shape
+// Cerebras Inference provider adapter — full-agent (tool-loop) sibling of byteplus.ts.
+// Cerebras exposes an OpenAI-compatible /v1/chat/completions API (verified:
+// inference-docs.cerebras.ai/api-reference/authentication — Bearer auth, chat/completions
+// endpoint; inference-docs.cerebras.ai capabilities/tool-use — OpenAI-style `tools`/
+// `tool_calls`, gpt-oss-120b supports tool calling). We call it with plain fetch, same as
+// byteplus.ts (no new SDK dependency). Two entry points mirror the BytePlus/Ollama seam
+// in /api/chat:
+//   - cerebrasChat()   : one NON-streaming tool round → OllamaChatResponse shape
 //                        (so runToolRounds + extractToolTurns work UNCHANGED).
-//   - byteplusStream() : the final STREAMING completion → {delta?,usage?} (the same
-//                        async-generator contract as ollamaStream / claudeStream).
-// The LAAM convo is Ollama-shaped; toOpenAI() translates it at the wire boundary
-// (synthesizing tool_call ids, pairing tool results, demoting the orphan web_read
-// nudge to a user message), exactly like claude.ts's toAnthropic().
+//   - cerebrasStream() : the final STREAMING completion → {delta?,usage?} (the same
+//                        async-generator contract as byteplusStream / claudeStream).
+// The LAAM convo is Ollama-shaped; toOpenAI() translates it at the wire boundary, exactly
+// like byteplus.ts's own toOpenAI() (duplicated rather than shared: each provider file is
+// self-contained in this codebase — see claude.ts/byteplus.ts/ollama.ts — so a future
+// wire-format divergence between Cerebras and BytePlus stays local to one file).
 import type { ChatMessage, OllamaChatResponse } from "@/lib/agent/orchestrator";
 
-// Whitelist of model ids surfaced to the picker — curated to what this account has
-// ACTIVATED and verified callable (smoke-tested live against the configured endpoint).
-// `gpt-oss-120b` works on the Coding Plan endpoint (api/coding/v3); it is a reasoning
-// model (returns reasoning_content + content + tool_calls) and supports the full
-// tool-loop. Keep this list small + curated; an unknown id fails closed (BytePlus 404
-// ModelNotOpen / InvalidEndpointOrModel) rather than silently mis-routing. EXACT
-// membership (not a prefix) is the router so a local Ollama `deepseek-r1:7b` is never
-// mistaken for a BytePlus model. Add more ids here as the account activates them.
-export const BYTEPLUS_MODELS = [
-  "gpt-oss-120b",
-  "deepseek-v4-flash",
-  "deepseek-v4-pro",
-  "dola-seed-2.0-pro",
-  "dola-seed-2.0-lite",
-  "dola-seed-2.0-code",
-  "bytedance-seed-code",
-  "kimi-k2.5",
-] as const;
+// Whitelist of model ids surfaced to the picker — curated to what Cerebras documents as
+// available and tool-call capable. Keep this list small + curated; an unknown id fails
+// closed (Cerebras 404/400 model-not-found) rather than silently mis-routing. EXACT
+// membership (not a prefix) is the router so a local Ollama tag is never mistaken for a
+// Cerebras model. Add more ids here once verified live against the account.
+//
+// IMPORTANT — the picker id is NOT the wire model id: Cerebras's literal model name
+// (`gpt-oss-120b`) is IDENTICAL to BytePlus's, and routing (isBytePlusModel/isCerebrasModel
+// in route.ts/internal.ts) is a same-string whitelist membership check. Reusing the bare
+// name here would make `isCerebrasModel("gpt-oss-120b")` true and silently steal every
+// BytePlus turn the instant both keys are configured. The `-cerebras` suffix keeps picker
+// ids globally unique across providers; WIRE_MODEL below maps back to what the API expects.
+export const CEREBRAS_MODELS = ["gpt-oss-120b-cerebras"] as const;
 
-export function isBytePlusModel(m: string): boolean {
-  return (BYTEPLUS_MODELS as readonly string[]).includes(m);
+export function isCerebrasModel(m: string): boolean {
+  return (CEREBRAS_MODELS as readonly string[]).includes(m);
 }
 
-export type BytePlusErrorCode = "auth" | "rate_limit" | "overloaded" | "connection";
+const WIRE_MODEL: Readonly<Record<string, string>> = {
+  "gpt-oss-120b-cerebras": "gpt-oss-120b",
+};
 
-// Typed "BytePlus unavailable" — route maps `code` → a tri-lingual notice (pattern
-// shared with ClaudeUnavailableError). Errors OUTSIDE these four (e.g. 400 schema)
-// throw as a plain Error so the route surfaces a generic 'api' code — fail loud,
-// never swallow an unexpected failure as a benign "unavailable".
-export class BytePlusUnavailableError extends Error {
-  code: BytePlusErrorCode;
-  constructor(code: BytePlusErrorCode, message?: string) {
-    super(message ?? `BytePlus unavailable: ${code}`);
-    this.name = "BytePlusUnavailableError";
+// Translate a picker/routing id → the literal model name Cerebras's API expects. Unknown
+// ids pass through unchanged (defensive — isCerebrasModel already gates callers).
+function toWireModel(pickerModel: string): string {
+  return WIRE_MODEL[pickerModel] ?? pickerModel;
+}
+
+export type CerebrasErrorCode = "auth" | "rate_limit" | "overloaded" | "connection";
+
+// Typed "Cerebras unavailable" — route maps `code` → a tri-lingual notice (pattern shared
+// with BytePlusUnavailableError/ClaudeUnavailableError). Errors OUTSIDE these four (e.g.
+// 400 schema) throw as a plain Error so the route surfaces a generic 'api' code — fail
+// loud, never swallow an unexpected failure as a benign "unavailable".
+export class CerebrasUnavailableError extends Error {
+  code: CerebrasErrorCode;
+  constructor(code: CerebrasErrorCode, message?: string) {
+    super(message ?? `Cerebras unavailable: ${code}`);
+    this.name = "CerebrasUnavailableError";
     this.code = code;
   }
 }
 
-const DEFAULT_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
+const DEFAULT_BASE = "https://api.cerebras.ai/v1";
 
 function baseUrl(): string {
-  return (process.env.BYTEPLUS_BASE_URL ?? DEFAULT_BASE).replace(/\/$/, "");
+  return (process.env.CEREBRAS_BASE_URL ?? DEFAULT_BASE).replace(/\/$/, "");
 }
 
 // Lazy read at call time (not import) → testable + restart-free. No key throws
-// 'auth' BEFORE any network call (mirrors claude.ts).
+// 'auth' BEFORE any network call (mirrors byteplus.ts/claude.ts).
 function apiKey(): string {
-  const k = process.env.BYTEPLUS_API_KEY;
-  if (!k) throw new BytePlusUnavailableError("auth", "BYTEPLUS_API_KEY chưa được đặt");
+  const k = process.env.CEREBRAS_API_KEY;
+  if (!k) throw new CerebrasUnavailableError("auth", "CEREBRAS_API_KEY chưa được đặt");
   return k;
 }
 
@@ -160,15 +167,9 @@ function applyOptions(body: Record<string, unknown>, options?: SamplingOptions):
   }
 }
 
-// Reasoning budget for gpt-oss / other reasoning models on BytePlus. UNSET → body is left
-// untouched and the provider default applies (measured: behaves like "high" — ~9k chars of
-// reasoning_content on a data question, most of a slow turn's wall time). Only the three
-// documented values are forwarded; anything else is ignored rather than sent to the API.
-// Split by phase on purpose: the TOOL rounds are where the model decides what to ask the
-// connector (a judgment call — starving it there produced a wrong "no duplicates found" on
-// a fraud question), while the FINAL round is only writing up rows it already has, which is
-// where most of the wall time goes. CHAT_REASONING_EFFORT sets both unless a phase-specific
-// var overrides it.
+// Reasoning budget for gpt-oss on Cerebras — same env vars as byteplus.ts on purpose:
+// it is the SAME model id (gpt-oss-120b), so an operator tuning CHAT_REASONING_EFFORT
+// expects it to apply regardless of which provider is currently serving that model.
 const REASONING_EFFORTS = new Set(["low", "medium", "high"]);
 function applyReasoningEffort(body: Record<string, unknown>, phase: "tools" | "final"): void {
   const specific = phase === "tools" ? process.env.CHAT_REASONING_EFFORT_TOOLS : process.env.CHAT_REASONING_EFFORT_FINAL;
@@ -185,27 +186,25 @@ async function safeText(res: Response): Promise<string> {
 }
 
 function mapStatus(status: number, text: string): Error {
-  if (status === 401 || status === 403) return new BytePlusUnavailableError("auth", text);
-  if (status === 429) return new BytePlusUnavailableError("rate_limit", text);
-  if (status === 503 || status === 529) return new BytePlusUnavailableError("overloaded", text);
-  return new Error(`BytePlus ${status}: ${text}`); // unexpected → route surfaces 'api'
+  if (status === 401 || status === 403) return new CerebrasUnavailableError("auth", text);
+  if (status === 429) return new CerebrasUnavailableError("rate_limit", text);
+  if (status === 503 || status === 529) return new CerebrasUnavailableError("overloaded", text);
+  return new Error(`Cerebras ${status}: ${text}`); // unexpected → route surfaces 'api'
 }
 
-// Transient on BytePlus's side, not ours: 429 is returned for their OWN capacity
-// ("ServerOverloaded"/"TooManyRequests"), not only for a per-key quota, and 503/529 mean the
-// same thing. Observed 2026-08-07: two of three consecutive turns died this way while the
-// requests were seconds apart and strictly sequential — nothing a client can pace its way out
-// of. Losing the whole turn costs far more than one extra call, because the tool rounds have
-// already run and only the final generation failed.
+// Transient on Cerebras's side, not ours (pattern mirrors byteplus.ts): 429/503/529 mean
+// capacity/overload, not necessarily a per-key quota. One retry only — retrying harder
+// into an overloaded server makes it worse, and losing the whole turn costs far more than
+// one extra call because the tool rounds have already run and only the final generation
+// failed.
 const RETRY_STATUSES: ReadonlySet<number> = new Set([429, 503, 529]);
-const MAX_RETRIES = 1; // one extra attempt — retrying harder into an overloaded server makes it worse
+const MAX_RETRIES = 1;
 const DEFAULT_RETRY_DELAY_MS = 2000;
 
-// Tunable per deployment (BYTEPLUS_RETRY_DELAY_MS): a dedicated endpoint can drop it, a shared
-// one can raise it. 0 is a legitimate setting — retry immediately — so only a negative or
-// unparseable value falls back to the default.
+// Tunable per deployment (CEREBRAS_RETRY_DELAY_MS): 0 is a legitimate setting — retry
+// immediately — so only a negative or unparseable value falls back to the default.
 function retryDelayMs(): number {
-  const n = Number(process.env.BYTEPLUS_RETRY_DELAY_MS);
+  const n = Number(process.env.CEREBRAS_RETRY_DELAY_MS);
   return Number.isFinite(n) && n >= 0 ? n : DEFAULT_RETRY_DELAY_MS;
 }
 
@@ -228,7 +227,7 @@ const backoff = (ms: number, signal?: AbortSignal) =>
 // rejects → 'connection'; non-ok status → typed/plain error via mapStatus.
 //
 // Retries live HERE and nowhere else: request() returns before a single byte of the body is
-// read, so both callers (byteplusChat's json, byteplusStream's SSE) are safe to restart. A
+// read, so both callers (cerebrasChat's json, cerebrasStream's SSE) are safe to restart. A
 // failure after this point — mid-stream, tokens already emitted — must never be retried, or
 // the user would see the answer twice.
 async function request(key: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
@@ -244,7 +243,7 @@ async function request(key: string, body: Record<string, unknown>, signal?: Abor
     } catch (e) {
       // Network rejects are NOT retried: unlike a 429 they carry no signal that waiting helps,
       // and an aborted turn arrives here too.
-      throw new BytePlusUnavailableError("connection", e instanceof Error ? e.message : String(e));
+      throw new CerebrasUnavailableError("connection", e instanceof Error ? e.message : String(e));
     }
     if (res.ok) return res;
     const text = await safeText(res);
@@ -259,7 +258,7 @@ async function request(key: string, body: Record<string, unknown>, signal?: Abor
 // One non-streaming tool round. Returns the OllamaChatResponse shape so the route's
 // runToolRounds/extractToolTurns consume it unchanged (tool-call arguments mapped
 // from OpenAI's JSON string back to an object).
-export async function byteplusChat(opts: {
+export async function cerebrasChat(opts: {
   model: string;
   messages: ChatMessage[];
   tools?: unknown;
@@ -268,7 +267,7 @@ export async function byteplusChat(opts: {
 }): Promise<OllamaChatResponse> {
   const key = apiKey();
   const body: Record<string, unknown> = {
-    model: opts.model,
+    model: toWireModel(opts.model),
     messages: toOpenAI(opts.messages),
     stream: false,
   };
@@ -283,7 +282,7 @@ export async function byteplusChat(opts: {
   // Mapping that to empty content would silently break the tool-loop (loop ends with
   // no output, user pays for nothing). Throw a plain Error → the route surfaces 'api'.
   if (!data?.choices?.length) {
-    throw new Error("BytePlus returned no choices (possible content filter / refusal)");
+    throw new Error("Cerebras returned no choices (possible content filter / refusal)");
   }
   const msg = data.choices[0]?.message ?? {};
   const rawCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
@@ -301,9 +300,9 @@ export async function byteplusChat(opts: {
 
 // The final streaming completion (no tools). Parses OpenAI SSE → {delta?} per token
 // (verbatim, Rule 13) then a final {usage}. stream_options.include_usage is requested
-// so the usage chunk arrives before [DONE]; a missing usage falls back to 0/0 to match
-// the route's always-emit-token-frame handling for the tool path.
-export async function* byteplusStream(opts: {
+// so the usage chunk arrives before [DONE]; a missing usage falls back to omitting the
+// usage event (see below) to match the route's always-emit-token-frame handling.
+export async function* cerebrasStream(opts: {
   model: string;
   messages: ChatMessage[];
   options?: SamplingOptions;
@@ -311,7 +310,7 @@ export async function* byteplusStream(opts: {
 }): AsyncGenerator<{ delta?: string; reasoning?: string; usage?: { in: number; out: number } }> {
   const key = apiKey();
   const body: Record<string, unknown> = {
-    model: opts.model,
+    model: toWireModel(opts.model),
     messages: toOpenAI(opts.messages),
     stream: true,
     stream_options: { include_usage: true },
@@ -340,9 +339,9 @@ export async function* byteplusStream(opts: {
         const d = j?.choices?.[0]?.delta;
         const delta = d?.content;
         if (typeof delta === "string" && delta.length) yield { delta };
-        // Reasoning models (gpt-oss, deepseek-v4) stream reasoning_content BEFORE any
-        // content — often 30s+ on a large context. Surface it so the route can keep the
-        // client SSE warm; it is NOT part of the answer.
+        // Reasoning models (gpt-oss) stream reasoning_content BEFORE any content — often
+        // seconds of thinking. Surface it so the route can keep the client SSE warm; it
+        // is NOT part of the answer.
         const reasoning = d?.reasoning_content;
         if (typeof reasoning === "string" && reasoning.length) yield { reasoning };
         if (j?.usage) usage = { in: j.usage.prompt_tokens ?? 0, out: j.usage.completion_tokens ?? 0 };
@@ -351,9 +350,9 @@ export async function* byteplusStream(opts: {
       }
     }
   }
-  // Only emit usage when BytePlus actually sent it (include_usage). A 0/0 fallback
-  // would be a truthy event → the route's gotUsage flips true → a FAKE $0 token frame
-  // gets persisted/emitted on a billed provider. Omitting lets emitTokens=gotUsage
-  // correctly drop the frame (Claude-style), so missing usage ≠ fabricated billing.
+  // Only emit usage when Cerebras actually sent it (include_usage). A 0/0 fallback would
+  // be a truthy event → the route's gotUsage flips true → a FAKE $0 token frame gets
+  // persisted/emitted on a billed provider. Omitting lets emitTokens=gotUsage correctly
+  // drop the frame (Claude/BytePlus-style), so missing usage ≠ fabricated billing.
   if (usage) yield { usage };
 }

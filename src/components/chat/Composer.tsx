@@ -253,7 +253,7 @@ export function Composer({
       {slashOpen && (matches.length > 0 || toolMatches.length > 0) && (
         <div
           role="listbox"
-          className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-80 overflow-y-auto rounded-xl border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
+          className="laam-scroll absolute bottom-full left-0 right-0 z-30 mb-2 max-h-80 overflow-y-auto rounded-xl border border-neutral-200 bg-white shadow-lg dark:border-neutral-700 dark:bg-neutral-800"
         >
           {matches.length > 0 && (
             <>

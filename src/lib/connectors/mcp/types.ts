@@ -12,6 +12,11 @@ export type McpServerConfig = {
   url: string;
   authToken?: string;
   trustReadHints: boolean;
+  // Which of the server's tools may be sent to the chat model. `undefined` = all of them
+  // (the default, and what every server configured before this existed keeps doing).
+  // An EMPTY array means the user turned every tool off — that is a real choice, not
+  // "unset", so it must not silently fall back to all.
+  enabledTools?: string[];
 };
 
 export type McpDiscoveredTool = {

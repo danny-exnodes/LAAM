@@ -5,6 +5,7 @@ import type { McpServerConfig } from "./types";
 const h = vi.hoisted(() => ({
   connect: vi.fn(async () => undefined),
   listTools: vi.fn(async () => ({ tools: [] as unknown[] })),
+  getInstructions: vi.fn((): string | undefined => undefined),
   callTool: vi.fn(async () => ({ content: [{ type: "text", text: "hi" }] })),
   close: vi.fn(async () => undefined),
   streamableCtor: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     return {
       connect: h.connect,
       listTools: h.listTools,
+      getInstructions: h.getInstructions,
       callTool: h.callTool,
       close: h.close,
     };
@@ -46,6 +48,7 @@ const cfg: McpServerConfig = { slug: "s", name: "S", url: "https://mcp.example.c
 beforeEach(() => {
   h.connect.mockReset().mockResolvedValue(undefined);
   h.listTools.mockReset().mockResolvedValue({ tools: [] });
+  h.getInstructions.mockReset().mockReturnValue(undefined);
   h.callTool.mockReset().mockResolvedValue({ content: [{ type: "text", text: "hi" }] });
   h.close.mockReset().mockResolvedValue(undefined);
   h.streamableCtor.mockReset();
@@ -54,9 +57,20 @@ beforeEach(() => {
 });
 
 describe("mcp client", () => {
+  // The server's initialize `instructions` are the only channel carrying facts about the
+  // CONNECTION rather than about a tool — DAAB puts the project_id / data_source_id it is
+  // bound to there. Dropping the field (the previous behaviour) made the model re-derive
+  // those ids with a discovery round-trip on every question.
+  test("listTools surfaces the server's initialize instructions", async () => {
+    h.listTools.mockResolvedValue({ tools: [{ name: "a", inputSchema: {} }] });
+    h.getInstructions.mockReturnValue("scoped to Pharmacy Chain (project_id: p-1)");
+    const listing = await listTools(cfg);
+    expect(listing.instructions).toBe("scoped to Pharmacy Chain (project_id: p-1)");
+  });
+
   test("listTools returns the tools and always closes", async () => {
     h.listTools.mockResolvedValue({ tools: [{ name: "a", inputSchema: {} }] });
-    const tools = await listTools(cfg);
+    const { tools } = await listTools(cfg);
     expect(tools).toEqual([{ name: "a", inputSchema: {} }]);
     expect(h.close).toHaveBeenCalledTimes(1);
     // streamable tried first, no SSE fallback when connect succeeds.
@@ -144,7 +158,7 @@ describe("mcp client", () => {
     const many = Array.from({ length: 250 }, (_, i) => ({ name: `t${i}`, inputSchema: {} }));
     h.listTools.mockResolvedValue({ tools: many });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const tools = await listTools(cfg);
+    const { tools } = await listTools(cfg);
     expect(tools).toHaveLength(200); // capped, not 250 — no silent unbounded ingestion
     expect(warn).toHaveBeenCalled(); // truncation surfaced, not silent (Rule 12)
     warn.mockRestore();

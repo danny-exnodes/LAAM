@@ -6,6 +6,8 @@ import type { ToolTraceItem } from "./toolLabel";
 import type { AttachmentMeta } from "@/lib/chat/attachment-meta";
 import type { CatalogTool } from "@/lib/chat/toolCatalog";
 
+import type { ViewDescriptor } from "@/lib/agent/view";
+
 export type ChatRole = "user" | "assistant";
 
 export type ChatMsg = {
@@ -18,6 +20,9 @@ export type ChatMsg = {
   toolTrace?: ToolTraceItem[]; // SP-4: trace tool (ephemeral, không reload)
   cites?: string[];            // SP-4: tên tool nguồn (ephemeral)
   pendingWrite?: PendingWrite; // SP-2 write-gate: card xác nhận (ephemeral)
+  // Bảng dựng từ tool result bằng CODE (Rule 13), hiện dưới câu trả lời. Ephemeral như
+  // toolTrace/cites: reload sẽ mất cho tới khi dựng lại từ chat_tool_calls đã lưu.
+  views?: ViewDescriptor[];
   attachments?: AttachmentMeta[]; // preview metadata — PERSISTED, hiện lại sau reload
 };
 

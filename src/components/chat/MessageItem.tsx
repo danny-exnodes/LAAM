@@ -16,6 +16,7 @@ import { useT } from "@/i18n/provider";
 import { chat } from "@/i18n/dictionaries/chat";
 import type { ChatMsg } from "./types";
 import { ToolTrace } from "./ToolTrace";
+import { ResultTables } from "./ResultTables";
 import { Citations } from "./Citations";
 import { ConfirmCard } from "./ConfirmCard";
 import { AttachmentPreview } from "./AttachmentChips";
@@ -97,6 +98,8 @@ export function MessageItem({
           <>
             <ToolTrace items={msg.toolTrace} />
             <ChatMarkdown source={msg.content} className="chat-md" />
+            {/* Rows the model did NOT have to retype: built from the tool result by code. */}
+            {msg.views?.length ? <ResultTables views={msg.views} /> : null}
             <Citations names={msg.cites} />
             {msg.pendingWrite && onConfirm && (
               <ConfirmCard

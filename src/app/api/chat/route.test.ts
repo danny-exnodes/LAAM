@@ -11,6 +11,7 @@ vi.mock("@/db", () => ({ get db() { return _db; } }));
 vi.mock("@/lib/connectors", () => ({
   chatTools: vi.fn(async () => []),
   mcpReadAllow: vi.fn(async () => new Set<string>()),
+  mcpInstructions: vi.fn(async () => []),
   execute: vi.fn(async () => ({})),
 }));
 // C1 contract: spy PASS-THROUGH quanh runToolRounds (giữ behavior thật) để assert
@@ -1058,6 +1059,100 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       expect(text).toContain("không trả về nội dung"); // EMPTY_REPLY — Rule 12, không phải bong bóng trắng
       const assistantRows = captured.values.filter((v) => (v as { role?: string }).role === "assistant") as { content?: string }[];
       expect(assistantRows.some((v) => String(v.content).includes("không trả về nội dung"))).toBe(true); // persist, không mất lượt
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cerebras provider — shares the SAME generalized branch as BytePlus in
+// streamMainTurn (both OpenAI-compat, wire-identical protocol) via a small
+// cloudChat/cloudStream/cloudErrText selector. These two tests exist to prove the
+// selector actually picks the Cerebras adapter/endpoint/notice — not a copy of
+// BytePlus's full coverage above (that already exercises the shared logic).
+// ---------------------------------------------------------------------------
+describe("Cerebras provider (shares BytePlus's tool-loop branch via provider selector)", () => {
+  const CB_MODEL = "gpt-oss-120b-cerebras"; // picker id — collision guard vs BytePlus's bare "gpt-oss-120b"
+
+  test("runs the tool-loop then streams via api.cerebras.ai (not BytePlus/Ollama); token frame from usage", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "cb-key");
+    orch.runToolRounds.mockClear();
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    _db = fakeChainDb({ values: [] });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sse =
+      'data: {"choices":[{"delta":{"content":"chào"}}]}\n\n' +
+      'data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":3}}\n\n' +
+      "data: [DONE]\n\n";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => {
+            let sent = false;
+            return { read: async () => (sent ? { done: true as const, value: undefined } : ((sent = true), { done: false as const, value: new TextEncoder().encode(sse) })) };
+          },
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: CB_MODEL }),
+        }),
+      );
+      expect(res.headers.get("x-conversation-id")).toBeTruthy();
+      const text = await res.text();
+      expect(orch.runToolRounds).toHaveBeenCalledTimes(1); // full agent, same as BytePlus
+      expect(fetchMock.mock.calls[0][0]).toContain("api.cerebras.ai"); // Cerebras, not BytePlus/Ollama
+      // wire body sends the LITERAL Cerebras model name, not the "-cerebras" picker id
+      const body1 = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+      expect(body1.model).toBe("gpt-oss-120b");
+      expect(text).toContain("chào");
+      expect(text).toContain('"t":"tokens"');
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  // Fail loud (Rule 12), Cerebras-specific notice text — proves cloudErrText picked the
+  // Cerebras copy, not BytePlus's.
+  test("no CEREBRAS_API_KEY → Cerebras-worded coded notice (persisted), no fetch, no Ollama fallback", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: CB_MODEL }),
+        }),
+      );
+      const text = await res.text();
+      expect(text).toContain("Không gọi được Cerebras API");
+      expect(text).toContain("auth");
+      expect(fetchMock).not.toHaveBeenCalled();
+      const assistantRows = captured.values.filter((v) => (v as { role?: string }).role === "assistant") as { content?: string }[];
+      expect(assistantRows.some((v) => String(v.content).includes("Không gọi được Cerebras API"))).toBe(true);
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();

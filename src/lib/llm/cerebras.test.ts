@@ -1,18 +1,18 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
-  BYTEPLUS_MODELS,
-  BytePlusUnavailableError,
-  byteplusChat,
-  byteplusStream,
-  isBytePlusModel,
-} from "./byteplus";
+  CEREBRAS_MODELS,
+  CerebrasUnavailableError,
+  cerebrasChat,
+  cerebrasStream,
+  isCerebrasModel,
+} from "./cerebras";
 
-// Adapter talks to BytePlus ModelArk's OpenAI-compatible /chat/completions via plain
-// fetch (no SDK dep — see decisions). Tests mock global.fetch and assert BOTH the
-// outgoing OpenAI wire shape (translation of the Ollama-shaped convo) AND the
-// inbound mapping back to the route's OllamaChatResponse contract.
+// Adapter talks to Cerebras's OpenAI-compatible /v1/chat/completions via plain fetch (no
+// SDK dep — mirrors byteplus.ts). Tests mock global.fetch and assert BOTH the outgoing
+// OpenAI wire shape (translation of the Ollama-shaped convo) AND the inbound mapping back
+// to the route's OllamaChatResponse contract.
 
-const BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
+const BASE = "https://api.cerebras.ai/v1";
 
 // A non-streaming JSON response (one tool round / completion).
 function jsonRes(body: unknown, status = 200): Response {
@@ -25,7 +25,7 @@ function jsonRes(body: unknown, status = 200): Response {
 }
 
 // A streaming SSE response whose body.getReader() replays the given chunks verbatim
-// (mirrors ollama.test.ts resFrom — lets us test partial-line reassembly).
+// (mirrors byteplus.test.ts sseRes — lets us test partial-line reassembly).
 function sseRes(chunks: string[], status = 200): Response {
   let i = 0;
   return {
@@ -57,50 +57,57 @@ function lastBody(): Record<string, unknown> {
 }
 
 beforeEach(() => {
-  vi.stubEnv("BYTEPLUS_API_KEY", "bp-test-key");
+  vi.stubEnv("CEREBRAS_API_KEY", "csk-test-key");
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
   // request() backs off before retrying a transient status. Every retry-exhausting case (the
   // 429/503/529 mappings below included) would otherwise pay that wait for real.
-  vi.stubEnv("BYTEPLUS_RETRY_DELAY_MS", "0");
+  vi.stubEnv("CEREBRAS_RETRY_DELAY_MS", "0");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
-describe("isBytePlusModel — exact whitelist (no prefix routing → no Ollama collision)", () => {
+describe("isCerebrasModel — exact whitelist (no prefix routing → no Ollama collision)", () => {
   test("whitelisted ids pass; everything else fails", () => {
-    expect(BYTEPLUS_MODELS.length).toBeGreaterThan(0);
-    for (const m of BYTEPLUS_MODELS) expect(isBytePlusModel(m)).toBe(true);
-    // a local Ollama deepseek tag must NOT be mistaken for a BytePlus model
-    expect(isBytePlusModel("deepseek-r1:7b")).toBe(false);
-    expect(isBytePlusModel("seed-1.6")).toBe(false); // bare alias not whitelisted
-    expect(isBytePlusModel("claude-opus-4-8")).toBe(false);
-    expect(isBytePlusModel("gemma4:e4b")).toBe(false);
-    expect(isBytePlusModel("")).toBe(false);
+    expect(CEREBRAS_MODELS.length).toBeGreaterThan(0);
+    for (const m of CEREBRAS_MODELS) expect(isCerebrasModel(m)).toBe(true);
+    // a local Ollama deepseek tag must NOT be mistaken for a Cerebras model
+    expect(isCerebrasModel("deepseek-r1:7b")).toBe(false);
+    expect(isCerebrasModel("llama-3.3-70b")).toBe(false); // not whitelisted yet
+    expect(isCerebrasModel("claude-opus-4-8")).toBe(false);
+    expect(isCerebrasModel("gemma4:e4b")).toBe(false);
+    expect(isCerebrasModel("")).toBe(false);
+    // Cerebras and BytePlus serve the literal SAME model name ("gpt-oss-120b"); the bare
+    // wire name must NOT itself be a valid Cerebras picker id, or configuring both
+    // providers' keys would make isCerebrasModel/isBytePlusModel both claim the same turn.
+    expect(isCerebrasModel("gpt-oss-120b")).toBe(false);
   });
 });
 
-describe("byteplusChat — outgoing OpenAI request shape", () => {
-  const model = BYTEPLUS_MODELS[0];
+describe("cerebrasChat — outgoing OpenAI request shape", () => {
+  const model = CEREBRAS_MODELS[0];
 
   test("POSTs to {base}/chat/completions with Bearer auth and stream:false", async () => {
     fetchMock.mockResolvedValue(jsonRes({ choices: [{ message: { role: "assistant", content: "hi" } }] }));
-    await byteplusChat({ model, messages: [{ role: "user", content: "hi" }], tools: [] });
+    await cerebrasChat({ model, messages: [{ role: "user", content: "hi" }], tools: [] });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe(`${BASE}/chat/completions`);
     expect((init as RequestInit).method).toBe("POST");
     const headers = (init as RequestInit).headers as Record<string, string>;
-    expect(headers["Authorization"]).toBe("Bearer bp-test-key");
+    expect(headers["Authorization"]).toBe("Bearer csk-test-key");
     expect(headers["content-type"]).toBe("application/json");
     expect(lastBody().stream).toBe(false);
-    expect(lastBody().model).toBe(model);
+    // The picker id carries a "-cerebras" suffix (collision guard vs. BytePlus, which
+    // owns the bare "gpt-oss-120b" as ITS picker id) — the wire body must send the literal
+    // model name Cerebras's API expects, not the picker id.
+    expect(lastBody().model).toBe("gpt-oss-120b");
   });
 
   test("strips the LAAM-specific `kind` field from tool schemas before sending", async () => {
     fetchMock.mockResolvedValue(jsonRes({ choices: [{ message: { role: "assistant", content: "" } }] }));
-    await byteplusChat({
+    await cerebrasChat({
       model,
       messages: [{ role: "user", content: "x" }],
       tools: [
@@ -118,13 +125,13 @@ describe("byteplusChat — outgoing OpenAI request shape", () => {
 
   test("omits the tools field entirely when no tools (final round must produce text)", async () => {
     fetchMock.mockResolvedValue(jsonRes({ choices: [{ message: { role: "assistant", content: "done" } }] }));
-    await byteplusChat({ model, messages: [{ role: "user", content: "x" }], tools: [] });
+    await cerebrasChat({ model, messages: [{ role: "user", content: "x" }], tools: [] });
     expect(lastBody()).not.toHaveProperty("tools");
   });
 
   test("passes sampling options (temperature/top_p/presence_penalty) when provided", async () => {
     fetchMock.mockResolvedValue(jsonRes({ choices: [{ message: { role: "assistant", content: "x" } }] }));
-    await byteplusChat({
+    await cerebrasChat({
       model,
       messages: [{ role: "user", content: "x" }],
       tools: [],
@@ -137,14 +144,14 @@ describe("byteplusChat — outgoing OpenAI request shape", () => {
   });
 });
 
-describe("byteplusChat — convo translation (Ollama-shaped → OpenAI), like claude's toAnthropic", () => {
-  const model = BYTEPLUS_MODELS[0];
+describe("cerebrasChat — convo translation (Ollama-shaped → OpenAI), like byteplus's toOpenAI", () => {
+  const model = CEREBRAS_MODELS[0];
   beforeEach(() =>
     fetchMock.mockResolvedValue(jsonRes({ choices: [{ message: { role: "assistant", content: "ok" } }] })),
   );
 
   test("system/user/assistant pass through with correct roles", async () => {
-    await byteplusChat({
+    await cerebrasChat({
       model,
       tools: [],
       messages: [
@@ -163,7 +170,7 @@ describe("byteplusChat — convo translation (Ollama-shaped → OpenAI), like cl
   });
 
   test("assistant tool_calls get synthesized ids + stringified args; following tool msg gets matching tool_call_id", async () => {
-    await byteplusChat({
+    await cerebrasChat({
       model,
       tools: [],
       messages: [
@@ -190,7 +197,7 @@ describe("byteplusChat — convo translation (Ollama-shaped → OpenAI), like cl
   });
 
   test("orphan tool message (web_read nudge, no preceding tool_call) → converted to user (OpenAI rejects unpaired tool msgs)", async () => {
-    await byteplusChat({
+    await cerebrasChat({
       model,
       tools: [],
       messages: [
@@ -211,7 +218,7 @@ describe("byteplusChat — convo translation (Ollama-shaped → OpenAI), like cl
   });
 
   test("images are ignored (v1 = no vision)", async () => {
-    await byteplusChat({
+    await cerebrasChat({
       model,
       tools: [],
       messages: [{ role: "user", content: "ảnh?", images: ["QUJD"] }],
@@ -220,8 +227,8 @@ describe("byteplusChat — convo translation (Ollama-shaped → OpenAI), like cl
   });
 });
 
-describe("byteplusChat — inbound mapping → OllamaChatResponse (Rule 13: trust code, not LLM args)", () => {
-  const model = BYTEPLUS_MODELS[0];
+describe("cerebrasChat — inbound mapping → OllamaChatResponse (Rule 13: trust code, not LLM args)", () => {
+  const model = CEREBRAS_MODELS[0];
 
   test("OpenAI tool_calls.arguments arrives as a JSON STRING → mapped to an OBJECT for the dispatch pipeline", async () => {
     fetchMock.mockResolvedValue(
@@ -240,7 +247,7 @@ describe("byteplusChat — inbound mapping → OllamaChatResponse (Rule 13: trus
         usage: { prompt_tokens: 1, completion_tokens: 1 },
       }),
     );
-    const res = await byteplusChat({ model, tools: [], messages: [{ role: "user", content: "go" }] });
+    const res = await cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "go" }] });
     const calls = res.message!.tool_calls as Array<{ function: { name: string; arguments: unknown } }>;
     expect(calls[0].function.name).toBe("demo_create_task");
     expect(calls[0].function.arguments).toEqual({ title: "  spaced  ", n: 2 }); // OBJECT, parsed
@@ -252,37 +259,37 @@ describe("byteplusChat — inbound mapping → OllamaChatResponse (Rule 13: trus
         choices: [{ message: { role: "assistant", content: "", tool_calls: [{ id: "c", type: "function", function: { name: "x", arguments: "{not json" } }] } }],
       }),
     );
-    const res = await byteplusChat({ model, tools: [], messages: [{ role: "user", content: "go" }] });
+    const res = await cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "go" }] });
     const calls = res.message!.tool_calls as Array<{ function: { arguments: unknown } }>;
     expect(calls[0].function.arguments).toEqual({});
   });
 
   test("plain text completion (no tool_calls) → message without tool_calls", async () => {
     fetchMock.mockResolvedValue(jsonRes({ choices: [{ message: { role: "assistant", content: "câu trả lời" } }] }));
-    const res = await byteplusChat({ model, tools: [], messages: [{ role: "user", content: "hi" }] });
+    const res = await cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "hi" }] });
     expect(res.message!.content).toBe("câu trả lời");
     expect(res.message!.tool_calls ?? []).toEqual([]);
   });
 
-  // Review finding (fail loud, Rule 12): a content-filter / refusal can return an
-  // EMPTY choices[]. Mapping that to empty content silently breaks the tool-loop
-  // (no tool_calls → loop ends → empty turn, user pays for nothing). Throw instead —
-  // a plain Error so the route surfaces 'api' (not a benign 'unavailable').
+  // Fail loud (Rule 12): a content-filter / refusal can return an EMPTY choices[].
+  // Mapping that to empty content silently breaks the tool-loop (no tool_calls → loop
+  // ends → empty turn, user pays for nothing). Throw instead — a plain Error so the route
+  // surfaces 'api' (not a benign 'unavailable').
   test("empty choices[] → throws a plain Error (no silent zombie round)", async () => {
     fetchMock.mockResolvedValue(jsonRes({ choices: [] }));
-    const err = await byteplusChat({ model, tools: [], messages: [{ role: "user", content: "x" }] }).catch((e) => e);
+    const err = await cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "x" }] }).catch((e) => e);
     expect(err).toBeInstanceOf(Error);
-    expect(err).not.toBeInstanceOf(BytePlusUnavailableError);
+    expect(err).not.toBeInstanceOf(CerebrasUnavailableError);
   });
 });
 
-describe("byteplusChat — auth + error mapping (typed, like ClaudeUnavailableError)", () => {
-  const model = BYTEPLUS_MODELS[0];
+describe("cerebrasChat — auth + error mapping (typed, like BytePlusUnavailableError)", () => {
+  const model = CEREBRAS_MODELS[0];
 
-  test("no BYTEPLUS_API_KEY → BytePlusUnavailableError('auth') BEFORE any fetch", async () => {
-    vi.stubEnv("BYTEPLUS_API_KEY", "");
-    await expect(byteplusChat({ model, tools: [], messages: [{ role: "user", content: "x" }] })).rejects.toMatchObject({
-      name: "BytePlusUnavailableError",
+  test("no CEREBRAS_API_KEY → CerebrasUnavailableError('auth') BEFORE any fetch", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "");
+    await expect(cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "x" }] })).rejects.toMatchObject({
+      name: "CerebrasUnavailableError",
       code: "auth",
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -296,37 +303,37 @@ describe("byteplusChat — auth + error mapping (typed, like ClaudeUnavailableEr
     [529, "overloaded"],
   ];
   for (const [status, code] of httpCases) {
-    test(`HTTP ${status} → BytePlusUnavailableError('${code}')`, async () => {
+    test(`HTTP ${status} → CerebrasUnavailableError('${code}')`, async () => {
       fetchMock.mockResolvedValue(jsonRes({ error: { message: "boom" } }, status));
-      await expect(byteplusChat({ model, tools: [], messages: [{ role: "user", content: "x" }] })).rejects.toMatchObject({
-        name: "BytePlusUnavailableError",
+      await expect(cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "x" }] })).rejects.toMatchObject({
+        name: "CerebrasUnavailableError",
         code,
       });
     });
   }
 
-  test("network error (fetch rejects) → BytePlusUnavailableError('connection')", async () => {
+  test("network error (fetch rejects) → CerebrasUnavailableError('connection')", async () => {
     fetchMock.mockRejectedValue(new TypeError("network down"));
-    await expect(byteplusChat({ model, tools: [], messages: [{ role: "user", content: "x" }] })).rejects.toMatchObject({
-      name: "BytePlusUnavailableError",
+    await expect(cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "x" }] })).rejects.toMatchObject({
+      name: "CerebrasUnavailableError",
       code: "connection",
     });
   });
 
   test("unexpected HTTP (e.g. 400 schema) → plain Error (route surfaces as 'api'), NOT swallowed as unavailable", async () => {
     fetchMock.mockResolvedValue(jsonRes({ error: { message: "bad schema" } }, 400));
-    const err = await byteplusChat({ model, tools: [], messages: [{ role: "user", content: "x" }] }).catch((e) => e);
+    const err = await cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "x" }] }).catch((e) => e);
     expect(err).toBeInstanceOf(Error);
-    expect(err).not.toBeInstanceOf(BytePlusUnavailableError);
+    expect(err).not.toBeInstanceOf(CerebrasUnavailableError);
   });
 });
 
-describe("byteplusStream — final streaming completion (SSE)", () => {
-  const model = BYTEPLUS_MODELS[0];
+describe("cerebrasStream — final streaming completion (SSE)", () => {
+  const model = CEREBRAS_MODELS[0];
 
   test("requests stream:true + include_usage, NO tools", async () => {
     fetchMock.mockResolvedValue(sseRes(["data: [DONE]\n\n"]));
-    await collect(byteplusStream({ model, messages: [{ role: "user", content: "hi" }] }));
+    await collect(cerebrasStream({ model, messages: [{ role: "user", content: "hi" }] }));
     const b = lastBody();
     expect(b.stream).toBe(true);
     expect(b.stream_options).toEqual({ include_usage: true });
@@ -342,7 +349,7 @@ describe("byteplusStream — final streaming completion (SSE)", () => {
         "data: [DONE]\n\n",
       ]),
     );
-    const got = await collect(byteplusStream({ model, messages: [{ role: "user", content: "hi" }] }));
+    const got = await collect(cerebrasStream({ model, messages: [{ role: "user", content: "hi" }] }));
     expect(got).toEqual([
       { delta: "  Xin   chào\n\n" },
       { delta: "\t— 42  " },
@@ -350,26 +357,26 @@ describe("byteplusStream — final streaming completion (SSE)", () => {
     ]);
   });
 
-  // Review finding (no fake billing): when BytePlus sends NO final usage chunk, the
-  // adapter must NOT fabricate a 0/0 usage event — otherwise the route's gotUsage
-  // flips true and persists/emits a fake $0 token frame on a BILLED provider. Omit it
-  // so the route's emitTokens=gotUsage correctly drops the token frame (Claude-style).
+  // No fake billing: when Cerebras sends NO final usage chunk, the adapter must NOT
+  // fabricate a 0/0 usage event — otherwise the route's gotUsage flips true and
+  // persists/emits a fake $0 token frame on a BILLED provider. Omit it so the route's
+  // emitTokens=gotUsage correctly drops the token frame (BytePlus/Claude-style).
   test("omits the usage event entirely when no final usage chunk arrives (no fake 0/0)", async () => {
     fetchMock.mockResolvedValue(sseRes(['data: {"choices":[{"delta":{"content":"hi"}}]}\n\n', "data: [DONE]\n\n"]));
-    const got = await collect(byteplusStream({ model, messages: [{ role: "user", content: "x" }] }));
+    const got = await collect(cerebrasStream({ model, messages: [{ role: "user", content: "x" }] }));
     expect(got).toEqual([{ delta: "hi" }]); // delta only — no trailing usage
   });
 
   test("reassembles an SSE event split across read() chunks", async () => {
     const evt = 'data: {"choices":[{"delta":{"content":"x"}}]}\n\n';
     fetchMock.mockResolvedValue(sseRes([evt.slice(0, 12), evt.slice(12), "data: [DONE]\n\n"]));
-    const got = await collect(byteplusStream({ model, messages: [{ role: "user", content: "hi" }] }));
+    const got = await collect(cerebrasStream({ model, messages: [{ role: "user", content: "hi" }] }));
     expect(got.filter((e) => e.delta).map((e) => e.delta)).toEqual(["x"]);
   });
 
-  test("no BYTEPLUS_API_KEY → BytePlusUnavailableError('auth') before fetch", async () => {
-    vi.stubEnv("BYTEPLUS_API_KEY", "");
-    await expect(collect(byteplusStream({ model, messages: [{ role: "user", content: "x" }] }))).rejects.toMatchObject({
+  test("no CEREBRAS_API_KEY → CerebrasUnavailableError('auth') before fetch", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "");
+    await expect(collect(cerebrasStream({ model, messages: [{ role: "user", content: "x" }] }))).rejects.toMatchObject({
       code: "auth",
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -377,7 +384,7 @@ describe("byteplusStream — final streaming completion (SSE)", () => {
 
   test("non-ok status before any delta → typed error (429 → rate_limit)", async () => {
     fetchMock.mockResolvedValue(sseRes([], 429));
-    await expect(collect(byteplusStream({ model, messages: [{ role: "user", content: "x" }] }))).rejects.toMatchObject({
+    await expect(collect(cerebrasStream({ model, messages: [{ role: "user", content: "x" }] }))).rejects.toMatchObject({
       code: "rate_limit",
     });
   });
@@ -385,30 +392,30 @@ describe("byteplusStream — final streaming completion (SSE)", () => {
   test("forwards AbortSignal to fetch", async () => {
     fetchMock.mockResolvedValue(sseRes(["data: [DONE]\n\n"]));
     const ctrl = new AbortController();
-    await collect(byteplusStream({ model, messages: [{ role: "user", content: "x" }], signal: ctrl.signal }));
+    await collect(cerebrasStream({ model, messages: [{ role: "user", content: "x" }], signal: ctrl.signal }));
     expect((fetchMock.mock.calls[0][1] as RequestInit).signal).toBe(ctrl.signal);
   });
 
-  test("respects BYTEPLUS_BASE_URL override (region selection)", async () => {
-    vi.stubEnv("BYTEPLUS_BASE_URL", "https://ark.eu-west.bytepluses.com/api/v3");
+  test("respects CEREBRAS_BASE_URL override", async () => {
+    vi.stubEnv("CEREBRAS_BASE_URL", "https://api.cerebras.ai/v1-staging");
     fetchMock.mockResolvedValue(sseRes(["data: [DONE]\n\n"]));
-    await collect(byteplusStream({ model, messages: [{ role: "user", content: "x" }] }));
-    expect(fetchMock.mock.calls[0][0]).toBe("https://ark.eu-west.bytepluses.com/api/v3/chat/completions");
+    await collect(cerebrasStream({ model, messages: [{ role: "user", content: "x" }] }));
+    expect(fetchMock.mock.calls[0][0]).toBe("https://api.cerebras.ai/v1-staging/chat/completions");
   });
 });
 
-// BytePlus answers 429 with its OWN "ServerOverloaded" — transient capacity, not our quota.
-// Losing a whole turn to a blip is expensive: the tool rounds already ran and only the final
+// Cerebras may answer 429/503/529 for its own capacity, not only a per-key quota. Losing a
+// whole turn to a blip is expensive: the tool rounds already ran and only the final
 // generation failed. One retry, and ONLY for the transient statuses.
 describe("transient-failure retry", () => {
-  const model = BYTEPLUS_MODELS[0];
-  const ask = () => byteplusChat({ model, tools: [], messages: [{ role: "user", content: "x" }] });
+  const model = CEREBRAS_MODELS[0];
+  const ask = () => cerebrasChat({ model, tools: [], messages: [{ role: "user", content: "x" }] });
   const ok = { choices: [{ message: { role: "assistant", content: "hi" } }] };
 
   for (const status of [429, 503, 529]) {
     test(`HTTP ${status} then success → one retry, answer returned instead of a dead turn`, async () => {
       fetchMock
-        .mockResolvedValueOnce(jsonRes({ error: { message: "ServerOverloaded" } }, status))
+        .mockResolvedValueOnce(jsonRes({ error: { message: "overloaded" } }, status))
         .mockResolvedValueOnce(jsonRes(ok));
       await expect(ask()).resolves.toMatchObject({ message: { content: "hi" } });
       expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -417,8 +424,8 @@ describe("transient-failure retry", () => {
 
   // Bounded: retrying harder into an overloaded server makes it worse, and the user is waiting.
   test("still failing after the retry → the typed error surfaces, exactly 2 attempts", async () => {
-    fetchMock.mockResolvedValue(jsonRes({ error: { message: "ServerOverloaded" } }, 429));
-    await expect(ask()).rejects.toMatchObject({ name: "BytePlusUnavailableError", code: "rate_limit" });
+    fetchMock.mockResolvedValue(jsonRes({ error: { message: "overloaded" } }, 429));
+    await expect(ask()).rejects.toMatchObject({ name: "CerebrasUnavailableError", code: "rate_limit" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
@@ -444,7 +451,7 @@ describe("transient-failure retry", () => {
     fetchMock
       .mockResolvedValueOnce(sseRes([], 429))
       .mockResolvedValueOnce(sseRes(['data: {"choices":[{"delta":{"content":"xin chào"}}]}\n\n', "data: [DONE]\n\n"]));
-    const got = await collect(byteplusStream({ model, messages: [{ role: "user", content: "x" }] }));
+    const got = await collect(cerebrasStream({ model, messages: [{ role: "user", content: "x" }] }));
     expect(got).toEqual([{ delta: "xin chào" }]);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });

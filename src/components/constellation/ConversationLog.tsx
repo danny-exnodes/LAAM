@@ -12,6 +12,8 @@
 // there is no focus trap and no backdrop. Same reasoning as DisplayPanel (role="region").
 import { useEffect, useRef } from "react";
 import { ChatMarkdown } from "@/components/render/ChatMarkdown";
+import { ResultTables } from "@/components/chat/ResultTables";
+import type { ViewDescriptor } from "@/lib/agent/view";
 import type { Turn } from "./turns";
 
 export function ConversationLog({
@@ -28,6 +30,13 @@ export function ConversationLog({
   // name so the landmark is still announced with something meaningful.
   title: string;
   youLabel: string;
+  // Tables ride on each Turn (see turns.ts), built from the tool result by code (Rule 13).
+  //
+  // The floating DisplayPanel also shows the CURRENT turn's tables — but ONLY while this
+  // transcript is closed (`panelOpen = views.length > 0 && !viewClosed && !chatOpen`). The two
+  // were designed as alternatives, for a mode where the answer is heard rather than read. Open
+  // the transcript to re-read a number and the table vanished, leaving prose that deliberately
+  // no longer lists rows: the user could see 62 refunds summarised and nowhere to look at them.
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -60,7 +69,10 @@ export function ConversationLog({
         //
         // no-scrollbar: a scroll track drawn over the starfield reads as a seam
         // (scrolling itself still works).
-        "absolute bottom-[9.375rem] right-4 z-20 flex w-[min(460px,88vw)] max-h-[56vh] flex-col gap-2 overflow-y-auto no-scrollbar",
+        // min-w-0 so flex children can shrink and table overflow-x works (see bubble).
+        // max-h: 56vh + 50px — a bit more room for multi-turn / table replies without
+        // climbing into the DisplayPanel zone at the top of the starfield.
+        "absolute bottom-[9.375rem] right-4 z-20 flex w-[min(460px,88vw)] min-w-0 max-h-[calc(56vh+50px)] flex-col gap-2 overflow-y-auto overflow-x-hidden no-scrollbar",
         open ? "pointer-events-auto anim-panel-in" : "pointer-events-none anim-panel-out",
       ].join(" ")}
     >
@@ -74,7 +86,10 @@ export function ConversationLog({
             // self-end also opts the bubble out of the flex column's default stretch, so
             // it shrinks to its own content instead of every turn being one slab the full
             // width of the column. ml-6 caps how wide a long one can grow.
-            "ml-6 self-end rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
+            // max-w-full + min-w-0 (no w-full): short turns still hug content;
+            // wide tables cap at the log column (min-w-0 beats flex min-width:auto)
+            // so .chat-md-tablewrap gets a bounded scrollport.
+            "ml-6 max-w-full min-w-0 self-end rounded-2xl px-3 py-2 text-[12px] leading-relaxed",
             // Each bubble carries its own background: with the wrapper gone there is
             // nothing else between the text and the moving starfield.
             // Solid rgba, NOT backdrop-blur — one blurred surface over the WebGL canvas was
@@ -96,6 +111,11 @@ export function ConversationLog({
           ) : (
             turn.text
           )}
+          {/* Each turn carries its OWN tables, so asking the next question no longer wipes
+              the table the previous answer was about. */}
+          {turn.role === "assistant" && turn.views?.length ? (
+            <ResultTables views={turn.views} />
+          ) : null}
         </div>
       ))}
     </section>

@@ -34,6 +34,17 @@ function truncateResult(text: string): string {
   return text.slice(0, MAX_RESULT_CHARS) + `\n\n[... nội dung đã rút gọn ${dropped} ký tự cho vừa ngữ cảnh]`;
 }
 
+// What one server advertises at connect time: its tools, plus the free-text
+// `instructions` the MCP spec lets a server return from `initialize`. The
+// instructions were previously discarded, which cost real work: DAAB names the
+// project + data-source ids it is scoped to in that field, and without them the
+// model re-derived those constants with a list_projects + list_datasources
+// round-trip on every single question.
+export type ServerListing = {
+  tools: RemoteTool[];
+  instructions?: string;
+};
+
 export type RemoteTool = {
   name: string;
   description?: string;
@@ -77,16 +88,18 @@ function withTimeout<T>(p: Promise<T>): Promise<T> {
   return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
 }
 
-export async function listTools(cfg: McpServerConfig): Promise<RemoteTool[]> {
+export async function listTools(cfg: McpServerConfig): Promise<ServerListing> {
   const client = await connect(cfg);
   try {
     const res = (await withTimeout(client.listTools())) as { tools: RemoteTool[] };
+    // Available only AFTER connect() — the SDK fills it from the initialize result.
+    const instructions = client.getInstructions();
     const all = res.tools ?? [];
     if (all.length > MAX_TOOLS) {
       console.warn(`[mcp] server '${cfg.slug}' trả ${all.length} tool — cắt còn ${MAX_TOOLS} (DoS guard)`);
-      return all.slice(0, MAX_TOOLS);
+      return { tools: all.slice(0, MAX_TOOLS), instructions };
     }
-    return all;
+    return { tools: all, instructions };
   } finally {
     await client.close();
   }

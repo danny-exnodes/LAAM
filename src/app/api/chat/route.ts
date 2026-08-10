@@ -2,7 +2,7 @@ import { eq, asc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages, chatToolCalls } from "@/db/schema";
-import { chatTools, mcpReadAllow } from "@/lib/connectors";
+import { chatTools, mcpReadAllow, mcpInstructions } from "@/lib/connectors";
 import { sanitizeAttachments } from "@/lib/chat/attachment-meta";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { getCustomAgent } from "@/lib/customAgents";
@@ -18,8 +18,10 @@ import { resolveKind } from "@/lib/agent/safety/policy";
 import { looksLikeWriteIntent, guardWriteClaim } from "@/lib/agent/safety/write-claim-guard";
 import { claudeStream, isClaudeModel, ClaudeUnavailableError } from "@/lib/llm/claude";
 import { isBytePlusModel, byteplusChat, byteplusStream, BytePlusUnavailableError } from "@/lib/llm/byteplus";
+import { isCerebrasModel, cerebrasChat, cerebrasStream, CerebrasUnavailableError } from "@/lib/llm/cerebras";
 import { replayBudgetFor } from "@/lib/chat/replay-budget";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
+import { digestMessagesForModel } from "@/lib/agent/digest";
 import { synthNudge, loopTruncatedNotice, restateQuestion } from "@/lib/chat/backstop-notice";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
@@ -86,6 +88,17 @@ const BYTEPLUS_ERR: Record<"vi" | "en" | "zh", string> = {
 };
 const byteplusErrText = (lang: string, code: string) =>
   (BYTEPLUS_ERR[lang as keyof typeof BYTEPLUS_ERR] ?? BYTEPLUS_ERR.vi).replace("{code}", code);
+// Cerebras (OpenAI-compat, org key) — same coded-notice pattern as BytePlus. Wire-identical
+// provider (both speak OpenAI /chat/completions with gpt-oss-120b), so it shares BytePlus's
+// full tool-loop treatment rather than getting its own copy of that ~200-line block; see
+// the cloudChat/cloudStream/cloudErrText selection at the top of the BytePlus branch below.
+const CEREBRAS_ERR: Record<"vi" | "en" | "zh", string> = {
+  vi: "Không gọi được Cerebras API ({code}). Vui lòng thử lại hoặc chuyển về model local.",
+  en: "Could not reach the Cerebras API ({code}). Please retry or switch back to the local model.",
+  zh: "无法调用 Cerebras API（{code}）。请重试或切换回本地模型。",
+};
+const cerebrasErrText = (lang: string, code: string) =>
+  (CEREBRAS_ERR[lang as keyof typeof CEREBRAS_ERR] ?? CEREBRAS_ERR.vi).replace("{code}", code);
 // SP-4: tên internal tool — redact args theo set-membership (D-SP4-3) khi gom tool frames.
 const INTERNAL_NAMES = new Set(INTERNAL_TOOLS.map((t) => t.name));
 // Cửa sổ ngữ cảnh model phục vụ. Ollama mặc định num_ctx=4096 BẤT KỂ model hỗ trợ tới ~128k+ →
@@ -125,7 +138,7 @@ const BYTEPLUS_TOOL_BUDGET_CHARS = Math.max(REPLAY_BUDGET_CHARS, Number(process.
 // only client.ts's cap was raised without this one — left a mid-size record still shredded.
 const CLOUD_RESULT_BOUND = 120_000;
 const resultBound = (model: string): number | undefined =>
-  isBytePlusModel(model) || isClaudeModel(model) ? CLOUD_RESULT_BOUND : undefined;
+  isBytePlusModel(model) || isCerebrasModel(model) || isClaudeModel(model) ? CLOUD_RESULT_BOUND : undefined;
 // Honest "stopped early" notice (Rule 12) appended when the loop is force-terminated by
 // the backstop or a stuck repeat — never silently truncate. Suppressed in voice mode
 // (TTS would read it aloud); see lib/chat/backstop-notice.ts.
@@ -407,6 +420,9 @@ export async function POST(req: Request) {
   // MCP tools the user trusts as read (opt-in) → safety gate skips confirm for them; all
   // other MCP tools fail-closed to write.
   const readAllow = await mcpReadAllow(userId);
+  // What each connected MCP server said about itself at initialize (scope, ids it is
+  // already bound to). Same 30s discovery cache as the tools above, so no extra round-trip.
+  const serverNotes = await mcpInstructions(userId);
 
   // P1 quick-tools: user picked tool → validate SỚM, fail-loud (Rule 12). Tên phải
   // nằm trong union tool khả dụng của CHÍNH user này + args qua CÙNG chuẩn
@@ -453,6 +469,8 @@ export async function POST(req: Request) {
         // handleConfirm) — liệt kê tool + "BẮT BUỘC gọi công cụ" cho model không
         // có tool sẽ làm nó bịa cú pháp tool / claim sai.
         tools: isClaudeModel(model) ? [] : tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+        // Same tool-less rule as above: no tools rendered → no server notes either.
+        serverNotes: isClaudeModel(model) ? [] : serverNotes,
         mode: body.mode,
         // Persona base (or undefined → default BASE) per resolveAgentBase precedence.
         base: resolveAgentBase(hasSystemOverride, agentPreset),
@@ -605,13 +623,23 @@ function streamMainTurn(opts: {
         });
         return;
       }
-      // --- BytePlus provider (ModelArk, OpenAI-compat, org key) — FULL agent. Unlike
-      // Claude's no-tool MVS, BytePlus runs the SAME gated tool-loop as Ollama
+      // --- BytePlus / Cerebras providers (both OpenAI-compat, org key) — FULL agent.
+      // Unlike Claude's no-tool MVS, these run the SAME gated tool-loop as Ollama
       // (runToolRounds + withSafety + write-gate), differing only in transport:
-      // byteplusChat per round, byteplusStream for the final completion. Final-stream
-      // error handling mirrors the Claude branch (byteplusStream THROWS typed errors,
-      // unlike ollamaStream). Summarize/proactive already ran on the local model above.
-      if (isBytePlusModel(payload.model)) {
+      // cloudChat per round, cloudStream for the final completion. Final-stream error
+      // handling mirrors the Claude branch (cloudStream THROWS typed errors, unlike
+      // ollamaStream). Summarize/proactive already ran on the local model above.
+      // Cerebras is wire-identical to BytePlus (same OpenAI /chat/completions protocol,
+      // same gpt-oss-120b model) so it shares this branch via a small selector instead of
+      // a second ~200-line copy — see cloudChat/cloudStream/cloudErrText below.
+      if (isBytePlusModel(payload.model) || isCerebrasModel(payload.model)) {
+        const cloudIsCerebras = isCerebrasModel(payload.model);
+        const cloudProvider = cloudIsCerebras ? "cerebras" : "byteplus";
+        const cloudChat = cloudIsCerebras ? cerebrasChat : byteplusChat;
+        const cloudStream = cloudIsCerebras ? cerebrasStream : byteplusStream;
+        const cloudErrText = cloudIsCerebras ? cerebrasErrText : byteplusErrText;
+        const isCloudUnavailableError = (e: unknown): e is BytePlusUnavailableError | CerebrasUnavailableError =>
+          e instanceof BytePlusUnavailableError || e instanceof CerebrasUnavailableError;
         let c = -1;
         const onEvent = (e: { type: "tool_call"; name: string; args: unknown } | { type: "tool_result"; name: string; ok: boolean }) => {
           if (e.type === "tool_call") {
@@ -626,9 +654,9 @@ function streamMainTurn(opts: {
           readAllow,
           maxBytes: resultBound(payload.model),
         });
-        // Tool round transport: BytePlus /chat/completions (non-stream) → OllamaChatResponse.
-        const callByteplus = (messages: ChatMessage[], roundTools: typeof tools): Promise<OllamaChatResponse> =>
-          byteplusChat({ model: payload.model, messages, tools: roundTools, options: payload.options, signal: reqSignal });
+        // Tool round transport: cloud provider /chat/completions (non-stream) → OllamaChatResponse.
+        const callCloud = (messages: ChatMessage[], roundTools: typeof tools): Promise<OllamaChatResponse> =>
+          cloudChat({ model: payload.model, messages, tools: roundTools, options: payload.options, signal: reqSignal });
 
         let convo: ChatMessage[] = payload.messages;
         let toolTurns: ReturnType<typeof extractToolTurns> = [];
@@ -636,7 +664,10 @@ function streamMainTurn(opts: {
         let hitBackstop = false;
         try {
           if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
-          convo = await runToolRounds(payload.messages, tools, { callOllama: callByteplus, dispatch }, {
+          convo = await runToolRounds(payload.messages, tools, { callOllama: callCloud, dispatch }, {
+            // Big tabular results get their own panel, emitted live as each lands. Without
+            // this the ONLY way a row reaches the user is the model retyping it in prose.
+            onView: (d) => emit({ t: "view", d }),
             drilldownPairs: DRILLDOWN_PAIRS,
             dataFetchTools: DATA_FETCH_TOOLS,
             maxRounds: CHAT_MAX_ROUNDS,
@@ -656,11 +687,11 @@ function streamMainTurn(opts: {
             await emitPendingWriteSuspend(controller, enc, emit, e, { convId, userId, now, model: payload.model });
             return;
           }
-          // Real failure mid tool-loop (BytePlus unreachable at round ≥ 1). Fail loud:
-          // coded notice + persist + close (pattern of the Ollama tool-loop catch).
-          const code = e instanceof BytePlusUnavailableError ? e.code : "api";
-          console.error(`[chat] byteplus tool-loop failed (conv=${convId}, code=${code})`, e);
-          const errText = byteplusErrText(lang, code);
+          // Real failure mid tool-loop (cloud provider unreachable at round ≥ 1). Fail
+          // loud: coded notice + persist + close (pattern of the Ollama tool-loop catch).
+          const code = isCloudUnavailableError(e) ? e.code : "api";
+          console.error(`[chat] ${cloudProvider} tool-loop failed (conv=${convId}, code=${code})`, e);
+          const errText = cloudErrText(lang, code);
           try {
             controller.enqueue(enc.encode(errText));
           } catch {
@@ -670,7 +701,7 @@ function streamMainTurn(opts: {
             await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: errText });
             await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
           } catch (err) {
-            console.error("[chat] byteplus tool-loop error persist failed (fail-soft)", err);
+            console.error(`[chat] ${cloudProvider} tool-loop error persist failed (fail-soft)`, err);
           }
           controller.close();
           return;
@@ -706,7 +737,7 @@ function streamMainTurn(opts: {
         let gotUsage = false; // billed provider: omit token frame if usage never arrived (no fake $0)
         let hbCount = 0;
         try {
-          for await (const ev of byteplusStream({ model: payload.model, messages: convo, options: payload.options, signal: reqSignal })) {
+          for await (const ev of cloudStream({ model: payload.model, messages: digestMessagesForModel(convo), options: payload.options, signal: reqSignal })) {
             if (ev.delta) {
               full += ev.delta;
               if (!guardWrites) {
@@ -734,9 +765,9 @@ function streamMainTurn(opts: {
           // Final completion dropped. Before first delta → fail loud (notice + persist
           // + close). After some delta / user abort → log + finalize with what we have.
           if (!full && !reqSignal?.aborted) {
-            const code = e instanceof BytePlusUnavailableError ? e.code : "api";
-            console.error(`[chat] byteplus stream failed before first delta (conv=${convId}, code=${code})`, e);
-            const errText = byteplusErrText(lang, code);
+            const code = isCloudUnavailableError(e) ? e.code : "api";
+            console.error(`[chat] ${cloudProvider} stream failed before first delta (conv=${convId}, code=${code})`, e);
+            const errText = cloudErrText(lang, code);
             try {
               controller.enqueue(enc.encode(errText));
             } catch {
@@ -746,12 +777,12 @@ function streamMainTurn(opts: {
               await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: errText });
               await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
             } catch (err) {
-              console.error("[chat] byteplus notice persist failed (fail-soft)", err);
+              console.error(`[chat] ${cloudProvider} notice persist failed (fail-soft)`, err);
             }
             controller.close();
             return;
           }
-          console.error(`[chat] byteplus stream failed (conv=${convId})`, e);
+          console.error(`[chat] ${cloudProvider} stream failed (conv=${convId})`, e);
         }
         // ONE-SHOT RETRY: a reasoning model can burn its whole final-answer turn on
         // reasoning_content and emit ZERO visible content even on a NATURAL completion
@@ -760,10 +791,10 @@ function streamMainTurn(opts: {
         // final stream exactly once before giving up (still fail loud below if this ALSO
         // comes back empty — Rule 12).
         if (!full && !reqSignal?.aborted) {
-          console.warn(`[chat] byteplus stream produced no content, retrying once (conv=${convId}, model=${payload.model})`);
+          console.warn(`[chat] ${cloudProvider} stream produced no content, retrying once (conv=${convId}, model=${payload.model})`);
           const retryConvo = [...convo, { role: "user", content: synthNudge(lang, userText) }];
           try {
-            for await (const ev of byteplusStream({ model: payload.model, messages: retryConvo, options: payload.options, signal: reqSignal })) {
+            for await (const ev of cloudStream({ model: payload.model, messages: digestMessagesForModel(retryConvo), options: payload.options, signal: reqSignal })) {
               if (ev.delta) {
                 full += ev.delta;
                 if (!guardWrites) {
@@ -784,7 +815,7 @@ function streamMainTurn(opts: {
               }
             }
           } catch (e) {
-            console.error(`[chat] byteplus retry stream failed (conv=${convId})`, e);
+            console.error(`[chat] ${cloudProvider} retry stream failed (conv=${convId})`, e);
           }
         }
         // Fail loud (Rule 12): the stream ended cleanly but produced ZERO answer content
@@ -792,7 +823,7 @@ function streamMainTurn(opts: {
         // stream torn down without a formal client abort). Show a labelled notice instead
         // of a silent blank bubble so an empty turn is never mistaken for success.
         if (!full && !reqSignal?.aborted) {
-          console.error(`[chat] byteplus stream produced no content after retry (conv=${convId}, model=${payload.model})`);
+          console.error(`[chat] ${cloudProvider} stream produced no content after retry (conv=${convId}, model=${payload.model})`);
           const note = EMPTY_REPLY[lang as keyof typeof EMPTY_REPLY] ?? EMPTY_REPLY.vi;
           full = note;
           if (!guardWrites) { try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ } }
@@ -867,6 +898,7 @@ function streamMainTurn(opts: {
         // → tool frame tự emit, write vẫn suspend PendingWriteSignal vào catch dưới).
         if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
         convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch }, {
+          onView: (d) => emit({ t: "view", d }),
           drilldownPairs: DRILLDOWN_PAIRS,
           dataFetchTools: DATA_FETCH_TOOLS,
           maxRounds: CHAT_MAX_ROUNDS,
@@ -923,7 +955,7 @@ function streamMainTurn(opts: {
         ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: payload.model, messages: convo, options: payload.options, stream: true }),
+          body: JSON.stringify({ model: payload.model, messages: digestMessagesForModel(convo), options: payload.options, stream: true }),
         });
       } catch {
         try {
@@ -1296,15 +1328,15 @@ async function handleConfirm(
   if (isClaudeModel(confirmModel)) {
     return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
   }
-  if (isBytePlusModel(confirmModel)) {
-    return streamByteplusCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
+  if (isBytePlusModel(confirmModel) || isCerebrasModel(confirmModel)) {
+    return streamCloudCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
   }
   let ollamaRes: Response;
   try {
     ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(buildResumeRequest(confirmModel, outcome.messages, { num_ctx: NUM_CTX })),
+      body: JSON.stringify(buildResumeRequest(confirmModel, digestMessagesForModel(outcome.messages), { num_ctx: NUM_CTX })),
     });
   } catch {
     return new Response("Đã thực hiện hành động nhưng không tạo được phản hồi (Ollama).", {
@@ -1400,13 +1432,15 @@ function streamClaudeCompletion(
   });
 }
 
-// Confirm-resume completed by BytePlus: stream text-only narration of the executed
-// write via the adapter (resume messages contain role:"tool" → toOpenAI maps it to
-// user for narration), persist assistant + trailing frames (the confirmed write's tool
+// Confirm-resume completed by BytePlus/Cerebras: stream text-only narration of the
+// executed write via the adapter (resume messages contain role:"tool" → toOpenAI maps it
+// to user for narration), persist assistant + trailing frames (the confirmed write's tool
 // frame + {t:"tokens"}). The write ALREADY ran before reaching here → a pre-delta
 // failure loses only the narration, not the action (persist a "done, no narration"
-// notice). Mirrors streamClaudeCompletion.
-function streamByteplusCompletion(
+// notice). Mirrors streamClaudeCompletion. Cerebras shares this fn with BytePlus (same
+// OpenAI-compat wire protocol) via the cloudStream/cloudErrText selection below — see the
+// same reasoning at the BytePlus/Cerebras branch in streamMainTurn.
+function streamCloudCompletion(
   convId: string,
   model: string,
   messages: ChatMessage[],
@@ -1415,6 +1449,12 @@ function streamByteplusCompletion(
   signal?: AbortSignal,
   persist?: { assistantMsgId: string; toolTurns: ToolTurnRow[] },
 ): Response {
+  const cloudIsCerebras = isCerebrasModel(model);
+  const cloudProvider = cloudIsCerebras ? "cerebras" : "byteplus";
+  const cloudStream = cloudIsCerebras ? cerebrasStream : byteplusStream;
+  const cloudErrText = cloudIsCerebras ? cerebrasErrText : byteplusErrText;
+  const isCloudUnavailableError = (e: unknown): e is BytePlusUnavailableError | CerebrasUnavailableError =>
+    e instanceof BytePlusUnavailableError || e instanceof CerebrasUnavailableError;
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -1423,7 +1463,7 @@ function streamByteplusCompletion(
       let tokensOut = 0;
       let gotUsage = false;
       try {
-        for await (const ev of byteplusStream({ model, messages, signal })) {
+        for await (const ev of cloudStream({ model, messages, signal })) {
           if (ev.delta) {
             full += ev.delta;
             try {
@@ -1440,16 +1480,16 @@ function streamByteplusCompletion(
         }
       } catch (e) {
         if (!full) {
-          const code = e instanceof BytePlusUnavailableError ? e.code : "api";
-          console.error(`[chat] byteplus resume failed before first delta (conv=${convId}, code=${code})`, e);
-          full = `Đã thực hiện hành động nhưng không tạo được phản hồi. ${byteplusErrText(lang, code)}`;
+          const code = isCloudUnavailableError(e) ? e.code : "api";
+          console.error(`[chat] ${cloudProvider} resume failed before first delta (conv=${convId}, code=${code})`, e);
+          full = `Đã thực hiện hành động nhưng không tạo được phản hồi. ${cloudErrText(lang, code)}`;
           try {
             controller.enqueue(enc.encode(full));
           } catch {
             /* aborted */
           }
         } else {
-          console.error(`[chat] byteplus resume stream failed (conv=${convId})`, e);
+          console.error(`[chat] ${cloudProvider} resume stream failed (conv=${convId})`, e);
         }
       }
       await finalizeTurn(controller, enc, convId, {

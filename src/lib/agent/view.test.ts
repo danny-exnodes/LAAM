@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveFromToolResult, pickTurnView, MAX_ROWS } from "./view";
+import { deriveFromToolResult, pickTurnView, MAX_ROWS, viewKey, worthShowing } from "./view";
 
 const AT = 1_700_000_000_000;
 
@@ -126,5 +126,199 @@ describe("pickTurnView", () => {
 
   it("rỗng → null", () => {
     expect(pickTurnView([])).toBeNull();
+  });
+});
+
+// Shapes taken from a real async query tool (chat_tool_call, 2026-08-06). Each of these was a
+// silent failure before: rows two levels deep were invisible, a capped result reported its
+// partial size as the whole answer, and every panel of a turn carried the same tool-name title.
+describe("async query result shape", () => {
+  const rows = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ refund_id: `REF-${i}`, store_id: "PH-001", amount: i }));
+
+  const payload = (n: number, rowCount: number) => ({
+    status: "completed",
+    natural_language_query: "Show every refund processed by Sarah Miller.",
+    results: { columns: ["refund_id", "store_id", "amount"], rows: rows(n), row_count: rowCount },
+  });
+
+  it("finds rows nested two levels down", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(12, 12), 1);
+    expect(d?.kind).toBe("table");
+    expect(d?.rows?.length).toBe(12);
+  });
+
+  // The caller asked for max_rows=50 and got 50 of 62. Reporting "50 rows" as the answer is
+  // the failure; the sibling row_count is the truth.
+  it("reports the real total from the sibling count, not the array length", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(50, 62), 1);
+    expect(d?.truncated).toEqual({ shown: 50, total: 62 });
+  });
+
+  it("does not claim truncation when the array IS the whole answer", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(12, 12), 1);
+    expect(d?.truncated).toBeUndefined();
+  });
+
+  // Several panels in one turn all come from the same tool; the tool name labels them
+  // identically and says nothing about which is which.
+  it("titles the panel with the question, not the tool name", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(12, 12), 1);
+    expect(d?.title).toBe("Show every refund processed by Sarah Miller.");
+  });
+
+  it("an explicit title still wins over the payload", () => {
+    const d = deriveFromToolResult("kg_query_datasource_status", payload(12, 12), 1, "Câu hỏi gốc");
+    expect(d?.title).toBe("Câu hỏi gốc");
+  });
+});
+
+// Column ORDER is part of the answer. The payload serialises row keys alphabetically, so
+// Object.keys() put approving_manager_id / customer_id / days_after_purchase first and pushed
+// refund_id and refund_amount off the right edge — a table that is technically complete and
+// practically unreadable. The result declares its own order beside the rows; use it.
+describe("column order follows the result's own declaration", () => {
+  const declared = ["refund_id", "refund_amount", "store_id"];
+  const rows = Array.from({ length: 12 }, (_, i) => ({
+    // deliberately NOT in declared order, as JSON key order arrives
+    approving_manager_id: "EMP-0001",
+    store_id: "PH-001",
+    refund_amount: i,
+    refund_id: `REF-${i}`,
+  }));
+
+  it("leads with the declared columns", () => {
+    const d = deriveFromToolResult("q", { results: { columns: declared, rows } }, 1);
+    expect(d?.columns?.slice(0, 3).map((c) => c.key)).toEqual(declared);
+  });
+
+  // Dropping a column the result did not declare would hide data without saying so.
+  it("keeps undeclared columns rather than dropping them", () => {
+    const d = deriveFromToolResult("q", { results: { columns: declared, rows } }, 1);
+    expect(d?.columns?.map((c) => c.key)).toContain("approving_manager_id");
+  });
+
+  it("falls back to the row's own key order when nothing is declared", () => {
+    const d = deriveFromToolResult("q", { results: { rows } }, 1);
+    expect(d?.columns?.[0].key).toBe("approving_manager_id");
+  });
+});
+
+// Duplicate tables were the loudest thing wrong with the panel in use: one turn produced two
+// identical 50/62 tables live, and a reloaded conversation stacked several under one message.
+describe("viewKey identifies a table by its data", () => {
+  const make = (title: string, first: Record<string, unknown>, n = 12) =>
+    deriveFromToolResult("q", {
+      natural_language_query: title,
+      results: { rows: [first, ...Array.from({ length: n - 1 }, (_, i) => ({ ...first, a: i + 1 }))] },
+    }, 1)!;
+
+  it("treats the same data under a rephrased title as the SAME table", () => {
+    const a = make("list all refunds processed by X", { a: 0, b: "x" });
+    const b = make("Show all refund records processed by X", { a: 0, b: "x" });
+    expect(a.title).not.toBe(b.title);
+    expect(viewKey(a)).toBe(viewKey(b));
+  });
+
+  it("keeps genuinely different data apart", () => {
+    expect(viewKey(make("q", { a: 0, b: "x" }))).not.toBe(viewKey(make("q", { a: 99, b: "y" })));
+  });
+});
+
+// A table is built for a result whose SHAPE is tabular, not one whose payload is large.
+//
+// The gate used to require >=6000 chars AND >=10 rows. Bytes are the wrong test: a top-10
+// ranking of "name + number" is about 700 chars, so it never qualified — and a result with no
+// table is a result the model retypes. Measured 2026-08-07 across 13 Larvis questions, only
+// 2 produced a table, and the retyped ones corrupted the data: "Blood Pressure Cuff" came out
+// "Blood Pressure uff", "OatmealLarge" gained a space (which sent a later investigation
+// chasing a product that appeared not to exist), and one table lost a cell and repeated a row.
+//
+// The size rule existed to keep INCIDENTAL lookups out of the panel — an id-by-name probe, a
+// "not found". Those are 0 or 1 rows, so the row floor still excludes them; the byte floor was
+// never what did that work.
+describe("worthShowing — tabular shape, not payload size", () => {
+  const rows = (n: number, cols = 2) =>
+    Array.from({ length: n }, (_, i) =>
+      Object.fromEntries(Array.from({ length: cols }, (_, c) => [`c${c}`, c === 0 ? `r${i}` : i])),
+    );
+  const wrap = (r: unknown[]) => ({ results: { rows: r } });
+
+  it("shows a small top-10 ranking — the case the byte floor excluded", () => {
+    const top10 = wrap(rows(10));
+    expect(JSON.stringify(top10).length).toBeLessThan(6000); // the old gate would reject this
+    expect(worthShowing(top10)).toBe(true);
+  });
+
+  it("still shows a large result", () => {
+    expect(worthShowing(wrap(rows(62, 30)))).toBe(true);
+  });
+
+  // The reason the old gate existed, and it must keep holding.
+  it("hides an id-by-name probe (1 row)", () => {
+    expect(worthShowing(wrap(rows(1)))).toBe(false);
+  });
+
+  it("hides an empty result", () => {
+    expect(worthShowing(wrap([]))).toBe(false);
+  });
+
+  // A single column is a list, not a table — prose says it better.
+  it("hides a single-column result", () => {
+    expect(worthShowing(wrap(rows(8, 1)))).toBe(false);
+  });
+
+  it("hides a result with no rows at all", () => {
+    expect(worthShowing({ status: "ok", count: 3 })).toBe(false);
+  });
+});
+
+// A connector that had to INTERPRET the request (reversing a ranking because the measure is
+// negative for a loss) reports how it read it. Carrying that to the panel is the whole point of
+// the correction: reversed-and-silent is still invisible, and a reader who wanted the other end
+// has no way to tell. Read from a sibling key of the rows, same idiom as row_count.
+describe("ranking note", () => {
+  const withNote = (note: unknown) => ({
+    results: {
+      ranking_note: note,
+      rows: [
+        { product: "a", total: -600 },
+        { product: "b", total: -5 },
+      ],
+    },
+  });
+
+  it("carries the note from the result onto the descriptor", () => {
+    const d = deriveFromToolResult("q", withNote("Ranked by largest total: reversed."), AT);
+    expect(d?.note).toBe("Ranked by largest total: reversed.");
+  });
+
+  it("omits the field when the result has no note", () => {
+    const d = deriveFromToolResult("q", { results: { rows: [{ a: 1, b: 2 }, { a: 3, b: 4 }] } }, AT);
+    expect(d?.note).toBeUndefined();
+  });
+
+  // A blank or non-string note must not render an empty grey strip under the table.
+  it("ignores a blank or non-string note", () => {
+    expect(deriveFromToolResult("q", withNote("   "), AT)?.note).toBeUndefined();
+    expect(deriveFromToolResult("q", withNote(42), AT)?.note).toBeUndefined();
+  });
+})
+
+// The row floor is what keeps a drilldown's intermediate step off screen — "list" before
+// "detail" is one or two rows, and panelling it shows a table for a step nobody asked about.
+// Pinned here because two other suites depend on it (orchestrator onView, chat route frames)
+// and a change to the constant should fail HERE, next to the reasoning, not only over there.
+describe("worthShowing — the row floor protects intermediate steps", () => {
+  const shaped = (n: number) => ({
+    results: { rows: Array.from({ length: n }, (_, i) => ({ name: `x${i}`, n: i })) },
+  });
+
+  it("hides a two-row lookup", () => {
+    expect(worthShowing(shaped(2))).toBe(false);
+  });
+
+  it("shows three rows — the smallest result read as an answer", () => {
+    expect(worthShowing(shaped(3))).toBe(true);
   });
 });
