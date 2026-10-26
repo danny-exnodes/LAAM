@@ -5,6 +5,7 @@ import type { McpServerConfig } from "./types";
 const h = vi.hoisted(() => ({
   connect: vi.fn(async () => undefined),
   listTools: vi.fn(async () => ({ tools: [] as unknown[] })),
+  getInstructions: vi.fn((): string | undefined => undefined),
   callTool: vi.fn(async () => ({ content: [{ type: "text", text: "hi" }] })),
   close: vi.fn(async () => undefined),
   streamableCtor: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     return {
       connect: h.connect,
       listTools: h.listTools,
+      getInstructions: h.getInstructions,
       callTool: h.callTool,
       close: h.close,
     };
@@ -46,6 +48,7 @@ const cfg: McpServerConfig = { slug: "s", name: "S", url: "https://mcp.example.c
 beforeEach(() => {
   h.connect.mockReset().mockResolvedValue(undefined);
   h.listTools.mockReset().mockResolvedValue({ tools: [] });
+  h.getInstructions.mockReset().mockReturnValue(undefined);
   h.callTool.mockReset().mockResolvedValue({ content: [{ type: "text", text: "hi" }] });
   h.close.mockReset().mockResolvedValue(undefined);
   h.streamableCtor.mockReset();
@@ -54,9 +57,20 @@ beforeEach(() => {
 });
 
 describe("mcp client", () => {
+  // The server's initialize `instructions` are the only channel carrying facts about the
+  // CONNECTION rather than about a tool — DAAB puts the project_id / data_source_id it is
+  // bound to there. Dropping the field (the previous behaviour) made the model re-derive
+  // those ids with a discovery round-trip on every question.
+  test("listTools surfaces the server's initialize instructions", async () => {
+    h.listTools.mockResolvedValue({ tools: [{ name: "a", inputSchema: {} }] });
+    h.getInstructions.mockReturnValue("scoped to Pharmacy Chain (project_id: p-1)");
+    const listing = await listTools(cfg);
+    expect(listing.instructions).toBe("scoped to Pharmacy Chain (project_id: p-1)");
+  });
+
   test("listTools returns the tools and always closes", async () => {
     h.listTools.mockResolvedValue({ tools: [{ name: "a", inputSchema: {} }] });
-    const tools = await listTools(cfg);
+    const { tools } = await listTools(cfg);
     expect(tools).toEqual([{ name: "a", inputSchema: {} }]);
     expect(h.close).toHaveBeenCalledTimes(1);
     // streamable tried first, no SSE fallback when connect succeeds.
@@ -97,6 +111,33 @@ describe("mcp client", () => {
     expect(h.close).toHaveBeenCalledTimes(1);
   });
 
+  test("callTool truncates an oversized all-text result with a visible marker", async () => {
+    // This is a raw-transport BACKSTOP against a truly pathological result (e.g. a runaway
+    // kg_search or a misbehaving MCP server) — the real per-provider shaping happens
+    // downstream in boundOutput (guardrails.ts), not here. WHY: an uncapped result previously
+    // killed the tool-loop with an empty answer; a too-tight cap HERE (48k) later re-shredded
+    // large-but-legitimate results (e.g. a ~78k master record) that a cloud model's boundOutput
+    // bound would otherwise have admitted whole — hence a generous 200k backstop.
+    const big = "x".repeat(250_000);
+    h.callTool.mockResolvedValue({ content: [{ type: "text", text: big }] });
+    const res = (await callTool(cfg, "do", {})) as { text: string };
+    expect(res.text.length).toBeLessThan(big.length);
+    expect(res.text).toContain("rút gọn");
+    expect(res.text.startsWith("x".repeat(200_000))).toBe(true);
+  });
+
+  // INTENT: a large-but-realistic single result (e.g. a big master record, ~78k) must pass
+  // through client.ts UNTRUNCATED — only boundOutput (provider-aware, downstream) decides
+  // whether it's small enough for the chosen model. Regression guard for the bug where
+  // client.ts's OWN cap sat below boundOutput's cloud bound and pre-emptively shredded it.
+  test("callTool does NOT truncate a large-but-realistic result (below the backstop)", async () => {
+    const realistic = "x".repeat(78_000);
+    h.callTool.mockResolvedValue({ content: [{ type: "text", text: realistic }] });
+    const res = (await callTool(cfg, "do", {})) as { text: string };
+    expect(res.text).toBe(realistic);
+    expect(res.text).not.toContain("rút gọn");
+  });
+
   test("callTool returns raw content when a block is non-text", async () => {
     const content: unknown[] = [
       { type: "text", text: "hi" },
@@ -117,7 +158,7 @@ describe("mcp client", () => {
     const many = Array.from({ length: 250 }, (_, i) => ({ name: `t${i}`, inputSchema: {} }));
     h.listTools.mockResolvedValue({ tools: many });
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const tools = await listTools(cfg);
+    const { tools } = await listTools(cfg);
     expect(tools).toHaveLength(200); // capped, not 250 — no silent unbounded ingestion
     expect(warn).toHaveBeenCalled(); // truncation surfaced, not silent (Rule 12)
     warn.mockRestore();

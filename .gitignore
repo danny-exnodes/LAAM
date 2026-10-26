@@ -36,3 +36,6 @@ connectors.json
 backups/
 
 .claude/tmp/
+
+# TTS engine audition samples (local A/B comparison WAVs, not project deliverables)
+tts-samples/

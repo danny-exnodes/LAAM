@@ -2,7 +2,7 @@ import { eq, asc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { db } from "@/db";
 import { chatConversations, chatMessages, chatToolCalls } from "@/db/schema";
-import { chatTools, mcpReadAllow } from "@/lib/connectors";
+import { chatTools, mcpReadAllow, mcpInstructions } from "@/lib/connectors";
 import { sanitizeAttachments } from "@/lib/chat/attachment-meta";
 import { buildSystemPrompt } from "@/lib/agent/context";
 import { getCustomAgent } from "@/lib/customAgents";
@@ -18,7 +18,11 @@ import { resolveKind } from "@/lib/agent/safety/policy";
 import { looksLikeWriteIntent, guardWriteClaim } from "@/lib/agent/safety/write-claim-guard";
 import { claudeStream, isClaudeModel, ClaudeUnavailableError } from "@/lib/llm/claude";
 import { isBytePlusModel, byteplusChat, byteplusStream, BytePlusUnavailableError } from "@/lib/llm/byteplus";
+import { isCerebrasModel, cerebrasChat, cerebrasStream, CerebrasUnavailableError } from "@/lib/llm/cerebras";
+import { replayBudgetFor } from "@/lib/chat/replay-budget";
 import { encodeFrame, type ChatFrame } from "@/lib/chat/frames";
+import { digestMessagesForModel } from "@/lib/agent/digest";
+import { synthNudge, loopTruncatedNotice, restateQuestion } from "@/lib/chat/backstop-notice";
 import { deriveConvTitle } from "@/lib/chat/title";
 import { makeFrameCollector, deriveCitations, summarizeArgs } from "@/lib/chat/trace";
 import { extractToolTurns, type ToolTurnRow } from "@/lib/agent/persist";
@@ -27,6 +31,7 @@ import { callModelText } from "@/lib/llm/internal";
 import { notifyWritePending } from "@/lib/notifications";
 import { stripNul } from "@/lib/chat/attach";
 import { planHistory, summarizeMessages, type HistoryMsg } from "@/lib/agent/summarize";
+import { parseDrilldownPairs } from "@/lib/agent/drilldown";
 import {
   detectAlerts,
   selectNewAlerts,
@@ -49,6 +54,19 @@ const TOOL_LOOP_ERR: Record<"vi" | "en" | "zh", string> = {
   en: `Lost connection to Ollama (${OLLAMA_URL}) while running tools. Please try again.`,
   zh: `调用工具时无法连接 Ollama（${OLLAMA_URL}）。请重试。`,
 };
+
+// Injected as a final user turn when the tool loop was force-stopped (backstop), so the
+// model writes an answer from what it already gathered instead of reasoning about more
+// tools. Built per-turn because it interpolates the literal question — see
+// lib/chat/backstop-notice.ts for why naming the question matters.
+
+// Shown when a turn completes but the model returned NO answer text (e.g. a reasoning
+// model that used its whole budget thinking). Fail loud, never a blank bubble.
+const EMPTY_REPLY: Record<"vi" | "en" | "zh", string> = {
+  vi: "Mô hình không trả về nội dung (có thể do suy luận quá dài hoặc câu hỏi quá phức tạp). Vui lòng thử lại, hỏi ngắn gọn hơn, hoặc đổi mô hình.",
+  en: "The model returned no content (possibly too much reasoning or an over-complex prompt). Please retry, ask more concisely, or switch models.",
+  zh: "模型未返回任何内容（可能推理过长或问题过于复杂）。请重试、简化问题或更换模型。",
+};
 // C1: Claude (Anthropic API, org key) rớt TRƯỚC khi có delta nào → notice 3 thứ
 // tiếng kèm code lỗi ('auth'|'rate_limit'|'overloaded'|'connection'; lỗi bất ngờ
 // ngoài 4 loại — vd 400 schema — hiển thị 'api'); KHÔNG tự fallback Ollama
@@ -70,6 +88,17 @@ const BYTEPLUS_ERR: Record<"vi" | "en" | "zh", string> = {
 };
 const byteplusErrText = (lang: string, code: string) =>
   (BYTEPLUS_ERR[lang as keyof typeof BYTEPLUS_ERR] ?? BYTEPLUS_ERR.vi).replace("{code}", code);
+// Cerebras (OpenAI-compat, org key) — same coded-notice pattern as BytePlus. Wire-identical
+// provider (both speak OpenAI /chat/completions with gpt-oss-120b), so it shares BytePlus's
+// full tool-loop treatment rather than getting its own copy of that ~200-line block; see
+// the cloudChat/cloudStream/cloudErrText selection at the top of the BytePlus branch below.
+const CEREBRAS_ERR: Record<"vi" | "en" | "zh", string> = {
+  vi: "Không gọi được Cerebras API ({code}). Vui lòng thử lại hoặc chuyển về model local.",
+  en: "Could not reach the Cerebras API ({code}). Please retry or switch back to the local model.",
+  zh: "无法调用 Cerebras API（{code}）。请重试或切换回本地模型。",
+};
+const cerebrasErrText = (lang: string, code: string) =>
+  (CEREBRAS_ERR[lang as keyof typeof CEREBRAS_ERR] ?? CEREBRAS_ERR.vi).replace("{code}", code);
 // SP-4: tên internal tool — redact args theo set-membership (D-SP4-3) khi gom tool frames.
 const INTERNAL_NAMES = new Set(INTERNAL_TOOLS.map((t) => t.name));
 // Cửa sổ ngữ cảnh model phục vụ. Ollama mặc định num_ctx=4096 BẤT KỂ model hỗ trợ tới ~128k+ →
@@ -82,18 +111,37 @@ const REPLAY_BUDGET_CHARS = Math.max(8000, Math.floor((NUM_CTX - 3072 - 2560) * 
 // Run-until-done tool loop: the agent finishes on natural completion; CHAT_MAX_ROUNDS is
 // only a runaway backstop (default 25, orchestrator clamps to its hard ceiling).
 const CHAT_MAX_ROUNDS = Math.max(1, Number(process.env.CHAT_MAX_ROUNDS) || DEFAULT_MAX_ROUNDS);
+// D2: cặp "tool liệt kê → tool chi tiết" cho bước tra cứu xác định (xem lib/agent/drilldown.ts).
+// Khai báo ở env chứ KHÔNG hardcode trong code: connector (DAAB…) là thứ cắm từ ngoài vào,
+// LAAM không được biết tên tool của riêng connector nào. Không đặt env ⇒ tính năng tắt.
+const DRILLDOWN_PAIRS = parseDrilldownPairs(process.env.TOOL_DRILLDOWN_PAIRS);
+// G5: tool nào THỰC SỰ lấy dữ liệu (phân biệt với tool đọc cấu trúc/liệt kê). Lượt nào chỉ đọc
+// cấu trúc rồi kết luận "không có dữ liệu thực tế" sẽ bị nhắc đúng 1 lần (xem DATA_FETCH_NUDGE
+// trong orchestrator.ts). Ở env vì tên tool là của connector — cùng lý do với DRILLDOWN_PAIRS.
+// Không đặt env ⇒ guard tắt, hành vi y như cũ.
+const DATA_FETCH_TOOLS: ReadonlySet<string> = new Set(
+  (process.env.TOOL_DATA_FETCH ?? "").split(",").map((s) => s.trim()).filter(Boolean),
+);
 // In-loop tool-result eviction budget. Local Ollama shares the replay budget (16k window);
 // BytePlus has a large window so it evicts far later (≈115k tokens, mirrors Anthropic's
 // 100k clear trigger) — env-tunable.
 const BYTEPLUS_TOOL_BUDGET_CHARS = Math.max(REPLAY_BUDGET_CHARS, Number(process.env.BYTEPLUS_TOOL_BUDGET_CHARS) || 400_000);
+// Per-result output bound (chars) for boundOutput, provider-aware. A large-context cloud
+// model admits a whole single result intact — sized with margin above the largest real
+// master record measured so far (kg_get_master_record — Cảng Định An v3's is ~78k wrapped,
+// Dasin's ~46k), and well below the round budget (BYTEPLUS_TOOL_BUDGET_CHARS, 400k+) so a
+// few large results in one round still fit. client.ts's own MAX_RESULT_CHARS is a much
+// higher raw-transport backstop (200k) so it never re-shreds a payload this bound would
+// otherwise admit whole. A 16k local model keeps boundOutput's own tight (8k) default.
+// Without this, the tight default replaced the whole master record with a "re-query
+// narrower" note that made a single-object result (unnarrowable) flail on search, or — if
+// only client.ts's cap was raised without this one — left a mid-size record still shredded.
+const CLOUD_RESULT_BOUND = 120_000;
+const resultBound = (model: string): number | undefined =>
+  isBytePlusModel(model) || isCerebrasModel(model) || isClaudeModel(model) ? CLOUD_RESULT_BOUND : undefined;
 // Honest "stopped early" notice (Rule 12) appended when the loop is force-terminated by
-// the backstop or a stuck repeat — never silently truncate.
-const LOOP_TRUNCATED: Record<"vi" | "en" | "zh", string> = {
-  vi: "\n\n_(Đã dừng sau nhiều bước công cụ — kết quả có thể chưa đầy đủ.)_",
-  en: "\n\n_(Stopped after many tool steps — the result may be incomplete.)_",
-  zh: "\n\n_(在多次工具调用后停止——结果可能不完整。)_",
-};
-const loopTruncatedText = (lang: string) => LOOP_TRUNCATED[lang as keyof typeof LOOP_TRUNCATED] ?? LOOP_TRUNCATED.vi;
+// the backstop or a stuck repeat — never silently truncate. Suppressed in voice mode
+// (TTS would read it aloud); see lib/chat/backstop-notice.ts.
 // Sampler (góp ý team): Qwen3-Q8 hay lặp từ khi để mặc định cao → presence_penalty 0.0–0.3 giảm
 // lặp + ổn định JSON/code. Env CHAT_PRESENCE_PENALTY (default 0.2). Áp server-side để có hiệu lực
 // NGAY (kể cả FE chưa gửi); `body.presencePenalty` override nếu có. (temperature default 0.6 ở DEFAULT_SETTINGS.)
@@ -120,6 +168,7 @@ type ChatBody = {
   images?: string[]; // W3 vision: raw base64 (không prefix data:), validate qua imagesError
   attachments?: unknown; // preview metadata để lưu + hiện lại sau reload (sanitizeAttachments)
   requestedTool?: { name?: unknown; args?: unknown }; // P1 quick-tools: tool user đã chọn (pre-dispatch deterministic)
+  mode?: "voice" | "text"; // /constellation sends "voice" → spoken-register prompt (buildSystemPrompt). Absent → "text".
 };
 
 // W3 vision caps (server, trần cứng): ≤2 ảnh/lượt, mỗi ảnh ≤ ~2.8MB base64
@@ -257,7 +306,8 @@ export async function POST(req: Request) {
   const userId = session.user.id;
 
   const rawBody = ((await req.json().catch(() => null)) ?? {}) as Record<string, unknown>;
-  if (isConfirmBody(rawBody)) return handleConfirm(req, rawBody.confirm, userId);
+  if (isConfirmBody(rawBody))
+    return handleConfirm(req, rawBody.confirm, userId, (rawBody as { mode?: "voice" | "text" }).mode);
   const body = rawBody as ChatBody;
 
   // stripNul: nội dung đính kèm nhị phân (PDF đọc-nhầm-thành-text…) chứa NUL → Postgres
@@ -327,9 +377,11 @@ export async function POST(req: Request) {
   const now = Date.now();
   const lang = readLang(req);
 
-  // --- Summarize (SP-3): bound lịch sử replay theo char-budget dẫn xuất từ num_ctx. ---
+  // --- Summarize (SP-3): bound lịch sử replay theo char-budget PROVIDER-AWARE ---
+  // (lib/chat/replay-budget). Budget cũ dẫn xuất từ num_ctx 16k local áp cho cả cloud
+  // từng nén hội thoại phân tích thành summary từ ~turn 15 dù cửa sổ cloud ~128k.
   const plan = planHistory(history as HistoryMsg[], convSummary, convWatermark, {
-    budgetChars: REPLAY_BUDGET_CHARS,
+    budgetChars: replayBudgetFor(model, REPLAY_BUDGET_CHARS),
   });
   let effectiveSummary = convSummary;
   if (plan.needsSummary) {
@@ -368,6 +420,9 @@ export async function POST(req: Request) {
   // MCP tools the user trusts as read (opt-in) → safety gate skips confirm for them; all
   // other MCP tools fail-closed to write.
   const readAllow = await mcpReadAllow(userId);
+  // What each connected MCP server said about itself at initialize (scope, ids it is
+  // already bound to). Same 30s discovery cache as the tools above, so no extra round-trip.
+  const serverNotes = await mcpInstructions(userId);
 
   // P1 quick-tools: user picked tool → validate SỚM, fail-loud (Rule 12). Tên phải
   // nằm trong union tool khả dụng của CHÍNH user này + args qua CÙNG chuẩn
@@ -414,6 +469,9 @@ export async function POST(req: Request) {
         // handleConfirm) — liệt kê tool + "BẮT BUỘC gọi công cụ" cho model không
         // có tool sẽ làm nó bịa cú pháp tool / claim sai.
         tools: isClaudeModel(model) ? [] : tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+        // Same tool-less rule as above: no tools rendered → no server notes either.
+        serverNotes: isClaudeModel(model) ? [] : serverNotes,
+        mode: body.mode,
         // Persona base (or undefined → default BASE) per resolveAgentBase precedence.
         base: resolveAgentBase(hasSystemOverride, agentPreset),
       });
@@ -460,7 +518,7 @@ export async function POST(req: Request) {
   // which on attachment turns is prefixed with the extracted file content — avoids
   // buffering a summarize-turn just because an uploaded doc contains "tạo/create".
   const intentText = (typeof body.titleHint === "string" && body.titleHint.trim()) ? body.titleHint : message;
-  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow, requestedTool, reqSignal: req.signal });
+  return streamMainTurn({ convId, userId, userText: intentText, now, lang, payload, tools, baseLen, proactive: proactiveSurfaced, readAllow, requestedTool, reqSignal: req.signal, mode: body.mode });
 }
 
 // S3 — the main chat turn as a single live stream. Replaces the old "await the
@@ -481,8 +539,9 @@ function streamMainTurn(opts: {
   readAllow: ReadonlySet<string>;
   requestedTool?: RequestedTool | null; // P1 quick-tools: pre-dispatch deterministic trước tool-loop
   reqSignal?: AbortSignal;
+  mode?: "voice" | "text"; // /constellation = "voice" → spoken register (no written-only footer)
 }): Response {
-  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow, requestedTool, reqSignal } = opts;
+  const { convId, userId, userText, now, lang, payload, tools, baseLen, proactive, readAllow, requestedTool, reqSignal, mode } = opts;
   const enc = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -564,13 +623,23 @@ function streamMainTurn(opts: {
         });
         return;
       }
-      // --- BytePlus provider (ModelArk, OpenAI-compat, org key) — FULL agent. Unlike
-      // Claude's no-tool MVS, BytePlus runs the SAME gated tool-loop as Ollama
+      // --- BytePlus / Cerebras providers (both OpenAI-compat, org key) — FULL agent.
+      // Unlike Claude's no-tool MVS, these run the SAME gated tool-loop as Ollama
       // (runToolRounds + withSafety + write-gate), differing only in transport:
-      // byteplusChat per round, byteplusStream for the final completion. Final-stream
-      // error handling mirrors the Claude branch (byteplusStream THROWS typed errors,
-      // unlike ollamaStream). Summarize/proactive already ran on the local model above.
-      if (isBytePlusModel(payload.model)) {
+      // cloudChat per round, cloudStream for the final completion. Final-stream error
+      // handling mirrors the Claude branch (cloudStream THROWS typed errors, unlike
+      // ollamaStream). Summarize/proactive already ran on the local model above.
+      // Cerebras is wire-identical to BytePlus (same OpenAI /chat/completions protocol,
+      // same gpt-oss-120b model) so it shares this branch via a small selector instead of
+      // a second ~200-line copy — see cloudChat/cloudStream/cloudErrText below.
+      if (isBytePlusModel(payload.model) || isCerebrasModel(payload.model)) {
+        const cloudIsCerebras = isCerebrasModel(payload.model);
+        const cloudProvider = cloudIsCerebras ? "cerebras" : "byteplus";
+        const cloudChat = cloudIsCerebras ? cerebrasChat : byteplusChat;
+        const cloudStream = cloudIsCerebras ? cerebrasStream : byteplusStream;
+        const cloudErrText = cloudIsCerebras ? cerebrasErrText : byteplusErrText;
+        const isCloudUnavailableError = (e: unknown): e is BytePlusUnavailableError | CerebrasUnavailableError =>
+          e instanceof BytePlusUnavailableError || e instanceof CerebrasUnavailableError;
         let c = -1;
         const onEvent = (e: { type: "tool_call"; name: string; args: unknown } | { type: "tool_result"; name: string; ok: boolean }) => {
           if (e.type === "tool_call") {
@@ -583,10 +652,11 @@ function streamMainTurn(opts: {
         const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
           internal: INTERNAL_TOOLS,
           readAllow,
+          maxBytes: resultBound(payload.model),
         });
-        // Tool round transport: BytePlus /chat/completions (non-stream) → OllamaChatResponse.
-        const callByteplus = (messages: ChatMessage[], roundTools: typeof tools): Promise<OllamaChatResponse> =>
-          byteplusChat({ model: payload.model, messages, tools: roundTools, options: payload.options, signal: reqSignal });
+        // Tool round transport: cloud provider /chat/completions (non-stream) → OllamaChatResponse.
+        const callCloud = (messages: ChatMessage[], roundTools: typeof tools): Promise<OllamaChatResponse> =>
+          cloudChat({ model: payload.model, messages, tools: roundTools, options: payload.options, signal: reqSignal });
 
         let convo: ChatMessage[] = payload.messages;
         let toolTurns: ReturnType<typeof extractToolTurns> = [];
@@ -594,10 +664,21 @@ function streamMainTurn(opts: {
         let hitBackstop = false;
         try {
           if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
-          convo = await runToolRounds(payload.messages, tools, { callOllama: callByteplus, dispatch }, {
+          convo = await runToolRounds(payload.messages, tools, { callOllama: callCloud, dispatch }, {
+            // Big tabular results get their own panel, emitted live as each lands. Without
+            // this the ONLY way a row reaches the user is the model retyping it in prose.
+            onView: (d) => emit({ t: "view", d }),
+            drilldownPairs: DRILLDOWN_PAIRS,
+            dataFetchTools: DATA_FETCH_TOOLS,
             maxRounds: CHAT_MAX_ROUNDS,
             budgetChars: BYTEPLUS_TOOL_BUDGET_CHARS,
-            onBackstop: () => { hitBackstop = true; },
+            // Log the reason: "rounds" means the cap is too low for this workload (raise
+            // CHAT_MAX_ROUNDS), "repeat" means a tool stalled and more rounds would not
+            // have helped. Conflating them mis-tunes the cap forever.
+            onBackstop: (reason) => {
+              hitBackstop = true;
+              console.warn(`[chat] tool-loop force-stopped (conv=${convId}, reason=${reason}, maxRounds=${CHAT_MAX_ROUNDS})`);
+            },
           });
           toolTurns = extractToolTurns(convo, baseLen);
           cites = deriveCitations(convo, baseLen);
@@ -606,11 +687,11 @@ function streamMainTurn(opts: {
             await emitPendingWriteSuspend(controller, enc, emit, e, { convId, userId, now, model: payload.model });
             return;
           }
-          // Real failure mid tool-loop (BytePlus unreachable at round ≥ 1). Fail loud:
-          // coded notice + persist + close (pattern of the Ollama tool-loop catch).
-          const code = e instanceof BytePlusUnavailableError ? e.code : "api";
-          console.error(`[chat] byteplus tool-loop failed (conv=${convId}, code=${code})`, e);
-          const errText = byteplusErrText(lang, code);
+          // Real failure mid tool-loop (cloud provider unreachable at round ≥ 1). Fail
+          // loud: coded notice + persist + close (pattern of the Ollama tool-loop catch).
+          const code = isCloudUnavailableError(e) ? e.code : "api";
+          console.error(`[chat] ${cloudProvider} tool-loop failed (conv=${convId}, code=${code})`, e);
+          const errText = cloudErrText(lang, code);
           try {
             controller.enqueue(enc.encode(errText));
           } catch {
@@ -620,10 +701,27 @@ function streamMainTurn(opts: {
             await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: errText });
             await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
           } catch (err) {
-            console.error("[chat] byteplus tool-loop error persist failed (fail-soft)", err);
+            console.error(`[chat] ${cloudProvider} tool-loop error persist failed (fail-soft)`, err);
           }
           controller.close();
           return;
+        }
+
+        // Backstop nudge: when the tool loop was force-stopped (maxRounds), convo ends on
+        // a tool result — a reasoning model then "thinks about the next tool" and emits
+        // reasoning_content only, no answer (seen: 455 out-tokens, 0 content). Append an
+        // explicit "answer now, no more tools" turn so the final stream produces content.
+        //
+        // Natural completion still needs the question PINNED (restateQuestion): measured
+        // 2026-08-05 on Larvis Q12 — zero backstops that turn, yet the answer came back on a
+        // previous question's topic. Only for turns that ran tools: a plain chitchat turn has
+        // no tool results to drift among, and appending a turn there would change the
+        // bare-turn request shape that route.test.ts pins.
+        if (hitBackstop) {
+          convo = [...convo, { role: "user", content: synthNudge(lang, userText) }];
+        } else if (toolTurns.length > 0) {
+          const restate = restateQuestion(lang, userText);
+          if (restate) convo = [...convo, { role: "user", content: restate }];
         }
 
         // F1 (Rule 13): a write never executes in the main turn — it suspends above.
@@ -637,8 +735,9 @@ function streamMainTurn(opts: {
         let tokensIn = 0;
         let tokensOut = 0;
         let gotUsage = false; // billed provider: omit token frame if usage never arrived (no fake $0)
+        let hbCount = 0;
         try {
-          for await (const ev of byteplusStream({ model: payload.model, messages: convo, options: payload.options, signal: reqSignal })) {
+          for await (const ev of cloudStream({ model: payload.model, messages: digestMessagesForModel(convo), options: payload.options, signal: reqSignal })) {
             if (ev.delta) {
               full += ev.delta;
               if (!guardWrites) {
@@ -648,6 +747,13 @@ function streamMainTurn(opts: {
                   /* client aborted */
                 }
               }
+            }
+            // Reasoning models stream reasoning_content (often 30s+) BEFORE any answer
+            // content. During that window no answer bytes flow, so without a keep-alive
+            // the client/proxy tears down the idle SSE → empty reply, no error. Emit a
+            // thin heartbeat frame (throttled; client ignores it) to keep the stream warm.
+            if (ev.reasoning && !guardWrites && (hbCount++ % 8) === 0) {
+              try { controller.enqueue(enc.encode(encodeFrame({ t: "hb" }))); } catch { /* aborted */ }
             }
             if (ev.usage) {
               gotUsage = true;
@@ -659,9 +765,9 @@ function streamMainTurn(opts: {
           // Final completion dropped. Before first delta → fail loud (notice + persist
           // + close). After some delta / user abort → log + finalize with what we have.
           if (!full && !reqSignal?.aborted) {
-            const code = e instanceof BytePlusUnavailableError ? e.code : "api";
-            console.error(`[chat] byteplus stream failed before first delta (conv=${convId}, code=${code})`, e);
-            const errText = byteplusErrText(lang, code);
+            const code = isCloudUnavailableError(e) ? e.code : "api";
+            console.error(`[chat] ${cloudProvider} stream failed before first delta (conv=${convId}, code=${code})`, e);
+            const errText = cloudErrText(lang, code);
             try {
               controller.enqueue(enc.encode(errText));
             } catch {
@@ -671,21 +777,66 @@ function streamMainTurn(opts: {
               await db.insert(chatMessages).values({ conversationId: convId, role: "assistant", content: errText });
               await db.update(chatConversations).set({ updatedAt: new Date() }).where(eq(chatConversations.id, convId));
             } catch (err) {
-              console.error("[chat] byteplus notice persist failed (fail-soft)", err);
+              console.error(`[chat] ${cloudProvider} notice persist failed (fail-soft)`, err);
             }
             controller.close();
             return;
           }
-          console.error(`[chat] byteplus stream failed (conv=${convId})`, e);
+          console.error(`[chat] ${cloudProvider} stream failed (conv=${convId})`, e);
+        }
+        // ONE-SHOT RETRY: a reasoning model can burn its whole final-answer turn on
+        // reasoning_content and emit ZERO visible content even on a NATURAL completion
+        // (not just the hitBackstop case above) — confirmed by manually resending the same
+        // question afterward always succeeding. Nudge it to answer directly and retry the
+        // final stream exactly once before giving up (still fail loud below if this ALSO
+        // comes back empty — Rule 12).
+        if (!full && !reqSignal?.aborted) {
+          console.warn(`[chat] ${cloudProvider} stream produced no content, retrying once (conv=${convId}, model=${payload.model})`);
+          const retryConvo = [...convo, { role: "user", content: synthNudge(lang, userText) }];
+          try {
+            for await (const ev of cloudStream({ model: payload.model, messages: digestMessagesForModel(retryConvo), options: payload.options, signal: reqSignal })) {
+              if (ev.delta) {
+                full += ev.delta;
+                if (!guardWrites) {
+                  try {
+                    controller.enqueue(enc.encode(ev.delta));
+                  } catch {
+                    /* client aborted */
+                  }
+                }
+              }
+              if (ev.reasoning && !guardWrites && (hbCount++ % 8) === 0) {
+                try { controller.enqueue(enc.encode(encodeFrame({ t: "hb" }))); } catch { /* aborted */ }
+              }
+              if (ev.usage) {
+                gotUsage = true;
+                tokensIn += ev.usage.in;
+                tokensOut += ev.usage.out;
+              }
+            }
+          } catch (e) {
+            console.error(`[chat] ${cloudProvider} retry stream failed (conv=${convId})`, e);
+          }
+        }
+        // Fail loud (Rule 12): the stream ended cleanly but produced ZERO answer content
+        // (e.g. a reasoning model that spent its whole budget on reasoning_content, or a
+        // stream torn down without a formal client abort). Show a labelled notice instead
+        // of a silent blank bubble so an empty turn is never mistaken for success.
+        if (!full && !reqSignal?.aborted) {
+          console.error(`[chat] ${cloudProvider} stream produced no content after retry (conv=${convId}, model=${payload.model})`);
+          const note = EMPTY_REPLY[lang as keyof typeof EMPTY_REPLY] ?? EMPTY_REPLY.vi;
+          full = note;
+          if (!guardWrites) { try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ } }
         }
         if (reqSignal?.aborted) console.warn(`[chat] client aborted stream (conv=${convId})`);
         // Backstop/repeat force-terminated the loop → append an honest notice (Rule 12).
         // Add to `full` so it persists + (guard turns) re-emits via finalizeTurn; enqueue
-        // live for non-guard turns (those already streamed and won't re-emit).
+        // live for non-guard turns (those already streamed and won't re-emit). Empty in
+        // voice mode (TTS would speak it) → nothing to append or enqueue.
         if (hitBackstop && full) {
-          const note = loopTruncatedText(lang);
+          const note = loopTruncatedNotice(lang, mode);
           full += note;
-          if (!guardWrites) {
+          if (note && !guardWrites) {
             try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ }
           }
         }
@@ -717,6 +868,7 @@ function streamMainTurn(opts: {
       const dispatch = withSafety(makeDispatch(INTERNAL_TOOLS, { userId, now, lang }, onEvent), {
         internal: INTERNAL_TOOLS,
         readAllow,
+        maxBytes: resultBound(payload.model),
       });
       const callOllama = async (
         messages: ChatMessage[],
@@ -746,9 +898,18 @@ function streamMainTurn(opts: {
         // → tool frame tự emit, write vẫn suspend PendingWriteSignal vào catch dưới).
         if (requestedTool) await seedRequestedTool(payload.messages, requestedTool, dispatch);
         convo = await runToolRounds(payload.messages, tools, { callOllama, dispatch }, {
+          onView: (d) => emit({ t: "view", d }),
+          drilldownPairs: DRILLDOWN_PAIRS,
+          dataFetchTools: DATA_FETCH_TOOLS,
           maxRounds: CHAT_MAX_ROUNDS,
           budgetChars: REPLAY_BUDGET_CHARS,
-          onBackstop: () => { hitBackstop = true; },
+          // Log the reason: "rounds" means the cap is too low for this workload (raise
+          // CHAT_MAX_ROUNDS), "repeat" means a tool stalled and more rounds would not
+          // have helped. Conflating them mis-tunes the cap forever.
+          onBackstop: (reason) => {
+            hitBackstop = true;
+            console.warn(`[chat] tool-loop force-stopped (conv=${convId}, reason=${reason}, maxRounds=${CHAT_MAX_ROUNDS})`);
+          },
         });
         toolTurns = extractToolTurns(convo, baseLen);
         cites = deriveCitations(convo, baseLen);
@@ -794,7 +955,7 @@ function streamMainTurn(opts: {
         ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: payload.model, messages: convo, options: payload.options, stream: true }),
+          body: JSON.stringify({ model: payload.model, messages: digestMessagesForModel(convo), options: payload.options, stream: true }),
         });
       } catch {
         try {
@@ -845,7 +1006,7 @@ function streamMainTurn(opts: {
         // Backstop/repeat force-terminated the loop → honest "stopped early" notice (Rule
         // 12): append to `full` (persist + guard re-emit), enqueue live for non-guard turns.
         if (hitBackstop && full) {
-          const note = loopTruncatedText(lang);
+          const note = loopTruncatedNotice(lang, mode);
           full += note;
           if (!guardWrites) {
             try { controller.enqueue(enc.encode(note)); } catch { /* aborted */ }
@@ -1106,6 +1267,7 @@ async function handleConfirm(
   req: Request,
   confirm: { token: string; approve: boolean },
   userId: string,
+  mode?: "voice" | "text", // spoken-register narration of the write result on /constellation
 ): Promise<Response> {
   const now = Date.now();
   const opened = openPendingWrite(confirm.token, now);
@@ -1126,7 +1288,7 @@ async function handleConfirm(
     .where(eq(chatMessages.conversationId, convId))
     .orderBy(asc(chatMessages.createdAt));
   const lang = readLang(req); // tri-lingual: narrate the result in the user's language
-  const system = buildSystemPrompt({ lang, now, tools: [] });
+  const system = buildSystemPrompt({ lang, now, tools: [], mode });
 
   const { onEvent, frames: confirmFrames } = makeFrameCollector(INTERNAL_NAMES);
   const readAllow = await mcpReadAllow(userId);
@@ -1134,6 +1296,7 @@ async function handleConfirm(
     internal: INTERNAL_TOOLS,
     confirmedAction: { name: signed.name, args: signed.args },
     readAllow,
+    maxBytes: resultBound(typeof signed.model === "string" && signed.model.trim() ? signed.model : MODEL),
   });
   const outcome = await runResume(
     signed,
@@ -1165,15 +1328,15 @@ async function handleConfirm(
   if (isClaudeModel(confirmModel)) {
     return streamClaudeCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
   }
-  if (isBytePlusModel(confirmModel)) {
-    return streamByteplusCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
+  if (isBytePlusModel(confirmModel) || isCerebrasModel(confirmModel)) {
+    return streamCloudCompletion(convId, confirmModel, outcome.messages, confirmFrames, lang, req.signal, confirmPersist);
   }
   let ollamaRes: Response;
   try {
     ollamaRes = await fetch(`${OLLAMA_URL}/api/chat`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(buildResumeRequest(confirmModel, outcome.messages, { num_ctx: NUM_CTX })),
+      body: JSON.stringify(buildResumeRequest(confirmModel, digestMessagesForModel(outcome.messages), { num_ctx: NUM_CTX })),
     });
   } catch {
     return new Response("Đã thực hiện hành động nhưng không tạo được phản hồi (Ollama).", {
@@ -1269,13 +1432,15 @@ function streamClaudeCompletion(
   });
 }
 
-// Confirm-resume completed by BytePlus: stream text-only narration of the executed
-// write via the adapter (resume messages contain role:"tool" → toOpenAI maps it to
-// user for narration), persist assistant + trailing frames (the confirmed write's tool
+// Confirm-resume completed by BytePlus/Cerebras: stream text-only narration of the
+// executed write via the adapter (resume messages contain role:"tool" → toOpenAI maps it
+// to user for narration), persist assistant + trailing frames (the confirmed write's tool
 // frame + {t:"tokens"}). The write ALREADY ran before reaching here → a pre-delta
 // failure loses only the narration, not the action (persist a "done, no narration"
-// notice). Mirrors streamClaudeCompletion.
-function streamByteplusCompletion(
+// notice). Mirrors streamClaudeCompletion. Cerebras shares this fn with BytePlus (same
+// OpenAI-compat wire protocol) via the cloudStream/cloudErrText selection below — see the
+// same reasoning at the BytePlus/Cerebras branch in streamMainTurn.
+function streamCloudCompletion(
   convId: string,
   model: string,
   messages: ChatMessage[],
@@ -1284,6 +1449,12 @@ function streamByteplusCompletion(
   signal?: AbortSignal,
   persist?: { assistantMsgId: string; toolTurns: ToolTurnRow[] },
 ): Response {
+  const cloudIsCerebras = isCerebrasModel(model);
+  const cloudProvider = cloudIsCerebras ? "cerebras" : "byteplus";
+  const cloudStream = cloudIsCerebras ? cerebrasStream : byteplusStream;
+  const cloudErrText = cloudIsCerebras ? cerebrasErrText : byteplusErrText;
+  const isCloudUnavailableError = (e: unknown): e is BytePlusUnavailableError | CerebrasUnavailableError =>
+    e instanceof BytePlusUnavailableError || e instanceof CerebrasUnavailableError;
   const enc = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -1292,7 +1463,7 @@ function streamByteplusCompletion(
       let tokensOut = 0;
       let gotUsage = false;
       try {
-        for await (const ev of byteplusStream({ model, messages, signal })) {
+        for await (const ev of cloudStream({ model, messages, signal })) {
           if (ev.delta) {
             full += ev.delta;
             try {
@@ -1309,16 +1480,16 @@ function streamByteplusCompletion(
         }
       } catch (e) {
         if (!full) {
-          const code = e instanceof BytePlusUnavailableError ? e.code : "api";
-          console.error(`[chat] byteplus resume failed before first delta (conv=${convId}, code=${code})`, e);
-          full = `Đã thực hiện hành động nhưng không tạo được phản hồi. ${byteplusErrText(lang, code)}`;
+          const code = isCloudUnavailableError(e) ? e.code : "api";
+          console.error(`[chat] ${cloudProvider} resume failed before first delta (conv=${convId}, code=${code})`, e);
+          full = `Đã thực hiện hành động nhưng không tạo được phản hồi. ${cloudErrText(lang, code)}`;
           try {
             controller.enqueue(enc.encode(full));
           } catch {
             /* aborted */
           }
         } else {
-          console.error(`[chat] byteplus resume stream failed (conv=${convId})`, e);
+          console.error(`[chat] ${cloudProvider} resume stream failed (conv=${convId})`, e);
         }
       }
       await finalizeTurn(controller, enc, convId, {

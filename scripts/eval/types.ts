@@ -25,6 +25,15 @@ export type Scenario = {
   toolStubs?: ToolStubs;                                  // output dispatch trả khi model gọi
   extraToolSchemas?: ConnectorTool[];                     // tool tạm cho model thấy (geo/write)
   expect: Expect;
+  // Vắng mặt ⇒ "text" (RENDER_GUIDE), y hệt trước đây. Đặt "voice" để đo ĐÚNG system prompt
+  // /constellation dùng thật (VOICE_GUIDE) — thiếu trường này, eval không bao giờ chạm được
+  // phần prompt đã xác định là gây dừng tra cứu sớm trên production.
+  mode?: "voice" | "text";
+  // Lịch sử hội thoại TRƯỚC lượt hiện tại — mô phỏng history-replay của route.ts: CHỈ role +
+  // content (không tool_calls), đúng shape route.ts đọc từ DB rồi replay (route.ts:352-356).
+  // Dùng để tái hiện ca "một câu trả lời nông cũ trong hội thoại khiến lượt sau lặp lại y
+  // hệt" — xác nhận bằng tay trên production (xem CHANGELOG). Vắng mặt ⇒ lượt đầu (cũ).
+  priorMessages?: { role: "user" | "assistant"; content: string }[];
 };
 
 export type DispatchCall = { name: string; args: Record<string, unknown> };

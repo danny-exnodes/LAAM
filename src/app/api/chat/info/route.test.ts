@@ -7,6 +7,8 @@ const h = vi.hoisted(() => ({
 vi.mock("@/auth", () => ({ auth: vi.fn(async () => h.authResult) }));
 
 import { GET } from "./route";
+import { BYTEPLUS_MODELS } from "@/lib/llm/byteplus";
+import { CEREBRAS_MODELS } from "@/lib/llm/cerebras";
 
 afterEach(() => {
   h.authResult = null;
@@ -28,6 +30,25 @@ describe("GET /api/chat/info", () => {
     const body = await res.json();
     expect(typeof body.model).toBe("string");
     expect(body.model.length).toBeGreaterThan(0);
+  });
+
+  // Cloud-first: a server holding a BytePlus key preselects the BytePlus default so the
+  // chat does not open on a local model that may be off. Asserted as a LITERAL — the
+  // chat default must not silently change when the whitelist is reordered.
+  test("model = gpt-oss-120b when BYTEPLUS_API_KEY is set, even with DEFAULT_CHAT_MODEL", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "bp-test");
+    vi.stubEnv("DEFAULT_CHAT_MODEL", "gemma4:e4b");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.model).toBe("gpt-oss-120b");
+  });
+
+  test("model = DEFAULT_CHAT_MODEL when no BYTEPLUS_API_KEY (local-only stays free)", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "");
+    vi.stubEnv("DEFAULT_CHAT_MODEL", "gemma4:e4b");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.model).toBe("gemma4:e4b");
   });
 
   // C1: claudeModels = whitelist CHỈ khi server có ANTHROPIC_API_KEY (đọc lúc
@@ -52,7 +73,7 @@ describe("GET /api/chat/info", () => {
     vi.stubEnv("BYTEPLUS_API_KEY", "bp-test");
     h.authResult = { user: { id: "u1" } };
     const body = await (await GET()).json();
-    expect(body.byteplusModels).toEqual(["gpt-oss-120b"]);
+    expect(body.byteplusModels).toEqual([...BYTEPLUS_MODELS]);
   });
 
   test("byteplusModels = [] khi không có BYTEPLUS_API_KEY", async () => {
@@ -60,5 +81,31 @@ describe("GET /api/chat/info", () => {
     h.authResult = { user: { id: "u1" } };
     const body = await (await GET()).json();
     expect(body.byteplusModels).toEqual([]);
+  });
+
+  // Same env-gated pattern for Cerebras: the picker only offers Cerebras models when the
+  // server holds a CEREBRAS_API_KEY (read at request time, not import).
+  test("cerebrasModels = whitelist khi có CEREBRAS_API_KEY", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "csk-test");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.cerebrasModels).toEqual([...CEREBRAS_MODELS]);
+  });
+
+  test("cerebrasModels = [] khi không có CEREBRAS_API_KEY", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.cerebrasModels).toEqual([]);
+  });
+
+  // Cerebras only (no BytePlus) still preselects cloud-first, like BytePlus does.
+  test("model = default Cerebras model when CEREBRAS_API_KEY is set and BytePlus is not", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "");
+    vi.stubEnv("CEREBRAS_API_KEY", "csk-test");
+    vi.stubEnv("DEFAULT_CHAT_MODEL", "gemma4:e4b");
+    h.authResult = { user: { id: "u1" } };
+    const body = await (await GET()).json();
+    expect(body.model).toBe(CEREBRAS_MODELS[0]);
   });
 });

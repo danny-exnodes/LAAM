@@ -69,11 +69,43 @@ describe("B2 — judge-verify + scheduled-triage", () => {
     expect(raw).not.toMatch(/\{\{trigger\.(?!source)/);
   });
 
-  test("mọi connector write trong template chỉ dùng Demo connector (connector-write-test-safety)", () => {
+  test("connector trong template: Demo (an toàn) HOẶC write gated có recipient TĨNH (không nội suy từ model)", () => {
+    // Bất biến (mở rộng 2026-07-10): template không được kích hoạt write ngoài ngoài ý muốn.
+    // Demo connector (auth:none) an toàn tuyệt đối. NGOẠI LỆ được họp phê duyệt: gmail_send
+    // trong template báo cáo — write gated bởi WORKFLOW_RECIPIENT_ALLOWLIST + dry-run mock.
+    // Điều kiện: recipient PHẢI là chuỗi TĨNH (Rule 13 — model KHÔNG được chọn đích gửi).
     for (const t of TEMPLATES) {
       for (const n of t.graph.nodes) {
-        if (n.kind === "connector") expect(n.connectorId, `template "${t.id}" node "${n.id}"`).toBe("demo");
+        if (n.kind !== "connector") continue;
+        if (n.connectorId === "demo") continue;
+        const to = (n.args as { to?: unknown }).to;
+        expect(
+          typeof to === "string" && !/\{\{/.test(to),
+          `template "${t.id}" node "${n.id}": connector ngoài Demo phải có recipient tĩnh (không {{...}})`,
+        ).toBe(true);
       }
     }
+  });
+});
+
+describe("P — template báo cáo đa nguồn song song", () => {
+  test("multi-source-report-email: parallel:true, hình kim cương fan-out 3 + fan-in", () => {
+    const t = getTemplate("multi-source-report-email")!;
+    expect(t.graph.parallel).toBe(true);
+    // brief fan-out tới 3 nhánh
+    const fromBrief = t.graph.edges.filter((e) => e.from === "brief").map((e) => e.to).sort();
+    expect(fromBrief).toEqual(["fetch_tasks", "research_laam", "research_web"]);
+    // synthesis fan-in từ 3 nhánh
+    const intoSynthesis = t.graph.edges.filter((e) => e.to === "synthesis").map((e) => e.from).sort();
+    expect(intoSynthesis).toEqual(["fetch_tasks", "research_laam", "research_web"]);
+    // gmail_send là node cuối (write duy nhất, sau join)
+    const send = t.graph.nodes.find((n) => n.id === "send");
+    expect(send).toMatchObject({ kind: "connector", connectorId: "gmail", action: "gmail_send" });
+  });
+
+  test("Rule 13: body email nối {{steps.research_laam.output}} verbatim (số liệu đi 1 hop, độc lập synthesis)", () => {
+    const send = getTemplate("multi-source-report-email")!.graph.nodes.find((n) => n.id === "send");
+    const body = String((send as { args: Record<string, unknown> }).args.body);
+    expect(body).toContain("{{steps.research_laam.output}}");
   });
 });

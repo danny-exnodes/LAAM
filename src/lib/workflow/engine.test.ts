@@ -227,3 +227,129 @@ describe("runWorkflow (cancel — shouldStop W4)", () => {
     expect(runNode).toHaveBeenCalledTimes(1); // chỉ item đầu — item 2,3 bị dừng
   });
 });
+
+// ── P: scheduleGraph (graph.parallel===true) — DAG song song ──────────────────
+// Kim cương: brief → fan-out (a agent, b agent, c connector) → fan-in join (đọc cả 3).
+// join ref a/b/c (đều là tổ tiên qua cạnh) → ref_not_ancestor PASS.
+const diamond: WorkflowGraph = {
+  parallel: true,
+  nodes: [
+    { id: "brief", kind: "agent", prompt: "plan" },
+    { id: "a", kind: "agent", prompt: "research A" },
+    { id: "b", kind: "agent", prompt: "research B" },
+    { id: "c", kind: "connector", connectorId: "demo", action: "demo_list_tasks", args: {} },
+    { id: "join", kind: "agent", prompt: "synth {{steps.a.output}} {{steps.b.output}} {{steps.c.output}}" },
+  ],
+  edges: [
+    { from: "brief", to: "a" }, { from: "brief", to: "b" }, { from: "brief", to: "c" },
+    { from: "a", to: "join" }, { from: "b", to: "join" }, { from: "c", to: "join" },
+  ],
+};
+const seqCon = { agent: 1, io: 1 }; // ép tuần tự (tất định) cho các assert nhạy-thứ-tự
+
+describe("runWorkflow (parallel — scheduleGraph)", () => {
+  test("diamond: chạy CẢ 5 node; join chỉ chạy sau khi đủ 3 upstream (fan-in join)", async () => {
+    let joinSaw: string[] = [];
+    const runNode = vi.fn(async (node: WfNode, ctx: RunContext) => {
+      if (node.id === "join") joinSaw = Object.keys(ctx.steps).sort();
+      return `out:${node.id}`;
+    });
+    const r = await runWorkflow(diamond, { runNode, onStep: noStep, evalPredicate }, emptyContext({}));
+    expect(r.status).toBe("succeeded");
+    expect(new Set(runNode.mock.calls.map((c) => (c[0] as WfNode).id))).toEqual(new Set(["brief", "a", "b", "c", "join"]));
+    // join thấy brief + cả 3 nhánh trong ctx.steps TRƯỚC khi chạy → join đã CHỜ đủ upstream.
+    expect(joinSaw).toEqual(["a", "b", "brief", "c"]);
+    expect(r.context.steps["join"].output).toBe("out:join");
+  });
+
+  test("các nhánh chạy ĐỒNG THỜI (barrier cần cả 3 start mới giải phóng — tuần tự sẽ deadlock)", async () => {
+    let started = 0;
+    let release!: () => void;
+    const allStarted = new Promise<void>((res) => (release = res));
+    const runNode = vi.fn(async (node: WfNode) => {
+      if (["a", "b", "c"].includes(node.id)) {
+        started++;
+        if (started === 3) release();
+        await allStarted; // chỉ resolve khi CẢ 3 nhánh đã bắt đầu → chứng minh song song
+      }
+      return node.id;
+    });
+    const r = await runWorkflow(diamond, { runNode, onStep: noStep, evalPredicate, concurrency: { agent: 2, io: 6 } }, emptyContext({}));
+    expect(r.status).toBe("succeeded");
+    expect(started).toBe(3);
+  });
+
+  test("golden equivalence: graph tuyến tính @concurrency=1 == walkGraph (steps + ctx byte-identical)", async () => {
+    const linear: WorkflowGraph = { nodes: chain.nodes, edges: chain.edges };
+    const parallel: WorkflowGraph = { nodes: chain.nodes, edges: chain.edges, parallel: true };
+    const mk = () => vi.fn(async (n: WfNode) => (n.id === "n1" ? { count: 2 } : "OK"));
+    const sLin: StepRecord[] = [];
+    const rLin = await runWorkflow(linear, { runNode: mk(), onStep: async (s) => { sLin.push({ ...s }); }, evalPredicate }, emptyContext({}));
+    const sPar: StepRecord[] = [];
+    const rPar = await runWorkflow(parallel, { runNode: mk(), onStep: async (s) => { sPar.push({ ...s }); }, evalPredicate, concurrency: seqCon }, emptyContext({}));
+    expect(rPar.status).toBe(rLin.status);
+    const sig = (s: StepRecord) => `${s.nodeId}:${s.status}:${s.seq}`;
+    expect(sPar.map(sig)).toEqual(sLin.map(sig));
+    expect(rPar.context.steps).toEqual(rLin.context.steps);
+  });
+
+  test("condition trong parallel: chỉ nhánh true chạy, nhánh false BỊ PRUNE (không vào ctx)", async () => {
+    const g: WorkflowGraph = {
+      parallel: true,
+      nodes: [
+        { id: "c", kind: "condition", when: { left: "{{trigger.n}}", op: "gt", right: 0 } },
+        { id: "t", kind: "agent", prompt: "yes" },
+        { id: "f", kind: "agent", prompt: "no" },
+      ],
+      edges: [{ from: "c", to: "t", label: "true" }, { from: "c", to: "f", label: "false" }],
+    };
+    const runNode = idOutput({ t: "TRUE", f: "FALSE" });
+    const r = await runWorkflow(g, { runNode, onStep: noStep, evalPredicate: vi.fn(() => true), concurrency: seqCon }, emptyContext({ n: 1 }));
+    expect(r.status).toBe("succeeded");
+    expect(runNode.mock.calls.map((c) => (c[0] as WfNode).id)).toEqual(["t"]);
+    expect(r.context.steps["t"].output).toBe("TRUE");
+    expect(r.context.steps["f"]).toBeUndefined(); // pruned — không chạy, không vào ctx
+  });
+
+  test("một nhánh lỗi → fail-stop (status failed, failedNodeId), join KHÔNG chạy", async () => {
+    const runNode = vi.fn(async (node: WfNode) => {
+      if (node.id === "b") throw new Error("branch boom");
+      return node.id;
+    });
+    const r = await runWorkflow(diamond, { runNode, onStep: noStep, evalPredicate }, emptyContext({}));
+    expect(r.status).toBe("failed");
+    expect(r.failedNodeId).toBe("b");
+    expect(r.error).toMatch(/branch boom/);
+    expect(r.context.steps["join"]).toBeUndefined();
+  });
+
+  test("budget maxSteps vượt trong parallel → status failed /budget/ (KHÔNG raw-throw)", async () => {
+    const runNode = idOutput({ brief: 1, a: 2, b: 3, c: 4, join: 5 });
+    const r = await runWorkflow(diamond, { runNode, onStep: noStep, evalPredicate }, emptyContext({}), { maxSteps: 2, maxForeachItems: 100 });
+    expect(r.status).toBe("failed");
+    expect(r.error).toMatch(/budget/i);
+  });
+
+  test("shouldStop=true → cancelled, không node nào chạy", async () => {
+    const runNode = vi.fn(async (n: WfNode) => n.id);
+    const r = await runWorkflow(diamond, { runNode, onStep: noStep, evalPredicate, shouldStop: async () => true }, emptyContext({}));
+    expect(r.status).toBe("cancelled");
+    expect(runNode).not.toHaveBeenCalled();
+  });
+
+  test("multi-start: 2 node start độc lập cùng chạy rồi hội tụ", async () => {
+    const g: WorkflowGraph = {
+      parallel: true,
+      nodes: [
+        { id: "s1", kind: "agent", prompt: "one" },
+        { id: "s2", kind: "agent", prompt: "two" },
+        { id: "join", kind: "agent", prompt: "{{steps.s1.output}}+{{steps.s2.output}}" },
+      ],
+      edges: [{ from: "s1", to: "join" }, { from: "s2", to: "join" }],
+    };
+    const runNode = idOutput({ s1: "A", s2: "B", join: "AB" });
+    const r = await runWorkflow(g, { runNode, onStep: noStep, evalPredicate }, emptyContext({}));
+    expect(r.status).toBe("succeeded");
+    expect(r.context.steps["join"].output).toBe("AB");
+  });
+});

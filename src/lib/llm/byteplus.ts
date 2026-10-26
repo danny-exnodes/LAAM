@@ -23,6 +23,13 @@ import type { ChatMessage, OllamaChatResponse } from "@/lib/agent/orchestrator";
 // mistaken for a BytePlus model. Add more ids here as the account activates them.
 export const BYTEPLUS_MODELS = [
   "gpt-oss-120b",
+  "deepseek-v4-flash",
+  "deepseek-v4-pro",
+  "dola-seed-2.0-pro",
+  "dola-seed-2.0-lite",
+  "dola-seed-2.0-code",
+  "bytedance-seed-code",
+  "kimi-k2.5",
 ] as const;
 
 export function isBytePlusModel(m: string): boolean {
@@ -153,6 +160,22 @@ function applyOptions(body: Record<string, unknown>, options?: SamplingOptions):
   }
 }
 
+// Reasoning budget for gpt-oss / other reasoning models on BytePlus. UNSET → body is left
+// untouched and the provider default applies (measured: behaves like "high" — ~9k chars of
+// reasoning_content on a data question, most of a slow turn's wall time). Only the three
+// documented values are forwarded; anything else is ignored rather than sent to the API.
+// Split by phase on purpose: the TOOL rounds are where the model decides what to ask the
+// connector (a judgment call — starving it there produced a wrong "no duplicates found" on
+// a fraud question), while the FINAL round is only writing up rows it already has, which is
+// where most of the wall time goes. CHAT_REASONING_EFFORT sets both unless a phase-specific
+// var overrides it.
+const REASONING_EFFORTS = new Set(["low", "medium", "high"]);
+function applyReasoningEffort(body: Record<string, unknown>, phase: "tools" | "final"): void {
+  const specific = phase === "tools" ? process.env.CHAT_REASONING_EFFORT_TOOLS : process.env.CHAT_REASONING_EFFORT_FINAL;
+  const effort = (specific ?? process.env.CHAT_REASONING_EFFORT ?? "").trim();
+  if (REASONING_EFFORTS.has(effort)) body.reasoning_effort = effort;
+}
+
 async function safeText(res: Response): Promise<string> {
   try {
     return await res.text();
@@ -168,22 +191,69 @@ function mapStatus(status: number, text: string): Error {
   return new Error(`BytePlus ${status}: ${text}`); // unexpected → route surfaces 'api'
 }
 
+// Transient on BytePlus's side, not ours: 429 is returned for their OWN capacity
+// ("ServerOverloaded"/"TooManyRequests"), not only for a per-key quota, and 503/529 mean the
+// same thing. Observed 2026-08-07: two of three consecutive turns died this way while the
+// requests were seconds apart and strictly sequential — nothing a client can pace its way out
+// of. Losing the whole turn costs far more than one extra call, because the tool rounds have
+// already run and only the final generation failed.
+const RETRY_STATUSES: ReadonlySet<number> = new Set([429, 503, 529]);
+const MAX_RETRIES = 1; // one extra attempt — retrying harder into an overloaded server makes it worse
+const DEFAULT_RETRY_DELAY_MS = 2000;
+
+// Tunable per deployment (BYTEPLUS_RETRY_DELAY_MS): a dedicated endpoint can drop it, a shared
+// one can raise it. 0 is a legitimate setting — retry immediately — so only a negative or
+// unparseable value falls back to the default.
+function retryDelayMs(): number {
+  const n = Number(process.env.BYTEPLUS_RETRY_DELAY_MS);
+  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_RETRY_DELAY_MS;
+}
+
+// Resolves early when the caller aborts, so a cancelled turn does not sit out the backoff;
+// the retry's fetch then rejects immediately on the aborted signal.
+const backoff = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const id = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(id);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+
 // Shared POST → returns the raw Response (caller reads json or SSE body). Network
 // rejects → 'connection'; non-ok status → typed/plain error via mapStatus.
+//
+// Retries live HERE and nowhere else: request() returns before a single byte of the body is
+// read, so both callers (byteplusChat's json, byteplusStream's SSE) are safe to restart. A
+// failure after this point — mid-stream, tokens already emitted — must never be retried, or
+// the user would see the answer twice.
 async function request(key: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<Response> {
-  let res: Response;
-  try {
-    res = await fetch(`${baseUrl()}/chat/completions`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
-      body: JSON.stringify(body),
-      signal,
-    });
-  } catch (e) {
-    throw new BytePlusUnavailableError("connection", e instanceof Error ? e.message : String(e));
+  for (let attempt = 0; ; attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl()}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal,
+      });
+    } catch (e) {
+      // Network rejects are NOT retried: unlike a 429 they carry no signal that waiting helps,
+      // and an aborted turn arrives here too.
+      throw new BytePlusUnavailableError("connection", e instanceof Error ? e.message : String(e));
+    }
+    if (res.ok) return res;
+    const text = await safeText(res);
+    if (attempt < MAX_RETRIES && RETRY_STATUSES.has(res.status) && !signal?.aborted) {
+      await backoff(retryDelayMs(), signal);
+      continue;
+    }
+    throw mapStatus(res.status, text);
   }
-  if (!res.ok) throw mapStatus(res.status, await safeText(res));
-  return res;
 }
 
 // One non-streaming tool round. Returns the OllamaChatResponse shape so the route's
@@ -205,6 +275,7 @@ export async function byteplusChat(opts: {
   const tools = sanitizeTools(opts.tools);
   if (tools.length) body.tools = tools; // omit on the final (text-only) round
   applyOptions(body, opts.options);
+  applyReasoningEffort(body, "tools");
 
   const res = await request(key, body, opts.signal);
   const data = (await res.json()) as OAChatResponse;
@@ -237,7 +308,7 @@ export async function* byteplusStream(opts: {
   messages: ChatMessage[];
   options?: SamplingOptions;
   signal?: AbortSignal;
-}): AsyncGenerator<{ delta?: string; usage?: { in: number; out: number } }> {
+}): AsyncGenerator<{ delta?: string; reasoning?: string; usage?: { in: number; out: number } }> {
   const key = apiKey();
   const body: Record<string, unknown> = {
     model: opts.model,
@@ -246,6 +317,7 @@ export async function* byteplusStream(opts: {
     stream_options: { include_usage: true },
   };
   applyOptions(body, opts.options);
+  applyReasoningEffort(body, "final");
 
   const res = await request(key, body, opts.signal);
   const reader = res.body!.getReader();
@@ -264,9 +336,15 @@ export async function* byteplusStream(opts: {
       const payload = line.slice(5).trim();
       if (payload === "[DONE]") continue;
       try {
-        const j = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
-        const delta = j?.choices?.[0]?.delta?.content;
+        const j = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: unknown; reasoning_content?: unknown } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } };
+        const d = j?.choices?.[0]?.delta;
+        const delta = d?.content;
         if (typeof delta === "string" && delta.length) yield { delta };
+        // Reasoning models (gpt-oss, deepseek-v4) stream reasoning_content BEFORE any
+        // content — often 30s+ on a large context. Surface it so the route can keep the
+        // client SSE warm; it is NOT part of the answer.
+        const reasoning = d?.reasoning_content;
+        if (typeof reasoning === "string" && reasoning.length) yield { reasoning };
         if (j?.usage) usage = { in: j.usage.prompt_tokens ?? 0, out: j.usage.completion_tokens ?? 0 };
       } catch {
         /* skip a partial / non-JSON line */

@@ -82,3 +82,42 @@
   --xy-controls-button-border-color: var(--wf-node-border);
   --xy-minimap-mask-background-color: color-mix(in srgb, var(--wf-node-bg) 55%, transparent);
 }
+
+/* ── P: highlight node đang chạy (pulsing ring) — nhiều node fan-out cùng sáng ── */
+/* Dùng ::after (node div đã position:relative + có inline boxShadow) để không xung  */
+/* đột với boxShadow inline. Thuần CSS, không JS timer. prefers-reduced-motion: tắt. */
+
+.wf-node-running::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55);
+  animation: wf-node-pulse 1.4s ease-out infinite;
+}
+
+@keyframes wf-node-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.55); }
+  70% { box-shadow: 0 0 0 9px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+/* Chấm nhấp nháy trong chip "N đang chạy song song". */
+.wf-run-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #fff;
+  animation: wf-dot-blink 1s ease-in-out infinite;
+}
+
+@keyframes wf-dot-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wf-node-running::after { animation: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4); }
+  .wf-run-dot { animation: none; }
+}

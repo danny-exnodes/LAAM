@@ -11,7 +11,20 @@ export type WritePreview = {
 
 export function buildPreview(name: string, args: Record<string, unknown>): WritePreview {
   const safe = redact(args);
-  const str = (v: unknown) => (v == null ? "" : String(v));
+  // Object/array args (vd `values` của kg_insert_datasource_row) phải render JSON —
+  // String() ra "[object Object]" là card mất chính nội dung user cần duyệt trước khi
+  // bấm xác nhận. redact() đã deep-scrub nên stringify nested là an toàn.
+  const str = (v: unknown): string => {
+    if (v == null) return "";
+    if (typeof v === "object") {
+      try {
+        return JSON.stringify(v);
+      } catch {
+        return String(v);
+      }
+    }
+    return String(v);
+  };
   switch (name) {
     case "trello_create_card": {
       const card = str(safe.name);

@@ -192,6 +192,85 @@ body::after {
   0% { transform: translateX(-120%); }
   100% { transform: translateX(420%); }
 }
+/* Larvis display panel (constellation): nổi lên từ nền sao — mờ + thu nhỏ nhẹ rồi
+   bung ra. Vào chậm hơn ra (0.34s vs 0.2s), ease-out-expo cho cảm giác dừng dứt khoát.
+   PANEL_EXIT_MS trong DisplayPanel.tsx phải ≥ thời lượng laam-panel-out.
+
+   CHỈ opacity + transform. KHÔNG animate `filter: blur()` ở đây: panel là element
+   lớn (78% bề ngang, tới 74vh) và đã có `backdrop-blur` — animate blur trên nó bắt
+   trình duyệt rasterize lại cả vùng nền MỖI KHUNG HÌNH, chồng lên vòng lặp WebGL của
+   ParticleFieldBackground → cả trang khựng đúng lúc panel hiện ra (đã đo bằng mắt,
+   bản đầu có blur trong keyframe). */
+@keyframes laam-panel-in {
+  from { opacity: 0; transform: translate3d(0, -12px, 0) scale(0.96); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes laam-panel-out {
+  from { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  to { opacity: 0; transform: translate3d(0, -8px, 0) scale(0.98); }
+}
+.anim-panel-in { animation: laam-panel-in 0.34s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.anim-panel-out { animation: laam-panel-out 0.2s cubic-bezier(0.4, 0, 1, 1) both; }
+
+/* Scrollable, but without the bar. For overlays floating on the constellation, where a
+   track drawn over the starfield reads as a seam. Scrolling itself is untouched — wheel,
+   trackpad, touch and keyboard all still work. */
+.no-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Themed scrollbars — Matte Dark / light. Replaces the OS default bright white track
+   (visible on chat tables + sidebar + message pane). Track stays transparent so the
+   bar floats on the surface; thumb is muted text-color, accent on hover.
+   Apply via class `laam-scroll`; .chat-md-tablewrap gets it by default. */
+.laam-scroll,
+.chat-md-tablewrap {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: color-mix(in oklab, var(--text-muted) 50%, transparent) transparent;
+}
+.laam-scroll::-webkit-scrollbar,
+.chat-md-tablewrap::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.laam-scroll::-webkit-scrollbar-track,
+.chat-md-tablewrap::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 2px;
+}
+.laam-scroll::-webkit-scrollbar-thumb,
+.chat-md-tablewrap::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--text-muted) 42%, transparent);
+  border-radius: 999px;
+  /* inset “padding” so the pill floats off the edge of the pane */
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.laam-scroll::-webkit-scrollbar-thumb:hover,
+.chat-md-tablewrap::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.laam-scroll::-webkit-scrollbar-thumb:active,
+.chat-md-tablewrap::-webkit-scrollbar-thumb:active {
+  background-color: color-mix(in oklab, var(--accent) 75%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.laam-scroll::-webkit-scrollbar-corner,
+.chat-md-tablewrap::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.dark .laam-scroll,
+.dark .chat-md-tablewrap {
+  /* Slightly more visible on near-black surfaces without going OS-white. */
+  scrollbar-color: color-mix(in oklab, var(--text-muted) 58%, transparent) transparent;
+}
+.dark .laam-scroll::-webkit-scrollbar-thumb,
+.dark .chat-md-tablewrap::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--text-muted) 52%, transparent);
+}
+
 .laam-bar { animation: laam-progress 0.9s ease-in-out infinite; }
 .anim-fade-in { animation: laam-fade-in 0.18s ease-out both; }
 .anim-slide-down { animation: laam-slide-down 0.18s ease-out both; }
@@ -240,6 +319,8 @@ body::after {
   .anim-slide-down,
   .anim-slide-in-left,
   .anim-scale-in,
+  .anim-panel-in,
+  .anim-panel-out,
   .anim-float,
   .anim-float-2,
   .anim-glow,
@@ -247,3 +328,86 @@ body::after {
     animation: none;
   }
 }
+
+/* Chat assistant markdown — Tailwind's preflight strips default element styling, so
+   react-markdown output (tables / headings / lists) renders bare (cells jammed, no
+   spacing). This restores a compact, theme-aware typographic set scoped to .chat-md.
+   Subtle fills use color-mix on currentColor so they adapt to light/dark automatically;
+   borders reuse the app's --border-* tokens. Wide tables scroll inside .chat-md-tablewrap
+   (added by MarkdownView's table override) so a message never overflows horizontally. */
+.chat-md { line-height: 1.6; overflow-wrap: anywhere; }
+.chat-md > :first-child { margin-top: 0; }
+.chat-md > :last-child { margin-bottom: 0; }
+
+.chat-md h1, .chat-md h2, .chat-md h3, .chat-md h4 { font-weight: 600; line-height: 1.3; margin: 1.2em 0 0.5em; }
+.chat-md h1 { font-size: 1.35em; }
+.chat-md h2 { font-size: 1.2em; }
+.chat-md h3 { font-size: 1.08em; }
+.chat-md h4 { font-size: 1em; }
+
+.chat-md p { margin: 0.6em 0; }
+.chat-md ul, .chat-md ol { margin: 0.6em 0; padding-left: 1.4em; }
+.chat-md ul { list-style: disc; }
+.chat-md ol { list-style: decimal; }
+.chat-md li { margin: 0.25em 0; }
+.chat-md li > ul, .chat-md li > ol { margin: 0.25em 0; }
+
+.chat-md a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
+.chat-md blockquote { margin: 0.7em 0; padding: 0.2em 0 0.2em 0.9em; border-left: 3px solid var(--border-strong); opacity: 0.85; }
+.chat-md hr { margin: 1em 0; border: 0; border-top: 1px solid var(--border-subtle); }
+.chat-md :not(pre) > code { font-size: 0.85em; padding: 0.12em 0.35em; border-radius: 0.35em; background: color-mix(in oklab, currentColor 10%, transparent); }
+
+/* Tables — two opposing cases:
+   1) Few columns + long cell text (e.g. a contract clause) → wrap inside the cell,
+      don't stretch the page.
+   2) Many columns (refund ledger, POS rows) → keep columns readable and scroll the
+      table horizontally inside .chat-md-tablewrap instead of crushing headers into
+      single-character stacks (the constellation chat-bubble regression).
+
+   `width: 100%` alone forced case (2) into the crush path: the table always fit the
+   bubble (~460px), so N columns shared that width. `width: max-content` +
+   `min-width: 100%` grows with columns (and still fills when few), while per-cell
+   max-width keeps long text wrapping. */
+.chat-md-tablewrap {
+  /* width:100% (not just max-width) so the scrollport is the bubble/message width.
+     Without an explicit width, a flex shrink-to-fit ancestor sizes itself to the
+     table's max-content and overflow-x never engages — columns look crushed or
+     the bubble just grows off-screen. */
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  margin: 0.7em 0;
+  -webkit-overflow-scrolling: touch;
+  /* Scrollbar chrome: shared `.laam-scroll` / `.chat-md-tablewrap` rules above. */
+}
+.chat-md table {
+  border-collapse: collapse;
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.9em;
+}
+/* --border-subtle (alpha .1 in dark) was too faint to read as a rule at table
+   scale — --border-strong is the visible-grid tier. */
+.chat-md th, .chat-md td {
+  border: 1px solid var(--border-strong);
+  padding: 0.4em 0.65em;
+  text-align: left;
+  vertical-align: top;
+  /* Floor so short headers ("ID", "Flag") never collapse to letter-stacking when
+     many columns compete for space under min-width:100% + few-column fill. */
+  min-width: 4.5rem;
+  max-width: 32ch;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Headers stay on one line so multi-word labels ("Refund Date/Time") stay legible;
+   the table grows and the wrap scrolls. */
+.chat-md thead th {
+  background: color-mix(in oklab, currentColor 12%, transparent);
+  font-weight: 600;
+  white-space: nowrap;
+  max-width: none;
+}
+.chat-md tbody tr:nth-child(even) { background: color-mix(in oklab, currentColor 6%, transparent); }

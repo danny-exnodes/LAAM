@@ -59,7 +59,11 @@ function mockFetch() {
   });
 }
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  // D3 tests push a ?conv=... URL — reset so it doesn't leak into other tests' mount effects.
+  window.history.pushState({}, "", "/chat");
+});
 
 // UX-1 INTENT: prompt mẫu là đường tắt 1-click. Nếu click chỉ ĐIỀN composer (hành vi
 // cũ) user phải bấm gửi lần nữa — click phải GỬI NGAY qua đường send hiện có.
@@ -311,42 +315,98 @@ function renderChat() {
   );
 }
 
-test("constellation: empty-state shows the Assistant-map toggle", async () => {
+test("empty-state links to the constellation page", async () => {
   vi.stubGlobal("fetch", mockFetchWithAgents());
   renderChat();
-  expect(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" })).toBeInTheDocument();
+  const links = await screen.findAllByRole("link", { name: /bản đồ trợ lý|assistant/i });
+  expect(links.some((l) => l.getAttribute("href") === "/constellation")).toBe(true);
 });
 
-// Rule 13: clicking a connector node must hand the EXACT catalog tool back through
-// the existing onToolPick path — observable as the real tool name shown in the composer.
-test("constellation: clicking a connector node picks its real tool into the composer", async () => {
-  vi.stubGlobal("fetch", mockFetchWithAgents());
-  renderChat();
-  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
-  // The DAAB (mcp) group node sits on the outer ring.
-  fireEvent.click(await screen.findByRole("button", { name: "Chọn DAAB" }));
-  // Constellation closed + composer now shows the ground-truth tool name.
-  expect(await screen.findByText("mcp__daab__kg_query")).toBeInTheDocument();
-  expect(screen.queryByRole("dialog", { name: "Bản đồ agent và công cụ" })).not.toBeInTheDocument();
-});
-
-test("constellation: clicking an agent node selects that custom agent (persisted)", async () => {
-  localStorage.clear();
-  vi.stubGlobal("fetch", mockFetchWithAgents());
-  renderChat();
-  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
-  fireEvent.click(await screen.findByRole("button", { name: "Chọn Strategist" }));
-  await waitFor(() => expect(localStorage.getItem("laam:chat:agent")).toBe("ag-1"));
-});
-
-test("constellation: Escape closes the overlay", async () => {
-  vi.stubGlobal("fetch", mockFetchWithAgents());
-  renderChat();
-  fireEvent.click(await screen.findByRole("button", { name: "Mở bản đồ trợ lý" }));
-  const dialog = await screen.findByRole("dialog", { name: "Bản đồ agent và công cụ" });
-  fireEvent.keyDown(dialog, { key: "Escape" });
-  await waitFor(() =>
-    expect(screen.queryByRole("dialog", { name: "Bản đồ agent và công cụ" })).not.toBeInTheDocument(),
+// D3 — deep-link tiếp tục hội thoại giữa /chat và /constellation. WHY: icon Orbit
+// (mở /constellation) trước đây luôn tạo hội thoại mới, kể cả đang xem sẵn một
+// hội thoại — xác nhận là chủ đích v1 nhưng đã hoãn phần deep-link (spec gốc:
+// "no new deep-link param required for v1"). Nay bổ sung theo cả 2 chiều.
+test("D3: mount với ?conv=<id> trong URL tự mở đúng hội thoại đó (không phải trang trắng)", async () => {
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url === "/api/conversations/conv-42") {
+      return {
+        ok: true,
+        json: async () => ({
+          messages: [
+            { role: "user", content: "câu hỏi cũ" },
+            { role: "assistant", content: "trả lời cũ" },
+          ],
+        }),
+      } as unknown as Response;
+    }
+    const json = url.startsWith("/api/conversations")
+      ? { conversations: [{ id: "conv-42", title: "chat cũ" }] }
+      : url === "/api/ollama/models"
+        ? { models: [] }
+        : url === "/api/chat/info"
+          ? { model: "test-model" }
+          : url === "/api/ocr"
+            ? { available: true }
+            : url === "/api/chat/tools"
+              ? { groups: TOOL_GROUPS_FX }
+              : {};
+    return { ok: true, json: async () => json } as unknown as Response;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  window.history.pushState({}, "", "/chat?conv=conv-42");
+  render(
+    <I18nProvider lang="vi">
+      <ChatClient />
+    </I18nProvider>,
   );
-  expect(screen.getByRole("button", { name: "Mở bản đồ trợ lý" })).toBeInTheDocument();
+  expect(await screen.findByText("câu hỏi cũ")).toBeInTheDocument();
+  expect(await screen.findByText("trả lời cũ")).toBeInTheDocument();
+});
+
+test("D3: link Orbit mang theo hội thoại đang mở (?conv=<activeId>) sau khi đã gửi 1 lượt", async () => {
+  const fetchMock = mockFetch(); // streamResponse mặc định trả x-conversation-id: "conv-1"
+  vi.stubGlobal("fetch", fetchMock);
+  renderChat();
+  fireEvent.change(await screen.findByLabelText("Soạn tin nhắn"), { target: { value: "hi" } });
+  fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+  await waitFor(() => {
+    const link = screen.getByRole("link", { name: /bản đồ trợ lý|assistant/i });
+    expect(link.getAttribute("href")).toBe("/constellation?conv=conv-1");
+  });
+});
+
+// INTENT: splitFrames() re-parses the WHOLE accumulated buffer on every chunk, so a `view`
+// frame that lands mid-stream is delivered again with every chunk that follows it. The panel
+// must show the table ONCE — a per-sighting append stacked the same table N times, which is
+// exactly what the user saw. The stream below puts the frame early and keeps streaming after
+// it; a test where the frame arrives last cannot fail on this.
+test("bảng chỉ hiện 1 lần dù frame view được stream lặp lại theo từng chunk", async () => {
+  const viewFrame =
+    "\x1e" +
+    JSON.stringify({
+      t: "view",
+      d: {
+        kind: "table",
+        title: "Hoàn tiền của Sarah Miller",
+        source: { type: "tool", toolName: "kg_query_datasource", at: 1 },
+        columns: [
+          { key: "id", label: "Mã" },
+          { key: "amount", label: "Số tiền" },
+        ],
+        rows: [{ id: "TXN-1", amount: 10 }],
+      },
+    }) +
+    "\x1e";
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/chat" && init?.method === "POST")
+      return streamResponse(["Kết quả ", viewFrame, "đây", " nhé", " bạn"]);
+    return { ok: true, json: async () => ({ conversations: [] }) } as unknown as Response;
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const { container } = renderChat();
+  fireEvent.change(await screen.findByLabelText("Soạn tin nhắn"), { target: { value: "hi" } });
+  fireEvent.click(screen.getByLabelText("Gửi tin nhắn"));
+
+  await screen.findByText("Hoàn tiền của Sarah Miller");
+  await waitFor(() => expect(container.querySelectorAll("figure")).toHaveLength(1));
 });

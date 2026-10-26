@@ -16,8 +16,11 @@ export function shapeAudit(rows: AuditRow[]) {
 export const queryAudit: Tool = {
   name: "laam_query_audit",
   description:
-    "Đọc nhật ký kiểm toán (audit log) gần nhất: hành động đã thực hiện trong hệ thống " +
-    "(vd ghi qua connector, duyệt write). Lọc theo tên action tuỳ chọn.",
+    "Đọc nhật ký kiểm toán (audit log) CỦA RIÊNG LAAM: hành động agent này đã thực hiện " +
+    "trong chính hệ thống LAAM (vd ghi qua connector, duyệt write). KHÔNG chứa dữ liệu " +
+    "nghiệp vụ của bất kỳ data source/connector nào đã kết nối (DAAB, database khách hàng…) " +
+    "— câu hỏi về hoạt động nghiệp vụ (giao dịch, override ngoài giờ, audit trail của khách " +
+    "hàng…) phải dùng tool truy vấn data source tương ứng, không dùng tool này. Lọc theo tên action tuỳ chọn.",
   kind: "read",
   parameters: {
     type: "object",

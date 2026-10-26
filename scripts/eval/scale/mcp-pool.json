@@ -1,0 +1,2239 @@
+[
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_approve_drafts",
+      "description": "Approve up to 50 draft nodes",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "draft_node_ids": {
+            "type": "array"
+          },
+          "projectId": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "projectId",
+          "draft_node_ids"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_deprecate",
+      "description": "Deprecate a node (append-only, no hard deletes)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "change_reason": {
+            "type": "string",
+            "description": "Reason for the change (mandatory for traceability)",
+            "minLength": 10
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "superseded_by": {
+            "type": "string",
+            "description": "UUID of the node that supersedes this one",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Current version of the node for optimistic locking",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "change_reason",
+          "version",
+          "id",
+          "project_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_document_shared_entities",
+      "description": "Return the canonical entities that two documents both mention (rarest/most-specific first) — the literal answer to 'how are these two documents related?'. Raw, no summarization.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "description": "First document",
+            "minLength": 1
+          },
+          "with_document_id": {
+            "type": "string",
+            "description": "Second document",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "document_id",
+          "with_document_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_end_session",
+      "description": "End the current agent session with a summary",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "edges_created": {
+            "type": "integer",
+            "description": "Number of edges created during this session",
+            "minimum": 0
+          },
+          "nodes_created": {
+            "type": "integer",
+            "description": "Number of nodes created during this session",
+            "minimum": 0
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the session to end",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Summary of what was accomplished in this session",
+            "minLength": 10
+          }
+        },
+        "required": [
+          "session_id",
+          "summary"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_backlinks",
+      "description": "Get cross-source links for a document, external, or section node: documents it references (references_out), documents that reference it (referenced_by / backlinks), and concepts it mentions. Use to navigate between linked documents and concepts. Pass a node UUID.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "node_id": {
+            "type": "string",
+            "description": "UUID of the document/external/document_section node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Optional project id (falls back to the default project)"
+          }
+        },
+        "required": [
+          "node_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_context",
+      "description": "Get knowledge context for a given scope",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "filter_value": {
+            "type": "string",
+            "description": "Value to filter by (e.g., task_id for task scope, domain name for domain scope)"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Scope level to retrieve context for",
+            "enum": [
+              "full",
+              "phase",
+              "task",
+              "domain",
+              "recent"
+            ]
+          }
+        },
+        "required": [
+          "project_id",
+          "scope"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_document",
+      "description": "Resolve a document_id to its citation metadata (filename, source URL, section count). Pass the document_id from a kg_search result's section properties to cite the source.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "description": "UUID of the document hub node (a section's properties.document_id from kg_search)",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Optional project id (falls back to the default project)"
+          }
+        },
+        "required": [
+          "document_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_document_outline",
+      "description": "Get a document's outline: the real section UUIDs, titles, line ranges, levels, chunk counts, and nesting. Pass a document hub UUID (a section's properties.document_id). Use to navigate to an exact passage.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "description": "UUID of the document/external hub node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Optional project id (falls back to the default project)"
+          }
+        },
+        "required": [
+          "document_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_history",
+      "description": "Get the version history of a node (append-only audit trail)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id",
+          "project_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_impact_analysis",
+      "description": "Analyze the impact of a node by traversing its relationships",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "include_types": {
+            "type": "array",
+            "description": "Node types to include in impact analysis"
+          },
+          "max_depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id",
+          "project_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_master_record",
+      "description": "Get a project's MASTER RECORD — the latest active derived_record, a satellite's finished analysis (e.g. an AAA Master Record with summary / strengths / risks / recommendation). Use this FIRST for whole-project questions (overview, risks, recommendation) and present it faithfully instead of re-deriving one from raw nodes. For an aaaa_master_record, properties.record_body embeds structured sections after the prose — including a `## risk` block whose JSON has redFlags[] (each with topic, a severity of critical|warning|info, description, sourceDocFiles) and openQuestions[]; when asked to count, list, or classify risks, read that redFlags[] array — do NOT count from the prose summary and do NOT fabricate a total. Returns {\"master_record\": <node>} when present, or {\"master_record\": null, \"hint\": ...} when the project has none — then fall back to kg_search / kg_query on the graph.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "subtype": {
+            "type": "string",
+            "description": "Optional: narrow to a record kind, e.g. aaaa_master_record. Omit to get the latest record of any subtype."
+          }
+        },
+        "required": [
+          "project_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_neighbors",
+      "description": "Get the one-hop neighbors of a node with their edge labels and direction. Use to trace relationships from a node found via kg_search.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string",
+            "description": "Edge direction filter (default: both)",
+            "enum": [
+              "outgoing",
+              "incoming",
+              "both"
+            ]
+          },
+          "edge_types": {
+            "type": "array",
+            "description": "Filter by edge type(s)"
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "include_cross_project": {
+            "type": "boolean",
+            "description": "Include neighbors from other projects connected via cross-project edges"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of results (default 50, max 200)",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "node_types": {
+            "type": "array",
+            "description": "Filter neighbors by node type(s)"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Number of results to skip (pagination)",
+            "minimum": 0
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Filter neighbors by status",
+            "enum": [
+              "active",
+              "deprecated",
+              "superseded"
+            ]
+          },
+          "view": {
+            "type": "string",
+            "description": "Response verbosity: 'full' (default, all fields) or 'slim' (id, project_id, node_type, title, status, scope, edge_id, edge_type, direction).",
+            "enum": [
+              "full",
+              "slim"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "project_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_node",
+      "description": "Fetch one node by UUID and return its full properties, type, and status. Requires `id` and `project_id`.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "id",
+          "project_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_get_section_neighbors",
+      "description": "Get a document_section's parent, child subsections and chunks, and sibling sections (prev/next) by real UUID. Pass a section UUID (e.g. a kg_search_chunks hit's section_id) to place it in its document.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Optional project id (falls back to the default project)"
+          },
+          "section_id": {
+            "type": "string",
+            "description": "UUID of the document_section node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "section_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_graph_retrieve",
+      "description": "Retrieve cross-document chunk evidence via 1-hop similar_to graph expansion. Returns a ranked, deduplicated, per-document-capped bundle of chunks that a flat search would miss.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "include_snippet": {
+            "type": "boolean",
+            "description": "Inline the full chunk content as `snippet` on each result, eliminating a follow-up kg_search_chunks call."
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Project ID (optional, uses default if omitted)"
+          },
+          "query": {
+            "type": "string",
+            "description": "Natural language query",
+            "minLength": 1
+          },
+          "result_k": {
+            "type": "integer",
+            "description": "Max results to return (default 5)",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_index_source",
+      "description": "Index a local source directory into the knowledge graph by running the ennam-kg-index CLI on this machine. Returns a job_id immediately; poll kg_index_status to get the result.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Local source directory on this machine to index",
+            "minLength": 1
+          },
+          "project_id": {
+            "type": "string",
+            "description": "KG project id (falls back to the bridge default project if omitted)",
+            "minLength": 1
+          },
+          "repo_key": {
+            "type": "string",
+            "description": "Stable repo identity stored in KG (default: the path). Use a logical id like github.com/org/repo for re-index stability.",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "path"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_index_status",
+      "description": "Poll the status of an index job started by kg_index_source.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "description": "Job id returned by kg_index_source",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "job_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_ingest_batch",
+      "description": "Submit up to 50 draft nodes in one batch",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "description": "Array of ingest items"
+          },
+          "projectId": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "projectId",
+          "items"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_ingest_node",
+      "description": "Submit a single draft node via the public ingest API",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "auto_approve": {
+            "type": "boolean",
+            "description": "Auto-approve after upsert"
+          },
+          "content_format": {
+            "type": "string",
+            "description": "Content format (plain_text, markdown, json, csv)"
+          },
+          "content_raw": {
+            "type": "string",
+            "description": "Raw content body"
+          },
+          "projectId": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "source_id": {
+            "type": "string",
+            "description": "Unique source identifier"
+          },
+          "source_url": {
+            "type": "string",
+            "description": "Provenance pointer back to the satellite's own copy (e.g. laam://memory/<id>)"
+          },
+          "title": {
+            "type": "string",
+            "description": "Draft title"
+          }
+        },
+        "required": [
+          "projectId",
+          "title",
+          "content_raw",
+          "source_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_ingest_status",
+      "description": "Poll a file ingest by upload_id. Returns status (processing|done|failed) and, once done, the document_id to cite or download.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "description": "Optional project id (falls back to the default project)"
+          },
+          "upload_id": {
+            "type": "string",
+            "description": "The upload_id returned when the file was POSTed to the upload_url",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "upload_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_link",
+      "description": "Create an edge (relationship) between two nodes in the knowledge graph",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "description": "Additional edge metadata"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "relationship": {
+            "type": "string",
+            "description": "Type of relationship between nodes",
+            "enum": [
+              "relates_to",
+              "impacts",
+              "supersedes",
+              "fulfilled_by",
+              "depends_on",
+              "blocked_by",
+              "implements",
+              "about"
+            ]
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "source_id": {
+            "type": "string",
+            "description": "UUID of the source node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "target_id": {
+            "type": "string",
+            "description": "UUID of the target node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "target_project_id": {
+            "type": "string",
+            "description": "UUID of the target node's project (for cross-project edges)",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "relationship",
+          "source_id",
+          "target_id",
+          "project_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_list_drafts",
+      "description": "List draft nodes with optional filters",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "projectId": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "source_type": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "processing",
+              "processed",
+              "failed",
+              "rejected"
+            ]
+          }
+        },
+        "required": [
+          "projectId"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_list_projects",
+      "description": "List all projects (id + name) accessible to the current API key. Call this when no project is configured/known to discover which project_id to use.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_process_drafts",
+      "description": "Queue approved drafts for KG generation processing",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "draft_node_ids": {
+            "type": "array"
+          },
+          "projectId": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "draft_node_ids",
+          "projectId"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_query",
+      "description": "Query nodes using structured JSON filters with optional multi-hop traversal",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cross_project_ids": {
+            "type": "array",
+            "description": "Additional project IDs to include in cross-project queries"
+          },
+          "filter": {
+            "type": "object",
+            "description": "Structured JSON filter object with {field, op, value} conditions or {and: []} / {or: []} combinators"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of results to return",
+            "minimum": 1,
+            "maximum": 200
+          },
+          "node_type": {
+            "type": "string",
+            "description": "Filter by node type",
+            "enum": [
+              "decision",
+              "concept",
+              "requirement",
+              "task",
+              "architecture",
+              "discovery"
+            ]
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Number of results to skip (pagination)",
+            "minimum": 0
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "traverse": {
+            "type": "object",
+            "description": "Optional multi-hop traversal from filtered results (max_depth: 1-3, direction, edge_types, node_types)"
+          }
+        },
+        "required": [
+          "project_id",
+          "node_type"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_recall",
+      "description": "Recall memories for the calling agent's project via hybrid semantic + keyword search. Returns raw snippets, most relevant first. project_id/user_id are resolved from the API key.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "Filter by kind",
+            "enum": [
+              "preference",
+              "decision",
+              "fact",
+              "correction"
+            ]
+          },
+          "query": {
+            "type": "string",
+            "description": "What to recall",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "scope": {
+            "type": "string",
+            "description": "Filter by scope",
+            "enum": [
+              "project",
+              "user",
+              "agent"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "description": "Filter by tags (any match)"
+          },
+          "top_k": {
+            "type": "integer",
+            "description": "Max results (default 8, max 50)"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_related_documents",
+      "description": "Find documents related to a document by shared canonical entities, ranked by entity specificity (rare = stronger). Raw provenance (the driving shared entity per result), no summarization. Project resolved from the API key.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "description": "The document to find relations for",
+            "minLength": 1
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max related documents (default 10)"
+          }
+        },
+        "required": [
+          "document_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_remember",
+      "description": "Persist a durable memory (preference/decision/fact/correction) for the calling agent's project. Re-remembering with the same mem_key replaces the prior memory. project_id/user_id are resolved from the API key — do not pass them.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "The memory text",
+            "minLength": 1,
+            "maxLength": 8000
+          },
+          "kind": {
+            "type": "string",
+            "description": "Memory kind",
+            "enum": [
+              "preference",
+              "decision",
+              "fact",
+              "correction"
+            ]
+          },
+          "mem_key": {
+            "type": "string",
+            "description": "Idempotency key; same key replaces the prior memory"
+          },
+          "scope": {
+            "type": "string",
+            "description": "What the memory is about",
+            "enum": [
+              "project",
+              "user",
+              "agent"
+            ]
+          },
+          "tags": {
+            "type": "array",
+            "description": "Optional tags"
+          }
+        },
+        "required": [
+          "scope",
+          "kind",
+          "content"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_request_file_upload",
+      "description": "Signal intent to ingest a file. Returns upload_url; the host then POSTs the file bytes there (binary travels over HTTP, never over MCP). Confirm-gated.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "content_format": {
+            "type": "string",
+            "description": "Optional hint: pdf | markdown | text"
+          },
+          "filename": {
+            "type": "string",
+            "description": "The file's name (e.g. contract.pdf)"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Optional project id (falls back to the default project)"
+          }
+        },
+        "required": [
+          "filename"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_search",
+      "description": "Search KG nodes by concept, decision, task, document, or keyword. Use `mode` to select fulltext (default), semantic (vector), or hybrid — pass `project_id` and `query` as the minimum.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cross_project_ids": {
+            "type": "array",
+            "description": "Additional project IDs to include in cross-project search"
+          },
+          "include_headline": {
+            "type": "boolean",
+            "description": "Include ts_headline contextual snippets in results"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of results (default 20, max 100)",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "mode": {
+            "type": "string",
+            "description": "Search mode: 'fulltext' (default, ts_rank), 'semantic' (vector cosine over section embeddings), or 'hybrid' (RRF fusion of both). Takes precedence over 'semantic'; semantic=true is equivalent to mode=semantic.",
+            "enum": [
+              "fulltext",
+              "semantic",
+              "hybrid"
+            ]
+          },
+          "node_types": {
+            "type": "array",
+            "description": "Filter search to specific node types"
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Number of results to skip (pagination)",
+            "minimum": 0
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "query": {
+            "type": "string",
+            "description": "Search query text",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "semantic": {
+            "type": "boolean",
+            "description": "Run semantic vector search over section embeddings (text query is embedded server-side at 384-dim) instead of full-text"
+          },
+          "status": {
+            "type": "string",
+            "description": "Filter by node status",
+            "enum": [
+              "active",
+              "deprecated",
+              "superseded"
+            ]
+          }
+        },
+        "required": [
+          "project_id",
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_search_chunks",
+      "description": "Search document passages for the exact text to cite in an answer; returns passage text with section and line location. Use instead of kg_search when you need a verbatim quote.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "description": "Optional: restrict to one document (hub UUID from a kg_search result)",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max results (default 5, max 10)",
+            "maximum": 10
+          },
+          "mode": {
+            "type": "string",
+            "description": "Retrieval mode: fulltext | semantic | hybrid (default hybrid)",
+            "enum": [
+              "fulltext",
+              "semantic",
+              "hybrid"
+            ]
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Pagination offset (default 0)"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "Optional project id (falls back to the default project)"
+          },
+          "query": {
+            "type": "string",
+            "description": "The search text"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_search_sessions",
+      "description": "Search conversation history via Vietnamese-correct full-text search. Returns raw windowed snippets, most relevant first, no summarization. Project scope is resolved from the API key. Use scope='monitoring' (admin only) to search across all users in the project.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "description": "Opaque pagination cursor from a prior next_cursor"
+          },
+          "include_archived": {
+            "type": "boolean",
+            "description": "Include archived threads in results (default false: archived threads are excluded)"
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max results (default 8, max 50)"
+          },
+          "query": {
+            "type": "string",
+            "description": "What to search for in past conversations",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "role": {
+            "type": "string",
+            "description": "Filter by message role",
+            "enum": [
+              "user",
+              "assistant"
+            ]
+          },
+          "scope": {
+            "type": "string",
+            "description": "Search scope: 'user' (default, own sessions only) or 'monitoring' (all users in project, requires admin role)",
+            "enum": [
+              "user",
+              "monitoring"
+            ]
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_store_architecture",
+      "description": "Store a new architecture node in the knowledge graph",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "inline_edges": {
+            "type": "array",
+            "description": "Optional inline edges to create with the node"
+          },
+          "node_type": {
+            "type": "string",
+            "description": "Node type (auto-inferred from tool name)",
+            "enum": [
+              "architecture"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "properties": {
+            "type": "object",
+            "description": "JSONB properties specific to the node type"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the node",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "project_id",
+          "title",
+          "properties"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_store_concept",
+      "description": "Store a new concept node in the knowledge graph",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "inline_edges": {
+            "type": "array",
+            "description": "Optional inline edges to create with the node"
+          },
+          "node_type": {
+            "type": "string",
+            "description": "Node type (auto-inferred from tool name)",
+            "enum": [
+              "concept"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "properties": {
+            "type": "object",
+            "description": "JSONB properties specific to the node type"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the node",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "project_id",
+          "title",
+          "properties"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_store_decision",
+      "description": "Store a new decision node in the knowledge graph",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "inline_edges": {
+            "type": "array",
+            "description": "Optional inline edges to create with the node"
+          },
+          "node_type": {
+            "type": "string",
+            "description": "Node type (auto-inferred from tool name)",
+            "enum": [
+              "decision"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "properties": {
+            "type": "object",
+            "description": "JSONB properties specific to the node type"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the node",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "project_id",
+          "title",
+          "properties"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_store_discovery",
+      "description": "Store a new discovery node in the knowledge graph",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "inline_edges": {
+            "type": "array",
+            "description": "Optional inline edges to create with the node"
+          },
+          "node_type": {
+            "type": "string",
+            "description": "Node type (auto-inferred from tool name)",
+            "enum": [
+              "discovery"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "properties": {
+            "type": "object",
+            "description": "JSONB properties specific to the node type"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the node",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "project_id",
+          "title",
+          "properties"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_store_requirement",
+      "description": "Store a new requirement node in the knowledge graph",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "inline_edges": {
+            "type": "array",
+            "description": "Optional inline edges to create with the node"
+          },
+          "node_type": {
+            "type": "string",
+            "description": "Node type (auto-inferred from tool name)",
+            "enum": [
+              "requirement"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "properties": {
+            "type": "object",
+            "description": "JSONB properties specific to the node type"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the node",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "properties",
+          "project_id",
+          "title"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_store_session",
+      "description": "Start a new agent session and register it in the knowledge graph",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "agent_name": {
+            "type": "string",
+            "description": "Name of the agent starting this session",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional session metadata"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "work_scope": {
+            "type": "string",
+            "description": "Type of work being performed",
+            "enum": [
+              "bug_fix",
+              "new_feature",
+              "refactoring",
+              "exploration",
+              "documentation",
+              "testing",
+              "performance",
+              "infrastructure",
+              "security",
+              "migration"
+            ]
+          }
+        },
+        "required": [
+          "project_id",
+          "agent_name"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_store_task",
+      "description": "Store a new task node in the knowledge graph",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "inline_edges": {
+            "type": "array",
+            "description": "Optional inline edges to create with the node"
+          },
+          "node_type": {
+            "type": "string",
+            "description": "Node type (auto-inferred from tool name)",
+            "enum": [
+              "task"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "properties": {
+            "type": "object",
+            "description": "JSONB properties specific to the node type"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Title of the node",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "title",
+          "properties",
+          "project_id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "read",
+    "function": {
+      "name": "mcp__daab__kg_traverse",
+      "description": "Multi-hop graph traversal from a starting node (2-3 levels via recursive CTEs)",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "direction": {
+            "type": "string",
+            "description": "Traversal direction",
+            "enum": [
+              "outgoing",
+              "incoming",
+              "both"
+            ]
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "max_depth": {
+            "type": "integer",
+            "description": "Maximum traversal depth (2-3 levels)",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "node_type": {
+            "type": "string",
+            "description": "Filter traversed nodes by type",
+            "enum": [
+              "decision",
+              "concept",
+              "requirement",
+              "task",
+              "architecture",
+              "discovery"
+            ]
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "relationship": {
+            "type": "string",
+            "description": "Filter by relationship type",
+            "enum": [
+              "relates_to",
+              "impacts",
+              "supersedes",
+              "fulfilled_by",
+              "depends_on",
+              "blocked_by",
+              "implements",
+              "about"
+            ]
+          }
+        },
+        "required": [
+          "project_id",
+          "id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_update",
+      "description": "Partially update a node with optimistic locking",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "change_reason": {
+            "type": "string",
+            "description": "Reason for the change (mandatory for traceability)",
+            "minLength": 10
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "properties": {
+            "type": "object",
+            "description": "Partial JSONB properties to merge"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Updated title"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Current version of the node for optimistic locking",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "project_id",
+          "change_reason",
+          "version"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_update_architecture",
+      "description": "Update an existing architecture node with optimistic locking and partial update semantics",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "arch_type": {
+            "type": "string",
+            "description": "Updated type of architecture artifact"
+          },
+          "change_reason": {
+            "type": "string",
+            "description": "Reason for the change (mandatory for traceability)",
+            "minLength": 10
+          },
+          "changed_by": {
+            "type": "string",
+            "description": "Who is making this change",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string",
+            "description": "Updated architecture artifact content"
+          },
+          "content_format": {
+            "type": "string",
+            "description": "Updated content format (e.g., markdown, mermaid)"
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Updated work scope context"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Updated lifecycle status"
+          },
+          "title": {
+            "type": "string",
+            "description": "Updated title"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Current version of the node for optimistic locking",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "change_reason",
+          "changed_by",
+          "id",
+          "version"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_update_concept",
+      "description": "Update an existing concept node with optimistic locking and partial update semantics",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "aliases": {
+            "type": "array",
+            "description": "Updated alternative names or abbreviations"
+          },
+          "change_reason": {
+            "type": "string",
+            "description": "Reason for the change (mandatory for traceability)",
+            "minLength": 10
+          },
+          "changed_by": {
+            "type": "string",
+            "description": "Who is making this change",
+            "minLength": 1
+          },
+          "definition": {
+            "type": "string",
+            "description": "Updated definition of the concept"
+          },
+          "domain": {
+            "type": "string",
+            "description": "Updated knowledge domain"
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Updated canonical name of the concept"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Updated work scope context"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Updated title"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Current version of the node for optimistic locking",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "version",
+          "change_reason",
+          "changed_by",
+          "id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_update_decision",
+      "description": "Update an existing decision node with optimistic locking and partial update semantics",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "alternatives": {
+            "type": "array",
+            "description": "Updated list of considered alternatives"
+          },
+          "change_reason": {
+            "type": "string",
+            "description": "Reason for the change (mandatory for traceability)",
+            "minLength": 10
+          },
+          "changed_by": {
+            "type": "string",
+            "description": "Who is making this change",
+            "minLength": 1
+          },
+          "context": {
+            "type": "string",
+            "description": "Updated background and circumstances leading to this decision"
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "impact": {
+            "type": "string",
+            "description": "Updated expected impact"
+          },
+          "rationale": {
+            "type": "string",
+            "description": "Updated reasoning and justification"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Updated work scope context"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Updated lifecycle status"
+          },
+          "superseded_by": {
+            "type": "string",
+            "description": "UUID of the decision that supersedes this one",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "description": "Updated title"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Current version of the node for optimistic locking",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "change_reason",
+          "changed_by",
+          "version",
+          "id"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_update_discovery",
+      "description": "Update an existing discovery node with optimistic locking and partial update semantics",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Updated discovery category",
+            "enum": [
+              "bug",
+              "edge_case",
+              "performance",
+              "security",
+              "insight",
+              "pattern",
+              "debt",
+              "improvement"
+            ]
+          },
+          "change_reason": {
+            "type": "string",
+            "description": "Reason for the change (mandatory for traceability)",
+            "minLength": 10
+          },
+          "changed_by": {
+            "type": "string",
+            "description": "Who is making this change",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "description": "Updated detailed description of the discovery"
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "resolution": {
+            "type": "string",
+            "description": "How this discovery was resolved"
+          },
+          "resolved": {
+            "type": "boolean",
+            "description": "Whether this discovery has been addressed"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Updated work scope context"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "severity": {
+            "type": "string",
+            "description": "Updated importance level",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low",
+              "info"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "description": "Updated lifecycle status"
+          },
+          "title": {
+            "type": "string",
+            "description": "Updated title"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Current version of the node for optimistic locking",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "change_reason",
+          "changed_by",
+          "version"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_update_requirement",
+      "description": "Update an existing requirement node with optimistic locking and partial update semantics",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "acceptance_criteria": {
+            "type": "array",
+            "description": "Updated list of acceptance criteria"
+          },
+          "change_reason": {
+            "type": "string",
+            "description": "Reason for the change (mandatory for traceability)",
+            "minLength": 10
+          },
+          "changed_by": {
+            "type": "string",
+            "description": "Who is making this change",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "description": "Updated detailed description"
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "priority": {
+            "type": "string",
+            "description": "Updated priority level",
+            "enum": [
+              "critical",
+              "high",
+              "medium",
+              "low"
+            ]
+          },
+          "req_id": {
+            "type": "string",
+            "description": "Updated requirement identifier (e.g., REQ-001)"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Updated work scope context"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Updated lifecycle status"
+          },
+          "title": {
+            "type": "string",
+            "description": "Updated title"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Current version of the node for optimistic locking",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "id",
+          "version",
+          "change_reason",
+          "changed_by"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_update_task",
+      "description": "Update an existing task node with optimistic locking and partial update semantics",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "assignee": {
+            "type": "string",
+            "description": "Updated assigned agent or developer"
+          },
+          "blockers": {
+            "type": "array",
+            "description": "Updated list of blocking task IDs or descriptions"
+          },
+          "branch": {
+            "type": "string",
+            "description": "Updated git branch associated with this task"
+          },
+          "change_reason": {
+            "type": "string",
+            "description": "Reason for the change (mandatory for traceability)",
+            "minLength": 10
+          },
+          "changed_by": {
+            "type": "string",
+            "description": "Who is making this change",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string",
+            "description": "Updated detailed description"
+          },
+          "id": {
+            "type": "string",
+            "description": "UUID of the node",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "scope": {
+            "type": "string",
+            "description": "Updated work scope context"
+          },
+          "session_id": {
+            "type": "string",
+            "description": "UUID of the current session",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "description": "Updated lifecycle status"
+          },
+          "task_id": {
+            "type": "string",
+            "description": "Updated task identifier (e.g., TASK-042)"
+          },
+          "title": {
+            "type": "string",
+            "description": "Updated title"
+          },
+          "version": {
+            "type": "integer",
+            "description": "Current version of the node for optimistic locking",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "change_reason",
+          "version",
+          "id",
+          "changed_by"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "kind": "write",
+    "function": {
+      "name": "mcp__daab__kg_upsert_derived_record",
+      "description": "Upsert a satellite-computed record (e.g. AAA Master Record) as a derived_record node. Idempotent by (source_system, record_ref). Provenance edges are supplied inline via links[] and REPLACE the node's existing derived_from/evidence edges — send the complete current set on every call.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "blank_summary": {
+            "type": "boolean",
+            "description": "Explicitly clear summary to empty string (distinct from omitting summary, which leaves it unchanged)"
+          },
+          "generated_at": {
+            "type": "string",
+            "description": "RFC3339 timestamp when the source system generated this record"
+          },
+          "links": {
+            "type": "array",
+            "description": "Provenance edges for this record. REPLACES the node's complete current derived_from/evidence edge set on every call — omit to clear all provenance edges."
+          },
+          "project_id": {
+            "type": "string",
+            "description": "UUID of the project",
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "format": "uuid"
+          },
+          "record_body": {
+            "type": "string",
+            "description": "Full record body. Stored in the KG but deliberately NOT full-text indexed — do not send this as `content`, which the search trigger would index."
+          },
+          "record_ref": {
+            "type": "string",
+            "description": "External id (idempotency key), e.g. AAA EntityProfile.id"
+          },
+          "source_system": {
+            "type": "string",
+            "description": "Producing system, e.g. aaa"
+          },
+          "subtype": {
+            "type": "string",
+            "description": "Record kind, e.g. aaaa_master_record"
+          },
+          "summary": {
+            "type": "string",
+            "description": "Short summary; set alongside record_body, which is stored (non-indexed) in the KG"
+          },
+          "title": {
+            "type": "string",
+            "description": "Record title"
+          }
+        },
+        "required": [
+          "subtype",
+          "source_system",
+          "project_id",
+          "record_ref",
+          "title"
+        ]
+      }
+    }
+  }
+]

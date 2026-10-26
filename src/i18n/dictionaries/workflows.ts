@@ -440,14 +440,14 @@ export const workflows: Dict = {
     zh: "连线指向不存在的节点",
   },
   "wf.validate.fan_in": {
-    vi: "Nhiều cạnh vào (chưa hỗ trợ gộp luồng)",
-    en: "Multiple incoming edges (merging not supported)",
-    zh: "多条入边（暂不支持合流）",
+    vi: "Nhiều cạnh vào — bật chế độ Song song để gộp luồng",
+    en: "Multiple incoming edges — enable Parallel mode to merge branches",
+    zh: "多条入边——启用并行模式以合流",
   },
   "wf.validate.multi_out": {
-    vi: "Nhiều cạnh ra (chỉ node Điều kiện mới được rẽ nhánh)",
-    en: "Multiple outgoing edges (only Condition nodes may branch)",
-    zh: "多条出边（仅条件节点可分支）",
+    vi: "Nhiều cạnh ra — bật chế độ Song song để rẽ nhánh (hoặc dùng node Điều kiện)",
+    en: "Multiple outgoing edges — enable Parallel mode to fan out (or use a Condition node)",
+    zh: "多条出边——启用并行模式以扇出（或使用条件节点）",
   },
   "wf.validate.condition_branches": {
     vi: "Điều kiện cần đúng 2 nhánh: true + false",
@@ -474,6 +474,24 @@ export const workflows: Dict = {
     vi: "agent.format phải là object JSON-schema",
     en: "agent.format must be a JSON-schema object",
     zh: "agent.format 必须是 JSON-schema 对象",
+  },
+  "wf.validate.ref_not_ancestor": {
+    vi: "Tham chiếu {{steps.X}} tới node không phải tổ tiên — hãy nối bằng cạnh (chế độ Song song)",
+    en: "A {{steps.X}} reference points to a non-ancestor node — connect it with an edge (Parallel mode)",
+    zh: "{{steps.X}} 引用了非祖先节点——请用连线连接（并行模式）",
+  },
+
+  // P — chế độ song song (editor toggle + HUD chip khi chạy)
+  "wf.editor.parallelMode": { vi: "Song song", en: "Parallel", zh: "并行" },
+  "wf.editor.parallelHint": {
+    vi: "Chạy các nhánh độc lập ĐỒNG THỜI (DAG). Tắt = tuyến tính từng bước.",
+    en: "Run independent branches CONCURRENTLY (DAG). Off = linear step-by-step.",
+    zh: "并发运行独立分支（DAG）。关闭 = 线性逐步执行。",
+  },
+  "wf.run.parallelCount": {
+    vi: "{n} node đang chạy song song",
+    en: "{n} nodes running in parallel",
+    zh: "{n} 个节点正在并行运行",
   },
 
   // Editor — Cmd/Ctrl+K node palette

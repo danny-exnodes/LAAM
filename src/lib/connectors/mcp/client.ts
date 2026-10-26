@@ -13,6 +13,37 @@ const TIMEOUT_MS = 15_000;
 // thousands of tools would otherwise bloat the model's tool list / context. Truncation is logged,
 // never silent.
 const MAX_TOOLS = 200;
+// Upper bound on ONE tool result fed back into the follow-up LLM round. This is a raw-transport
+// BACKSTOP against a pathological result (e.g. a runaway kg_search with a huge limit, or a
+// misbehaving MCP server dumping megabytes) — it must NOT be the real per-provider shaping layer,
+// because this module has no idea which model will consume the result. Real shaping happens
+// downstream, provider-aware, in guardrails.ts's boundOutput (see route.ts's resultBound()).
+// 48k previously sat BELOW that shaping layer's cloud bound and silently re-shredded large master
+// records a 60k+ cloud bound would otherwise have admitted whole (kg_get_master_record — Cảng
+// Định An v3's is ~78k wrapped, Dasin's ~46k) — hence 200k: comfortably above any real single
+// result seen so far, while still capping true pathological cases. Truncate with a VISIBLE marker
+// — never silently.
+const MAX_RESULT_CHARS = 200_000;
+
+function truncateResult(text: string): string {
+  if (text.length <= MAX_RESULT_CHARS) return text;
+  const dropped = text.length - MAX_RESULT_CHARS;
+  // Neutral marker: report the elision WITHOUT nudging the model to re-query — an
+  // earlier "thu hẹp truy vấn để xem phần còn lại" phrasing made agents loop on repeat
+  // searches, exploding the context. The top slice is enough to answer from.
+  return text.slice(0, MAX_RESULT_CHARS) + `\n\n[... nội dung đã rút gọn ${dropped} ký tự cho vừa ngữ cảnh]`;
+}
+
+// What one server advertises at connect time: its tools, plus the free-text
+// `instructions` the MCP spec lets a server return from `initialize`. The
+// instructions were previously discarded, which cost real work: DAAB names the
+// project + data-source ids it is scoped to in that field, and without them the
+// model re-derived those constants with a list_projects + list_datasources
+// round-trip on every single question.
+export type ServerListing = {
+  tools: RemoteTool[];
+  instructions?: string;
+};
 
 export type RemoteTool = {
   name: string;
@@ -57,16 +88,18 @@ function withTimeout<T>(p: Promise<T>): Promise<T> {
   return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
 }
 
-export async function listTools(cfg: McpServerConfig): Promise<RemoteTool[]> {
+export async function listTools(cfg: McpServerConfig): Promise<ServerListing> {
   const client = await connect(cfg);
   try {
     const res = (await withTimeout(client.listTools())) as { tools: RemoteTool[] };
+    // Available only AFTER connect() — the SDK fills it from the initialize result.
+    const instructions = client.getInstructions();
     const all = res.tools ?? [];
     if (all.length > MAX_TOOLS) {
       console.warn(`[mcp] server '${cfg.slug}' trả ${all.length} tool — cắt còn ${MAX_TOOLS} (DoS guard)`);
-      return all.slice(0, MAX_TOOLS);
+      return { tools: all.slice(0, MAX_TOOLS), instructions };
     }
-    return all;
+    return { tools: all, instructions };
   } finally {
     await client.close();
   }
@@ -89,7 +122,7 @@ export async function callTool(
       blocks.length > 0 &&
       blocks.every((b) => (b as { type?: string })?.type === "text");
     if (allText) {
-      return { text: (blocks as TextBlock[]).map((b) => b.text).join("\n") };
+      return { text: truncateResult((blocks as TextBlock[]).map((b) => b.text).join("\n")) };
     }
     return { content: res.content };
   } finally {

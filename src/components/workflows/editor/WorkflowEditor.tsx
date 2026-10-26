@@ -27,9 +27,10 @@ import {
   Position,
   MarkerType,
   NodeToolbar,
+  Panel,
 } from "@xyflow/react";
 import type { Node as RFNode, Edge as RFEdge, Connection } from "@xyflow/react";
-import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft, Sparkles, ClipboardCheck, LayoutGrid, AlertTriangle, SearchCode } from "lucide-react";
+import { Copy, Trash2, Undo2, Redo2, Move, PanelRight, PanelLeft, Sparkles, ClipboardCheck, LayoutGrid, AlertTriangle, SearchCode, GitBranch } from "lucide-react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-editor.css";
 
@@ -127,6 +128,7 @@ function WfNodeCard({ data, selected }: { data: Record<string, unknown>; selecte
 
   return (
     <div
+      className={status === "running" ? "wf-node-running" : undefined}
       style={{
         background: "var(--wf-node-bg)",
         // Per-side longhand only (no `border` shorthand) so the accent left border
@@ -402,6 +404,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
 
   // Workflow metadata
   const [wfName, setWfName] = useState("");
+  // P: graph.parallel — chế độ DAG song song. Load từ graph, giữ qua save (fromReactFlow
+  // bỏ flag này), toggle ở toolbar. Ảnh hưởng validator (nới lỏng) + engine (scheduleGraph).
+  const [parallel, setParallel] = useState(false);
 
   // React Flow state
   const [nodes, setNodes, onNodesChange] = useNodesState<RFNode<{ node: WfNode }>>([]);
@@ -468,7 +473,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
   // changes, localize each code, and attribute foreach-body faults to their
   // top-level foreach node. Advisory only — Save/Test still gate via assertRunnable.
   const { issuesByNode, graphIssues } = useMemo(() => {
-    const list = collectIssues(fromReactFlow(nodes, edges));
+    const list = collectIssues({ ...fromReactFlow(nodes, edges), parallel });
     const byNode = new Map<string, string[]>();
     const top: string[] = [];
     for (const iss of list) {
@@ -483,7 +488,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
       }
     }
     return { issuesByNode: byNode, graphIssues: top };
-  }, [nodes, edges, t]);
+  }, [nodes, edges, t, parallel]);
 
   const issueCount = graphIssues.length + [...issuesByNode.values()].reduce((s, a) => s + a.length, 0);
 
@@ -505,22 +510,30 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
     [nodes, nodeStatuses, nodeOutputs, issuesByNode],
   );
 
-  // Auto-pan: smoothly recenter the canvas on the node that just started running so
-  // the user follows execution live (open-agent-builder UX). Only on a new running
-  // node — never fights manual panning between transitions.
+  // Auto-pan: follow execution live. 1 node running → recenter on it (linear UX, giữ
+  // nguyên hành vi cũ). NHIỀU node running song song (P) → fitView TẬP đang chạy MỘT LẦN
+  // mỗi lần đổi tập (không setCenter lên 1 node tuỳ ý mỗi tick SSE → hết giật viewport).
   const lastPannedRef = useRef<string | null>(null);
   useEffect(() => {
-    const running = nodeStatuses && Object.keys(nodeStatuses).find((id) => nodeStatuses[id] === "running");
-    if (!running) {
+    const runningIds = nodeStatuses ? Object.keys(nodeStatuses).filter((id) => nodeStatuses[id] === "running") : [];
+    if (runningIds.length === 0) {
       if (!nodeStatuses || Object.keys(nodeStatuses).length === 0) lastPannedRef.current = null; // reset between runs
       return;
     }
-    if (running === lastPannedRef.current) return;
-    const rf = nodes.find((n) => n.id === running);
-    if (!rf) return;
-    lastPannedRef.current = running;
+    const signature = [...runningIds].sort().join(","); // chỉ di chuyển khi TẬP đang chạy đổi
+    if (signature === lastPannedRef.current) return;
     try {
-      rfInstance.setCenter(rf.position.x, rf.position.y, { zoom: 1, duration: 400 });
+      if (runningIds.length === 1) {
+        const rf = nodes.find((n) => n.id === runningIds[0]);
+        if (!rf) return; // nodes chưa load → thử lại khi load xong (CHƯA ghi signature)
+        lastPannedRef.current = signature;
+        rfInstance.setCenter(rf.position.x, rf.position.y, { zoom: 1, duration: 400 });
+      } else {
+        const runningNodes = nodes.filter((n) => runningIds.includes(n.id)).map((n) => ({ id: n.id }));
+        if (runningNodes.length === 0) return; // nodes chưa load → thử lại
+        lastPannedRef.current = signature;
+        rfInstance.fitView({ nodes: runningNodes, padding: 0.3, duration: 400 });
+      }
     } catch {
       /* no viewport yet */
     }
@@ -549,6 +562,12 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
     [edges, nodeStatuses, runStatus, selectedEdgeId],
   );
 
+  // P: số node đang chạy SONG SONG — drive HUD chip "N đang chạy song song".
+  const runningCount = useMemo(
+    () => (nodeStatuses ? Object.values(nodeStatuses).filter((s) => s === "running").length : 0),
+    [nodeStatuses],
+  );
+
   // Load on mount
   useEffect(() => {
     void (async () => {
@@ -560,6 +579,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
         }
         const wf = await res.json() as { name: string; graph: import("@/lib/workflow/types").WorkflowGraph };
         setWfName(wf.name);
+        setParallel(wf.graph.parallel === true); // P: khôi phục chế độ song song
         // Defensive: drop edges to nodes that no longer exist before rendering.
         const rf = toReactFlow(pruneDanglingEdges(wf.graph));
         setNodes(rf.nodes.map((n) => ({ ...n, sourcePosition: Position.Right, targetPosition: Position.Left })));
@@ -878,7 +898,9 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
   // Persist the CURRENT editor graph (preflight + PATCH). Shared by Save and Test.
   // Throws on invalid graph or non-ok PATCH; no navigation / status side-effects.
   const persistGraph = useCallback(async () => {
-    const graph = fromReactFlow(nodes, edges);
+    // P: giữ cờ parallel (fromReactFlow bỏ nó) — nếu không, lưu 1 workflow song song sẽ mất
+    // flag → fan-in bị validator từ chối ở lần chạy sau.
+    const graph: WorkflowGraph = { ...fromReactFlow(nodes, edges), parallel };
     assertRunnable(graph); // client preflight — throws on invalid
     // Persist canvas positions so node layout round-trips through save (#5).
     graph.positions = capturePositions(nodes);
@@ -891,7 +913,7 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
       const body = await res.json() as { error?: string };
       throw new Error(body.error ?? "save failed");
     }
-  }, [nodes, edges, workflowId, wfName, f]);
+  }, [nodes, edges, workflowId, wfName, f, parallel]);
 
   const handleSave = useCallback(async () => {
     setSaveStatus("saving");
@@ -1195,6 +1217,21 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
           </button>
           <button
             type="button"
+            data-testid="parallel-toggle"
+            onClick={() => { setParallel((p) => !p); setIsDirty(true); }}
+            title={t("wf.editor.parallelHint")}
+            aria-pressed={parallel}
+            aria-label={t("wf.editor.parallelMode")}
+            className={`shrink-0 rounded-lg border px-2.5 py-1.5 text-sm font-semibold transition ${
+              parallel
+                ? "border-[var(--color-accent)] bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)] text-[var(--color-accent)]"
+                : "border-neutral-200 text-neutral-600 hover:border-[var(--color-accent)] hover:text-[var(--color-accent)] dark:border-neutral-700 dark:text-neutral-300"
+            }`}
+          >
+            <GitBranch size={14} className="-mt-0.5 mr-1 inline" aria-hidden /> <span className="hidden sm:inline">{t("wf.editor.parallelMode")}</span>
+          </button>
+          <button
+            type="button"
             onClick={() => void handleTest()}
             disabled={testing || saveStatus === "saving"}
             title={t("wf.editor.testHint")}
@@ -1324,6 +1361,28 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
               nodeStrokeColor="transparent"
               style={{ background: "var(--wf-node-bg)", border: "1px solid var(--wf-node-border)" }}
             />
+            {/* P: HUD chip đếm node đang chạy SONG SONG — chỉ hiện khi >1 (fan-out đang chạy). */}
+            {runningCount > 1 && (
+              <Panel position="top-center">
+                <div
+                  data-testid="parallel-count-chip"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    borderRadius: 9999,
+                    padding: "4px 12px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#fff",
+                    background: "#3b82f6",
+                    boxShadow: "0 2px 8px rgba(0,0,0,.18)",
+                  }}
+                >
+                  <span className="wf-run-dot" aria-hidden /> {t("wf.run.parallelCount", { n: runningCount })}
+                </div>
+              </Panel>
+            )}
           </ReactFlow>
 
           {/* Nodes Library — floating (desktop), draggable by its header */}
@@ -1332,11 +1391,11 @@ function WorkflowEditorInner({ workflowId, fetchImpl, onSaved, nodeStatuses, nod
               onApply={applyGeneratedGraph}
               onClose={() => setAiOpen(false)}
               t={t}
-              currentGraph={fromReactFlow(nodes, edges)}
+              currentGraph={{ ...fromReactFlow(nodes, edges), parallel }}
             />
           )}
           {reviewOpen && (
-            <AiReviewPanel graph={fromReactFlow(nodes, edges)} onClose={() => setReviewOpen(false)} t={t} />
+            <AiReviewPanel graph={{ ...fromReactFlow(nodes, edges), parallel }} onClose={() => setReviewOpen(false)} t={t} />
           )}
           {libraryMode === "float" && (
             <div className="absolute z-40 hidden md:block" style={{ left: libFloatPos.x, top: libFloatPos.y }}>

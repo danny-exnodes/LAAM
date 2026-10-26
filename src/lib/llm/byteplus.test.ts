@@ -60,6 +60,9 @@ beforeEach(() => {
   vi.stubEnv("BYTEPLUS_API_KEY", "bp-test-key");
   fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
+  // request() backs off before retrying a transient status. Every retry-exhausting case (the
+  // 429/503/529 mappings below included) would otherwise pay that wait for real.
+  vi.stubEnv("BYTEPLUS_RETRY_DELAY_MS", "0");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -391,5 +394,58 @@ describe("byteplusStream — final streaming completion (SSE)", () => {
     fetchMock.mockResolvedValue(sseRes(["data: [DONE]\n\n"]));
     await collect(byteplusStream({ model, messages: [{ role: "user", content: "x" }] }));
     expect(fetchMock.mock.calls[0][0]).toBe("https://ark.eu-west.bytepluses.com/api/v3/chat/completions");
+  });
+});
+
+// BytePlus answers 429 with its OWN "ServerOverloaded" — transient capacity, not our quota.
+// Losing a whole turn to a blip is expensive: the tool rounds already ran and only the final
+// generation failed. One retry, and ONLY for the transient statuses.
+describe("transient-failure retry", () => {
+  const model = BYTEPLUS_MODELS[0];
+  const ask = () => byteplusChat({ model, tools: [], messages: [{ role: "user", content: "x" }] });
+  const ok = { choices: [{ message: { role: "assistant", content: "hi" } }] };
+
+  for (const status of [429, 503, 529]) {
+    test(`HTTP ${status} then success → one retry, answer returned instead of a dead turn`, async () => {
+      fetchMock
+        .mockResolvedValueOnce(jsonRes({ error: { message: "ServerOverloaded" } }, status))
+        .mockResolvedValueOnce(jsonRes(ok));
+      await expect(ask()).resolves.toMatchObject({ message: { content: "hi" } });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+  }
+
+  // Bounded: retrying harder into an overloaded server makes it worse, and the user is waiting.
+  test("still failing after the retry → the typed error surfaces, exactly 2 attempts", async () => {
+    fetchMock.mockResolvedValue(jsonRes({ error: { message: "ServerOverloaded" } }, 429));
+    await expect(ask()).rejects.toMatchObject({ name: "BytePlusUnavailableError", code: "rate_limit" });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  // A bad key is not transient — retrying burns the user's time to fail identically.
+  for (const status of [401, 403]) {
+    test(`HTTP ${status} is not retried — one attempt only`, async () => {
+      fetchMock.mockResolvedValue(jsonRes({ error: { message: "nope" } }, status));
+      await expect(ask()).rejects.toMatchObject({ code: "auth" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  }
+
+  test("network reject is not retried — waiting carries no signal that it would help", async () => {
+    fetchMock.mockRejectedValue(new Error("ECONNRESET"));
+    await expect(ask()).rejects.toMatchObject({ code: "connection" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // INTENT: retrying a stream that already emitted tokens would replay the answer. request()
+  // hands back the Response before any body is read, so the retry can only ever happen before
+  // the first byte — this asserts the streaming caller gets the same protection.
+  test("stream: 429 before any delta retries and then streams normally", async () => {
+    fetchMock
+      .mockResolvedValueOnce(sseRes([], 429))
+      .mockResolvedValueOnce(sseRes(['data: {"choices":[{"delta":{"content":"xin chào"}}]}\n\n', "data: [DONE]\n\n"]));
+    const got = await collect(byteplusStream({ model, messages: [{ role: "user", content: "x" }] }));
+    expect(got).toEqual([{ delta: "xin chào" }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

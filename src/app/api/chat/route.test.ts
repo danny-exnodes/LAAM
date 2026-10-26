@@ -11,6 +11,7 @@ vi.mock("@/db", () => ({ get db() { return _db; } }));
 vi.mock("@/lib/connectors", () => ({
   chatTools: vi.fn(async () => []),
   mcpReadAllow: vi.fn(async () => new Set<string>()),
+  mcpInstructions: vi.fn(async () => []),
   execute: vi.fn(async () => ({})),
 }));
 // C1 contract: spy PASS-THROUGH quanh runToolRounds (giữ behavior thật) để assert
@@ -330,6 +331,103 @@ describe("R0 tool-loop robustness", () => {
     }
   });
 
+  // NGUỒN A ĐÃ TẮT. Trước đây route tự suy descriptor từ MỌI tool result và phát frame
+  // `view` — panel do đó hiện cả những bước tra cứu nội bộ chẳng liên quan gì tới câu trả
+  // lời (tra id theo tên, kết quả "not found"...), vì luật cấu trúc không trả lời được câu
+  // hỏi ngữ nghĩa "kết quả này có đáng cho user nhìn không". Nay model tự quyết bằng cách
+  // chèn bảng/```chart vào câu trả lời (VOICE_GUIDE), client tách ra bằng extractForSpeech
+  // — CÙNG cơ chế với chat thường.
+  //
+  // Test này giữ lại ở dạng ĐẢO NGƯỢC: một tool trả kết quả dạng bảng đẹp KHÔNG được đẻ ra
+  // frame `view` nữa. Nếu ai đó nối lại onView ở route mà không cân nhắc, test này đỏ.
+  test("tool trả bảng (laam_list_agents) → KHÔNG còn phát frame view (nguồn A đã tắt)", async () => {
+    const captured = { values: [] as unknown[] };
+    const agentRows = [
+      {
+        id: "s1",
+        projectId: "P1",
+        machineId: "m1",
+        model: "claude",
+        status: "running",
+        startedAt: new Date(Date.now() - 10 * 60_000),
+        lastActivity: new Date(Date.now() - 1 * 60_000),
+        latestActivity: "đang chạy tests",
+        tokensIn: 100,
+        tokensOut: 200,
+        costUsd: 0.12,
+      },
+      {
+        id: "s2",
+        projectId: "P2",
+        machineId: "m2",
+        model: "claude",
+        status: "idle",
+        startedAt: new Date(Date.now() - 20 * 60_000),
+        lastActivity: new Date(Date.now() - 15 * 60_000),
+        latestActivity: "chờ input",
+        tokensIn: 50,
+        tokensOut: 80,
+        costUsd: 0.05,
+      },
+    ];
+    // select #1 = history (rỗng, lượt mới không có conversationId), select #2 = agentSessions
+    // (bên trong laam_list_agents handler). `system` override trong body BỎ QUA nhánh
+    // proactive (route.ts: `if (!hasSystemOverride)`) nên không có select xen giữa.
+    _db = fakeChainDb(captured, [[], agentRows]);
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ndjson = JSON.stringify({ message: { content: "Dưới đây là danh sách agent." }, done: true, prompt_eval_count: 3, eval_count: 6 }) + "\n";
+    const fetchMock = vi
+      .fn()
+      // round 1: model gọi laam_list_agents
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          message: { content: "", tool_calls: [{ function: { name: "laam_list_agents", arguments: {} } }] },
+        }),
+      })
+      // round 2: không tool_calls nữa → tool-loop kết thúc tự nhiên
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ message: { content: "" } }) })
+      // completion cuối: NDJSON stream (nội dung THẬT, khác rỗng → finalizeTurn mới phát leadingFrames)
+      .mockResolvedValueOnce({
+        ok: true,
+        body: {
+          getReader: () => {
+            let sent = false;
+            return {
+              read: async () => {
+                if (sent) return { done: true as const, value: undefined };
+                sent = true;
+                return { done: false as const, value: new TextEncoder().encode(ndjson) };
+              },
+            };
+          },
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "liệt kê agent đang theo dõi", system: "Bạn là trợ lý LAAM." }),
+        }),
+      );
+      const text = await res.text();
+      // Tool ĐÃ chạy và ĐÃ trả kết quả dạng bảng (sanity — nếu tool không chạy thì phép
+      // khẳng định "không có view frame" dưới đây là vô nghĩa, đúng kiểu test luôn xanh).
+      expect(text).toContain("laam_list_agents");
+      expect(text).toContain('"t":"cite"'); // chuỗi frame đuôi vẫn phát bình thường
+      // …nhưng KHÔNG có view frame: panel giờ do model tự quyết (bảng/```chart trong câu
+      // trả lời → extractForSpeech tách ở client), không phải code tự suy từ tool result.
+      expect(text).not.toContain('"t":"view"');
+    } finally {
+      vi.unstubAllGlobals();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
   // BUG prod: upload PDF → ChatClient đọc file.text() ra rác nhị phân chứa NUL → message
   // có NUL → insert chatMessages (KHÔNG fail-soft, route.ts:217) ném vì Postgres TEXT không
   // lưu NUL → 500 "Lỗi server". Server PHẢI strip NUL trước persist (defense-in-depth).
@@ -439,6 +537,10 @@ describe("C1 Claude provider MVS", () => {
     vi.stubEnv("BYTEPLUS_API_KEY", "");
     vi.stubEnv("INTERNAL_MODEL", "");
     vi.stubEnv("DEFAULT_CHAT_MODEL", "qwen-local");
+    // Ép budget replay cloud xuống floor (= budget local) để fixture ~50k chars vẫn
+    // vượt ngưỡng và kích summarize — test này kiểm MODEL nào summarize, không kiểm
+    // NGƯỠNG cloud (ngưỡng có test riêng ở lib/chat/replay-budget.test.ts).
+    vi.stubEnv("CLOUD_REPLAY_BUDGET_CHARS", "1");
     mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
     const big = "x".repeat(10_000);
     const longHistory = [
@@ -806,7 +908,10 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       "data: [DONE]\n\n";
     const fetchMock = vi
       .fn()
-      // round 1: OpenAI non-stream, NO tool_calls → tool-loop ends after one round
+      // round 1: OpenAI non-stream, NO tool_calls
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
+      // round 2: G4 grounding guard hỏi lại ĐÚNG một lần khi vòng 0 không chạm tool nào;
+      // vẫn không tool_calls → loop kết thúc (chitchat không bị ép gọi tool).
       .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
       // final completion: OpenAI SSE
       .mockResolvedValueOnce({
@@ -834,7 +939,7 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       expect(fetchMock.mock.calls[0][0]).toContain("/chat/completions"); // BytePlus, not Ollama
       expect(text).toContain("chào"); // streamed delta reached the user
       expect(text).toContain('"t":"tokens"'); // usage → token frame
-      expect(fetchMock).toHaveBeenCalledTimes(2); // round + completion, no Ollama
+      expect(fetchMock).toHaveBeenCalledTimes(3); // round + G4 hỏi lại 1 lần + completion, no Ollama
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
@@ -868,6 +973,186 @@ describe("BytePlus provider (full agent — tool-loop + streaming)", () => {
       expect(fetchMock).not.toHaveBeenCalled();
       const assistantRows = captured.values.filter((v) => (v as { role?: string }).role === "assistant") as { content?: string }[];
       expect(assistantRows.some((v) => String(v.content).includes("Không gọi được BytePlus API"))).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  // Fixture SSE cho gọi byteplusStream giả — chuỗi các `data:` frame + [DONE].
+  function sseBody(sse: string) {
+    return {
+      getReader: () => {
+        let sent = false;
+        return { read: async () => (sent ? { done: true as const, value: undefined } : ((sent = true), { done: false as const, value: new TextEncoder().encode(sse) })) };
+      },
+    };
+  }
+  const noToolRound = { ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) };
+  // Round 1 + G4 grounding-guard hỏi lại (round 2) — cả hai không tool_calls → tool-loop kết
+  // thúc, y hệt test "runs the tool-loop..." ở trên. Đơn giản hoá phần chung cho 2 test dưới.
+  function bareTurnFetch(...finals: unknown[]) {
+    return vi.fn().mockResolvedValueOnce(noToolRound).mockResolvedValueOnce(noToolRound).mockResolvedValueOnce(finals[0]).mockResolvedValueOnce(finals[1]);
+  }
+
+  // D2b — soi ra qua investigation "final-completion trả rỗng": byteplusStream() (bước hoàn
+  // tất, KHÔNG có tools trong request — lib/llm/byteplus.ts:242-247) chỉ đọc delta.content;
+  // nếu model tự sinh tool_calls (hoặc chỉ reasoning_content) ở BƯỚC NÀY, generator không yield
+  // gì → `full` rỗng. route.ts ĐÃ có phòng thủ (comment "ONE-SHOT RETRY" + "Fail loud") nhưng
+  // KHÔNG có test nào xác nhận — hai test này đóng lỗ hổng đó (Rule 9: test phải đỏ nếu logic
+  // retry/fail-loud bị xoá, không chỉ đo hành vi hiện tại).
+  test("D2b: hoàn tất đầu tiên RỖNG (model burn hết vào reasoning) → retry 1 lần, dùng nội dung retry", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "bp-key");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    _db = fakeChainDb({ values: [] });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    // Hoàn tất lần 1: chỉ reasoning_content, KHÔNG content → full rỗng sau vòng này.
+    const emptySse = 'data: {"choices":[{"delta":{"reasoning_content":"đang nghĩ..."}}]}\n\n' + "data: [DONE]\n\n";
+    // Retry (sau SYNTH_NUDGE): có content thật.
+    const retrySse = 'data: {"choices":[{"delta":{"content":"Câu trả lời sau khi nhắc lại."}}]}\n\n' + "data: [DONE]\n\n";
+    const fetchMock = bareTurnFetch({ ok: true, status: 200, body: sseBody(emptySse) }, { ok: true, status: 200, body: sseBody(retrySse) });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: BP_MODEL }),
+        }),
+      );
+      const text = await res.text();
+      expect(fetchMock).toHaveBeenCalledTimes(4); // round + G4 + hoàn tất rỗng + retry
+      expect(text).toContain("Câu trả lời sau khi nhắc lại.");
+      expect(text).not.toContain("không trả về nội dung"); // KHÔNG rơi vào fail-loud — retry đã cứu được
+      // Retry phải kèm SYNTH_NUDGE ("KHÔNG gọi thêm công cụ") — nudge sai thì retry cũng dễ rỗng lại.
+      const retryBody = JSON.parse(fetchMock.mock.calls[3][1].body as string);
+      expect(retryBody.messages.at(-1).content).toContain("KHÔNG gọi thêm công cụ");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  test("D2b: CẢ hoàn tất lẫn retry đều RỖNG → fail loud (notice rõ ràng), KHÔNG bong bóng rỗng lặng lẽ", async () => {
+    vi.stubEnv("BYTEPLUS_API_KEY", "bp-key");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const emptySse = "data: [DONE]\n\n"; // không delta nào — mô phỏng model tự sinh tool_calls dù không có tools
+    const fetchMock = bareTurnFetch({ ok: true, status: 200, body: sseBody(emptySse) }, { ok: true, status: 200, body: sseBody(emptySse) });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: BP_MODEL }),
+        }),
+      );
+      const text = await res.text();
+      expect(fetchMock).toHaveBeenCalledTimes(4); // round + G4 + hoàn tất rỗng + retry rỗng, KHÔNG lặp mãi
+      expect(text).toContain("không trả về nội dung"); // EMPTY_REPLY — Rule 12, không phải bong bóng trắng
+      const assistantRows = captured.values.filter((v) => (v as { role?: string }).role === "assistant") as { content?: string }[];
+      expect(assistantRows.some((v) => String(v.content).includes("không trả về nội dung"))).toBe(true); // persist, không mất lượt
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cerebras provider — shares the SAME generalized branch as BytePlus in
+// streamMainTurn (both OpenAI-compat, wire-identical protocol) via a small
+// cloudChat/cloudStream/cloudErrText selector. These two tests exist to prove the
+// selector actually picks the Cerebras adapter/endpoint/notice — not a copy of
+// BytePlus's full coverage above (that already exercises the shared logic).
+// ---------------------------------------------------------------------------
+describe("Cerebras provider (shares BytePlus's tool-loop branch via provider selector)", () => {
+  const CB_MODEL = "gpt-oss-120b-cerebras"; // picker id — collision guard vs BytePlus's bare "gpt-oss-120b"
+
+  test("runs the tool-loop then streams via api.cerebras.ai (not BytePlus/Ollama); token frame from usage", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "cb-key");
+    orch.runToolRounds.mockClear();
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    _db = fakeChainDb({ values: [] });
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sse =
+      'data: {"choices":[{"delta":{"content":"chào"}}]}\n\n' +
+      'data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":3}}\n\n' +
+      "data: [DONE]\n\n";
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, text: async () => "", json: async () => ({ choices: [{ message: { role: "assistant", content: "" } }] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => {
+            let sent = false;
+            return { read: async () => (sent ? { done: true as const, value: undefined } : ((sent = true), { done: false as const, value: new TextEncoder().encode(sse) })) };
+          },
+        },
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: CB_MODEL }),
+        }),
+      );
+      expect(res.headers.get("x-conversation-id")).toBeTruthy();
+      const text = await res.text();
+      expect(orch.runToolRounds).toHaveBeenCalledTimes(1); // full agent, same as BytePlus
+      expect(fetchMock.mock.calls[0][0]).toContain("api.cerebras.ai"); // Cerebras, not BytePlus/Ollama
+      // wire body sends the LITERAL Cerebras model name, not the "-cerebras" picker id
+      const body1 = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+      expect(body1.model).toBe("gpt-oss-120b");
+      expect(text).toContain("chào");
+      expect(text).toContain('"t":"tokens"');
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+      errSpy.mockRestore();
+      _db = {};
+    }
+  });
+
+  // Fail loud (Rule 12), Cerebras-specific notice text — proves cloudErrText picked the
+  // Cerebras copy, not BytePlus's.
+  test("no CEREBRAS_API_KEY → Cerebras-worded coded notice (persisted), no fetch, no Ollama fallback", async () => {
+    vi.stubEnv("CEREBRAS_API_KEY", "");
+    mockAuth.mockResolvedValueOnce({ user: { id: "u1", role: "member" } } as never);
+    const captured = { values: [] as unknown[] };
+    _db = fakeChainDb(captured);
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const res = await POST(
+        new Request("http://x/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: "laam_lang=vi" },
+          body: JSON.stringify({ message: "xin chào", model: CB_MODEL }),
+        }),
+      );
+      const text = await res.text();
+      expect(text).toContain("Không gọi được Cerebras API");
+      expect(text).toContain("auth");
+      expect(fetchMock).not.toHaveBeenCalled();
+      const assistantRows = captured.values.filter((v) => (v as { role?: string }).role === "assistant") as { content?: string }[];
+      expect(assistantRows.some((v) => String(v.content).includes("Không gọi được Cerebras API"))).toBe(true);
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();

@@ -19,6 +19,7 @@ export function SettingsPanel({
   models,
   claudeModels = [],
   byteplusModels = [],
+  cerebrasModels = [],
   customAgents = [],
   onChange,
 }: {
@@ -28,6 +29,8 @@ export function SettingsPanel({
   claudeModels?: string[];
   /** BytePlus model whitelist from /api/chat/info. Empty = no BytePlus optgroup. */
   byteplusModels?: string[];
+  /** Cerebras model whitelist from /api/chat/info. Empty = no Cerebras optgroup. */
+  cerebrasModels?: string[];
   /** P3 chat persona: user's saved custom agents (id+name). Empty = no persona select. */
   customAgents?: { id: string; name: string }[];
   onChange(next: ChatSettings): void;
@@ -44,10 +47,10 @@ export function SettingsPanel({
   // C2: when any cloud-provider whitelist is non-empty, split the <select> into
   // optgroups. When all are empty, render the flat list exactly as before (tests
   // pass unchanged). Each cloud optgroup renders only when it has entries.
-  const hasGroups = claudeModels.length > 0 || byteplusModels.length > 0;
+  const hasGroups = claudeModels.length > 0 || byteplusModels.length > 0 || cerebrasModels.length > 0;
   // Ollama list: exclude any cloud models that somehow appear in the Ollama list.
   const ollamaList = hasGroups
-    ? list.filter((m) => !claudeModels.includes(m) && !byteplusModels.includes(m))
+    ? list.filter((m) => !claudeModels.includes(m) && !byteplusModels.includes(m) && !cerebrasModels.includes(m))
     : list;
 
   return (
@@ -83,6 +86,13 @@ export function SettingsPanel({
               {byteplusModels.length > 0 && (
                 <optgroup label={t("chat.grpByteplus")}>
                   {byteplusModels.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </optgroup>
+              )}
+              {cerebrasModels.length > 0 && (
+                <optgroup label={t("chat.grpCerebras")}>
+                  {cerebrasModels.map((m) => (
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </optgroup>

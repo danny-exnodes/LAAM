@@ -54,6 +54,19 @@ See `.serena/memories/backlog/v1-unported.md` (Search, Office, proxy, `/api/conf
 
 The UI and documentation are primarily **Vietnamese**, with English and 中文 available through the i18n engine. `README.md` and `CHANGELOG.md` are written in Vietnamese. When adding user-facing strings, add keys to the relevant `i18n.*.js` files for **all three** languages (vi / en / zh) — they cover every page.
 
+### Code comments and commit messages: English
+
+**All code comments and all git commit messages MUST be written in English** — subject line and body alike. This applies to every language in the repo (TypeScript, CSS, SQL, config) and to test files.
+
+What stays **Vietnamese**: `README.md`, `CHANGELOG.md`, docs under `docs/`, Serena memories, and every user-facing string (which goes through i18n in all three languages). This rule is about the code, not the product.
+
+Two clarifications, so nobody over-applies it:
+
+- **Going forward only.** The existing codebase has a large body of Vietnamese comments. Do **not** mass-translate them — that would bury real changes under rename noise and break `git blame`. Rewrite a comment only when you are already editing that code for another reason.
+- **Match the surrounding block's meaning, not its language.** If a Vietnamese comment nearby explains WHY something is the way it is, keep that reasoning intact when you touch it; translate the wording, don't drop the content.
+
+For comment language specifically, this **overrides `AGENTS.md` Rule 11** ("match the codebase's conventions"): the Vietnamese comments you see around you are legacy, not the target convention — don't copy them.
+
 ## Workflow Rules
 
 @AGENTS.md

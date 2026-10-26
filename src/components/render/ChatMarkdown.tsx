@@ -9,6 +9,7 @@
 
 import dynamic from "next/dynamic";
 import { MarkdownView } from "./MarkdownView";
+import { repairTableDelimiters } from "@/lib/markdown/repair-tables";
 
 const USE_STREAMDOWN = process.env.NEXT_PUBLIC_CHAT_RENDERER === "streamdown";
 
@@ -21,6 +22,9 @@ const StreamdownView = USE_STREAMDOWN
   : null;
 
 export function ChatMarkdown(props: { source: string; className?: string }) {
-  if (USE_STREAMDOWN && StreamdownView) return <StreamdownView {...props} />;
-  return <MarkdownView {...props} />;
+  // Repair here rather than in either renderer: the delimiter-row defect is in the model's
+  // markdown, so it breaks both paths identically and fixing it once keeps them in step.
+  const source = repairTableDelimiters(props.source);
+  if (USE_STREAMDOWN && StreamdownView) return <StreamdownView {...props} source={source} />;
+  return <MarkdownView {...props} source={source} />;
 }

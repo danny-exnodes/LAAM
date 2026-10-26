@@ -41,6 +41,10 @@ export type SafetyOptions = {
   // by the chat route from the user's MCP servers; absent everywhere else → MCP
   // tools fail-closed to write (gated).
   readAllow?: ReadonlySet<string>;
+  // Per-result output bound (chars) fed to boundOutput — provider-aware. A large-context
+  // cloud model (BytePlus/Claude) admits a whole master record intact; a 16k local model
+  // keeps the tight default. Absent → boundOutput's own default (local-sized).
+  maxBytes?: number;
 };
 
 export function withSafety(
@@ -54,6 +58,6 @@ export function withSafety(
       throw new PendingWriteSignal(name, parseArgs(args));
     }
     const result = await inner(name, args);
-    return redact(boundOutput(result));
+    return redact(boundOutput(result, opts.maxBytes));
   };
 }

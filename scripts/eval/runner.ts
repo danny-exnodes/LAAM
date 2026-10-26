@@ -23,8 +23,16 @@ async function runOnce(s: Scenario, deps: RunnerDeps): Promise<RunTrace> {
     now: deps.now ?? t0,
     // QW-1: truyền {name, kind} để eval đo đúng prompt grouped đọc/ghi như prod.
     tools: tools.map((t) => ({ name: t.function.name, kind: t.kind })),
+    // Vắng mặt ⇒ undefined ⇒ buildSystemPrompt coi như "text" (hành vi cũ, không đổi).
+    mode: s.mode,
   });
-  const messages: ChatMessage[] = [{ role: "system", content: system }, { role: "user", content: s.input }];
+  // priorMessages đi GIỮA system và lượt hiện tại — đúng thứ tự route.ts replay (history rồi
+  // mới tới message user vừa gửi). Vắng mặt ⇒ [] ⇒ y hệt trước (chỉ [system, user]).
+  const messages: ChatMessage[] = [
+    { role: "system", content: system },
+    ...(s.priorMessages ?? []),
+    { role: "user", content: s.input },
+  ];
   try {
     // maxRounds now via opts; per-scenario override (e.g. loopGuard) preserved, default = prod backstop.
     const convo = await runToolRounds(messages, tools, { callOllama: deps.callOllama, dispatch }, { maxRounds: deps.maxRounds });

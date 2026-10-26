@@ -52,11 +52,23 @@ export type WorkflowGraph = {
   viewport?: unknown;
   // Editor-persisted canvas layout: nodeId → xy. Ignored by the engine/validate.
   positions?: Record<string, { x: number; y: number }>;
+  // P (2026-07-10) DAG song song opt-in. undefined/false → engine tuyến tính (walkGraph)
+  // BẤT BIẾN; true → validator nới lỏng (fan-in/fan-out/multi-start + ref-tổ-tiên) + bộ
+  // lập lịch topological song song (scheduleGraph). Xem docs/…/comfyui-parallel-workflow-design.
+  parallel?: boolean;
 };
 
 // G1: cận chạy (chống runaway). Token-precise budgeting hoãn (đổi runNode contract A0).
 export type Budget = { maxSteps: number; maxForeachItems: number };
 export const DEFAULT_BUDGET: Budget = { maxSteps: 200, maxForeachItems: 100 };
+
+// P (parallel): trần đồng thời TÁCH theo loại tài nguyên (risk-review must-fix). agent node
+// gọi mô hình cục bộ (1 GPU) → pool nhỏ; connector/mcp/foreach IO-bound → pool rộng hơn.
+// DI qua EngineDeps.concurrency; test đặt {agent:1,io:1} để tất định (linear-subset equivalence).
+export type Concurrency = { agent: number; io: number };
+export const DEFAULT_CONCURRENCY: Concurrency = { agent: 2, io: 6 };
+// Trần fan-out (số cạnh ra 1 node) khi parallel — chặn tự-DoS ngay ở validate-time.
+export const MAX_FANOUT = 12;
 
 // Blackboard. run_step = nguồn bền; context = working-set RAM (spec D-STATE).
 export type RunContext = {

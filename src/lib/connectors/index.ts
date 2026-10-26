@@ -317,13 +317,31 @@ export async function chatTools(userId: string): Promise<ConnectorTool[]> {
     if (await isConnected(userId, def.id)) out.push(...def.tools);
   }
   // MCP servers (per-user, dynamic). Best-effort: a down server yields no tools.
+  // Only the tools the user left ON reach the model: every tool a server advertises is sent
+  // on EVERY round (measured 2026-08-06: one server = 55 tools / ~11k tokens per round), and
+  // a bigger menu is also more for the model to mis-pick from. Discovery still returns them
+  // all — the connectors page needs the OFF ones to offer them back.
   try {
-    const { tools } = await discoverForUser(userId);
-    out.push(...tools);
+    const { tools, enabled } = await discoverForUser(userId);
+    out.push(...tools.filter((t) => enabled.has(t.function.name)));
   } catch {
     /* MCP discovery failure must not break chat tool listing */
   }
   return out;
+}
+
+// Free-text `instructions` each connected MCP server returned at initialize, for
+// servers contributing at least one enabled tool. Fed into the system prompt so the
+// model knows what a connection is scoped to BEFORE it picks a tool — DAAB uses it to
+// hand over the project_id / data_source_id it is already bound to, which removes the
+// discovery round-trip the model otherwise runs on every question.
+export async function mcpInstructions(userId: string): Promise<{ slug: string; text: string }[]> {
+  try {
+    return (await discoverForUser(userId)).instructions;
+  } catch {
+    /* discovery failure must not break chat — the prompt just loses the hint */
+    return [];
+  }
 }
 
 // Names of MCP tools the user opted to trust as read (fed to the safety gate's

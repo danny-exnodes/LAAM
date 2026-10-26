@@ -11,13 +11,17 @@
 // provider, so these paths work whichever model is configured. Resolution priority:
 //   1. INTERNAL_MODEL env   — explicit operator override (force any provider/model)
 //   2. BYTEPLUS_API_KEY set — cloud-first: use the default BytePlus model
-//   3. ANTHROPIC_API_KEY set — fall back to Claude (text-only paths only)
-//   4. DEFAULT_CHAT_MODEL   — local Ollama ($0); the unchanged local-only path
+//   3. CEREBRAS_API_KEY set — cloud-first: use the default Cerebras model
+//   4. ANTHROPIC_API_KEY set — fall back to Claude (text-only paths only)
+//   5. DEFAULT_CHAT_MODEL   — local Ollama ($0); the unchanged local-only path
 //
 // A local-only deployment (no cloud key) therefore keeps the free local path exactly
 // as before; a deployment with a cloud key gets cloud-first internal ops for free.
+// BytePlus keeps precedence over Cerebras (unchanged default for existing deployments
+// that already set both) — an operator wanting Cerebras preferred sets INTERNAL_MODEL.
 import type { ChatMessage, OllamaChatResponse } from "@/lib/agent/orchestrator";
 import { BYTEPLUS_MODELS, isBytePlusModel, byteplusChat } from "./byteplus";
+import { CEREBRAS_MODELS, isCerebrasModel, cerebrasChat } from "./cerebras";
 import { CLAUDE_MODELS, isClaudeModel, claudeStream } from "./claude";
 import { ollamaChat } from "./ollama";
 
@@ -28,6 +32,7 @@ export function resolveInternalModel(): string {
   const explicit = process.env.INTERNAL_MODEL?.trim();
   if (explicit) return explicit;
   if (process.env.BYTEPLUS_API_KEY) return BYTEPLUS_MODELS[0];
+  if (process.env.CEREBRAS_API_KEY) return CEREBRAS_MODELS[0];
   if (process.env.ANTHROPIC_API_KEY) return CLAUDE_MODELS[0];
   return process.env.DEFAULT_CHAT_MODEL ?? DEFAULT_LOCAL;
 }
@@ -48,6 +53,10 @@ export async function callModelText(prompt: string, model: string = resolveInter
   const messages: ChatMessage[] = [{ role: "user", content: prompt }];
   if (isBytePlusModel(model)) {
     const res = await byteplusChat({ model, messages });
+    return res.message?.content ?? "";
+  }
+  if (isCerebrasModel(model)) {
+    const res = await cerebrasChat({ model, messages });
     return res.message?.content ?? "";
   }
   if (isClaudeModel(model)) {
@@ -78,10 +87,13 @@ export async function callModelChat(
   if (isBytePlusModel(model)) {
     return byteplusChat({ model, messages, tools });
   }
+  if (isCerebrasModel(model)) {
+    return cerebrasChat({ model, messages, tools });
+  }
   if (isClaudeModel(model)) {
     throw new Error(
       `INTERNAL_MODEL=${model}: Claude is a no-tool provider and cannot run workflow/agent tool steps. ` +
-        `Set INTERNAL_MODEL to a BytePlus or local model for internal/workflow operations.`,
+        `Set INTERNAL_MODEL to a BytePlus, Cerebras, or local model for internal/workflow operations.`,
     );
   }
   return ollamaChat({ model, messages, tools, format });
@@ -98,6 +110,10 @@ export async function callModelGenerate(
 ): Promise<string> {
   if (isBytePlusModel(model)) {
     const res = await byteplusChat({ model, messages });
+    return res.message?.content ?? "";
+  }
+  if (isCerebrasModel(model)) {
+    const res = await cerebrasChat({ model, messages });
     return res.message?.content ?? "";
   }
   if (isClaudeModel(model)) {
